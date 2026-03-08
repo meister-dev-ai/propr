@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  meisterpropr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - MEISTER_CLIENT_KEYS=${MEISTER_CLIENT_KEYS}
+      - AI_ENDPOINT=${AI_ENDPOINT}
+      - AI_DEPLOYMENT=${AI_DEPLOYMENT}
+      # AI_API_KEY: optional — omit to use DefaultAzureCredential (managed identity / service principal)
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      # CORS_ORIGINS: optional extra comma-separated origins beyond the built-in defaults
+      # (localhost:3000, dev.azure.com, *.visualstudio.com)
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - ASPNETCORE_ENVIRONMENT=Production
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

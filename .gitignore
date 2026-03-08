@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+out/
+
+# Visual Studio
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+TestResults/
+
+# .NET
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.secret.*
+
+# IDE
+.idea/
+*.DS_Store
+Thumbs.db
+
+# NuGet
+packages/
+*.nupkg
+
+# Claude
+settings.local.json

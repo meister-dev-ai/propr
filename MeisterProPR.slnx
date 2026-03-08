@@ -1,0 +1,14 @@
+<Solution>
+    <Folder Name="/src/">
+        <Project Path="src/MeisterProPR.Api/MeisterProPR.Api.csproj"/>
+        <Project Path="src/MeisterProPR.Application/MeisterProPR.Application.csproj"/>
+        <Project Path="src/MeisterProPR.Domain/MeisterProPR.Domain.csproj"/>
+        <Project Path="src/MeisterProPR.Infrastructure/MeisterProPR.Infrastructure.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj"/>
+        <Project Path="tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj"/>
+        <Project Path="tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj"/>
+        <Project Path="tests/MeisterProPR.Infrastructure.Tests/MeisterProPR.Infrastructure.Tests.csproj"/>
+    </Folder>
+</Solution>

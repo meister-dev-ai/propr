@@ -1,0 +1,347 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Meister ProPR",
+    "version": "1.0.0",
+    "description": "AI-powered pull request review backend for Azure DevOps."
+  },
+  "paths": {
+    "/reviews": {
+      "post": {
+        "operationId": "SubmitReview",
+        "summary": "Submit a pull request for AI review",
+        "description": "Enqueues a background review job. The backend fetches the changed files directly from ADO using the supplied token, runs the AI review, and posts comments back to the pull request on the specified iteration.",
+        "security": [
+          {
+            "clientKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Ado-Token",
+            "in": "header",
+            "required": true,
+            "description": "ADO personal access token or OAuth token used solely to verify that the requesting user is an authenticated member of the configured ADO organisation. The backend uses its own managed identity for all ADO API operations (file fetching, comment posting). This token is never forwarded, stored, cached beyond the request lifetime, or included in any response.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Review job accepted and queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing client key."
+          },
+          "422": {
+            "description": "Request validation failed."
+          }
+        }
+      },
+      "get": {
+        "operationId": "ListReviews",
+        "summary": "List review jobs for this client",
+        "description": "Returns all review jobs submitted under this client key, newest first.",
+        "security": [
+          {
+            "clientKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Ado-Token",
+            "in": "header",
+            "required": true,
+            "description": "ADO personal access token or OAuth token used solely to verify that the requesting user is an authenticated member of the configured ADO organisation. The backend uses its own managed identity for all ADO API operations (file fetching, comment posting). This token is never forwarded, stored, cached beyond the request lifetime, or included in any response.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of review jobs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewListItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing client key."
+          }
+        }
+      }
+    },
+    "/reviews/{jobId}": {
+      "get": {
+        "operationId": "GetReview",
+        "summary": "Get the status and result of a review job",
+        "security": [
+          {
+            "clientKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Ado-Token",
+            "in": "header",
+            "required": true,
+            "description": "ADO personal access token or OAuth token used solely to verify that the requesting user is an authenticated member of the configured ADO organisation. The backend uses its own managed identity for all ADO API operations (file fetching, comment posting). This token is never forwarded, stored, cached beyond the request lifetime, or included in any response.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Review job status and, once completed, its result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing client key."
+          },
+          "404": {
+            "description": "Job not found."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "clientKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Client-Key",
+        "description": "Client key issued by the backend operator to authenticate the ADO organisation."
+      }
+    },
+    "schemas": {
+      "ReviewRequest": {
+        "type": "object",
+        "required": [
+          "organizationUrl",
+          "projectId",
+          "repositoryId",
+          "pullRequestId",
+          "iterationId"
+        ],
+        "properties": {
+          "organizationUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "ADO organisation URL.",
+            "example": "https://dev.azure.com/myorg"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "ADO project ID or name.",
+            "example": "my-project"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "ADO repository ID.",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pull request ID.",
+            "example": 42
+          },
+          "iterationId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "PR iteration (change version) to review and post comments on.",
+            "example": 3
+          }
+        }
+      },
+      "ReviewJob": {
+        "type": "object",
+        "required": [
+          "jobId"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identifier for polling job status."
+          }
+        }
+      },
+      "ReviewJobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "processing",
+          "completed",
+          "failed"
+        ],
+        "description": "Current processing state of the review job."
+      },
+      "ReviewListItem": {
+        "type": "object",
+        "required": [
+          "jobId",
+          "status",
+          "organizationUrl",
+          "projectId",
+          "repositoryId",
+          "pullRequestId",
+          "iterationId",
+          "submittedAt"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewJobStatus"
+          },
+          "organizationUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "type": "string"
+          },
+          "pullRequestId": {
+            "type": "integer"
+          },
+          "iterationId": {
+            "type": "integer"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ReviewStatusResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReviewListItem"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "result": {
+                "nullable": true,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ReviewResult"
+                  }
+                ],
+                "description": "Present when status is 'completed'."
+              },
+              "error": {
+                "type": "string",
+                "nullable": true,
+                "description": "Human-readable error message. Present when status is 'failed'."
+              }
+            }
+          }
+        ]
+      },
+      "ReviewResult": {
+        "type": "object",
+        "required": [
+          "summary",
+          "comments"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "Overall narrative of the AI review."
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewComment"
+            }
+          }
+        }
+      },
+      "ReviewComment": {
+        "type": "object",
+        "required": [
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "nullable": true,
+            "description": "File path the comment applies to. Null for general (PR-level) comments."
+          },
+          "lineNumber": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Line number within the file. Null if not line-specific."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "suggestion"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
