@@ -65,7 +65,7 @@ async function handleSave() {
   try {
     const { response } = await createAdminClient().PUT('/clients/{clientId}/ado-credentials', {
       params: { path: { clientId: props.clientId } },
-      body: { tenantId: tenantId.value, clientId: formClientId.value, clientSecret: secret.value },
+      body: { tenantId: tenantId.value, clientId: formClientId.value, secret: secret.value },
     })
     if (!(response as Response).ok) {
       formError.value = 'Failed to save credentials.'

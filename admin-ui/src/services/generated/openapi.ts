@@ -357,7 +357,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Enables or disables a client. Requires `X-Admin-Key`. */
+        /** Updates one or more fields of a client (display name, active status). Requires `X-Admin-Key`. */
         patch: {
             parameters: {
                 query?: never;
@@ -368,7 +368,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Update request. */
+            /** @description Fields to update; omit a field to leave it unchanged. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["PatchClientRequest"];
@@ -674,6 +674,86 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewer-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets or replaces the ADO reviewer identity GUID for a client. Requires `X-Admin-Key`.
+         *     Until this is set, review jobs for the client will be rejected.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The ADO identity GUID of the AI service account. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetReviewerIdentityRequest"];
+                    "text/json": components["schemas"]["SetReviewerIdentityRequest"];
+                    "application/*+json": components["schemas"]["SetReviewerIdentityRequest"];
+                };
+            };
+            responses: {
+                /** @description Reviewer identity stored. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description request contains an empty GUID. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid `X-Admin-Key`. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/identities/resolve": {
@@ -993,6 +1073,8 @@ export interface components {
             hasAdoCredentials?: boolean;
             adoTenantId?: string | null;
             adoClientId?: string | null;
+            /** Format: uuid */
+            reviewerId?: string | null;
         };
         /**
          * @description Severity level of a review comment.
@@ -1007,8 +1089,6 @@ export interface components {
             clientId?: string;
             organizationUrl?: string | null;
             projectId?: string | null;
-            /** Format: uuid */
-            reviewerId?: string;
             /** Format: int32 */
             crawlIntervalSeconds?: number;
             isActive?: boolean;
@@ -1024,7 +1104,6 @@ export interface components {
         CreateCrawlConfigRequest: {
             organizationUrl?: string | null;
             projectId?: string | null;
-            reviewerDisplayName?: string | null;
             /** Format: int32 */
             crawlIntervalSeconds?: number;
         };
@@ -1072,9 +1151,10 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "processing" | "completed" | "failed";
-        /** @description Request body for patching a client's active status. */
+        /** @description Request body for patching a client. All fields are optional; omitted fields are left unchanged. */
         PatchClientRequest: {
-            isActive?: boolean;
+            isActive?: boolean | null;
+            displayName?: string | null;
         };
         /** @description Request body for patching a crawl configuration's active status. */
         PatchCrawlConfigRequest: {
@@ -1159,6 +1239,11 @@ export interface components {
             tenantId?: string | null;
             clientId?: string | null;
             secret?: string | null;
+        };
+        /** @description Request body for setting the ADO reviewer identity on a client. */
+        SetReviewerIdentityRequest: {
+            /** Format: uuid */
+            reviewerId?: string;
         };
     };
     responses: never;

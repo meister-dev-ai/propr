@@ -41,6 +41,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("ado_client_secret")
             .IsRequired(false);
 
+        builder.Property(c => c.ReviewerId)
+            .HasColumnName("reviewer_id")
+            .IsRequired(false);
+
         builder.HasIndex(c => c.Key)
             .IsUnique()
             .HasDatabaseName("ix_clients_key");

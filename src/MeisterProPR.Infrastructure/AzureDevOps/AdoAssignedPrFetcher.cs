@@ -7,7 +7,7 @@ using Microsoft.TeamFoundation.SourceControl.WebApi;
 namespace MeisterProPR.Infrastructure.AzureDevOps;
 
 /// <summary>ADO-backed implementation of <see cref="IAssignedPullRequestFetcher" />.</summary>
-public sealed class AdoAssignedPrFetcher(
+public sealed partial class AdoAssignedPrFetcher(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository,
     ILogger<AdoAssignedPrFetcher> logger) : IAssignedPullRequestFetcher
@@ -25,6 +25,12 @@ public sealed class AdoAssignedPrFetcher(
         CrawlConfigurationDto config,
         CancellationToken cancellationToken = default)
     {
+        if (config.ReviewerId is null)
+        {
+            LogSkippedNoReviewerIdentity(logger, config.Id, config.ClientId);
+            return [];
+        }
+
         using var activity = ActivitySource.StartActivity("AdoAssignedPrFetcher.GetAssignedOpenPullRequests");
         activity?.SetTag("ado.org", config.OrganizationUrl);
         activity?.SetTag("ado.project", config.ProjectId);
@@ -77,6 +83,15 @@ public sealed class AdoAssignedPrFetcher(
 
         return results;
     }
+
+    [LoggerMessage(
+        EventId = 5002,
+        Level = LogLevel.Warning,
+        Message = "Skipping crawl config {ConfigId} for client {ClientId} — reviewer identity not configured")]
+    private static partial void LogSkippedNoReviewerIdentity(
+        ILogger logger,
+        Guid configId,
+        Guid clientId);
 
     private async Task<GitHttpClient> ResolveGitClientAsync(CrawlConfigurationDto config, CancellationToken ct)
     {

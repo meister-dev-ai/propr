@@ -45,4 +45,13 @@ public sealed class PostgresClientRegistry(
 
         return client;
     }
+
+    /// <inheritdoc />
+    public async Task<Guid?> GetReviewerIdAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => c.ReviewerId)
+            .FirstOrDefaultAsync(ct);
+    }
 }

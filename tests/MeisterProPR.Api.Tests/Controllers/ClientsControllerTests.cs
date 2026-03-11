@@ -25,6 +25,92 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     private const string ValidAdminKey = "admin-key-min-16-chars-ok";
     private const string ValidClientKey = "client-key-min-16-chars-ok";
 
+    // ── DELETE /clients/{clientId}/ado-credentials (T029) ────────────────────
+
+    [Fact]
+    public async Task DeleteAdoCredentials_ExistingClient_Returns204()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}/ado-credentials");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAdoCredentials_UnknownClient_Returns404()
+    {
+        var unknownId = Guid.NewGuid();
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{unknownId}/ado-credentials");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAdoCredentials_WithoutAdminKey_Returns401()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}/ado-credentials");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // ── GET /clients/{clientId} — no secret in response (T032) ───────────────
+
+    [Fact]
+    public async Task GetClient_ResponseDoesNotContainSecret()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("secret", body, StringComparison.OrdinalIgnoreCase);
+        Assert.True(JsonDocument.Parse(body).RootElement.TryGetProperty("hasAdoCredentials", out _));
+    }
+
+    [Fact]
+    public async Task GetClient_WithNoCredentials_HasAdoCredentialsFalse()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(body.RootElement.GetProperty("hasAdoCredentials").GetBoolean());
+    }
+
+    // ── GET /clients — no secret in list response (T033) ─────────────────────
+
+    [Fact]
+    public async Task GetClients_ListResponseDoesNotContainSecret()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("secret", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── GET /clients (T030) ───────────────────────────────────────────────────
 
     [Fact]
@@ -219,26 +305,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    // ── PUT /clients/{clientId}/ado-credentials (T018) ────────────────────────
-
-    [Fact]
-    public async Task PutAdoCredentials_WithValidFields_Returns204()
-    {
-        var clientId = factory.ClientId;
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Content = JsonContent.Create(new
-        {
-            tenantId = "tenant-id-abc",
-            clientId = "client-id-abc",
-            secret = "super-secret-value",
-        });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-    }
-
     [Fact]
     public async Task PutAdoCredentials_MissingField_Returns400()
     {
@@ -254,18 +320,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
-    public async Task PutAdoCredentials_WithoutAdminKey_Returns401()
-    {
-        var clientId = factory.ClientId;
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
-        request.Content = JsonContent.Create(new { tenantId = "t", clientId = "c", secret = "s" });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
     public async Task PutAdoCredentials_UnknownClient_Returns404()
     {
         var unknownId = Guid.NewGuid();
@@ -278,123 +332,50 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    // ── DELETE /clients/{clientId}/ado-credentials (T029) ────────────────────
-
     [Fact]
-    public async Task DeleteAdoCredentials_ExistingClient_Returns204()
+    public async Task PutAdoCredentials_WithoutAdminKey_Returns401()
     {
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task DeleteAdoCredentials_UnknownClient_Returns404()
-    {
-        var unknownId = Guid.NewGuid();
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{unknownId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task DeleteAdoCredentials_WithoutAdminKey_Returns401()
-    {
-        var clientId = factory.ClientId;
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}/ado-credentials");
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
+        request.Content = JsonContent.Create(new { tenantId = "t", clientId = "c", secret = "s" });
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    // ── GET /clients/{clientId} — no secret in response (T032) ───────────────
+    // ── PUT /clients/{clientId}/ado-credentials (T018) ────────────────────────
 
     [Fact]
-    public async Task GetClient_ResponseDoesNotContainSecret()
+    public async Task PutAdoCredentials_WithValidFields_Returns204()
     {
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
         request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Content = JsonContent.Create(
+            new
+            {
+                tenantId = "tenant-id-abc",
+                clientId = "client-id-abc",
+                secret = "super-secret-value",
+            });
 
         var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("secret", body, StringComparison.OrdinalIgnoreCase);
-        Assert.True(JsonDocument.Parse(body).RootElement.TryGetProperty("hasAdoCredentials", out _));
-    }
-
-    [Fact]
-    public async Task GetClient_WithNoCredentials_HasAdoCredentialsFalse()
-    {
-        var clientId = factory.ClientId;
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.False(body.RootElement.GetProperty("hasAdoCredentials").GetBoolean());
-    }
-
-    // ── GET /clients — no secret in list response (T033) ─────────────────────
-
-    [Fact]
-    public async Task GetClients_ListResponseDoesNotContainSecret()
-    {
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("secret", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     // ── Factory ───────────────────────────────────────────────────────────────
 
     public sealed class ClientsApiFactory : WebApplicationFactory<Program>
     {
+        private readonly string _dbName = $"TestDb_Clients_{Guid.NewGuid()}";
+
         // Explicit root ensures all DbContext instances within this factory share the same in-memory store.
         private readonly InMemoryDatabaseRoot _dbRoot = new();
-        private readonly string _dbName = $"TestDb_Clients_{Guid.NewGuid()}";
 
         /// <summary>The UUID of the seeded client that maps to <c>ValidClientKey</c>.</summary>
         public Guid ClientId { get; } = Guid.NewGuid();
-
-        protected override IHost CreateHost(IHostBuilder builder)
-        {
-            var host = base.CreateHost(builder);
-
-            // Seed the client record that maps to ValidClientKey so crawl-config endpoints work
-            using var scope = host.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(
-                new ClientRecord
-                {
-                    Id = this.ClientId,
-                    Key = ValidClientKey,
-                    DisplayName = "Test Client",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
-            db.SaveChanges();
-
-            return host;
-        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -430,7 +411,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         Arg.Any<Guid>(),
                         Arg.Any<string>(),
                         Arg.Any<string>(),
-                        Arg.Any<Guid>(),
                         Arg.Any<int>(),
                         Arg.Any<CancellationToken>())
                     .Returns(ci => Task.FromResult(
@@ -439,8 +419,8 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                             ci.ArgAt<Guid>(0),
                             ci.ArgAt<string>(1),
                             ci.ArgAt<string>(2),
-                            ci.ArgAt<Guid>(3),
-                            ci.ArgAt<int>(4),
+                            null,
+                            ci.ArgAt<int>(3),
                             true,
                             DateTimeOffset.UtcNow)));
                 crawlRepo.SetActiveAsync(
@@ -466,8 +446,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 // Provide a stub IIdentityResolver that returns one identity for any display name.
                 var identityResolver = Substitute.For<IIdentityResolver>();
                 identityResolver.ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<ResolvedIdentity>>(
-                        [new ResolvedIdentity(Guid.NewGuid(), "Test Reviewer")]));
+                    .Returns(Task.FromResult<IReadOnlyList<ResolvedIdentity>>([new ResolvedIdentity(Guid.NewGuid(), "Test Reviewer")]));
                 services.AddSingleton(identityResolver);
 
                 // Provide an in-memory IClientAdoCredentialRepository
@@ -480,6 +459,27 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     .Returns(Task.CompletedTask);
                 services.AddSingleton(adoCredRepo);
             });
+        }
+
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            var host = base.CreateHost(builder);
+
+            // Seed the client record that maps to ValidClientKey so crawl-config endpoints work
+            using var scope = host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = this.ClientId,
+                    Key = ValidClientKey,
+                    DisplayName = "Test Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            db.SaveChanges();
+
+            return host;
         }
     }
 }

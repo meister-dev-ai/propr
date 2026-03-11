@@ -1,5 +1,4 @@
 using System.ClientModel;
-using Microsoft.Extensions.Logging;
 using Azure.AI.OpenAI;
 using Azure.Core;
 using Azure.Identity;
@@ -11,9 +10,11 @@ using MeisterProPR.Infrastructure.Configuration;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
 
@@ -24,34 +25,6 @@ namespace MeisterProPR.Infrastructure.DependencyInjection;
 /// </summary>
 public static class InfrastructureServiceExtensions
 {
-    /// <summary>
-    ///     Creates an <see cref="IChatClient" /> backed by the Azure OpenAI <b>Responses API</b>,
-    ///     which supports reasoning models, tool use, and multi-turn state.
-    ///     Both <c>*.openai.azure.com</c> and <c>*.services.ai.azure.com</c> (Azure AI Foundry)
-    ///     are supported via <see cref="AzureOpenAIClient" />. For AI Foundry endpoints any
-    ///     project path is stripped — <see cref="AzureOpenAIClient" /> constructs the correct
-    ///     <c>/openai/responses</c> sub-path from the resource root automatically.
-    /// </summary>
-    private static IChatClient CreateChatClient(string endpoint, string deployment, string? apiKey)
-    {
-        var uri = new Uri(endpoint);
-
-        // Azure AI Foundry portal URLs include a project path (.../api/projects/{project})
-        // that is not part of the Azure OpenAI API surface — use only the resource root.
-        if (uri.Host.EndsWith("services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
-        {
-            uri = new Uri($"{uri.Scheme}://{uri.Host}/");
-        }
-
-        var azureClient = string.IsNullOrWhiteSpace(apiKey)
-            ? new AzureOpenAIClient(uri, new DefaultAzureCredential())
-            : new AzureOpenAIClient(uri, new ApiKeyCredential(apiKey));
-
-        // GetResponsesClient targets the Responses API endpoint instead of the
-        // legacy Chat Completions endpoint, enabling reasoning and tool use.
-        return azureClient.GetResponsesClient(deployment).AsIChatClient();
-    }
-
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var dbConnectionString = configuration["DB_CONNECTION_STRING"];
@@ -65,8 +38,7 @@ public static class InfrastructureServiceExtensions
                     .UseNpgsql(dbConnectionString)
                     // EF tools 9.x generate snapshots that EF runtime 10.x flags as pending;
                     // the schema is correct — suppress the spurious warning.
-                    .ConfigureWarnings(w => w.Ignore(
-                        Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
             services.AddScoped<IJobRepository, PostgresJobRepository>();
             services.AddScoped<IClientRegistry, PostgresClientRegistry>();
@@ -109,6 +81,7 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IAdoCommentPoster, NoOpAdoCommentPoster>();
             services.AddScoped<IAssignedPullRequestFetcher, StubAssignedPrFetcher>();
             services.AddScoped<IIdentityResolver, StubIdentityResolver>();
+            services.AddSingleton<IAdoReviewerManager, StubAdoReviewerManager>();
         }
         else
         {
@@ -123,13 +96,14 @@ public static class InfrastructureServiceExtensions
                     credential,
                     sp.GetRequiredService<IHttpClientFactory>(),
                     sp.GetRequiredService<IClientAdoCredentialRepository>()));
+            services.AddSingleton<IAdoReviewerManager, AdoReviewerManager>();
         }
 
         // AI review (provider-agnostic via IChatClient)
         var aiEndpoint = configuration["AI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AI_ENDPOINT environment variable is not set.");
+                         ?? throw new InvalidOperationException("AI_ENDPOINT environment variable is not set.");
         var aiDeployment = configuration["AI_DEPLOYMENT"]
-            ?? throw new InvalidOperationException("AI_DEPLOYMENT environment variable is not set.");
+                           ?? throw new InvalidOperationException("AI_DEPLOYMENT environment variable is not set.");
 
         services.AddSingleton<IChatClient>(_ => CreateChatClient(
             aiEndpoint,
@@ -139,6 +113,34 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<IAiReviewCore, AgentAiReviewCore>();
 
         return services;
+    }
+
+    /// <summary>
+    ///     Creates an <see cref="IChatClient" /> backed by the Azure OpenAI <b>Responses API</b>,
+    ///     which supports reasoning models, tool use, and multi-turn state.
+    ///     Both <c>*.openai.azure.com</c> and <c>*.services.ai.azure.com</c> (Azure AI Foundry)
+    ///     are supported via <see cref="AzureOpenAIClient" />. For AI Foundry endpoints any
+    ///     project path is stripped — <see cref="AzureOpenAIClient" /> constructs the correct
+    ///     <c>/openai/responses</c> sub-path from the resource root automatically.
+    /// </summary>
+    private static IChatClient CreateChatClient(string endpoint, string deployment, string? apiKey)
+    {
+        var uri = new Uri(endpoint);
+
+        // Azure AI Foundry portal URLs include a project path (.../api/projects/{project})
+        // that is not part of the Azure OpenAI API surface — use only the resource root.
+        if (uri.Host.EndsWith("services.ai.azure.com", StringComparison.OrdinalIgnoreCase))
+        {
+            uri = new Uri($"{uri.Scheme}://{uri.Host}/");
+        }
+
+        var azureClient = string.IsNullOrWhiteSpace(apiKey)
+            ? new AzureOpenAIClient(uri, new DefaultAzureCredential())
+            : new AzureOpenAIClient(uri, new ApiKeyCredential(apiKey));
+
+        // GetResponsesClient targets the Responses API endpoint instead of the
+        // legacy Chat Completions endpoint, enabling reasoning and tool use.
+        return azureClient.GetResponsesClient(deployment).AsIChatClient();
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-# meister-propr Development Guidelines
+﻿# meister-propr Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-03-03
 
@@ -7,6 +7,10 @@ Auto-generated from all feature plans. Last updated: 2026-03-03
 - PostgreSQL 17 via EF Core (three new nullable columns on `clients` table) (003-client-ado-auth)
 - TypeScript 5.x + Vue 3.5 (Composition API, `<script setup>`) + Vite 6, Vue Router 4, Vitest 3, `@vue/test-utils` 2 (004-admin-ui)
 - No backend storage changes — reads/writes existing `clients` table via REST API (004-admin-ui)
+- C# 13 / .NET 10, TFM `net10.0` + ASP.NET Core MVC, `Microsoft.TeamFoundationServer.Client 20.269.0-preview` (existing), `Azure.Identity 1.14.2` (existing) (005-add-ai-reviewer)
+- No changes — reviewer GUID is ephemeral (from `VssConnection.AuthorizedIdentity`) (005-add-ai-reviewer)
+- C# 13 / .NET 10, TFM `net10.0` + ASP.NET Core MVC, EF Core 10.0.3, Npgsql 10.0.0, `Microsoft.TeamFoundationServer.Client 20.269.0-preview`, `Azure.Identity 1.14.2` — all existing; no new packages (005-add-ai-reviewer)
+- PostgreSQL 17 — one column added to `clients`, one column dropped from `crawl_configurations`; one new EF Core migration (005-add-ai-reviewer)
 
 - C# / .NET 10, TFM `net10.0` + ASP.NET Core MVC, EF Core 10.0.3, Npgsql.EntityFrameworkCore.PostgreSQL 10.0.0,
   Microsoft.TeamFoundationServer.Client 20.269.0-preview (existing) (002-pr-review-persistence)
@@ -48,10 +52,10 @@ docker compose up                                 # Production-like container st
 - Serilog for logging; destructuring policies MUST scrub `X-Client-Key`, `X-Ado-Token`, `AZURE_CLIENT_SECRET`
 
 ## Recent Changes
+- 005-add-ai-reviewer: Added C# 13 / .NET 10, TFM `net10.0` + ASP.NET Core MVC, EF Core 10.0.3, Npgsql 10.0.0, `Microsoft.TeamFoundationServer.Client 20.269.0-preview`, `Azure.Identity 1.14.2` — all existing; no new packages
+- 005-add-ai-reviewer: Added C# 13 / .NET 10, TFM `net10.0` + ASP.NET Core MVC, `Microsoft.TeamFoundationServer.Client 20.269.0-preview` (existing), `Azure.Identity 1.14.2` (existing)
 - 004-admin-ui: Added TypeScript 5.x + Vue 3.5 (Composition API, `<script setup>`) + Vite 6, Vue Router 4, Vitest 3, `@vue/test-utils` 2
-- 003-client-ado-auth: Added C# 13 / .NET 10, TFM `net10.0` + ASP.NET Core MVC, EF Core 10.0.3, Npgsql 10.0.0, Azure.Identity 1.14.2, Microsoft.TeamFoundationServer.Client 20.269.0-preview
 
-- 002-pr-review-persistence: Added C# / .NET 10, TFM `net10.0` + ASP.NET Core MVC, EF Core 10.0.3,
   Npgsql.EntityFrameworkCore.PostgreSQL 10.0.0, Microsoft.TeamFoundationServer.Client 20.269.0-preview (existing)
 
 

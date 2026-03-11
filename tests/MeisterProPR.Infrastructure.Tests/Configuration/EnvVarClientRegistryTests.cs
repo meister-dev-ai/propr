@@ -64,6 +64,18 @@ public class EnvVarClientRegistryTests : IDisposable
         Assert.Throws<InvalidOperationException>(CreateRegistry);
     }
 
+    // T002 — GetReviewerIdAsync always returns null in env-var mode
+
+    [Fact]
+    public async Task GetReviewerIdAsync_AlwaysReturnsNull()
+    {
+        Environment.SetEnvironmentVariable(EnvVar, "some-key-123");
+        var registry = CreateRegistry();
+
+        var result = await registry.GetReviewerIdAsync(Guid.NewGuid());
+        Assert.Null(result);
+    }
+
     [Fact]
     public void IsValidKey_IsCaseSensitive()
     {

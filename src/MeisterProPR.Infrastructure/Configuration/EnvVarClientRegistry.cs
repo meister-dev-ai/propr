@@ -43,6 +43,16 @@ public sealed class EnvVarClientRegistry : IClientRegistry
         return Task.FromResult(id);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Env-var mode has no database storage; reviewer identity is always null.
+    ///     Crawl-based jobs are not triggered in this mode, so the null return is safe.
+    /// </remarks>
+    public Task<Guid?> GetReviewerIdAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<Guid?>(null);
+    }
+
     /// <summary>Derives a stable, deterministic UUID from the key string using MD5.</summary>
     private static Guid DeterministicGuid(string key)
     {

@@ -13,12 +13,16 @@ namespace MeisterProPR.Application.Services;
 /// <param name="prFetcher">The pull request fetcher for retrieving PR details.</param>
 /// <param name="aiCore">The AI review core for performing the review.</param>
 /// <param name="commentPoster">The comment poster for posting review results to Azure DevOps.</param>
+/// <param name="reviewerManager">Adds the AI identity as an optional reviewer on the PR.</param>
+/// <param name="clientRegistry">Registry for looking up per-client configuration.</param>
 /// <param name="logger">The logger for logging review orchestration events.</param>
 public sealed class ReviewOrchestrationService(
     IJobRepository jobs,
     IPullRequestFetcher prFetcher,
     IAiReviewCore aiCore,
     IAdoCommentPoster commentPoster,
+    IAdoReviewerManager reviewerManager,
+    IClientRegistry clientRegistry,
     ILogger<ReviewOrchestrationService> logger)
 {
     /// <summary>
@@ -26,6 +30,26 @@ public sealed class ReviewOrchestrationService(
     /// </summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
     {
+        // Guard 1: client must be associated
+        if (job.ClientId is null)
+        {
+            logger.LogWarning("Job {JobId} has no client associated — failing", job.Id);
+            jobs.SetFailed(job.Id, "No client associated with job");
+            return;
+        }
+
+        // Guard 2: client must have a reviewer identity configured
+        var reviewerId = await clientRegistry.GetReviewerIdAsync(job.ClientId.Value, ct);
+        if (reviewerId is null)
+        {
+            logger.LogWarning(
+                "Reviewer identity not configured for client {ClientId} — failing job {JobId}",
+                job.ClientId,
+                job.Id);
+            jobs.SetFailed(job.Id, $"Reviewer identity not configured for client {job.ClientId}");
+            return;
+        }
+
         try
         {
             logger.LogInformation("Starting review for job {JobId} PR#{PrId}", job.Id, job.PullRequestId);
@@ -50,6 +74,16 @@ public sealed class ReviewOrchestrationService(
                 jobs.SetFailed(job.Id, "PR was closed or abandoned before review could begin");
                 return;
             }
+
+            // Add AI identity as optional reviewer before posting any comments.
+            await reviewerManager.AddOptionalReviewerAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                reviewerId.Value,
+                job.ClientId,
+                ct);
 
             var result = await aiCore.ReviewAsync(pr, ct);
 

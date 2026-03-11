@@ -12,19 +12,82 @@ namespace MeisterProPR.Application.Tests.Services;
 
 public class ReviewOrchestrationServiceTests
 {
+    private static (
+        IJobRepository jobs,
+        IPullRequestFetcher prFetcher,
+        IAiReviewCore aiCore,
+        IAdoCommentPoster commentPoster,
+        IAdoReviewerManager reviewerManager,
+        IClientRegistry clientRegistry,
+        ILogger<ReviewOrchestrationService> logger) CreateDeps()
+    {
+        return (
+            Substitute.For<IJobRepository>(),
+            Substitute.For<IPullRequestFetcher>(),
+            Substitute.For<IAiReviewCore>(),
+            Substitute.For<IAdoCommentPoster>(),
+            Substitute.For<IAdoReviewerManager>(),
+            Substitute.For<IClientRegistry>(),
+            Substitute.For<ILogger<ReviewOrchestrationService>>());
+    }
+
+    private static ReviewJob CreateJob()
+    {
+        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+    }
+
+    private static PullRequest CreatePullRequest()
+    {
+        return new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            1,
+            1,
+            "Test PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile>().AsReadOnly());
+    }
+
+    private static ReviewResult CreateReviewResult()
+    {
+        return new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly());
+    }
+
+    private static ReviewOrchestrationService CreateService(
+        IJobRepository jobs,
+        IPullRequestFetcher prFetcher,
+        IAiReviewCore aiCore,
+        IAdoCommentPoster commentPoster,
+        IAdoReviewerManager reviewerManager,
+        IClientRegistry clientRegistry,
+        ILogger<ReviewOrchestrationService> logger)
+    {
+        return new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+    }
+
+    /// <summary>Set up the clientRegistry to return a non-null reviewerId for the given job's ClientId.</summary>
+    private static void SetupReviewerIdReturns(IClientRegistry clientRegistry, ReviewJob job, Guid reviewerId)
+    {
+        if (job.ClientId is not null)
+        {
+            clientRegistry.GetReviewerIdAsync(job.ClientId.Value, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<Guid?>(reviewerId));
+        }
+    }
+
     [Fact]
     public async Task ProcessAsync_AiException_TransitionsJobToFailed()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
         var pr = CreatePullRequest();
 
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -37,7 +100,7 @@ public class ReviewOrchestrationServiceTests
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
             .Throws(new Exception("AI error"));
 
-        var service = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -47,20 +110,71 @@ public class ReviewOrchestrationServiceTests
         jobs.DidNotReceive().SetResult(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
     }
 
+    // T025 — AddOptionalReviewerAsync is called with client's ReviewerId before PostAsync
+
+    [Fact]
+    public async Task ProcessAsync_CallsAddOptionalReviewerBeforePostAsync()
+    {
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+        var reviewerId = Guid.NewGuid();
+
+        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
+            .Returns(result);
+
+        var callOrder = new List<string>();
+        reviewerManager.AddOptionalReviewerAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(_ => callOrder.Add("reviewer"));
+        commentPoster.PostAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(_ => callOrder.Add("post"));
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        Assert.Equal(["reviewer", "post"], callOrder);
+    }
+
     [Fact]
     public async Task ProcessAsync_CommentPostException_TransitionsJobToFailed()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
         var pr = CreatePullRequest();
         var result = CreateReviewResult();
 
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -83,7 +197,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("Comment post error"));
 
-        var service = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -96,13 +210,10 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_FetchException_TransitionsJobToFailed()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -113,7 +224,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("ADO fetch error"));
 
-        var service = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -121,6 +232,48 @@ public class ReviewOrchestrationServiceTests
         // Assert
         jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("ADO fetch error")));
         jobs.DidNotReceive().SetResult(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
+    }
+
+    // T033 — null ClientId → SetFailed immediately, no GetReviewerIdAsync call
+
+    [Fact]
+    public async Task ProcessAsync_NullClientId_CallsSetFailedImmediately()
+    {
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
+
+        // Job with null ClientId
+        var job = new ReviewJob(Guid.NewGuid(), null, "https://dev.azure.com/org", "proj", "repo", 1, 1);
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        jobs.Received(1).SetFailed(job.Id, Arg.Any<string>());
+        await clientRegistry.DidNotReceiveWithAnyArgs().GetReviewerIdAsync(default);
+    }
+
+    // T032 — null ReviewerId → SetFailed "not configured", no reviewer call, no PostAsync
+
+    [Fact]
+    public async Task ProcessAsync_NullReviewerId_CallsSetFailedWithNotConfiguredMessage()
+    {
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
+
+        var clientId = Guid.NewGuid();
+        var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
+
+        clientRegistry.GetReviewerIdAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Guid?>(null));
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("not configured")));
+        await reviewerManager.DidNotReceiveWithAnyArgs()
+            .AddOptionalReviewerAsync(default!, default!, default!, default, default);
+        await commentPoster.DidNotReceiveWithAnyArgs()
+            .PostAsync(default!, default!, default!, default, default, default!);
     }
 
     // ── EC-002: PR abandoned/closed while Processing ──────────────────────────
@@ -131,15 +284,12 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_PrNotActive_CallsSetFailedWithoutCallingAi(PrStatus status)
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
         var closedPr = CreatePullRequest() with { Status = status };
 
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -150,7 +300,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(closedPr);
 
-        var sut = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var sut = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await sut.ProcessAsync(job, CancellationToken.None);
@@ -160,20 +310,56 @@ public class ReviewOrchestrationServiceTests
         await aiCore.DidNotReceiveWithAnyArgs().ReviewAsync(default!);
     }
 
+    // T034 — AddOptionalReviewerAsync throws → PostAsync NOT called, job fails
+
+    [Fact]
+    public async Task ProcessAsync_ReviewerAddThrows_PostAsyncNotCalledAndJobFails()
+    {
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        reviewerManager.AddOptionalReviewerAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Throws(new Exception("Permission denied"));
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        jobs.Received(1).SetFailed(job.Id, Arg.Any<string>());
+        await commentPoster.DidNotReceiveWithAnyArgs()
+            .PostAsync(default!, default!, default!, default, default, default!);
+    }
+
     [Fact]
     public async Task ProcessAsync_SuccessfulFlow_CallsCommentPosterWithCorrectParameters()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
         var pr = CreatePullRequest();
         var result = CreateReviewResult();
 
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -186,7 +372,7 @@ public class ReviewOrchestrationServiceTests
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -208,16 +394,13 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_SuccessfulFlow_TransitionsJobToCompleted()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
-        var prFetcher = Substitute.For<IPullRequestFetcher>();
-        var aiCore = Substitute.For<IAiReviewCore>();
-        var commentPoster = Substitute.For<IAdoCommentPoster>();
-        var logger = Substitute.For<ILogger<ReviewOrchestrationService>>();
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
         var job = CreateJob();
         var pr = CreatePullRequest();
         var result = CreateReviewResult();
 
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -230,7 +413,7 @@ public class ReviewOrchestrationServiceTests
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = new ReviewOrchestrationService(jobs, prFetcher, aiCore, commentPoster, logger);
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -250,28 +433,42 @@ public class ReviewOrchestrationServiceTests
         jobs.DidNotReceive().SetFailed(Arg.Any<Guid>(), Arg.Any<string>());
     }
 
-    private static PullRequest CreatePullRequest()
-    {
-        return new PullRequest(
-            "https://dev.azure.com/org",
-            "proj",
-            "repo",
-            1,
-            1,
-            "Test PR",
-            null,
-            "feature/x",
-            "main",
-            new List<ChangedFile>().AsReadOnly());
-    }
+    // T026 — GetReviewerIdAsync returns non-null → AddOptionalReviewerAsync called with that GUID
 
-    private static ReviewJob CreateJob()
+    [Fact]
+    public async Task ProcessAsync_WithConfiguredReviewerId_CallsAddOptionalReviewerWithThatGuid()
     {
-        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
-    }
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
 
-    private static ReviewResult CreateReviewResult()
-    {
-        return new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly());
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+        var reviewerId = Guid.NewGuid();
+
+        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
+            .Returns(result);
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await reviewerManager.Received(1)
+            .AddOptionalReviewerAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                reviewerId,
+                job.ClientId,
+                Arg.Any<CancellationToken>());
     }
 }

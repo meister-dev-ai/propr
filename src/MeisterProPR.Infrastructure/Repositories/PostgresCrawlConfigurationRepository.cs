@@ -30,7 +30,6 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
         Guid clientId,
         string organizationUrl,
         string projectId,
-        Guid reviewerId,
         int crawlIntervalSeconds,
         CancellationToken ct = default)
     {
@@ -40,19 +39,25 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
             ClientId = clientId,
             OrganizationUrl = organizationUrl,
             ProjectId = projectId,
-            ReviewerId = reviewerId,
             CrawlIntervalSeconds = crawlIntervalSeconds,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         dbContext.CrawlConfigurations.Add(record);
         await dbContext.SaveChangesAsync(ct);
+
+        // Populate ReviewerId from the owning client record.
+        var clientReviewerId = await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => c.ReviewerId)
+            .FirstOrDefaultAsync(ct);
+
         return new CrawlConfigurationDto(
             record.Id,
             record.ClientId,
             record.OrganizationUrl,
             record.ProjectId,
-            record.ReviewerId,
+            clientReviewerId,
             record.CrawlIntervalSeconds,
             record.IsActive,
             record.CreatedAt);
@@ -68,7 +73,7 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
                 c.ClientId,
                 c.OrganizationUrl,
                 c.ProjectId,
-                c.ReviewerId,
+                c.Client.ReviewerId,
                 c.CrawlIntervalSeconds,
                 c.IsActive,
                 c.CreatedAt))
@@ -80,14 +85,14 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
         Guid clientId,
         string organizationUrl,
         string projectId,
-        Guid reviewerId,
         CancellationToken ct = default)
-        => dbContext.CrawlConfigurations.AnyAsync(
+    {
+        return dbContext.CrawlConfigurations.AnyAsync(
             c => c.ClientId == clientId &&
                  c.OrganizationUrl == organizationUrl &&
-                 c.ProjectId == projectId &&
-                 c.ReviewerId == reviewerId,
+                 c.ProjectId == projectId,
             ct);
+    }
 
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default)
@@ -95,7 +100,9 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
         var record = await dbContext.CrawlConfigurations
             .FirstOrDefaultAsync(c => c.Id == configId && c.ClientId == clientId, ct);
         if (record is null)
+        {
             return false;
+        }
 
         dbContext.CrawlConfigurations.Remove(record);
         await dbContext.SaveChangesAsync(ct);
@@ -115,7 +122,7 @@ public sealed class PostgresCrawlConfigurationRepository(MeisterProPRDbContext d
                 c.ClientId,
                 c.OrganizationUrl,
                 c.ProjectId,
-                c.ReviewerId,
+                c.Client.ReviewerId,
                 c.CrawlIntervalSeconds,
                 c.IsActive,
                 c.CreatedAt))

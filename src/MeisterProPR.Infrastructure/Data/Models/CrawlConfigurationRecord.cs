@@ -8,7 +8,6 @@ public sealed class CrawlConfigurationRecord
     public DateTimeOffset CreatedAt { get; set; }
     public Guid ClientId { get; set; }
     public Guid Id { get; set; }
-    public Guid ReviewerId { get; set; }
     public int CrawlIntervalSeconds { get; set; }
     public string OrganizationUrl { get; set; } = string.Empty;
     public string ProjectId { get; set; } = string.Empty;

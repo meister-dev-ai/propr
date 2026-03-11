@@ -11,4 +11,5 @@ public sealed class ClientRecord
     public string? AdoTenantId { get; set; }
     public string? AdoClientId { get; set; }
     public string? AdoClientSecret { get; set; }
+    public Guid? ReviewerId { get; set; }
 }

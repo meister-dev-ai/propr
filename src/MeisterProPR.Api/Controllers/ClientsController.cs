@@ -13,9 +13,20 @@ public sealed class ClientsController(
     MeisterProPRDbContext dbContext,
     IClientRegistry clientRegistry,
     ICrawlConfigurationRepository crawlConfigs,
-    IIdentityResolver identityResolver,
     IClientAdoCredentialRepository adoCredentialRepository) : ControllerBase
 {
+    private static ClientResponse ToClientResponse(ClientRecord client)
+    {
+        return new ClientResponse(
+            client.Id,
+            client.DisplayName,
+            client.IsActive,
+            client.CreatedAt,
+            client.AdoTenantId != null && client.AdoClientId != null && client.AdoClientSecret != null,
+            client.AdoTenantId,
+            client.AdoClientId,
+            client.ReviewerId);
+    }
     // ── Client-Scoped: Crawl Configurations ──────────────────────────────────
 
     /// <summary>
@@ -59,38 +70,29 @@ public sealed class ClientsController(
         }
 
         if (string.IsNullOrWhiteSpace(request.OrganizationUrl))
+        {
             return this.BadRequest(new { error = "OrganizationUrl is required." });
+        }
 
         if (string.IsNullOrWhiteSpace(request.ProjectId))
+        {
             return this.BadRequest(new { error = "ProjectId is required." });
-
-        if (string.IsNullOrWhiteSpace(request.ReviewerDisplayName))
-            return this.BadRequest(new { error = "ReviewerDisplayName is required." });
+        }
 
         if (request.CrawlIntervalSeconds < 10)
+        {
             return this.BadRequest(new { error = "CrawlIntervalSeconds must be >= 10." });
+        }
 
-        var identityMatches = await identityResolver.ResolveAsync(request.OrganizationUrl, request.ReviewerDisplayName, clientId, ct);
-        if (identityMatches.Count == 0)
-            return this.BadRequest(new { error = $"No ADO identity found with display name '{request.ReviewerDisplayName}'." });
-
-        if (identityMatches.Count > 1)
-            return this.BadRequest(new
-            {
-                error = $"Multiple ADO identities match '{request.ReviewerDisplayName}'. Provide a more specific display name.",
-                matches = identityMatches.Select(m => new { m.Id, m.DisplayName }),
-            });
-
-        var reviewerId = identityMatches[0].Id;
-
-        if (await crawlConfigs.ExistsAsync(clientId, request.OrganizationUrl, request.ProjectId, reviewerId, ct))
-            return this.Conflict(new { error = "A crawl configuration for this organisation, project and reviewer already exists." });
+        if (await crawlConfigs.ExistsAsync(clientId, request.OrganizationUrl, request.ProjectId, ct))
+        {
+            return this.Conflict(new { error = "A crawl configuration for this organisation and project already exists." });
+        }
 
         var config = await crawlConfigs.AddAsync(
             clientId,
             request.OrganizationUrl,
             request.ProjectId,
-            reviewerId,
             request.CrawlIntervalSeconds,
             ct);
 
@@ -102,7 +104,6 @@ public sealed class ClientsController(
                 config.ClientId,
                 config.OrganizationUrl,
                 config.ProjectId,
-                config.ReviewerId,
                 config.CrawlIntervalSeconds,
                 config.IsActive,
                 config.CreatedAt));
@@ -161,6 +162,106 @@ public sealed class ClientsController(
             nameof(this.GetClient),
             new { clientId = client.Id },
             ToClientResponse(client));
+    }
+
+    /// <summary>
+    ///     Removes ADO service principal credentials from a client. Requires <c>X-Admin-Key</c>.
+    ///     The client falls back to the global backend identity on subsequent ADO operations.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="204">Credentials removed (or client had no credentials — idempotent).</response>
+    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpDelete("clients/{clientId:guid}/ado-credentials")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteAdoCredentials(Guid clientId, CancellationToken ct = default)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+        }
+
+        var clientExists = await dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
+        if (!clientExists)
+        {
+            return this.NotFound();
+        }
+
+        await adoCredentialRepository.ClearAsync(clientId, ct);
+        return this.NoContent();
+    }
+
+    /// <summary>
+    ///     Deletes a client and all its crawl configurations. Requires <c>X-Admin-Key</c>.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <response code="204">Client deleted.</response>
+    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpDelete("clients/{clientId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteClient(Guid clientId)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+        }
+
+        var client = await dbContext.Clients.FindAsync(clientId);
+        if (client is null)
+        {
+            return this.NotFound();
+        }
+
+        dbContext.Clients.Remove(client);
+        await dbContext.SaveChangesAsync();
+        return this.NoContent();
+    }
+
+    /// <summary>
+    ///     Deletes a crawl configuration. Requires <c>X-Client-Key</c> that owns the client.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="configId">Configuration identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="204">Configuration deleted.</response>
+    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
+    /// <response code="403">Caller does not own this client.</response>
+    /// <response code="404">Configuration not found.</response>
+    [HttpDelete("clients/{clientId:guid}/crawl-configurations/{configId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteCrawlConfiguration(
+        Guid clientId,
+        Guid configId,
+        CancellationToken ct = default)
+    {
+        var callerKey = this.HttpContext.Items["ClientKey"] as string;
+        if (string.IsNullOrWhiteSpace(callerKey))
+        {
+            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+        }
+
+        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
+        if (callerId is null || callerId != clientId)
+        {
+            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
+        }
+
+        var deleted = await crawlConfigs.DeleteAsync(configId, clientId, ct);
+        if (!deleted)
+        {
+            return this.NotFound();
+        }
+
+        return this.NoContent();
     }
 
     /// <summary>
@@ -245,7 +346,6 @@ public sealed class ClientsController(
                     c.ClientId,
                     c.OrganizationUrl,
                     c.ProjectId,
-                    c.ReviewerId,
                     c.CrawlIntervalSeconds,
                     c.IsActive,
                     c.CreatedAt))
@@ -253,35 +353,10 @@ public sealed class ClientsController(
     }
 
     /// <summary>
-    ///     Deletes a client and all its crawl configurations. Requires <c>X-Admin-Key</c>.
+    ///     Updates one or more fields of a client (display name, active status). Requires <c>X-Admin-Key</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
-    /// <response code="204">Client deleted.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpDelete("clients/{clientId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteClient(Guid clientId)
-    {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
-
-        var client = await dbContext.Clients.FindAsync(clientId);
-        if (client is null)
-            return this.NotFound();
-
-        dbContext.Clients.Remove(client);
-        await dbContext.SaveChangesAsync();
-        return this.NoContent();
-    }
-
-    /// <summary>
-    ///     Enables or disables a client. Requires <c>X-Admin-Key</c>.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Update request.</param>
+    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
     /// <response code="200">Client updated.</response>
     /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
     /// <response code="404">Client not found.</response>
@@ -302,113 +377,19 @@ public sealed class ClientsController(
             return this.NotFound();
         }
 
-        client.IsActive = request.IsActive;
+        if (request.IsActive.HasValue)
+        {
+            client.IsActive = request.IsActive.Value;
+        }
+
+        if (request.DisplayName is not null)
+        {
+            client.DisplayName = request.DisplayName;
+        }
+
         await dbContext.SaveChangesAsync();
 
         return this.Ok(ToClientResponse(client));
-    }
-
-    /// <summary>
-    ///     Sets or replaces ADO service principal credentials for a client. Requires <c>X-Admin-Key</c>.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">ADO credential details — all three fields required.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Credentials stored.</response>
-    /// <response code="400">One or more fields are missing or blank.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpPut("clients/{clientId:guid}/ado-credentials")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> PutAdoCredentials(
-        Guid clientId,
-        [FromBody] SetAdoCredentialsRequest request,
-        CancellationToken ct = default)
-    {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
-
-        if (string.IsNullOrWhiteSpace(request.TenantId) ||
-            string.IsNullOrWhiteSpace(request.ClientId) ||
-            string.IsNullOrWhiteSpace(request.Secret))
-        {
-            return this.BadRequest(new { error = "TenantId, ClientId, and Secret are all required." });
-        }
-
-        var clientExists = await dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
-        if (!clientExists)
-            return this.NotFound();
-
-        await adoCredentialRepository.UpsertAsync(
-            clientId,
-            new ClientAdoCredentials(request.TenantId, request.ClientId, request.Secret),
-            ct);
-
-        return this.NoContent();
-    }
-
-    /// <summary>
-    ///     Removes ADO service principal credentials from a client. Requires <c>X-Admin-Key</c>.
-    ///     The client falls back to the global backend identity on subsequent ADO operations.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Credentials removed (or client had no credentials — idempotent).</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpDelete("clients/{clientId:guid}/ado-credentials")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAdoCredentials(Guid clientId, CancellationToken ct = default)
-    {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
-
-        var clientExists = await dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
-        if (!clientExists)
-            return this.NotFound();
-
-        await adoCredentialRepository.ClearAsync(clientId, ct);
-        return this.NoContent();
-    }
-
-    /// <summary>
-    ///     Deletes a crawl configuration. Requires <c>X-Client-Key</c> that owns the client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="configId">Configuration identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Configuration deleted.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">Configuration not found.</response>
-    [HttpDelete("clients/{clientId:guid}/crawl-configurations/{configId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteCrawlConfiguration(
-        Guid clientId,
-        Guid configId,
-        CancellationToken ct = default)
-    {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
-
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-
-        var deleted = await crawlConfigs.DeleteAsync(configId, clientId, ct);
-        if (!deleted)
-            return this.NotFound();
-
-        return this.NoContent();
     }
 
     /// <summary>
@@ -460,21 +441,99 @@ public sealed class ClientsController(
                 config.ClientId,
                 config.OrganizationUrl,
                 config.ProjectId,
-                config.ReviewerId,
                 config.CrawlIntervalSeconds,
                 config.IsActive,
                 config.CreatedAt));
     }
 
-    private static ClientResponse ToClientResponse(ClientRecord client) =>
-        new(
-            client.Id,
-            client.DisplayName,
-            client.IsActive,
-            client.CreatedAt,
-            client.AdoTenantId != null && client.AdoClientId != null && client.AdoClientSecret != null,
-            client.AdoTenantId,
-            client.AdoClientId);
+    /// <summary>
+    ///     Sets or replaces ADO service principal credentials for a client. Requires <c>X-Admin-Key</c>.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="request">ADO credential details — all three fields required.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="204">Credentials stored.</response>
+    /// <response code="400">One or more fields are missing or blank.</response>
+    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpPut("clients/{clientId:guid}/ado-credentials")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PutAdoCredentials(
+        Guid clientId,
+        [FromBody] SetAdoCredentialsRequest request,
+        CancellationToken ct = default)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.TenantId) ||
+            string.IsNullOrWhiteSpace(request.ClientId) ||
+            string.IsNullOrWhiteSpace(request.Secret))
+        {
+            return this.BadRequest(new { error = "TenantId, ClientId, and Secret are all required." });
+        }
+
+        var clientExists = await dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
+        if (!clientExists)
+        {
+            return this.NotFound();
+        }
+
+        await adoCredentialRepository.UpsertAsync(
+            clientId,
+            new ClientAdoCredentials(request.TenantId, request.ClientId, request.Secret),
+            ct);
+
+        return this.NoContent();
+    }
+
+    /// <summary>
+    ///     Sets or replaces the ADO reviewer identity GUID for a client. Requires <c>X-Admin-Key</c>.
+    ///     Until this is set, review jobs for the client will be rejected.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="request">The ADO identity GUID of the AI service account.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="204">Reviewer identity stored.</response>
+    /// <response code="400"><paramref name="request" /> contains an empty GUID.</response>
+    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpPut("clients/{clientId:guid}/reviewer-identity")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PutReviewerIdentity(
+        Guid clientId,
+        [FromBody] SetReviewerIdentityRequest request,
+        CancellationToken ct = default)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+        }
+
+        if (request.ReviewerId == Guid.Empty)
+        {
+            return this.BadRequest(new { error = "ReviewerId must not be an empty GUID." });
+        }
+
+        var client = await dbContext.Clients.FindAsync([clientId], ct);
+        if (client is null)
+        {
+            return this.NotFound();
+        }
+
+        client.ReviewerId = request.ReviewerId;
+        await dbContext.SaveChangesAsync(ct);
+
+        return this.NoContent();
+    }
 
     /// <summary>Client response — key and ADO secret are never included.</summary>
     public sealed record ClientResponse(
@@ -484,7 +543,8 @@ public sealed class ClientsController(
         DateTimeOffset CreatedAt,
         bool HasAdoCredentials,
         string? AdoTenantId,
-        string? AdoClientId);
+        string? AdoClientId,
+        Guid? ReviewerId);
 
     /// <summary>Crawl configuration response.</summary>
     public sealed record CrawlConfigResponse(
@@ -492,7 +552,6 @@ public sealed class ClientsController(
         Guid ClientId,
         string OrganizationUrl,
         string ProjectId,
-        Guid ReviewerId,
         int CrawlIntervalSeconds,
         bool IsActive,
         DateTimeOffset CreatedAt);
@@ -506,15 +565,17 @@ public sealed class ClientsController(
     public sealed record CreateCrawlConfigRequest(
         string OrganizationUrl,
         string ProjectId,
-        string ReviewerDisplayName,
         int CrawlIntervalSeconds = 60);
 
-    /// <summary>Request body for patching a client's active status.</summary>
-    public sealed record PatchClientRequest(bool IsActive);
+    /// <summary>Request body for patching a client. All fields are optional; omitted fields are left unchanged.</summary>
+    public sealed record PatchClientRequest(bool? IsActive = null, string? DisplayName = null);
 
     /// <summary>Request body for patching a crawl configuration's active status.</summary>
     public sealed record PatchCrawlConfigRequest(bool IsActive);
 
     /// <summary>Request body for setting ADO service principal credentials.</summary>
     public sealed record SetAdoCredentialsRequest(string TenantId, string ClientId, string Secret);
+
+    /// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
+    public sealed record SetReviewerIdentityRequest(Guid ReviewerId);
 }

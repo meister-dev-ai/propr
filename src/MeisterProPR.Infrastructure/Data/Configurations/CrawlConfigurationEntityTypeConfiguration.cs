@@ -25,10 +25,6 @@ internal sealed class CrawlConfigurationEntityTypeConfiguration : IEntityTypeCon
             .HasColumnName("project_id")
             .IsRequired();
 
-        builder.Property(c => c.ReviewerId)
-            .HasColumnName("reviewer_id")
-            .IsRequired();
-
         builder.Property(c => c.CrawlIntervalSeconds)
             .HasColumnName("crawl_interval_seconds")
             .HasDefaultValue(60);
@@ -48,7 +44,7 @@ internal sealed class CrawlConfigurationEntityTypeConfiguration : IEntityTypeCon
 
         builder.HasIndex(c => c.ClientId).HasDatabaseName("ix_crawl_configurations_client_id");
 
-        builder.HasIndex(c => new { c.ClientId, c.OrganizationUrl, c.ProjectId, c.ReviewerId })
+        builder.HasIndex(c => new { c.ClientId, c.OrganizationUrl, c.ProjectId })
             .IsUnique()
             .HasDatabaseName("ix_crawl_configurations_unique_config");
         builder.HasIndex(c => c.IsActive)
