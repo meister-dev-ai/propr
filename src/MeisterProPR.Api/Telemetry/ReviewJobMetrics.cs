@@ -6,11 +6,11 @@ namespace MeisterProPR.Api.Telemetry;
 /// <summary>Exposes metrics for review jobs (histograms, counters, etc.).</summary>
 public sealed class ReviewJobMetrics : IDisposable
 {
-    /// <summary>Counter tracking total number of PRs discovered by the crawler.</summary>
-    public readonly Counter<long> CrawlPrsDiscovered;
-
     /// <summary>Histogram measuring PR crawl cycle durations in seconds.</summary>
     public readonly Histogram<double> CrawlDuration;
+
+    /// <summary>Counter tracking total number of PRs discovered by the crawler.</summary>
+    public readonly Counter<long> CrawlPrsDiscovered;
 
     /// <summary>Histogram measuring review job durations in seconds.</summary>
     public readonly Histogram<double> JobDuration;

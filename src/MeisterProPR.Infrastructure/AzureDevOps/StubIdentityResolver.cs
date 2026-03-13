@@ -11,5 +11,7 @@ public sealed class StubIdentityResolver : IIdentityResolver
         string displayName,
         Guid clientId,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ResolvedIdentity>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ResolvedIdentity>>([]);
+    }
 }

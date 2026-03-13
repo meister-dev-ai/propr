@@ -28,7 +28,10 @@ public sealed class AdoCommentPoster(
         // Build a map of normalised file path → changeTrackingId for inline comment anchoring.
         // changeTrackingId is required by ADO to resolve a file thread against the correct diff.
         var changes = await gitClient.GetPullRequestIterationChangesAsync(
-            projectId, repositoryId, pullRequestId, iterationId,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
             cancellationToken: cancellationToken);
         var changeTrackingIds = (changes.ChangeEntries ?? [])
             .Where(c => c.Item?.Path is not null)
@@ -103,9 +106,6 @@ public sealed class AdoCommentPoster(
         }
     }
 
-    private static string NormalizePath(string path) =>
-        path.StartsWith('/') ? path : "/" + path;
-
     private static async Task CreateThreadAsync(
         GitHttpClient gitClient,
         string projectId,
@@ -129,5 +129,10 @@ public sealed class AdoCommentPoster(
             pullRequestId,
             projectId,
             ct);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return path.StartsWith('/') ? path : "/" + path;
     }
 }

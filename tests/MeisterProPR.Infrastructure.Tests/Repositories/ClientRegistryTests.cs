@@ -34,7 +34,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     [Fact]
     public async Task GetReviewerIdAsync_ClientWithNullReviewerId_ReturnsNull()
     {
-        var record = await this.SeedClientAsync(null);
+        var record = await this.SeedClientAsync();
         var result = await this._registry.GetReviewerIdAsync(record.Id);
         Assert.Null(result);
     }

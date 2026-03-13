@@ -21,7 +21,9 @@ namespace MeisterProPR.Api.Tests;
 [Collection("PostgresApiIntegration")]
 public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
-    public async Task DisposeAsync() { }
+    public async Task DisposeAsync()
+    {
+    }
 
     public async Task InitializeAsync()
     {

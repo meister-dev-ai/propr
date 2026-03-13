@@ -29,7 +29,10 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         await ctx.Database.MigrateAsync();
     }
 
-    public async Task DisposeAsync() => await this._postgres.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        await this._postgres.DisposeAsync();
+    }
 }
 
 /// <summary>

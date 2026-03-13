@@ -1,5 +1,4 @@
 using Azure.Core;
-using Azure.Identity;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Infrastructure.AzureDevOps;
 using NSubstitute;
@@ -8,6 +7,26 @@ namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
 public class VssConnectionFactoryTests
 {
+    [Fact]
+    public async Task GetConnectionAsync_CacheKeyDistinguishesClientIdFromGlobal()
+    {
+        // Arrange
+        var credential = Substitute.For<TokenCredential>();
+        credential
+            .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>())
+            .Returns(new AccessToken("fake-token-value", DateTimeOffset.UtcNow.AddHours(1)));
+
+        var factory = new VssConnectionFactory(credential);
+        const string orgUrl = "https://dev.azure.com/testorg";
+
+        // Act: null credentials (global path) and non-null credentials use different cache keys
+        var globalConn = await factory.GetConnectionAsync(orgUrl);
+        var globalConn2 = await factory.GetConnectionAsync(orgUrl);
+
+        // Same cache key for two global calls
+        Assert.Same(globalConn, globalConn2);
+    }
+
     [Fact]
     public async Task GetConnectionAsync_DifferentUrls_ReturnsDifferentConnections()
     {
@@ -115,25 +134,5 @@ public class VssConnectionFactoryTests
 
         await globalCredential.DidNotReceiveWithAnyArgs()
             .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GetConnectionAsync_CacheKeyDistinguishesClientIdFromGlobal()
-    {
-        // Arrange
-        var credential = Substitute.For<TokenCredential>();
-        credential
-            .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>())
-            .Returns(new AccessToken("fake-token-value", DateTimeOffset.UtcNow.AddHours(1)));
-
-        var factory = new VssConnectionFactory(credential);
-        const string orgUrl = "https://dev.azure.com/testorg";
-
-        // Act: null credentials (global path) and non-null credentials use different cache keys
-        var globalConn = await factory.GetConnectionAsync(orgUrl, null);
-        var globalConn2 = await factory.GetConnectionAsync(orgUrl, null);
-
-        // Same cache key for two global calls
-        Assert.Same(globalConn, globalConn2);
     }
 }

@@ -25,16 +25,37 @@ public sealed class PostgresClientAdoCredentialRepositoryTests
     private static async Task<Guid> SeedClientAsync(MeisterProPRDbContext db)
     {
         var id = Guid.NewGuid();
-        db.Clients.Add(new ClientRecord
-        {
-            Id = id,
-            Key = $"key-{id}",
-            DisplayName = "Test",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = id,
+                Key = $"key-{id}",
+                DisplayName = "Test",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
         return id;
+    }
+
+    [Fact]
+    public async Task ClearAsync_NullsAllThreeColumns()
+    {
+        await using var db = CreateContext();
+        var clientId = await SeedClientAsync(db);
+        var sut = new PostgresClientAdoCredentialRepository(db);
+
+        await sut.UpsertAsync(clientId, new ClientAdoCredentials("t", "c", "s"), CancellationToken.None);
+        await sut.ClearAsync(clientId, CancellationToken.None);
+
+        var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
+        Assert.Null(result);
+
+        var record = await db.Clients.FindAsync(clientId);
+        Assert.NotNull(record);
+        Assert.Null(record.AdoTenantId);
+        Assert.Null(record.AdoClientId);
+        Assert.Null(record.AdoClientSecret);
     }
 
     [Fact]
@@ -47,23 +68,6 @@ public sealed class PostgresClientAdoCredentialRepositoryTests
         var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
 
         Assert.Null(result);
-    }
-
-    [Fact]
-    public async Task UpsertAsync_ThenGetByClientId_ReturnsStoredCredentials()
-    {
-        await using var db = CreateContext();
-        var clientId = await SeedClientAsync(db);
-        var sut = new PostgresClientAdoCredentialRepository(db);
-        var credentials = new ClientAdoCredentials("tenant-abc", "client-abc", "secret-abc");
-
-        await sut.UpsertAsync(clientId, credentials, CancellationToken.None);
-        var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
-
-        Assert.NotNull(result);
-        Assert.Equal("tenant-abc", result.TenantId);
-        Assert.Equal("client-abc", result.ClientId);
-        Assert.Equal("secret-abc", result.Secret);
     }
 
     [Fact]
@@ -88,22 +92,19 @@ public sealed class PostgresClientAdoCredentialRepositoryTests
     }
 
     [Fact]
-    public async Task ClearAsync_NullsAllThreeColumns()
+    public async Task UpsertAsync_ThenGetByClientId_ReturnsStoredCredentials()
     {
         await using var db = CreateContext();
         var clientId = await SeedClientAsync(db);
         var sut = new PostgresClientAdoCredentialRepository(db);
+        var credentials = new ClientAdoCredentials("tenant-abc", "client-abc", "secret-abc");
 
-        await sut.UpsertAsync(clientId, new ClientAdoCredentials("t", "c", "s"), CancellationToken.None);
-        await sut.ClearAsync(clientId, CancellationToken.None);
-
+        await sut.UpsertAsync(clientId, credentials, CancellationToken.None);
         var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
-        Assert.Null(result);
 
-        var record = await db.Clients.FindAsync(clientId);
-        Assert.NotNull(record);
-        Assert.Null(record.AdoTenantId);
-        Assert.Null(record.AdoClientId);
-        Assert.Null(record.AdoClientSecret);
+        Assert.NotNull(result);
+        Assert.Equal("tenant-abc", result.TenantId);
+        Assert.Equal("client-abc", result.ClientId);
+        Assert.Equal("secret-abc", result.Secret);
     }
 }

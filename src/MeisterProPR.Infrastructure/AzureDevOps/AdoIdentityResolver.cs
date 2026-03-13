@@ -31,7 +31,7 @@ public sealed class AdoIdentityResolver(
     {
         var perClientCredentials = await credentialRepository.GetByClientIdAsync(clientId, ct);
 
-        TokenCredential effectiveCredential = perClientCredentials is not null
+        var effectiveCredential = perClientCredentials is not null
             ? new ClientSecretCredential(
                 perClientCredentials.TenantId,
                 perClientCredentials.ClientId,

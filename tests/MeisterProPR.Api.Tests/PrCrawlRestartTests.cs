@@ -1,6 +1,6 @@
+using MeisterProPR.Api.Tests.Fixtures;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Api.Tests.Fixtures;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
@@ -21,6 +21,19 @@ namespace MeisterProPR.Api.Tests;
 [Collection("PostgresApiIntegration")]
 public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    public async Task DisposeAsync()
+    {
+    }
+
+    public async Task InitializeAsync()
+    {
+        // Wipe jobs so the count assertion (total == 1) is not polluted by other tests.
+        var opts = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+        await using var db = new MeisterProPRDbContext(opts);
+        await db.ReviewJobs.ExecuteDeleteAsync();
+    }
 
     /// <summary>
     ///     Seeds a Completed job for PR #42 directly into Postgres (before the app starts),
@@ -117,17 +130,5 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             var (total, _) = await jobs.GetAllJobsAsync(100, 0, null);
             Assert.Equal(1, total);
         }
-    }
-
-    public async Task DisposeAsync() { }
-
-    public async Task InitializeAsync()
-    {
-        // Wipe jobs so the count assertion (total == 1) is not polluted by other tests.
-        var opts = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
-            .Options;
-        await using var db = new MeisterProPRDbContext(opts);
-        await db.ReviewJobs.ExecuteDeleteAsync();
     }
 }

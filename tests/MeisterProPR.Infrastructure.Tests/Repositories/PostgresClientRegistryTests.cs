@@ -23,6 +23,17 @@ public sealed class PostgresClientRegistryTests(PostgresContainerFixture fixture
         await this._dbContext.DisposeAsync();
     }
 
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+        this._dbContext = new MeisterProPRDbContext(options);
+        // Wipe client rows between tests (CASCADE removes crawl_configurations too).
+        await this._dbContext.Clients.ExecuteDeleteAsync();
+        this._registry = new PostgresClientRegistry(this._dbContext, NullLogger<PostgresClientRegistry>.Instance);
+    }
+
     // ── GetClientIdByKeyAsync (T046) ──────────────────────────────────────────
 
     [Fact]
@@ -56,15 +67,10 @@ public sealed class PostgresClientRegistryTests(PostgresContainerFixture fixture
         Assert.Null(result);
     }
 
-    public async Task InitializeAsync()
+    [Fact]
+    public void IsValidKey_ReturnsFalse_ForEmpty()
     {
-        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
-            .Options;
-        this._dbContext = new MeisterProPRDbContext(options);
-        // Wipe client rows between tests (CASCADE removes crawl_configurations too).
-        await this._dbContext.Clients.ExecuteDeleteAsync();
-        this._registry = new PostgresClientRegistry(this._dbContext, NullLogger<PostgresClientRegistry>.Instance);
+        Assert.False(this._registry.IsValidKey(""));
     }
 
     [Fact]
@@ -74,6 +80,12 @@ public sealed class PostgresClientRegistryTests(PostgresContainerFixture fixture
         Assert.False(this._registry.IsValidKey("inactive-key-xyz"));
     }
 
+    [Fact]
+    public void IsValidKey_ReturnsFalse_ForUnknownKey()
+    {
+        Assert.False(this._registry.IsValidKey("totally-unknown-key"));
+    }
+
     // ── IsValidKey ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -81,18 +93,6 @@ public sealed class PostgresClientRegistryTests(PostgresContainerFixture fixture
     {
         await this.SeedClientAsync("valid-key-abc123");
         Assert.True(this._registry.IsValidKey("valid-key-abc123"));
-    }
-
-    [Fact]
-    public void IsValidKey_ReturnsFalse_ForEmpty()
-    {
-        Assert.False(this._registry.IsValidKey(""));
-    }
-
-    [Fact]
-    public void IsValidKey_ReturnsFalse_ForUnknownKey()
-    {
-        Assert.False(this._registry.IsValidKey("totally-unknown-key"));
     }
 
     private async Task<ClientRecord> SeedClientAsync(string key, bool isActive = true)

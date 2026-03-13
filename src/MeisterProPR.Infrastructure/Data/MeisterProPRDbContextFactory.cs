@@ -13,7 +13,7 @@ public sealed class MeisterProPRDbContextFactory : IDesignTimeDbContextFactory<M
     public MeisterProPRDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
-            ?? "Host=localhost;Database=meisterpropr;Username=postgres;Password=postgres";
+                               ?? "Host=localhost;Database=meisterpropr;Username=postgres;Password=postgres";
 
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseNpgsql(connectionString)

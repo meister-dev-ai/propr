@@ -22,7 +22,7 @@ public sealed partial class AdoTokenValidator(
     {
         if (IsJwt(adoToken) && !string.IsNullOrWhiteSpace(orgUrl))
         {
-            return await ValidateExtensionTokenAsync(adoToken, orgUrl, ct);
+            return await this.ValidateExtensionTokenAsync(adoToken, orgUrl, ct);
         }
 
         // PAT path: Basic auth against global connectionData
@@ -36,10 +36,66 @@ public sealed partial class AdoTokenValidator(
         return response.StatusCode == HttpStatusCode.OK;
     }
 
+    private static string? ExtractNameIdFromJwt(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length < 2)
+            {
+                return null;
+            }
+
+            var payload = parts[1];
+            var padded = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var bytes = Convert.FromBase64String(padded.Replace('-', '+').Replace('_', '/'));
+            using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(bytes));
+            var root = doc.RootElement;
+
+            // nameid is the VSS identity ID; aui is authenticated user identity — both are valid.
+            foreach (var claim in new[] { "nameid", "aui", "sub" })
+            {
+                if (root.TryGetProperty(claim, out var val) && val.ValueKind == JsonValueKind.String)
+                {
+                    return val.GetString();
+                }
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ExtractOrgName(string orgUrl)
+    {
+        var uri = new Uri(orgUrl.TrimEnd('/'));
+        return uri.Host.Equals("dev.azure.com", StringComparison.OrdinalIgnoreCase)
+            ? uri.Segments.Last().TrimEnd('/')
+            : uri.Host.Split('.')[0];
+    }
+
+    private static bool IsJwt(string token)
+    {
+        return token.StartsWith("eyJ", StringComparison.Ordinal);
+    }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "ADO JWT token missing upn/unique_name/email claim — cannot validate.")]
+    private partial void LogJwtClaimMissing();
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "ADO token validation: scheme={Scheme} status={StatusCode}")]
+    private partial void LogValidationResult(string scheme, int statusCode);
+
     /// <summary>
-    /// Validates a browser-extension JWT by decoding its UPN claim and confirming
-    /// the user exists in the org using the server's own service-principal credentials.
-    /// This avoids calling VSSPS with the user token, which fails for session tokens.
+    ///     Validates a browser-extension JWT by decoding its UPN claim and confirming
+    ///     the user exists in the org using the server's own service-principal credentials.
+    ///     This avoids calling VSSPS with the user token, which fails for session tokens.
     /// </summary>
     private async Task<bool> ValidateExtensionTokenAsync(string token, string orgUrl, CancellationToken ct)
     {
@@ -76,49 +132,4 @@ public sealed partial class AdoTokenValidator(
         this.LogValidationResult("ServerBearer/Identity", (int)response.StatusCode);
         return count > 0;
     }
-
-    private static string? ExtractNameIdFromJwt(string token)
-    {
-        try
-        {
-            var parts = token.Split('.');
-            if (parts.Length < 2) return null;
-
-            var payload = parts[1];
-            var padded = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
-            var bytes = Convert.FromBase64String(padded.Replace('-', '+').Replace('_', '/'));
-            using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(bytes));
-            var root = doc.RootElement;
-
-            // nameid is the VSS identity ID; aui is authenticated user identity — both are valid.
-            foreach (var claim in new[] { "nameid", "aui", "sub" })
-            {
-                if (root.TryGetProperty(claim, out var val) && val.ValueKind == JsonValueKind.String)
-                    return val.GetString();
-            }
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static bool IsJwt(string token) => token.StartsWith("eyJ", StringComparison.Ordinal);
-
-    private static string ExtractOrgName(string orgUrl)
-    {
-        var uri = new Uri(orgUrl.TrimEnd('/'));
-        return uri.Host.Equals("dev.azure.com", StringComparison.OrdinalIgnoreCase)
-            ? uri.Segments.Last().TrimEnd('/')
-            : uri.Host.Split('.')[0];
-    }
-
-    [LoggerMessage(Level = LogLevel.Information,
-        Message = "ADO token validation: scheme={Scheme} status={StatusCode}")]
-    private partial void LogValidationResult(string scheme, int statusCode);
-
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "ADO JWT token missing upn/unique_name/email claim — cannot validate.")]
-    private partial void LogJwtClaimMissing();
 }

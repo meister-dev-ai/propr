@@ -22,6 +22,27 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
     }
 
     [Fact]
+    public async Task ListReviews_ClientKeyScoping_JobsFromOneKeyNotVisibleToAnother()
+    {
+        var client = factory.CreateClient();
+        factory.InsertJob("test-key-123", 800);
+
+        // test-key-456 is also a valid key but should not see test-key-123's jobs
+        using var request = CreateListRequest("test-key-456");
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = body.RootElement.EnumerateArray().ToList();
+
+        // test-key-456 should not see jobs belonging to test-key-123
+        Assert.DoesNotContain(
+            items,
+            item =>
+                item.TryGetProperty("pullRequestId", out var pr) && pr.GetInt32() == 800);
+    }
+
+    [Fact]
     public async Task ListReviews_EmptyRepository_Returns200WithEmptyArray()
     {
         var client = factory.CreateClient();
@@ -51,10 +72,10 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
     public async Task ListReviews_WithJobs_ReturnsNewestFirst()
     {
         var client = factory.CreateClient();
-        factory.InsertJob("test-key-123", prId: 701);
-        factory.InsertJob("test-key-123", prId: 702);
+        factory.InsertJob("test-key-123", 701);
+        factory.InsertJob("test-key-123", 702);
 
-        using var request = CreateListRequest("test-key-123");
+        using var request = CreateListRequest();
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -70,29 +91,8 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
         Assert.True(first >= second);
     }
 
-    [Fact]
-    public async Task ListReviews_ClientKeyScoping_JobsFromOneKeyNotVisibleToAnother()
-    {
-        var client = factory.CreateClient();
-        factory.InsertJob("test-key-123", prId: 800);
-
-        // test-key-456 is also a valid key but should not see test-key-123's jobs
-        using var request = CreateListRequest("test-key-456");
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var items = body.RootElement.EnumerateArray().ToList();
-
-        // test-key-456 should not see jobs belonging to test-key-123
-        Assert.DoesNotContain(items, item =>
-            item.TryGetProperty("pullRequestId", out var pr) && pr.GetInt32() == 800);
-    }
-
     public sealed class ListReviewsFactory : WebApplicationFactory<Program>
     {
-        private IJobRepository? _jobRepo;
-
         // Fixed client IDs so InsertJob and IClientRegistry stub agree on the same Guid per key.
         private static readonly Guid ClientId123 = Guid.NewGuid();
         private static readonly Guid ClientId456 = Guid.NewGuid();
@@ -102,6 +102,8 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
             ["test-key-123"] = ClientId123,
             ["test-key-456"] = ClientId456,
         };
+
+        private IJobRepository? _jobRepo;
 
         public ListReviewsFactory()
         {
@@ -145,8 +147,9 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
             builder.ConfigureServices(services =>
             {
                 var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(Arg.Any<string>()).Returns(callInfo =>
-                    ClientIds.ContainsKey(callInfo.Arg<string>()));
+                clientRegistry.IsValidKey(Arg.Any<string>())
+                    .Returns(callInfo =>
+                        ClientIds.ContainsKey(callInfo.Arg<string>()));
                 clientRegistry.GetClientIdByKeyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                     .Returns(callInfo =>
                     {

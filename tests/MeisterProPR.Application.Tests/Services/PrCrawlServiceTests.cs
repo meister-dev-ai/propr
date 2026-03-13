@@ -20,9 +20,10 @@ public sealed class PrCrawlServiceTests
         true,
         DateTimeOffset.UtcNow);
 
-    private readonly IAssignedPullRequestFetcher _prFetcher = Substitute.For<IAssignedPullRequestFetcher>();
     private readonly ICrawlConfigurationRepository _crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
+
+    private readonly IAssignedPullRequestFetcher _prFetcher = Substitute.For<IAssignedPullRequestFetcher>();
     private readonly PrCrawlService _sut;
 
     public PrCrawlServiceTests()
@@ -32,6 +33,16 @@ public sealed class PrCrawlServiceTests
             this._prFetcher,
             this._jobs,
             NullLogger<PrCrawlService>.Instance);
+    }
+
+    private static AssignedPullRequestRef MakePr(int prId = 1, int iterationId = 1)
+    {
+        return new AssignedPullRequestRef(
+            DefaultConfig.OrganizationUrl,
+            DefaultConfig.ProjectId,
+            "repo-1",
+            prId,
+            iterationId);
     }
 
     [Fact]
@@ -172,15 +183,5 @@ public sealed class PrCrawlServiceTests
 
         // Assert: a job created for each discovered PR
         this._jobs.Received(2).Add(Arg.Any<ReviewJob>());
-    }
-
-    private static AssignedPullRequestRef MakePr(int prId = 1, int iterationId = 1)
-    {
-        return new AssignedPullRequestRef(
-            DefaultConfig.OrganizationUrl,
-            DefaultConfig.ProjectId,
-            "repo-1",
-            prId,
-            iterationId);
     }
 }

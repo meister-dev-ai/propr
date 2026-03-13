@@ -1,5 +1,6 @@
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Testcontainers.PostgreSql;
 
 namespace MeisterProPR.Infrastructure.Tests.Fixtures;
@@ -22,15 +23,17 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseNpgsql(this.ConnectionString)
-            .ConfigureWarnings(w => w.Ignore(
-                Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning))
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
 
         await using var ctx = new MeisterProPRDbContext(options);
         await ctx.Database.MigrateAsync();
     }
 
-    public async Task DisposeAsync() => await this._postgres.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        await this._postgres.DisposeAsync();
+    }
 }
 
 /// <summary>

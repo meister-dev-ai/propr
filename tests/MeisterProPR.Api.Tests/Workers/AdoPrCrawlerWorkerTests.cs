@@ -11,6 +11,26 @@ namespace MeisterProPR.Api.Tests.Workers;
 /// <summary>Unit tests for <see cref="AdoPrCrawlerWorker" />.</summary>
 public sealed class AdoPrCrawlerWorkerTests
 {
+    private static AdoPrCrawlerWorker BuildWorker(
+        IServiceScopeFactory scopeFactory,
+        int intervalSeconds = 10)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["PR_CRAWL_INTERVAL_SECONDS"] = intervalSeconds.ToString(),
+                })
+            .Build();
+
+        var metrics = new ReviewJobMetrics(Substitute.For<IJobRepository>());
+        return new AdoPrCrawlerWorker(
+            scopeFactory,
+            metrics,
+            config,
+            NullLogger<AdoPrCrawlerWorker>.Instance);
+    }
+
     [Fact]
     public async Task ExecuteAsync_CallsCrawlService_OnEachTick()
     {
@@ -35,7 +55,7 @@ public sealed class AdoPrCrawlerWorkerTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
 
-        var worker = BuildWorker(scopeFactory, 10);
+        var worker = BuildWorker(scopeFactory);
 
         // Act: start and let it run briefly then cancel
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
@@ -88,7 +108,7 @@ public sealed class AdoPrCrawlerWorkerTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
 
-        var worker = BuildWorker(scopeFactory, 10);
+        var worker = BuildWorker(scopeFactory);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         // Should not throw even though crawl service throws
@@ -100,25 +120,5 @@ public sealed class AdoPrCrawlerWorkerTests
         });
 
         Assert.Null(ex);
-    }
-
-    private static AdoPrCrawlerWorker BuildWorker(
-        IServiceScopeFactory scopeFactory,
-        int intervalSeconds = 10)
-    {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["PR_CRAWL_INTERVAL_SECONDS"] = intervalSeconds.ToString(),
-                })
-            .Build();
-
-        var metrics = new ReviewJobMetrics(Substitute.For<IJobRepository>());
-        return new AdoPrCrawlerWorker(
-            scopeFactory,
-            metrics,
-            config,
-            NullLogger<AdoPrCrawlerWorker>.Instance);
     }
 }

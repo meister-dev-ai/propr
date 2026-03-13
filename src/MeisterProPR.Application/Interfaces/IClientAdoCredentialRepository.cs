@@ -5,6 +5,9 @@ namespace MeisterProPR.Application.Interfaces;
 /// <summary>Manages the ADO credential sub-resource attached to a client.</summary>
 public interface IClientAdoCredentialRepository
 {
+    /// <summary>Removes credentials — the client falls back to the global identity.</summary>
+    Task ClearAsync(Guid clientId, CancellationToken ct);
+
     /// <summary>
     ///     Returns the per-client ADO credentials, or <c>null</c> if none are configured.
     /// </summary>
@@ -12,7 +15,4 @@ public interface IClientAdoCredentialRepository
 
     /// <summary>Creates or replaces the credentials for a client.</summary>
     Task UpsertAsync(Guid clientId, ClientAdoCredentials credentials, CancellationToken ct);
-
-    /// <summary>Removes credentials — the client falls back to the global identity.</summary>
-    Task ClearAsync(Guid clientId, CancellationToken ct);
 }

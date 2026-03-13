@@ -23,7 +23,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
             return cached;
         }
 
-        TokenCredential effectiveCredential = credentials is not null
+        var effectiveCredential = credentials is not null
             ? new ClientSecretCredential(credentials.TenantId, credentials.ClientId, credentials.Secret)
             : credential;
 

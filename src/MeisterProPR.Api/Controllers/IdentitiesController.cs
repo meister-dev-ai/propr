@@ -29,15 +29,21 @@ public sealed class IdentitiesController(IIdentityResolver identityResolver) : C
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(orgUrl))
+        {
             return this.BadRequest(new { error = "orgUrl is required." });
+        }
 
         if (string.IsNullOrWhiteSpace(displayName))
+        {
             return this.BadRequest(new { error = "displayName is required." });
+        }
 
         var matches = await identityResolver.ResolveAsync(orgUrl, displayName, Guid.Empty, ct);
 
         if (matches.Count == 0)
+        {
             return this.NotFound(new { error = $"No identity found with display name '{displayName}'." });
+        }
 
         return this.Ok(matches.Select(m => new IdentityResponse(m.Id, m.DisplayName)).ToList());
     }

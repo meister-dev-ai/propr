@@ -1,14 +1,14 @@
 using System.Text;
 using DiffPlex.DiffBuilder;
-using Microsoft.Extensions.Logging;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;
 
-public sealed partial class AdoPullRequestFetcher(
+public sealed class AdoPullRequestFetcher(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository,
     ILogger<AdoPullRequestFetcher> logger) : IPullRequestFetcher
@@ -89,20 +89,20 @@ public sealed partial class AdoPullRequestFetcher(
                         projectId,
                         repositoryId,
                         path,
-                        null,   // scopePath
-                        null,   // recursionLevel
-                        null,   // includeContentMetadata
-                        null,   // latestProcessedChange
-                        null,   // download
+                        null, // scopePath
+                        null, // recursionLevel
+                        null, // includeContentMetadata
+                        null, // latestProcessedChange
+                        null, // download
                         new GitVersionDescriptor
                         {
                             VersionType = GitVersionType.Commit,
                             Version = sourceCommit,
                         },
-                        true,   // includeContent
-                        null,   // resolveLfs
-                        null,   // sanitize
-                        null,   // userState
+                        true, // includeContent
+                        null, // resolveLfs
+                        null, // sanitize
+                        null, // userState
                         cancellationToken);
                     headContent = item.Content ?? "";
                 }
@@ -121,20 +121,20 @@ public sealed partial class AdoPullRequestFetcher(
                         projectId,
                         repositoryId,
                         path,
-                        null,   // scopePath
-                        null,   // recursionLevel
-                        null,   // includeContentMetadata
-                        null,   // latestProcessedChange
-                        null,   // download
+                        null, // scopePath
+                        null, // recursionLevel
+                        null, // includeContentMetadata
+                        null, // latestProcessedChange
+                        null, // download
                         new GitVersionDescriptor
                         {
                             VersionType = GitVersionType.Commit,
                             Version = baseCommit,
                         },
-                        true,   // includeContent
-                        null,   // resolveLfs
-                        null,   // sanitize
-                        null,   // userState
+                        true, // includeContent
+                        null, // resolveLfs
+                        null, // sanitize
+                        null, // userState
                         cancellationToken);
                     baseContent = item.Content ?? "";
                 }

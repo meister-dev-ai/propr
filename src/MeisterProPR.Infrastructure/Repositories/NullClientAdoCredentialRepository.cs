@@ -11,13 +11,19 @@ public sealed class NullClientAdoCredentialRepository : IClientAdoCredentialRepo
 {
     /// <inheritdoc />
     public Task<ClientAdoCredentials?> GetByClientIdAsync(Guid clientId, CancellationToken ct)
-        => Task.FromResult<ClientAdoCredentials?>(null);
+    {
+        return Task.FromResult<ClientAdoCredentials?>(null);
+    }
 
     /// <inheritdoc />
     public Task UpsertAsync(Guid clientId, ClientAdoCredentials credentials, CancellationToken ct)
-        => Task.CompletedTask;
+    {
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task ClearAsync(Guid clientId, CancellationToken ct)
-        => Task.CompletedTask;
+    {
+        return Task.CompletedTask;
+    }
 }

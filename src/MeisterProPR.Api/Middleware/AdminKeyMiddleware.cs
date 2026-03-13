@@ -14,7 +14,7 @@ public sealed class AdminKeyMiddleware(RequestDelegate next, IConfiguration conf
         // For simplicity: enforce on all /clients (admin ops) and /jobs routes
         var path = context.Request.Path.Value ?? string.Empty;
         var isAdminRoute = path.StartsWith("/clients", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/jobs", StringComparison.OrdinalIgnoreCase);
+                           path.StartsWith("/jobs", StringComparison.OrdinalIgnoreCase);
 
         // Routes that are NOT admin-only even though under /clients: crawl-configurations sub-resource
         // handled by ClientKeyMiddleware via [RequireClientKey] (ownership check in controller)
@@ -27,7 +27,7 @@ public sealed class AdminKeyMiddleware(RequestDelegate next, IConfiguration conf
             var providedKey = context.Request.Headers[AdminKeyHeader].FirstOrDefault();
             // Store whether admin key was provided and valid
             context.Items["IsAdmin"] = !string.IsNullOrWhiteSpace(providedKey) &&
-                providedKey == adminKey;
+                                       providedKey == adminKey;
         }
         else
         {

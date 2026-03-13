@@ -5,6 +5,18 @@ namespace MeisterProPR.Domain.Tests.Entities;
 
 public class ReviewJobTests
 {
+    private static ReviewJob CreateJob(
+        Guid? id = null,
+        Guid? clientId = null,
+        string orgUrl = "https://dev.azure.com/myorg",
+        string projectId = "proj-1",
+        string repoId = "repo-1",
+        int prId = 1,
+        int iterationId = 1)
+    {
+        return new ReviewJob(id ?? Guid.NewGuid(), clientId, orgUrl, projectId, repoId, prId, iterationId);
+    }
+
     [Fact]
     public void Constructor_CompletedAtIsNull()
     {
@@ -33,6 +45,13 @@ public class ReviewJobTests
         var job = new ReviewJob(Guid.NewGuid(), null, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         Assert.Null(job.ClientId);
         Assert.Equal(JobStatus.Pending, job.Status);
+    }
+
+    [Fact]
+    public void Constructor_NullClientId_SetsClientIdToNull()
+    {
+        var job = CreateJob(clientId: null);
+        Assert.Null(job.ClientId);
     }
 
     [Fact]
@@ -66,14 +85,6 @@ public class ReviewJobTests
         var after = DateTimeOffset.UtcNow.AddSeconds(1);
 
         Assert.InRange(job.SubmittedAt, before, after);
-    }
-
-    [Fact]
-    public void Constructor_WithClientId_SetsClientId()
-    {
-        var clientId = Guid.NewGuid();
-        var job = CreateJob(clientId: clientId);
-        Assert.Equal(clientId, job.ClientId);
     }
 
     [Fact]
@@ -113,10 +124,11 @@ public class ReviewJobTests
     }
 
     [Fact]
-    public void Constructor_NullClientId_SetsClientIdToNull()
+    public void Constructor_WithClientId_SetsClientId()
     {
-        var job = CreateJob(clientId: null);
-        Assert.Null(job.ClientId);
+        var clientId = Guid.NewGuid();
+        var job = CreateJob(clientId: clientId);
+        Assert.Equal(clientId, job.ClientId);
     }
 
     [Fact]
@@ -133,17 +145,5 @@ public class ReviewJobTests
         var job = CreateJob();
         job.Status = JobStatus.Processing;
         Assert.Equal(JobStatus.Processing, job.Status);
-    }
-
-    private static ReviewJob CreateJob(
-        Guid? id = null,
-        Guid? clientId = null,
-        string orgUrl = "https://dev.azure.com/myorg",
-        string projectId = "proj-1",
-        string repoId = "repo-1",
-        int prId = 1,
-        int iterationId = 1)
-    {
-        return new ReviewJob(id ?? Guid.NewGuid(), clientId, orgUrl, projectId, repoId, prId, iterationId);
     }
 }
