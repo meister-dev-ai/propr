@@ -206,11 +206,6 @@ The backend uses the **Azure OpenAI Responses API** and accepts endpoints from t
    `https://<resource>.services.ai.azure.com/api/projects/<project>`.
 3. Use the **model name** (e.g. `gpt-4o`) as `AI_DEPLOYMENT`.
 
-> [!NOTE]
-> By default the backend uses `DefaultAzureCredential` (managed identity / service principal) —
-> no API key needed. Assign the identity the **Cognitive Services OpenAI User** role on the
-> resource. If you prefer API key auth, set `AI_API_KEY` instead.
-
 ---
 
 ### 2 — Create an Azure service principal (Entra ID app registration)
