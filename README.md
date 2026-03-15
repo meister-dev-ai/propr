@@ -11,7 +11,7 @@
 ---
 
 Meister ProPR is a self-hosted ASP.NET Core backend that watches Azure DevOps pull requests,
-runs an AI review against them using the Azure OpenAI Responses API, and posts the findings
+runs an AI review against them using Microsoft Foundry and the Microsoft Agent Framework, and posts the findings
 back as threaded comments — anchored to the relevant file and line number.
 
 ---
