@@ -126,7 +126,17 @@ dotnet test   # 235 tests — no Azure credentials or database required
 
 ---
 
+## Demo Video
+
+<a href="https://youtu.be/HFaO4oglM2s">
+  <img src="https://img.youtube.com/vi/HFaO4oglM2s/maxresdefault.jpg" alt="YouTube demo video" width="400">
+</a>
+
+---
+
 ## License · Security · Contributing
 
 - [MIT License](LICENSE)
 - [Security Policy](SECURITY.md) — report vulnerabilities privately
+
+
