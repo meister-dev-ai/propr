@@ -15,6 +15,7 @@ public interface IPullRequestFetcher
     /// <param name="repositoryId">The ID of the repository.</param>
     /// <param name="pullRequestId">The ID of the pull request.</param>
     /// <param name="iterationId">The ID of the iteration.</param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation, containing the fetched pull request.</returns>
     Task<PullRequest> FetchAsync(
