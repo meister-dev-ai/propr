@@ -1,4 +1,4 @@
-using MeisterProPR.Domain.Entities;
+﻿using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +15,15 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
+
+    /// <summary>Mention reply jobs table.</summary>
+    public DbSet<MentionReplyJob> MentionReplyJobs => this.Set<MentionReplyJob>();
+
+    /// <summary>Mention project scan watermarks table.</summary>
+    public DbSet<MentionProjectScan> MentionProjectScans => this.Set<MentionProjectScan>();
+
+    /// <summary>Mention per-PR scan watermarks table.</summary>
+    public DbSet<MentionPrScan> MentionPrScans => this.Set<MentionPrScan>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

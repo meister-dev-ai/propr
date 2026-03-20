@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const mockPut = vi.fn()
@@ -54,7 +54,7 @@ describe('AdoCredentialsForm', () => {
       '/clients/{clientId}/ado-credentials',
       expect.objectContaining({
         params: { path: { clientId: 'client-1' } },
-        body: { tenantId: 'tenant-abc', clientId: 'client-abc', clientSecret: 'my-secret' },
+        body: { tenantId: 'tenant-abc', clientId: 'client-abc', secret: 'my-secret' },
       })
     )
   })

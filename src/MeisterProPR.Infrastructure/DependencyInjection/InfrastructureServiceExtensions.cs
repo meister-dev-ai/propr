@@ -1,4 +1,4 @@
-using System.ClientModel;
+﻿using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Core;
 using Azure.Identity;
@@ -44,6 +44,8 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IClientRegistry, PostgresClientRegistry>();
             services.AddScoped<ICrawlConfigurationRepository, PostgresCrawlConfigurationRepository>();
             services.AddScoped<IClientAdoCredentialRepository, PostgresClientAdoCredentialRepository>();
+            services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
+            services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
         }
         else
         {
@@ -82,6 +84,8 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IAssignedPullRequestFetcher, StubAssignedPrFetcher>();
             services.AddScoped<IIdentityResolver, StubIdentityResolver>();
             services.AddSingleton<IAdoReviewerManager, StubAdoReviewerManager>();
+            services.AddSingleton<IActivePrFetcher, StubActivePrFetcher>();
+            services.AddScoped<IAdoThreadReplier, StubAdoThreadReplier>();
         }
         else
         {
@@ -97,6 +101,8 @@ public static class InfrastructureServiceExtensions
                     sp.GetRequiredService<IHttpClientFactory>(),
                     sp.GetRequiredService<IClientAdoCredentialRepository>()));
             services.AddSingleton<IAdoReviewerManager, AdoReviewerManager>();
+            services.AddSingleton<IActivePrFetcher, AdoActivePrFetcher>();
+            services.AddScoped<IAdoThreadReplier, AdoThreadReplier>();
         }
 
         // AI review (provider-agnostic via IChatClient)
@@ -111,6 +117,7 @@ public static class InfrastructureServiceExtensions
             configuration["AI_API_KEY"]));
 
         services.AddSingleton<IAiReviewCore, AgentAiReviewCore>();
+        services.AddSingleton<MeisterProPR.Domain.Interfaces.IMentionAnswerService, AgentMentionAnswerService>();
 
         return services;
     }

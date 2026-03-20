@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using DiffPlex.DiffBuilder;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -214,7 +214,11 @@ public partial class AdoPullRequestFetcher(
                         .Select(c => new PrThreadComment(
                             c.Author?.DisplayName ?? "Unknown",
                             c.Content ?? "",
-                            Guid.TryParse(c.Author?.Id, out var aid) ? aid : null))
+                            Guid.TryParse(c.Author?.Id, out var aid) ? aid : null,
+                            c.Id,
+                            c.PublishedDate != default
+                                ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
+                                : null))
                         .ToList()
                         .AsReadOnly()))
                 .ToList()

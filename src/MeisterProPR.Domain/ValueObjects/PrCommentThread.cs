@@ -1,4 +1,4 @@
-namespace MeisterProPR.Domain.ValueObjects;
+﻿namespace MeisterProPR.Domain.ValueObjects;
 
 /// <summary>
 ///     Represents an existing comment thread on a pull request, from any author or iteration.
@@ -22,7 +22,17 @@ public sealed record PrCommentThread(
 ///     VSS identity GUID of the comment author, as returned by the ADO comments API.
 ///     <c>null</c> when the author ID could not be parsed or was not provided.
 /// </param>
+/// <param name="CommentId">
+///     ADO comment ID within the thread. Used for deduplication in mention scanning.
+///     Defaults to <c>0</c> when not provided (e.g. older call sites).
+/// </param>
+/// <param name="PublishedAt">
+///     When the comment was published in ADO. Used as the per-PR watermark in mention scanning.
+///     <c>null</c> when not provided.
+/// </param>
 public sealed record PrThreadComment(
     string AuthorName,
     string Content,
-    Guid? AuthorId = null);
+    Guid? AuthorId = null,
+    int CommentId = 0,
+    DateTimeOffset? PublishedAt = null);

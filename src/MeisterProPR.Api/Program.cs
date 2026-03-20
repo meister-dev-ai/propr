@@ -1,11 +1,13 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -96,6 +98,8 @@ try
     if (isDbMode)
     {
         builder.Services.AddScoped<IPrCrawlService, PrCrawlService>();
+        builder.Services.AddScoped<IMentionScanService, MentionScanService>();
+        builder.Services.AddScoped<IMentionReplyService, MentionReplyService>();
     }
 
     // ── Background workers ────────────────────────────────────────────────────
@@ -108,6 +112,29 @@ try
     // Register it unconditionally — it will gracefully handle missing DI dependencies.
     builder.Services.AddSingleton<AdoPrCrawlerWorker>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
+
+    // ── Mention scan pipeline (Channel + workers) ─────────────────────────────
+    // MentionScanWorker (producer) and MentionReplyWorker (consumer) share a single bounded
+    // Channel<MentionReplyJob>. Channel capacity is 1000; writer blocks when full (Wait mode).
+    // Both workers only run in DB mode — without DB there is no persistent scan state.
+    if (isDbMode)
+    {
+        var mentionChannel = Channel.CreateBounded<MentionReplyJob>(new BoundedChannelOptions(1000)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
+        builder.Services.AddSingleton(mentionChannel);
+        builder.Services.AddSingleton(mentionChannel.Reader);
+        builder.Services.AddSingleton(mentionChannel.Writer);
+
+        builder.Services.AddSingleton<MentionScanWorker>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
+
+        builder.Services.AddSingleton<MentionReplyWorker>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
+    }
 
     // ── CORS ──────────────────────────────────────────────────────────────────
     // Fixed origins: testbed (localhost:3000) and Azure DevOps.

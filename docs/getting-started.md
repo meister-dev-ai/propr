@@ -1,4 +1,4 @@
-# Getting Started — Meister ProPR Backend
+﻿# Getting Started — Meister ProPR Backend
 
 Meister ProPR is an ASP.NET Core 10 backend that accepts Azure DevOps pull request review
 requests, fetches the changed files using a backend-controlled Azure identity, runs an AI review
@@ -67,6 +67,9 @@ AZURE_CLIENT_SECRET=<global-service-principal-secret>
 
 # --- PR crawler ---
 # PR_CRAWL_INTERVAL_SECONDS=60
+
+# --- Mention scanner ---
+# MENTION_CRAWL_INTERVAL_SECONDS=60
 
 # --- Observability (optional) ---
 # OTLP_ENDPOINT=http://localhost:4317
@@ -279,9 +282,10 @@ The application **will not start** if required variables are missing or empty.
 
 | Variable                    | Description                                                                         |
 |-----------------------------|-------------------------------------------------------------------------------------|
-| `DB_CONNECTION_STRING`      | PostgreSQL connection string. When set, enables DB mode (persisted jobs + client registry). |
-| `PR_CRAWL_INTERVAL_SECONDS` | Polling interval in seconds for the PR crawler background worker (default `60`, minimum `10`). |
-| `AI_API_KEY`                | API key for the AI endpoint. Omit to use `DefaultAzureCredential`.                 |
+| `DB_CONNECTION_STRING`           | PostgreSQL connection string. When set, enables DB mode (persisted jobs + client registry). |
+| `PR_CRAWL_INTERVAL_SECONDS`      | Polling interval in seconds for the PR crawler background worker (default `60`, minimum `10`). |
+| `MENTION_CRAWL_INTERVAL_SECONDS` | Polling interval in seconds for the mention-scan background worker (default `60`, minimum `10`). |
+| `AI_API_KEY`                     | API key for the AI endpoint. Omit to use `DefaultAzureCredential`.                 |
 | `AZURE_CLIENT_ID`           | Global service principal app ID (`DefaultAzureCredential` env-var chain)           |
 | `AZURE_TENANT_ID`           | Azure AD tenant ID                                                                  |
 | `AZURE_CLIENT_SECRET`       | Global service principal secret (local dev — **never commit**)                     |
