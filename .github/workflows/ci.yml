@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Run tests
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +16,25 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version-file: global.json
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Restore dependencies
         run: dotnet restore
@@ -24,9 +42,10 @@ jobs:
       - name: Run tests
         run: dotnet test --no-restore --configuration Release --logger "github" --verbosity normal
 
-  build-backend:
+  build-backend-image:
     name: Build backend image
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
@@ -39,13 +58,14 @@ jobs:
           context: .
           file: Dockerfile
           push: false
-          tags: meisterpropr:pr-${{ github.event.number }}
+          tags: meisterpropr:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-frontend:
+  build-frontend-image:
     name: Build frontend image
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +78,6 @@ jobs:
           context: .
           file: admin-ui/Dockerfile
           push: false
-          tags: meisterpropr-admin-ui:pr-${{ github.event.number }}
+          tags: meisterpropr-admin-ui:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
