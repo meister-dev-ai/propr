@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.Application.Services;
 
 /// <summary>
 ///     Pure-logic utility for detecting bot mentions in pull request comment content.

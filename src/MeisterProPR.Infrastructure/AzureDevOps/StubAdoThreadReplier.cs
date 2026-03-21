@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;

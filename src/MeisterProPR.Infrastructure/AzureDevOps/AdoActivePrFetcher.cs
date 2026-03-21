@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;

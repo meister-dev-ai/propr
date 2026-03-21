@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;

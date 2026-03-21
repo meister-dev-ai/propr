@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Domain.Enums;
+namespace MeisterProPR.Domain.Enums;
 
 /// <summary>
 ///     Status of a mention reply job.

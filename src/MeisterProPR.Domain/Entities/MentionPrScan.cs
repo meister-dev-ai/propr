@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Domain.Entities;
+namespace MeisterProPR.Domain.Entities;
 
 /// <summary>
 ///     Tracks the per-PR comment watermark for mention scanning.

@@ -1,4 +1,4 @@
-﻿using System.Threading.Channels;
+using System.Threading.Channels;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 

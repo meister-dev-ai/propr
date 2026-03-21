@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Domain.Interfaces;
 

@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;

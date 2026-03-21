@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;

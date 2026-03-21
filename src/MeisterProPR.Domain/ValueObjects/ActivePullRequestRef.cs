@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Domain.ValueObjects;
+namespace MeisterProPR.Domain.ValueObjects;
 
 /// <summary>
 ///     Lightweight reference to an active pull request, used during mention scanning.

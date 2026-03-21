@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Application.Interfaces;
+namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>Orchestrates a single mention scan cycle across all active crawl configurations.</summary>
 public interface IMentionScanService

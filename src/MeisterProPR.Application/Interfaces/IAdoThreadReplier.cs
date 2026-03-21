@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Application.Interfaces;
+namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>
 ///     Posts a reply comment into an existing pull request thread.

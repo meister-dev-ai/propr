@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Domain.ValueObjects;
+namespace MeisterProPR.Domain.ValueObjects;
 
 /// <summary>
 ///     Represents an existing comment thread on a pull request, from any author or iteration.

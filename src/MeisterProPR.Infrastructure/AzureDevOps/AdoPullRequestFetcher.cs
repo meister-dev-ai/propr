@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using DiffPlex.DiffBuilder;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;

@@ -1,4 +1,4 @@
-﻿namespace MeisterProPR.Domain.Entities;
+namespace MeisterProPR.Domain.Entities;
 
 /// <summary>
 ///     Tracks the project-level watermark for mention scanning.

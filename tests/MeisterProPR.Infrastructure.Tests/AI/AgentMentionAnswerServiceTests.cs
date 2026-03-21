@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Domain.Entities;
 

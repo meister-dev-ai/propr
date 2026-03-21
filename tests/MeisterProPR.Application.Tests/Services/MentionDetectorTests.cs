@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Application.Services;
+using MeisterProPR.Application.Services;
 
 namespace MeisterProPR.Application.Tests.Services;
 

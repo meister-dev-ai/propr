@@ -1,4 +1,4 @@
-﻿using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Entities;
 
 namespace MeisterProPR.Application.Interfaces;
 
