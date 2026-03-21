@@ -16,20 +16,20 @@ internal sealed partial class AgentMentionAnswerService(
     IChatClient chatClient,
     ILogger<AgentMentionAnswerService> logger) : IMentionAnswerService
 {
-    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
-
     private const string SystemPrompt =
         "You are a PR review assistant. Answer the developer's question concisely and directly, " +
         "grounded only in the PR content provided. Do not initiate a full review. " +
         "If the question is about a specific line, focus your answer on that line and its immediate context. " +
         "Respond in plain text (markdown is fine) — no JSON.";
 
-    private static readonly Regex MentionPrefixRegex =
-        new(@"^@<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>\s*",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     private const int MaxFiles = 10;
     private const int MaxDiffLines = 200;
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
+    private static readonly Regex MentionPrefixRegex =
+        new(
+            @"^@<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>\s*",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <inheritdoc />
     public async Task<string> AnswerAsync(
@@ -126,7 +126,8 @@ internal sealed partial class AgentMentionAnswerService(
             : thread.FilePath;
     }
 
-    [LoggerMessage(Level = LogLevel.Debug,
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "AgentMentionAnswerService: generating answer for PR#{PullRequestId}, question length {QuestionLength}")]
     private static partial void LogGeneratingAnswer(ILogger logger, int pullRequestId, int questionLength);
 }

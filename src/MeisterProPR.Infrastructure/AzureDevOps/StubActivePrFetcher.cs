@@ -22,7 +22,8 @@ internal sealed partial class StubActivePrFetcher(ILogger<StubActivePrFetcher> l
         return Task.FromResult<IReadOnlyList<ActivePullRequestRef>>([]);
     }
 
-    [LoggerMessage(Level = LogLevel.Debug,
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "StubActivePrFetcher: returning empty PR list for {OrganizationUrl}/{ProjectId}")]
     private static partial void LogStubCall(ILogger logger, string organizationUrl, string projectId);
 }

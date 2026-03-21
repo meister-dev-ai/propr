@@ -1,6 +1,5 @@
 ﻿using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
-using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Api.Workers;
 
@@ -20,7 +19,7 @@ public sealed partial class MentionScanWorker(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalSeconds = configuration.GetValue<int>("MENTION_CRAWL_INTERVAL_SECONDS", 60);
+        var intervalSeconds = configuration.GetValue("MENTION_CRAWL_INTERVAL_SECONDS", 60);
         var interval = TimeSpan.FromSeconds(Math.Max(intervalSeconds, MinInterval.TotalSeconds));
 
         LogWorkerStarted(logger, interval.TotalSeconds);
@@ -62,19 +61,23 @@ public sealed partial class MentionScanWorker(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionScanWorker started (interval: {IntervalSeconds:F0}s)")]
     private static partial void LogWorkerStarted(ILogger logger, double intervalSeconds);
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionScanWorker stopped")]
     private static partial void LogWorkerStopped(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning,
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "MentionScanWorker: IMentionScanService not registered — scan skipped")]
     private static partial void LogScanServiceUnavailable(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error,
+    [LoggerMessage(
+        Level = LogLevel.Error,
         Message = "MentionScanWorker: scan cycle failed")]
     private static partial void LogScanCycleError(ILogger logger, Exception ex);
 }

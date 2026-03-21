@@ -24,7 +24,8 @@ internal sealed partial class StubAdoThreadReplier(ILogger<StubAdoThreadReplier>
         return Task.CompletedTask;
     }
 
-    [LoggerMessage(Level = LogLevel.Debug,
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "StubAdoThreadReplier: would reply to {OrganizationUrl}/{ProjectId}/{RepositoryId} PR#{PullRequestId} thread {ThreadId}: {ReplyText}")]
     private static partial void LogStubReply(
         ILogger logger,

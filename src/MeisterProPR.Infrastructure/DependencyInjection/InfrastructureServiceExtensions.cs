@@ -117,7 +117,7 @@ public static class InfrastructureServiceExtensions
             configuration["AI_API_KEY"]));
 
         services.AddSingleton<IAiReviewCore, AgentAiReviewCore>();
-        services.AddSingleton<MeisterProPR.Domain.Interfaces.IMentionAnswerService, AgentMentionAnswerService>();
+        services.AddSingleton<IMentionAnswerService, AgentMentionAnswerService>();
 
         return services;
     }

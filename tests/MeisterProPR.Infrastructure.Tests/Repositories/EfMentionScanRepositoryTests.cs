@@ -13,12 +13,11 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
-    private MeisterProPRDbContext _dbContext = null!;
-    private EfMentionScanRepository _repo = null!;
-
     // Deterministic GUIDs so FK constraints are satisfied across test runs.
     private static readonly Guid SeedClientId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid ConfigId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private MeisterProPRDbContext _dbContext = null!;
+    private EfMentionScanRepository _repo = null!;
 
     public async Task InitializeAsync()
     {
@@ -30,29 +29,31 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
         // Seed client + crawl config for FK constraints.
         if (!await this._dbContext.Clients.AnyAsync(c => c.Id == SeedClientId))
         {
-            this._dbContext.Clients.Add(new ClientRecord
-            {
-                Id = SeedClientId,
-                Key = "test-scan-client",
-                DisplayName = "Test Scan Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            this._dbContext.Clients.Add(
+                new ClientRecord
+                {
+                    Id = SeedClientId,
+                    Key = "test-scan-client",
+                    DisplayName = "Test Scan Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             await this._dbContext.SaveChangesAsync();
         }
 
         if (!await this._dbContext.CrawlConfigurations.AnyAsync(c => c.Id == ConfigId))
         {
-            this._dbContext.CrawlConfigurations.Add(new CrawlConfigurationRecord
-            {
-                Id = ConfigId,
-                ClientId = SeedClientId,
-                OrganizationUrl = "https://dev.azure.com/test-org",
-                ProjectId = "test-proj",
-                CrawlIntervalSeconds = 60,
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            this._dbContext.CrawlConfigurations.Add(
+                new CrawlConfigurationRecord
+                {
+                    Id = ConfigId,
+                    ClientId = SeedClientId,
+                    OrganizationUrl = "https://dev.azure.com/test-org",
+                    ProjectId = "test-proj",
+                    CrawlIntervalSeconds = 60,
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             await this._dbContext.SaveChangesAsync();
         }
 
@@ -131,8 +132,7 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
     [Fact]
     public async Task UpsertPrScanAsync_CalledTwice_UpdatesWatermark()
     {
-        var scan = new MentionPrScan(
-            Guid.NewGuid(), ConfigId, "repo-2", 7, DateTimeOffset.UtcNow.AddHours(-2));
+        var scan = new MentionPrScan(Guid.NewGuid(), ConfigId, "repo-2", 7, DateTimeOffset.UtcNow.AddHours(-2));
         await this._repo.UpsertPrScanAsync(scan);
 
         var updated = new MentionPrScan(scan.Id, ConfigId, "repo-2", 7, DateTimeOffset.UtcNow);

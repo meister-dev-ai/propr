@@ -2,7 +2,10 @@
 
 namespace MeisterProPR.Application.Interfaces;
 
-/// <summary>Processes a single <see cref="MentionReplyJob" />: fetches PR context, generates an AI answer, and posts it as a thread reply.</summary>
+/// <summary>
+///     Processes a single <see cref="MentionReplyJob" />: fetches PR context, generates an AI answer, and posts it as
+///     a thread reply.
+/// </summary>
 public interface IMentionReplyService
 {
     /// <summary>

@@ -119,12 +119,13 @@ try
     // Both workers only run in DB mode — without DB there is no persistent scan state.
     if (isDbMode)
     {
-        var mentionChannel = Channel.CreateBounded<MentionReplyJob>(new BoundedChannelOptions(1000)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false,
-        });
+        var mentionChannel = Channel.CreateBounded<MentionReplyJob>(
+            new BoundedChannelOptions(1000)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false,
+            });
         builder.Services.AddSingleton(mentionChannel);
         builder.Services.AddSingleton(mentionChannel.Reader);
         builder.Services.AddSingleton(mentionChannel.Writer);

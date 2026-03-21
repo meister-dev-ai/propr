@@ -22,7 +22,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
     {
         var cacheKey = $"{organizationUrl}::{credentials?.ClientId ?? "global"}";
 
-        if (_cache.TryGetValue(cacheKey, out var cached) &&
+        if (this._cache.TryGetValue(cacheKey, out var cached) &&
             cached.ExpiresOn - DateTimeOffset.UtcNow > ExpiryBuffer)
         {
             return cached.Connection;
@@ -37,7 +37,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
             new Uri(organizationUrl),
             new VssOAuthAccessTokenCredential(token.Token));
 
-        _cache[cacheKey] = (conn, token.ExpiresOn);
+        this._cache[cacheKey] = (conn, token.ExpiresOn);
         return conn;
     }
 }

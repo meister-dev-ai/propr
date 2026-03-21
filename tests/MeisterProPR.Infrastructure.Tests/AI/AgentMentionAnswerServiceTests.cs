@@ -32,7 +32,7 @@ public sealed class AgentMentionAnswerServiceTests
             null,
             "feat/x",
             "main",
-            ChangedFiles: [],
+            [],
             ExistingThreads: threads);
     }
 
@@ -50,7 +50,7 @@ public sealed class AgentMentionAnswerServiceTests
         var rawMention = $"@<{BotGuid}> Is this method safe?";
 
         // Act
-        await sut.AnswerAsync(MakePr(), rawMention, threadId: 5);
+        await sut.AnswerAsync(MakePr(), rawMention, 5);
 
         // Assert: the user message must contain the cleaned question, not the raw GUID prefix
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -68,14 +68,18 @@ public sealed class AgentMentionAnswerServiceTests
             .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
-        var thread = new PrCommentThread(5, "src/Foo.cs", 42, [
-            new PrThreadComment("alice", $"@<{BotGuid}> Is this safe?", BotGuid)
-        ]);
+        var thread = new PrCommentThread(
+            5,
+            "src/Foo.cs",
+            42,
+            [
+                new PrThreadComment("alice", $"@<{BotGuid}> Is this safe?", BotGuid),
+            ]);
         var pr = MakePr(threads: [thread]);
         var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act
-        await sut.AnswerAsync(pr, $"@<{BotGuid}> Is this safe?", threadId: 5);
+        await sut.AnswerAsync(pr, $"@<{BotGuid}> Is this safe?", 5);
 
         // Assert: location info is present in the user message
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -91,7 +95,7 @@ public sealed class AgentMentionAnswerServiceTests
         var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act & Assert: no exception, returns AI text
-        var result = await sut.AnswerAsync(MakePr(), $"@<{BotGuid}> Hello?", threadId: 999);
+        var result = await sut.AnswerAsync(MakePr(), $"@<{BotGuid}> Hello?", 999);
         Assert.Equal("fine", result);
     }
 
@@ -103,7 +107,7 @@ public sealed class AgentMentionAnswerServiceTests
         var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act
-        var result = await sut.AnswerAsync(MakePr(), "any question", threadId: 1);
+        var result = await sut.AnswerAsync(MakePr(), "any question", 1);
 
         // Assert
         Assert.Equal("Certainly, here is the answer.", result);

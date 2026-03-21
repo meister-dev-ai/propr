@@ -24,9 +24,10 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
     {
         var updated = await dbContext.MentionProjectScans
             .Where(s => s.CrawlConfigurationId == record.CrawlConfigurationId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(p => p.LastScannedAt, record.LastScannedAt)
-                .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow),
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(p => p.LastScannedAt, record.LastScannedAt)
+                    .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow),
                 ct);
 
         if (updated == 0)
@@ -46,10 +47,11 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
     {
         return await dbContext.MentionPrScans
             .AsNoTracking()
-            .FirstOrDefaultAsync(s =>
-                s.CrawlConfigurationId == crawlConfigurationId &&
-                s.RepositoryId == repositoryId &&
-                s.PullRequestId == pullRequestId,
+            .FirstOrDefaultAsync(
+                s =>
+                    s.CrawlConfigurationId == crawlConfigurationId &&
+                    s.RepositoryId == repositoryId &&
+                    s.PullRequestId == pullRequestId,
                 ct);
     }
 
@@ -61,9 +63,10 @@ public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : I
                 s.CrawlConfigurationId == record.CrawlConfigurationId &&
                 s.RepositoryId == record.RepositoryId &&
                 s.PullRequestId == record.PullRequestId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(p => p.LastCommentSeenAt, record.LastCommentSeenAt)
-                .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow),
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(p => p.LastCommentSeenAt, record.LastCommentSeenAt)
+                    .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow),
                 ct);
 
         if (updated == 0)

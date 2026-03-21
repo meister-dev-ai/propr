@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using MeisterProPR.Application.Interfaces;
-using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.Extensions.Logging;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;
 
@@ -57,7 +57,8 @@ internal sealed partial class AdoThreadReplier(
         LogReplied(logger, organizationUrl, pullRequestId, threadId);
     }
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "AdoThreadReplier: posted reply to {OrganizationUrl} PR#{PullRequestId} thread {ThreadId}")]
     private static partial void LogReplied(ILogger logger, string organizationUrl, int pullRequestId, int threadId);
 }

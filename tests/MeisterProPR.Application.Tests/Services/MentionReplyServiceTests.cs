@@ -2,6 +2,7 @@
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -14,12 +15,14 @@ public sealed class MentionReplyServiceTests
 {
     private static readonly Guid ClientId = Guid.NewGuid();
 
-    private readonly IPullRequestFetcher _prFetcher = Substitute.For<IPullRequestFetcher>();
+    private readonly IMentionAnswerService _answerService =
+        Substitute.For<IMentionAnswerService>();
+
     private readonly IMentionReplyJobRepository _jobRepository = Substitute.For<IMentionReplyJobRepository>();
-    private readonly MeisterProPR.Domain.Interfaces.IMentionAnswerService _answerService =
-        Substitute.For<MeisterProPR.Domain.Interfaces.IMentionAnswerService>();
-    private readonly IAdoThreadReplier _threadReplier = Substitute.For<IAdoThreadReplier>();
+
+    private readonly IPullRequestFetcher _prFetcher = Substitute.For<IPullRequestFetcher>();
     private readonly MentionReplyService _sut;
+    private readonly IAdoThreadReplier _threadReplier = Substitute.For<IAdoThreadReplier>();
 
     public MentionReplyServiceTests()
     {
@@ -53,7 +56,8 @@ public sealed class MentionReplyServiceTests
             mentionText);
     }
 
-    private static PullRequest MakePullRequest(string orgUrl = "https://dev.azure.com/org",
+    private static PullRequest MakePullRequest(
+        string orgUrl = "https://dev.azure.com/org",
         string projectId = "proj",
         string repoId = "repo",
         int prId = 1)
@@ -72,8 +76,13 @@ public sealed class MentionReplyServiceTests
         this._jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing)
             .Returns(true);
         this._prFetcher.FetchAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-            Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
         this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
@@ -82,15 +91,16 @@ public sealed class MentionReplyServiceTests
         await this._sut.ProcessAsync(job);
 
         // Assert: reply was posted and job marked completed
-        await this._threadReplier.Received(1).ReplyAsync(
-            job.OrganizationUrl,
-            job.ProjectId,
-            job.RepositoryId,
-            job.PullRequestId,
-            job.ThreadId,
-            answer,
-            job.ClientId,
-            Arg.Any<CancellationToken>());
+        await this._threadReplier.Received(1)
+            .ReplyAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.ThreadId,
+                answer,
+                job.ClientId,
+                Arg.Any<CancellationToken>());
         await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
     }
 
@@ -106,10 +116,8 @@ public sealed class MentionReplyServiceTests
         await this._sut.ProcessAsync(job);
 
         // Assert: no PR fetch, no reply, no state change
-        await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(
-            default!, default!, default!, default, default, default, default);
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(
-            default!, default!, default!, default, default, default!, default, default);
+        await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default!, default, default);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default!, default!, default!, default, default, default!);
     }
 
     [Fact]
@@ -122,8 +130,13 @@ public sealed class MentionReplyServiceTests
         this._jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing)
             .Returns(true);
         this._prFetcher.FetchAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-            Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
         this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<InvalidOperationException>();
@@ -132,12 +145,12 @@ public sealed class MentionReplyServiceTests
         await this._sut.ProcessAsync(job);
 
         // Assert: job marked failed, no reply posted
-        await this._jobRepository.Received(1).SetFailedAsync(
-            job.Id,
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(
-            default!, default!, default!, default, default, default!, default, default);
+        await this._jobRepository.Received(1)
+            .SetFailedAsync(
+                job.Id,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default!, default!, default!, default, default, default!);
     }
 
     [Fact]
@@ -151,23 +164,35 @@ public sealed class MentionReplyServiceTests
         this._jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing)
             .Returns(true);
         this._prFetcher.FetchAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-            Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
         this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
         this._threadReplier.ReplyAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-            Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<HttpRequestException>();
 
         // Act
         await this._sut.ProcessAsync(job);
 
         // Assert: job marked failed
-        await this._jobRepository.Received(1).SetFailedAsync(
-            job.Id,
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1)
+            .SetFailedAsync(
+                job.Id,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
     }
 }

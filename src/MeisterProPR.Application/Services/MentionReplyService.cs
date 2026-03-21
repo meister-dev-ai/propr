@@ -1,6 +1,7 @@
 ﻿using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Application.Services;
@@ -12,7 +13,7 @@ namespace MeisterProPR.Application.Services;
 public sealed partial class MentionReplyService(
     IPullRequestFetcher pullRequestFetcher,
     IMentionReplyJobRepository jobRepository,
-    MeisterProPR.Domain.Interfaces.IMentionAnswerService answerService,
+    IMentionAnswerService answerService,
     IAdoThreadReplier threadReplier,
     ILogger<MentionReplyService> logger) : IMentionReplyService
 {
@@ -20,8 +21,7 @@ public sealed partial class MentionReplyService(
     public async Task ProcessAsync(MentionReplyJob job, CancellationToken cancellationToken = default)
     {
         // Atomic claim: transition Pending → Processing before doing expensive work.
-        var claimed = await jobRepository.TryTransitionAsync(
-            job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing, cancellationToken);
+        var claimed = await jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing, cancellationToken);
 
         if (!claimed)
         {
@@ -37,9 +37,9 @@ public sealed partial class MentionReplyService(
                 job.ProjectId,
                 job.RepositoryId,
                 job.PullRequestId,
-                iterationId: 1,
-                clientId: job.ClientId,
-                cancellationToken: cancellationToken);
+                1,
+                job.ClientId,
+                cancellationToken);
 
             // Generate an AI answer grounded in the PR, focused on the specific thread.
             var answer = await answerService.AnswerAsync(pullRequest, job.MentionText, job.ThreadId, cancellationToken);
@@ -69,15 +69,18 @@ public sealed partial class MentionReplyService(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Debug,
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "MentionReplyService: job {JobId} was already claimed by another worker — skipping")]
     private static partial void LogJobAlreadyClaimed(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionReplyService: job {JobId} completed successfully")]
     private static partial void LogJobCompleted(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Error,
+    [LoggerMessage(
+        Level = LogLevel.Error,
         Message = "MentionReplyService: job {JobId} failed")]
     private static partial void LogJobFailed(ILogger logger, Guid jobId, Exception ex);
 }

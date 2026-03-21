@@ -89,27 +89,33 @@ public sealed partial class MentionReplyWorker(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionReplyWorker started")]
     private static partial void LogWorkerStarted(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionReplyWorker stopped")]
     private static partial void LogWorkerStopped(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "MentionReplyWorker hydrated {Count} pending jobs from DB")]
     private static partial void LogHydrated(ILogger logger, int count);
 
-    [LoggerMessage(Level = LogLevel.Error,
+    [LoggerMessage(
+        Level = LogLevel.Error,
         Message = "MentionReplyWorker: hydration failed")]
     private static partial void LogHydrationError(ILogger logger, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Debug,
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "MentionReplyWorker: IMentionReplyService not registered — job skipped")]
     private static partial void LogReplyServiceUnavailable(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error,
+    [LoggerMessage(
+        Level = LogLevel.Error,
         Message = "MentionReplyWorker: failed to process job {JobId}")]
     private static partial void LogJobError(ILogger logger, Guid jobId, Exception ex);
 }

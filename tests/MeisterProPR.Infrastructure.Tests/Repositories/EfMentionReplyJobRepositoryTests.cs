@@ -15,11 +15,10 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
-    private MeisterProPRDbContext _dbContext = null!;
-    private EfMentionReplyJobRepository _repo = null!;
-
     // Deterministic client ID so FK constraint is satisfied across test runs.
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private MeisterProPRDbContext _dbContext = null!;
+    private EfMentionReplyJobRepository _repo = null!;
 
     public async Task InitializeAsync()
     {
@@ -31,14 +30,15 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         // Seed the client for FK constraint — use ON CONFLICT DO NOTHING pattern.
         if (!await this._dbContext.Clients.AnyAsync(c => c.Id == ClientId))
         {
-            this._dbContext.Clients.Add(new ClientRecord
-            {
-                Id = ClientId,
-                Key = "test-mention-client",
-                DisplayName = "Test Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            this._dbContext.Clients.Add(
+                new ClientRecord
+                {
+                    Id = ClientId,
+                    Key = "test-mention-client",
+                    DisplayName = "Test Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             await this._dbContext.SaveChangesAsync();
         }
 
@@ -114,8 +114,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         var job = MakeJob();
         await this._repo.AddAsync(job);
 
-        var transitioned = await this._repo.TryTransitionAsync(
-            job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        var transitioned = await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
         Assert.True(transitioned);
 
         var pending = await this._repo.GetPendingAsync();
@@ -129,8 +128,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         await this._repo.AddAsync(job);
 
         // Job is Pending, try to transition from Processing → Completed (invalid)
-        var transitioned = await this._repo.TryTransitionAsync(
-            job.Id, MentionJobStatus.Processing, MentionJobStatus.Completed);
+        var transitioned = await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Processing, MentionJobStatus.Completed);
         Assert.False(transitioned);
 
         // Status should still be Pending

@@ -38,11 +38,12 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
         CancellationToken ct = default)
     {
         return await dbContext.MentionReplyJobs
-            .AnyAsync(j =>
-                j.ClientId == clientId &&
-                j.PullRequestId == pullRequestId &&
-                j.ThreadId == threadId &&
-                j.CommentId == commentId,
+            .AnyAsync(
+                j =>
+                    j.ClientId == clientId &&
+                    j.PullRequestId == pullRequestId &&
+                    j.ThreadId == threadId &&
+                    j.CommentId == commentId,
                 ct);
     }
 
@@ -113,7 +114,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
             .Where(j => j.Status == MentionJobStatus.Processing)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(j => j.Status, MentionJobStatus.Pending)
-                      .SetProperty(j => j.ProcessingStartedAt, (DateTimeOffset?)null),
+                    .SetProperty(j => j.ProcessingStartedAt, (DateTimeOffset?)null),
                 ct);
     }
 }

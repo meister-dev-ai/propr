@@ -80,11 +80,13 @@ internal sealed partial class AdoActivePrFetcher(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information,
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "AdoActivePrFetcher: fetched {Count} active PRs for {OrganizationUrl}/{ProjectId}")]
     private static partial void LogPrsFetched(ILogger logger, string organizationUrl, string projectId, int count);
 
-    [LoggerMessage(Level = LogLevel.Warning,
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "AdoActivePrFetcher: failed to fetch PRs for {OrganizationUrl}/{ProjectId}")]
     private static partial void LogFetchError(ILogger logger, string organizationUrl, string projectId, Exception ex);
 }
