@@ -32,7 +32,7 @@ public sealed partial class ReviewJobWorker(
 
                 foreach (var job in jobRepository.GetPendingJobs())
                 {
-                    if (!jobRepository.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing))
+                    if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
                     {
                         continue;
                     }
@@ -81,12 +81,12 @@ public sealed partial class ReviewJobWorker(
         }
         catch (OperationCanceledException)
         {
-            jobRepository.TryTransition(job.Id, JobStatus.Processing, JobStatus.Pending);
+            await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
         }
         catch (Exception ex)
         {
             LogJobProcessingError(logger, job.Id, ex);
-            jobRepository.SetFailed(job.Id, ex.Message);
+            await jobRepository.SetFailedAsync(job.Id, ex.Message);
         }
     }
 

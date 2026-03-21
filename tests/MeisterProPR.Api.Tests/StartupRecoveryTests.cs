@@ -58,14 +58,14 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
             var repo = new PostgresJobRepository(db);
             var job = new ReviewJob(
                 Guid.NewGuid(),
-                null,
+                Guid.NewGuid(),
                 "https://dev.azure.com/org",
                 "proj",
                 "repo",
                 99,
                 1);
-            repo.Add(job);
-            repo.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing);
+            await repo.AddAsync(job);
+            await repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
             stalJobId = job.Id;
         }
 

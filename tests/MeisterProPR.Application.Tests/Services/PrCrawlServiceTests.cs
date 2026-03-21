@@ -56,7 +56,7 @@ public sealed class PrCrawlServiceTests
         // FindActiveJob returns an existing job (Pending/Processing/Completed)
         var existingJob = new ReviewJob(
             Guid.NewGuid(),
-            null,
+            Guid.NewGuid(),
             pr.OrganizationUrl,
             pr.ProjectId,
             pr.RepositoryId,
@@ -74,7 +74,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: Add was NOT called
-        this._jobs.DidNotReceive().Add(Arg.Any<ReviewJob>());
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: a new job is created
-        this._jobs.Received(1).Add(Arg.Any<ReviewJob>());
+        await this._jobs.Received(1).AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: Add was called exactly once with the config's ClientId
-        this._jobs.Received(1)
-            .Add(
+        await this._jobs.Received(1)
+            .AddAsync(
                 Arg.Is<ReviewJob>(j =>
                     j.PullRequestId == 42 &&
                     j.IterationId == 1 &&
@@ -157,7 +157,7 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: job created for the successful config only
-        this._jobs.Received(1).Add(Arg.Any<ReviewJob>());
+        await this._jobs.Received(1).AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
@@ -182,6 +182,6 @@ public sealed class PrCrawlServiceTests
         await this._sut.CrawlAsync();
 
         // Assert: a job created for each discovered PR
-        this._jobs.Received(2).Add(Arg.Any<ReviewJob>());
+        await this._jobs.Received(2).AddAsync(Arg.Any<ReviewJob>());
     }
 }

@@ -73,11 +73,8 @@ public class ReviewOrchestrationServiceTests
     /// <summary>Set up the clientRegistry to return a non-null reviewerId for the given job's ClientId.</summary>
     private static void SetupReviewerIdReturns(IClientRegistry clientRegistry, ReviewJob job, Guid reviewerId)
     {
-        if (job.ClientId is not null)
-        {
-            clientRegistry.GetReviewerIdAsync(job.ClientId.Value, Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult<Guid?>(reviewerId));
-        }
+        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Guid?>(reviewerId));
     }
 
     [Fact]
@@ -108,8 +105,8 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert
-        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("AI error")));
-        jobs.DidNotReceive().SetResult(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("AI error")));
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
     }
 
     // T025 — AddOptionalReviewerAsync is called with client's ReviewerId before PostAsync
@@ -208,7 +205,7 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert
-        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("Comment post error")));
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("Comment post error")));
     }
 
     [Fact]
@@ -235,26 +232,8 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert
-        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("ADO fetch error")));
-        jobs.DidNotReceive().SetResult(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
-    }
-
-    // T033 — null ClientId → SetFailed immediately, no GetReviewerIdAsync call
-
-    [Fact]
-    public async Task ProcessAsync_NullClientId_CallsSetFailedImmediately()
-    {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger) = CreateDeps();
-
-        // Job with null ClientId
-        var job = new ReviewJob(Guid.NewGuid(), null, "https://dev.azure.com/org", "proj", "repo", 1, 1);
-
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, logger);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        jobs.Received(1).SetFailed(job.Id, Arg.Any<string>());
-        await clientRegistry.DidNotReceiveWithAnyArgs().GetReviewerIdAsync(default);
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("ADO fetch error")));
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
     }
 
     // T032 — null ReviewerId → SetFailed "not configured", no reviewer call, no PostAsync
@@ -274,7 +253,7 @@ public class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(s => s.Contains("not configured")));
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("not configured")));
         await reviewerManager.DidNotReceiveWithAnyArgs()
             .AddOptionalReviewerAsync(default!, default!, default!, default, default);
         await commentPoster.DidNotReceiveWithAnyArgs()
@@ -363,7 +342,7 @@ public class ReviewOrchestrationServiceTests
         await sut.ProcessAsync(job, CancellationToken.None);
 
         // Assert: job is marked failed with the EC-002 message; AI is never called
-        jobs.Received(1).SetFailed(job.Id, Arg.Is<string>(m => m.Contains("closed or abandoned")));
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(m => m.Contains("closed or abandoned")));
         await aiCore.DidNotReceiveWithAnyArgs().ReviewAsync(default!);
     }
 
@@ -401,7 +380,7 @@ public class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        jobs.Received(1).SetFailed(job.Id, Arg.Any<string>());
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Any<string>());
         await commentPoster.DidNotReceiveWithAnyArgs()
             .PostAsync(default!, default!, default!, default, default, default!);
     }
@@ -477,7 +456,7 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert
-        jobs.Received(1).SetResult(job.Id, result);
+        await jobs.Received(1).SetResultAsync(job.Id, result);
         await commentPoster.Received(1)
             .PostAsync(
                 Arg.Any<string>(),
@@ -489,7 +468,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<IReadOnlyList<PrCommentThread>?>(),
                 Arg.Any<CancellationToken>());
-        jobs.DidNotReceive().SetFailed(Arg.Any<Guid>(), Arg.Any<string>());
+        await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>());
     }
 
     // T026 — GetReviewerIdAsync returns non-null → AddOptionalReviewerAsync called with that GUID

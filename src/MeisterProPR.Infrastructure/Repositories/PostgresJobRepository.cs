@@ -11,11 +11,9 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJobRepository
 {
     /// <inheritdoc />
-    public bool TryTransition(Guid id, JobStatus from, JobStatus to)
+    public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
-        // Use optimistic concurrency: load, check status, update, save
-        // If another thread already transitioned, SaveChanges will see the conflict
-        var job = dbContext.ReviewJobs.Find(id);
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
         if (job is null || job.Status != from)
         {
             return false;
@@ -29,12 +27,12 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
 
         try
         {
-            dbContext.SaveChanges();
+            await dbContext.SaveChangesAsync(ct);
             return true;
         }
         catch (DbUpdateConcurrencyException)
         {
-            dbContext.Entry(job).Reload();
+            await dbContext.Entry(job).ReloadAsync(ct);
             return false;
         }
     }
@@ -66,14 +64,12 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         int iterationId)
     {
         return dbContext.ReviewJobs
-            .Where(j =>
-                j.OrganizationUrl == organizationUrl &&
-                j.ProjectId == projectId &&
-                j.RepositoryId == repositoryId &&
-                j.PullRequestId == pullRequestId &&
-                j.IterationId == iterationId &&
-                j.Status != JobStatus.Failed)
-            .FirstOrDefault();
+            .FirstOrDefault(j => j.OrganizationUrl == organizationUrl &&
+                                 j.ProjectId == projectId &&
+                                 j.RepositoryId == repositoryId &&
+                                 j.PullRequestId == pullRequestId &&
+                                 j.IterationId == iterationId &&
+                                 j.Status != JobStatus.Failed);
     }
 
     /// <inheritdoc />
@@ -114,16 +110,16 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
     }
 
     /// <inheritdoc />
-    public void Add(ReviewJob job)
+    public async Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
         dbContext.ReviewJobs.Add(job);
-        dbContext.SaveChanges();
+        await dbContext.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public void SetFailed(Guid id, string errorMessage)
+    public async Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
-        var job = dbContext.ReviewJobs.Find(id);
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
         if (job is null)
         {
             return;
@@ -132,13 +128,13 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         job.ErrorMessage = errorMessage;
         job.Status = JobStatus.Failed;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        dbContext.SaveChanges();
+        await dbContext.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public void SetResult(Guid id, ReviewResult result)
+    public async Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
-        var job = dbContext.ReviewJobs.Find(id);
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
         if (job is null)
         {
             return;
@@ -147,6 +143,6 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         job.Result = result;
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        dbContext.SaveChanges();
+        await dbContext.SaveChangesAsync(ct);
     }
 }

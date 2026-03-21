@@ -48,7 +48,12 @@ public sealed partial class AdoPrCrawlerWorker(
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var crawlService = scope.ServiceProvider.GetRequiredService<IPrCrawlService>();
+            var crawlService = scope.ServiceProvider.GetService<IPrCrawlService>();
+            if (crawlService is null)
+            {
+                return;
+            }
+
             await crawlService.CrawlAsync(ct);
         }
         catch (Exception ex)

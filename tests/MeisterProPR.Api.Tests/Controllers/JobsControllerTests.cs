@@ -64,9 +64,9 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
             "repo",
             500,
             1);
-        repo.Add(completedJob);
-        repo.TryTransition(completedJob.Id, JobStatus.Pending, JobStatus.Processing);
-        repo.SetResult(completedJob.Id, new ReviewResult("done", []));
+        await repo.AddAsync(completedJob);
+        await repo.TryTransitionAsync(completedJob.Id, JobStatus.Pending, JobStatus.Processing);
+        await repo.SetResultAsync(completedJob.Id, new ReviewResult("done", []));
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs?status=Completed");
@@ -100,10 +100,10 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         for (var i = 0; i < 10_000; i++)
         {
-            jobRepo.Add(
+            await jobRepo.AddAsync(
                 new ReviewJob(
                     Guid.NewGuid(),
-                    null,
+                    Guid.NewGuid(),
                     "https://dev.azure.com/org",
                     "proj",
                     "repo",

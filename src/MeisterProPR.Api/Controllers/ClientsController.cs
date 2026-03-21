@@ -12,8 +12,9 @@ public sealed class ClientsController(
     ICrawlConfigurationRepository crawlConfigs,
     IClientAdoCredentialRepository adoCredentialRepository) : ControllerBase
 {
-    private static ClientResponse ToClientResponse(ClientDto client) =>
-        new(
+    private static ClientResponse ToClientResponse(ClientDto client)
+    {
+        return new ClientResponse(
             client.Id,
             client.DisplayName,
             client.IsActive,
@@ -22,6 +23,7 @@ public sealed class ClientsController(
             client.AdoTenantId,
             client.AdoClientId,
             client.ReviewerId);
+    }
 
     /// <summary>
     ///     Adds a crawl configuration for the specified client. Requires <c>X-Client-Key</c> that owns the client.

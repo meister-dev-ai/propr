@@ -25,25 +25,14 @@ public sealed partial class ReviewOrchestrationService(
     IClientRegistry clientRegistry,
     ILogger<ReviewOrchestrationService> logger)
 {
-    /// <summary>
-    ///     Processes the given review job end-to-end.
-    /// </summary>
+    /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
     {
-        // Guard 1: client must be associated
-        if (job.ClientId is null)
-        {
-            LogNoClientAssociated(logger, job.Id);
-            jobs.SetFailed(job.Id, "No client associated with job");
-            return;
-        }
-
-        // Guard 2: client must have a reviewer identity configured
-        var reviewerId = await clientRegistry.GetReviewerIdAsync(job.ClientId.Value, ct);
+        var reviewerId = await clientRegistry.GetReviewerIdAsync(job.ClientId, ct);
         if (reviewerId is null)
         {
-            LogReviewerIdentityMissing(logger, job.ClientId.Value, job.Id);
-            jobs.SetFailed(job.Id, $"Reviewer identity not configured for client {job.ClientId}");
+            LogReviewerIdentityMissing(logger, job.ClientId, job.Id);
+            await jobs.SetFailedAsync(job.Id, $"Reviewer identity not configured for client {job.ClientId}", ct);
             return;
         }
 
@@ -60,15 +49,13 @@ public sealed partial class ReviewOrchestrationService(
                 job.ClientId,
                 ct);
 
-            // EC-002: PR was closed or abandoned before the review could run.
             if (pr.Status != PrStatus.Active)
             {
                 LogPrNoLongerActive(logger, job.PullRequestId, pr.Status, job.Id);
-                jobs.SetFailed(job.Id, "PR was closed or abandoned before review could begin");
+                await jobs.SetFailedAsync(job.Id, "PR was closed or abandoned before review could begin", ct);
                 return;
             }
 
-            // Add AI identity as optional reviewer before posting any comments.
             await reviewerManager.AddOptionalReviewerAsync(
                 job.OrganizationUrl,
                 job.ProjectId,
@@ -91,18 +78,15 @@ public sealed partial class ReviewOrchestrationService(
                 pr.ExistingThreads,
                 ct);
 
-            jobs.SetResult(job.Id, result);
+            await jobs.SetResultAsync(job.Id, result, ct);
             LogReviewCompleted(logger, job.Id);
         }
         catch (Exception ex)
         {
             LogReviewFailed(logger, job.Id, ex);
-            jobs.SetFailed(job.Id, ex.Message);
+            await jobs.SetFailedAsync(job.Id, ex.Message, ct);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Job {JobId} has no client associated — failing")]
-    private static partial void LogNoClientAssociated(ILogger logger, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reviewer identity not configured for client {ClientId} — failing job {JobId}")]
     private static partial void LogReviewerIdentityMissing(ILogger logger, Guid clientId, Guid jobId);

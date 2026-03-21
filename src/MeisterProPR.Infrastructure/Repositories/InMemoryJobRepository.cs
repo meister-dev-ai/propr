@@ -15,23 +15,9 @@ public sealed class InMemoryJobRepository : IJobRepository
     private readonly ConcurrentDictionary<Guid, ReviewJob> _jobs = new();
 
     /// <inheritdoc />
-    public bool TryTransition(Guid id, JobStatus from, JobStatus to)
+    public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
-        if (!this._jobs.TryGetValue(id, out var job))
-        {
-            return false;
-        }
-
-        lock (job)
-        {
-            if (job.Status != from)
-            {
-                return false;
-            }
-
-            job.Status = to;
-            return true;
-        }
+        return Task.FromResult(this.TryTransition(id, from, to));
     }
 
     /// <inheritdoc />
@@ -104,13 +90,14 @@ public sealed class InMemoryJobRepository : IJobRepository
     }
 
     /// <inheritdoc />
-    public void Add(ReviewJob job)
+    public Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
-        this._jobs[job.Id] = job;
+        this.Add(job);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public void SetFailed(Guid id, string errorMessage)
+    public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
         if (this._jobs.TryGetValue(id, out var job))
         {
@@ -121,10 +108,12 @@ public sealed class InMemoryJobRepository : IJobRepository
                 job.CompletedAt = DateTimeOffset.UtcNow;
             }
         }
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public void SetResult(Guid id, ReviewResult result)
+    public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
         if (this._jobs.TryGetValue(id, out var job))
         {
@@ -135,5 +124,33 @@ public sealed class InMemoryJobRepository : IJobRepository
                 job.CompletedAt = DateTimeOffset.UtcNow;
             }
         }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Synchronous compare-and-swap on Status. Used internally and by tests.</summary>
+    public bool TryTransition(Guid id, JobStatus from, JobStatus to)
+    {
+        if (!this._jobs.TryGetValue(id, out var job))
+        {
+            return false;
+        }
+
+        lock (job)
+        {
+            if (job.Status != from)
+            {
+                return false;
+            }
+
+            job.Status = to;
+            return true;
+        }
+    }
+
+    /// <summary>Synchronous add. Used by tests that construct jobs directly.</summary>
+    public void Add(ReviewJob job)
+    {
+        this._jobs[job.Id] = job;
     }
 }

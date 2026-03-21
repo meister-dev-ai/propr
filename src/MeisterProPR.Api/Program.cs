@@ -244,9 +244,9 @@ try
         var staleJobs = await jobRepo.GetProcessingJobsAsync();
         foreach (var job in staleJobs)
         {
-            jobRepo.TryTransition(job.Id, JobStatus.Processing, JobStatus.Pending);
+            await jobRepo.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
             Log.Warning(
-                "Startup recovery: job {JobId} for PR#{PrId} was stale (Processing); reset to Pending.",
+                "Startup recovery: job {JobId} for PR#{PrId} was stale (Processing); reset to Pending",
                 job.Id,
                 job.PullRequestId);
         }

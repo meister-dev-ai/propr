@@ -89,8 +89,10 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
     }
 
     /// <inheritdoc />
-    public Task<bool> ExistsAsync(Guid clientId, CancellationToken ct = default) =>
-        dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
+    public Task<bool> ExistsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return dbContext.Clients.AnyAsync(c => c.Id == clientId, ct);
+    }
 
     /// <inheritdoc />
     public async Task<bool> SetReviewerIdentityAsync(Guid clientId, Guid reviewerId, CancellationToken ct = default)
@@ -106,8 +108,9 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
         return true;
     }
 
-    private static ClientDto ToDto(ClientRecord client) =>
-        new(
+    private static ClientDto ToDto(ClientRecord client)
+    {
+        return new ClientDto(
             client.Id,
             client.DisplayName,
             client.IsActive,
@@ -116,4 +119,5 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
             client.AdoTenantId,
             client.AdoClientId,
             client.ReviewerId);
+    }
 }

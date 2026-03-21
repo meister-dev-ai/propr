@@ -25,7 +25,7 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
     public async Task ListReviews_ClientKeyScoping_JobsFromOneKeyNotVisibleToAnother()
     {
         var client = factory.CreateClient();
-        factory.InsertJob("test-key-123", 800);
+        await factory.InsertJobAsync("test-key-123", 800);
 
         // test-key-456 is also a valid key but should not see test-key-123's jobs
         using var request = CreateListRequest("test-key-456");
@@ -72,8 +72,8 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
     public async Task ListReviews_WithJobs_ReturnsNewestFirst()
     {
         var client = factory.CreateClient();
-        factory.InsertJob("test-key-123", 701);
-        factory.InsertJob("test-key-123", 702);
+        await factory.InsertJobAsync("test-key-123", 701);
+        await factory.InsertJobAsync("test-key-123", 702);
 
         using var request = CreateListRequest();
         var response = await client.SendAsync(request);
@@ -125,7 +125,7 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
             services.AddSingleton(implementation);
         }
 
-        public void InsertJob(string clientKey, int prId)
+        public async Task InsertJobAsync(string clientKey, int prId)
         {
             var repo = this._jobRepo ?? throw new InvalidOperationException("Factory not initialized");
             var clientId = ClientIds.TryGetValue(clientKey, out var id) ? id : Guid.NewGuid();
@@ -137,7 +137,7 @@ public class ReviewsControllerListTests(ReviewsControllerListTests.ListReviewsFa
                 "repo",
                 prId,
                 1);
-            repo.Add(job);
+            await repo.AddAsync(job);
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

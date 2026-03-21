@@ -59,14 +59,14 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             var repo = new PostgresJobRepository(db);
             var job = new ReviewJob(
                 Guid.NewGuid(),
-                null,
+                Guid.NewGuid(),
                 "https://dev.azure.com/org",
                 "proj",
                 "repo-42",
                 42,
                 1);
-            repo.Add(job);
-            repo.SetResult(job.Id, new ReviewResult("Looks good.", []));
+            await repo.AddAsync(job);
+            await repo.SetResultAsync(job.Id, new ReviewResult("Looks good.", []));
         }
 
         // Step 2 — mock crawl-config repo returning one config for our org

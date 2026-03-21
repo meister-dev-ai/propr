@@ -17,7 +17,7 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
 
         builder.Property(j => j.ClientId)
             .HasColumnName("client_id")
-            .IsRequired(false);
+            .IsRequired();
 
         builder.Property(j => j.OrganizationUrl)
             .HasColumnName("organization_url")

@@ -167,13 +167,13 @@ public class InMemoryJobRepositoryTests
     }
 
     [Fact]
-    public void SetFailed_PopulatesErrorMessageAndSetsFailed()
+    public async Task SetFailed_PopulatesErrorMessageAndSetsFailed()
     {
         var repo = new InMemoryJobRepository();
         var job = CreateJob();
         repo.Add(job);
 
-        repo.SetFailed(job.Id, "Something went wrong");
+        await repo.SetFailedAsync(job.Id, "Something went wrong");
 
         var retrieved = repo.GetById(job.Id)!;
         Assert.Equal(JobStatus.Failed, retrieved.Status);
@@ -182,14 +182,14 @@ public class InMemoryJobRepositoryTests
     }
 
     [Fact]
-    public void SetResult_PopulatesResultAndSetsCompleted()
+    public async Task SetResult_PopulatesResultAndSetsCompleted()
     {
         var repo = new InMemoryJobRepository();
         var job = CreateJob();
         repo.Add(job);
         var result = new ReviewResult("summary", new List<ReviewComment>().AsReadOnly());
 
-        repo.SetResult(job.Id, result);
+        await repo.SetResultAsync(job.Id, result);
 
         var retrieved = repo.GetById(job.Id)!;
         Assert.Equal(JobStatus.Completed, retrieved.Status);

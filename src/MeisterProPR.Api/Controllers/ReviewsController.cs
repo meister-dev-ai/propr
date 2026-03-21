@@ -169,14 +169,14 @@ public sealed partial class ReviewsController(
 
         var job = new ReviewJob(
             Guid.NewGuid(),
-            clientId,
+            clientId.Value,
             request.OrganizationUrl,
             request.ProjectId,
             request.RepositoryId,
             request.PullRequestId,
             request.IterationId);
 
-        jobRepository.Add(job);
+        await jobRepository.AddAsync(job, ct);
 
         this.LogReviewJobCreated(job.Id, job.PullRequestId);
         return this.Accepted(new ReviewJobResponse(job.Id));

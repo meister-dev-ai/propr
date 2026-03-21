@@ -61,7 +61,7 @@ public sealed partial class PrCrawlService(
                     pr.PullRequestId,
                     pr.LatestIterationId);
 
-                jobs.Add(job);
+                await jobs.AddAsync(job, cancellationToken);
                 LogJobCreated(logger, job.Id, pr.PullRequestId, pr.LatestIterationId);
             }
         }

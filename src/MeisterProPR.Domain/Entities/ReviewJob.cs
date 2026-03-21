@@ -13,7 +13,7 @@ public sealed class ReviewJob
     /// </summary>
     public ReviewJob(
         Guid id,
-        Guid? clientId,
+        Guid clientId,
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -114,10 +114,8 @@ public sealed class ReviewJob
     /// </summary>
     public string RepositoryId { get; init; }
 
-    /// <summary>
-    ///     Client that owns this job. Null for legacy jobs without client tracking.
-    /// </summary>
-    public Guid? ClientId { get; init; }
+    /// <summary>Client that owns this job.</summary>
+    public Guid ClientId { get; init; }
 
     /// <summary>
     ///     Error message if the job failed.

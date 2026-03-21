@@ -14,7 +14,7 @@ public class ReviewJobTests
         int prId = 1,
         int iterationId = 1)
     {
-        return new ReviewJob(id ?? Guid.NewGuid(), clientId, orgUrl, projectId, repoId, prId, iterationId);
+        return new ReviewJob(id ?? Guid.NewGuid(), clientId ?? Guid.NewGuid(), orgUrl, projectId, repoId, prId, iterationId);
     }
 
     [Fact]
@@ -36,22 +36,6 @@ public class ReviewJobTests
     {
         var job = CreateJob();
         Assert.NotEqual(Guid.Empty, job.Id);
-    }
-
-    [Fact]
-    public void Constructor_NullClientId_IsValid()
-    {
-        // T012: crawler-initiated jobs have no client — null must be accepted
-        var job = new ReviewJob(Guid.NewGuid(), null, "https://dev.azure.com/org", "proj", "repo", 1, 1);
-        Assert.Null(job.ClientId);
-        Assert.Equal(JobStatus.Pending, job.Status);
-    }
-
-    [Fact]
-    public void Constructor_NullClientId_SetsClientIdToNull()
-    {
-        var job = CreateJob(clientId: null);
-        Assert.Null(job.ClientId);
     }
 
     [Fact]

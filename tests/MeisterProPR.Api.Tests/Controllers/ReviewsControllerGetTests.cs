@@ -27,7 +27,7 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
     {
         // Use the factory's job repository directly to insert a completed job
         var client = factory.CreateClient();
-        var jobId = factory.InsertCompletedJob();
+        var jobId = await factory.InsertCompletedJobAsync();
 
         using var request = CreateGetRequest(jobId.ToString());
         var response = await client.SendAsync(request);
@@ -46,7 +46,7 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
     public async Task GetReview_FailedJob_Returns200WithError()
     {
         var client = factory.CreateClient();
-        var jobId = factory.InsertFailedJob();
+        var jobId = await factory.InsertFailedJobAsync();
 
         using var request = CreateGetRequest(jobId.ToString());
         var response = await client.SendAsync(request);
@@ -146,7 +146,7 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
             services.AddSingleton(implementation);
         }
 
-        public Guid InsertCompletedJob()
+        public async Task<Guid> InsertCompletedJobAsync()
         {
             var repo = this._jobRepo ?? throw new InvalidOperationException("Factory not initialized");
             var job = new ReviewJob(
@@ -157,12 +157,12 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
                 "repo",
                 200,
                 1);
-            repo.Add(job);
-            repo.SetResult(job.Id, new ReviewResult("AI completed", new List<ReviewComment>().AsReadOnly()));
+            await repo.AddAsync(job);
+            await repo.SetResultAsync(job.Id, new ReviewResult("AI completed", new List<ReviewComment>().AsReadOnly()));
             return job.Id;
         }
 
-        public Guid InsertFailedJob()
+        public async Task<Guid> InsertFailedJobAsync()
         {
             var repo = this._jobRepo ?? throw new InvalidOperationException("Factory not initialized");
             var job = new ReviewJob(
@@ -173,8 +173,8 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
                 "repo",
                 300,
                 1);
-            repo.Add(job);
-            repo.SetFailed(job.Id, "Something went wrong");
+            await repo.AddAsync(job);
+            await repo.SetFailedAsync(job.Id, "Something went wrong");
             return job.Id;
         }
 

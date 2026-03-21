@@ -48,10 +48,10 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void Add_ThenGetById_ReturnsJob()
+    public async Task Add_ThenGetById_ReturnsJob()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
         var fetched = this._repo.GetById(job.Id);
         Assert.NotNull(fetched);
@@ -60,12 +60,12 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     }
 
     [Fact]
-    public void FindActiveJob_ReturnsJobForCompleted()
+    public async Task FindActiveJob_ReturnsJobForCompleted()
     {
         var job = MakeJob();
-        this._repo.Add(job);
-        this._repo.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing);
-        this._repo.SetResult(job.Id, new ReviewResult("summary", []));
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
 
         var found = this._repo.FindActiveJob(
             job.OrganizationUrl,
@@ -77,13 +77,13 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     }
 
     [Fact]
-    public void FindActiveJob_ReturnsNullForFailedJob()
+    public async Task FindActiveJob_ReturnsNullForFailedJob()
     {
         // T039 / T009: Failed job should return null to allow retry
         var job = MakeJob();
-        this._repo.Add(job);
-        this._repo.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing);
-        this._repo.SetFailed(job.Id, "test error");
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetFailedAsync(job.Id, "test error");
 
         var found = this._repo.FindActiveJob(
             job.OrganizationUrl,
@@ -96,10 +96,10 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void FindActiveJob_ReturnsPendingJob()
+    public async Task FindActiveJob_ReturnsPendingJob()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
         var found = this._repo.FindActiveJob(
             job.OrganizationUrl,
@@ -113,13 +113,13 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void GetAllForClient_ReturnsOnlyMatchingClientJobs()
+    public async Task GetAllForClient_ReturnsOnlyMatchingClientJobs()
     {
         var clientA = Guid.NewGuid();
         var clientB = Guid.NewGuid();
-        this._repo.Add(MakeJob(clientA, prId: 1));
-        this._repo.Add(MakeJob(clientB, prId: 2));
-        this._repo.Add(MakeJob(clientA, prId: 3));
+        await this._repo.AddAsync(MakeJob(clientA, prId: 1));
+        await this._repo.AddAsync(MakeJob(clientB, prId: 2));
+        await this._repo.AddAsync(MakeJob(clientA, prId: 3));
 
         var result = this._repo.GetAllForClient(clientA);
         Assert.Equal(2, result.Count);
@@ -131,7 +131,7 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     {
         for (var i = 1; i <= 5; i++)
         {
-            this._repo.Add(MakeJob(prId: i));
+            await this._repo.AddAsync(MakeJob(prId: i));
         }
 
         var (total, page1) = await this._repo.GetAllJobsAsync(2, 0, null);
@@ -150,11 +150,11 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     public async Task GetAllJobsAsync_ReturnsAllJobsNewestFirst()
     {
         var job1 = MakeJob(prId: 100);
-        this._repo.Add(job1);
+        await this._repo.AddAsync(job1);
         // Brief delay to ensure job2 gets a strictly later SubmittedAt timestamp.
         await Task.Delay(10);
         var job2 = MakeJob(prId: 101);
-        this._repo.Add(job2);
+        await this._repo.AddAsync(job2);
 
         var (total, items) = await this._repo.GetAllJobsAsync(100, 0, null);
         Assert.Equal(2, total);
@@ -167,9 +167,9 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     {
         var pending = MakeJob(prId: 200);
         var processing = MakeJob(prId: 201);
-        this._repo.Add(pending);
-        this._repo.Add(processing);
-        this._repo.TryTransition(processing.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.AddAsync(pending);
+        await this._repo.AddAsync(processing);
+        await this._repo.TryTransitionAsync(processing.Id, JobStatus.Pending, JobStatus.Processing);
 
         var (total, items) = await this._repo.GetAllJobsAsync(100, 0, JobStatus.Processing);
         Assert.Equal(1, total);
@@ -185,12 +185,12 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void GetPendingJobs_OrderedOldestFirst()
+    public async Task GetPendingJobs_OrderedOldestFirst()
     {
         var job1 = MakeJob(prId: 10);
         var job2 = MakeJob(prId: 20);
-        this._repo.Add(job1);
-        this._repo.Add(job2);
+        await this._repo.AddAsync(job1);
+        await this._repo.AddAsync(job2);
 
         var pending = this._repo.GetPendingJobs();
         Assert.Equal(2, pending.Count);
@@ -201,7 +201,7 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     [Fact]
     public async Task GetProcessingJobsAsync_EmptyWhenNoneProcessing()
     {
-        this._repo.Add(MakeJob(prId: 400));
+        await this._repo.AddAsync(MakeJob(prId: 400));
         var result = await this._repo.GetProcessingJobsAsync();
         Assert.Empty(result);
     }
@@ -212,9 +212,9 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     {
         var j1 = MakeJob(prId: 300);
         var j2 = MakeJob(prId: 301);
-        this._repo.Add(j1);
-        this._repo.Add(j2);
-        this._repo.TryTransition(j1.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.AddAsync(j1);
+        await this._repo.AddAsync(j2);
+        await this._repo.TryTransitionAsync(j1.Id, JobStatus.Pending, JobStatus.Processing);
 
         var result = await this._repo.GetProcessingJobsAsync();
         Assert.Single(result);
@@ -223,12 +223,12 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void SetFailed_TransitionsToFailed()
+    public async Task SetFailed_TransitionsToFailed()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
-        this._repo.SetFailed(job.Id, "ADO API error");
+        await this._repo.SetFailedAsync(job.Id, "ADO API error");
 
         var fetched = this._repo.GetById(job.Id);
         Assert.Equal(JobStatus.Failed, fetched!.Status);
@@ -238,13 +238,13 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void SetResult_TransitionsToCompleted()
+    public async Task SetResult_TransitionsToCompleted()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
         var result = new ReviewResult("Looks good", [new ReviewComment(null, null, CommentSeverity.Info, "No issues")]);
-        this._repo.SetResult(job.Id, result);
+        await this._repo.SetResultAsync(job.Id, result);
 
         var fetched = this._repo.GetById(job.Id);
         Assert.Equal(JobStatus.Completed, fetched!.Status);
@@ -255,12 +255,12 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
 
 
     [Fact]
-    public void TryTransition_PendingToProcessing_ReturnsTrue()
+    public async Task TryTransition_PendingToProcessing_ReturnsTrue()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
-        var result = this._repo.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing);
+        var result = await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
         Assert.True(result);
 
         var fetched = this._repo.GetById(job.Id);
@@ -269,13 +269,13 @@ public sealed class PostgresJobRepositoryTests(PostgresContainerFixture fixture)
     }
 
     [Fact]
-    public void TryTransition_WrongFromStatus_ReturnsFalse()
+    public async Task TryTransition_WrongFromStatus_ReturnsFalse()
     {
         var job = MakeJob();
-        this._repo.Add(job);
+        await this._repo.AddAsync(job);
 
         // job is Pending; trying to transition from Processing should fail
-        var result = this._repo.TryTransition(job.Id, JobStatus.Processing, JobStatus.Completed);
+        var result = await this._repo.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Completed);
         Assert.False(result);
 
         var fetched = this._repo.GetById(job.Id);
