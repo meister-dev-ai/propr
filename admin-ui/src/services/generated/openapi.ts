@@ -1062,7 +1062,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Client response — key and ADO secret are never included. */
+        /** @description Client response — key, ADO secret, and credential metadata are never included. */
         ClientResponse: {
             /** Format: uuid */
             id?: string;
@@ -1071,8 +1071,6 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             hasAdoCredentials?: boolean;
-            adoTenantId?: string | null;
-            adoClientId?: string | null;
             /** Format: uuid */
             reviewerId?: string | null;
         };

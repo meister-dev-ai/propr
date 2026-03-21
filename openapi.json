@@ -1620,14 +1620,6 @@
           "hasAdoCredentials": {
             "type": "boolean"
           },
-          "adoTenantId": {
-            "type": "string",
-            "nullable": true
-          },
-          "adoClientId": {
-            "type": "string",
-            "nullable": true
-          },
           "reviewerId": {
             "type": "string",
             "format": "uuid",
@@ -1635,7 +1627,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Client response — key and ADO secret are never included."
+        "description": "Client response — key, ADO secret, and credential metadata are never included."
       },
       "CommentSeverity": {
         "enum": [

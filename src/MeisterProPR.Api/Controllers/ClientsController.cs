@@ -20,8 +20,6 @@ public sealed class ClientsController(
             client.IsActive,
             client.CreatedAt,
             client.HasAdoCredentials,
-            client.AdoTenantId,
-            client.AdoClientId,
             client.ReviewerId);
     }
 
@@ -476,15 +474,13 @@ public sealed class ClientsController(
         return found ? this.NoContent() : this.NotFound();
     }
 
-    /// <summary>Client response — key and ADO secret are never included.</summary>
+    /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
     public sealed record ClientResponse(
         Guid Id,
         string DisplayName,
         bool IsActive,
         DateTimeOffset CreatedAt,
         bool HasAdoCredentials,
-        string? AdoTenantId,
-        string? AdoClientId,
         Guid? ReviewerId);
 
     /// <summary>Crawl configuration response.</summary>
