@@ -1,4 +1,5 @@
 using MeisterProPR.Api.Workers;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -16,7 +17,7 @@ public class ReviewJobWorkerTests
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, 1);
     }
 
-    private static IServiceScopeFactory CreateScopeFactory(Action<IServiceProvider>? configureServices = null)
+    private static IServiceScopeFactory CreateScopeFactory(IJobRepository? repo = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -25,16 +26,18 @@ public class ReviewJobWorkerTests
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
 
+        var effectiveRepo = repo ?? new InMemoryJobRepository();
+        serviceProvider.GetService(typeof(IJobRepository)).Returns(effectiveRepo);
+
         return scopeFactory;
     }
 
     [Fact]
     public async Task IsRunning_AfterStart_BecomesTrue()
     {
-        var repo = new InMemoryJobRepository();
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(repo, scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, logger);
 
         using var cts = new CancellationTokenSource();
 
@@ -58,10 +61,9 @@ public class ReviewJobWorkerTests
     [Fact]
     public void IsRunning_BeforeStart_IsFalse()
     {
-        var repo = new InMemoryJobRepository();
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(repo, scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, logger);
 
         Assert.False(worker.IsRunning);
     }
@@ -73,21 +75,20 @@ public class ReviewJobWorkerTests
         var job = CreateJob(101);
         repo.Add(job);
 
-        // We'll use the real InMemoryJobRepository and just observe status changes
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
 
-        // Create a scope factory that uses a service that just transitions the job
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
         var sp = Substitute.For<IServiceProvider>();
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(sp);
 
-        // Make the orchestration service just signal and wait
-        sp.GetService(typeof(ReviewOrchestrationService))
-            .Returns(null); // Will throw - that's ok, SetFailed will be called
+        sp.GetService(typeof(IJobRepository)).Returns(repo);
+        // Make the orchestration service return null — GetRequiredService will throw,
+        // causing SetFailed to be called on the job.
+        sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
 
-        var worker = new ReviewJobWorker(repo, scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
@@ -105,10 +106,9 @@ public class ReviewJobWorkerTests
     [Fact]
     public async Task Worker_IsRunning_BecomesFalseAfterStop()
     {
-        var repo = new InMemoryJobRepository();
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(repo, scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, logger);
 
         using var cts = new CancellationTokenSource();
         _ = worker.StartAsync(cts.Token);
@@ -136,12 +136,13 @@ public class ReviewJobWorkerTests
         var sp = Substitute.For<IServiceProvider>();
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(sp);
-        // GetRequiredService throws - simulating unhandled exception
-        sp.GetService(typeof(ReviewOrchestrationService))
-            .Returns(null);
+
+        sp.GetService(typeof(IJobRepository)).Returns(repo);
+        // GetRequiredService throws — simulating unhandled exception in orchestration
+        sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(repo, scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, logger);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         _ = worker.StartAsync(cts.Token);

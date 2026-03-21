@@ -5,6 +5,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -386,10 +387,11 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
                 services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
 
-                // Provide an in-memory EF Core DB for ClientsController (which uses DbContext directly).
+                // Provide an in-memory EF Core DB backing IClientAdminService.
                 // The explicit InMemoryDatabaseRoot guarantees all context instances share the same store.
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<IClientAdminService, PostgresClientAdminService>();
 
                 // Provide a stub ICrawlConfigurationRepository for crawl config endpoints
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();

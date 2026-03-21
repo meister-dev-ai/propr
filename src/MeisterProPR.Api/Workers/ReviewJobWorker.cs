@@ -8,7 +8,6 @@ namespace MeisterProPR.Api.Workers;
 
 /// <summary>Background worker that pulls pending jobs and runs reviews.</summary>
 public sealed partial class ReviewJobWorker(
-    IJobRepository jobRepository,
     IServiceScopeFactory scopeFactory,
     ILogger<ReviewJobWorker> logger) : BackgroundService
 {
@@ -28,6 +27,9 @@ public sealed partial class ReviewJobWorker(
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
+                using var tickScope = scopeFactory.CreateScope();
+                var jobRepository = tickScope.ServiceProvider.GetRequiredService<IJobRepository>();
+
                 foreach (var job in jobRepository.GetPendingJobs())
                 {
                     if (!jobRepository.TryTransition(job.Id, JobStatus.Pending, JobStatus.Processing))
@@ -69,9 +71,11 @@ public sealed partial class ReviewJobWorker(
     /// <summary>Processes a single job safely, handling exceptions and cancellations.</summary>
     private async Task ProcessJobSafeAsync(ReviewJob job, CancellationToken stoppingToken)
     {
+        using var scope = scopeFactory.CreateScope();
+        var jobRepository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+
         try
         {
-            using var scope = scopeFactory.CreateScope();
             var orchestrator = scope.ServiceProvider.GetRequiredService<ReviewOrchestrationService>();
             await orchestrator.ProcessAsync(job, stoppingToken);
         }
