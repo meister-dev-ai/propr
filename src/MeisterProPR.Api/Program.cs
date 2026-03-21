@@ -1,9 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using FluentValidation;
+using MeisterProPR.Api.Controllers;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
+using MeisterProPR.Api.Validators;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
@@ -87,6 +90,11 @@ try
 
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddTransient<ReviewOrchestrationService>();
+
+    builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
+    builder.Services.AddSingleton<IValidator<CreateCrawlConfigRequest>, CreateCrawlConfigRequestValidator>();
+    builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
+    builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
 
     // Only registered in DB mode — PrCrawlService depends on ICrawlConfigurationRepository
     // which is only available when DB_CONNECTION_STRING is configured.

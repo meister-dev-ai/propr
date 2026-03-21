@@ -1,3 +1,5 @@
+using FluentValidation;
+using FluentValidation.Results;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -23,11 +25,27 @@ public sealed class ClientsController(
             client.ReviewerId);
     }
 
+    private IActionResult? ValidateRequest(ValidationResult result)
+    {
+        if (result.IsValid)
+        {
+            return null;
+        }
+
+        foreach (var error in result.Errors)
+        {
+            this.ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
+        }
+
+        return this.ValidationProblem();
+    }
+
     /// <summary>
     ///     Adds a crawl configuration for the specified client. Requires <c>X-Client-Key</c> that owns the client.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">Crawl configuration details.</param>
+    /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="201">Configuration created.</response>
     /// <response code="400">Validation failure.</response>
@@ -43,6 +61,7 @@ public sealed class ClientsController(
     public async Task<IActionResult> AddCrawlConfiguration(
         Guid clientId,
         [FromBody] CreateCrawlConfigRequest request,
+        [FromServices] IValidator<CreateCrawlConfigRequest> validator,
         CancellationToken ct = default)
     {
         var callerKey = this.HttpContext.Items["ClientKey"] as string;
@@ -63,19 +82,10 @@ public sealed class ClientsController(
             return this.NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(request.OrganizationUrl))
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
         {
-            return this.BadRequest(new { error = "OrganizationUrl is required." });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.ProjectId))
-        {
-            return this.BadRequest(new { error = "ProjectId is required." });
-        }
-
-        if (request.CrawlIntervalSeconds < 10)
-        {
-            return this.BadRequest(new { error = "CrawlIntervalSeconds must be >= 10." });
+            return validation;
         }
 
         if (await crawlConfigs.ExistsAsync(clientId, request.OrganizationUrl, request.ProjectId, ct))
@@ -107,6 +117,8 @@ public sealed class ClientsController(
     ///     Registers a new client. Requires <c>X-Admin-Key</c>.
     /// </summary>
     /// <param name="request">Client registration details.</param>
+    /// <param name="validator">Validator for the request body.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <response code="201">Client registered.</response>
     /// <response code="400">Validation failure.</response>
     /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
@@ -116,24 +128,23 @@ public sealed class ClientsController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> CreateClient([FromBody] CreateClientRequest request)
+    public async Task<IActionResult> CreateClient(
+        [FromBody] CreateClientRequest request,
+        [FromServices] IValidator<CreateClientRequest> validator,
+        CancellationToken ct = default)
     {
         if (this.HttpContext.Items["IsAdmin"] is not true)
         {
             return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Key) || request.Key.Length < 16)
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
         {
-            return this.BadRequest(new { error = "Key must be at least 16 characters." });
+            return validation;
         }
 
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            return this.BadRequest(new { error = "DisplayName is required." });
-        }
-
-        var client = await clientAdminService.CreateAsync(request.Key, request.DisplayName);
+        var client = await clientAdminService.CreateAsync(request.Key, request.DisplayName, ct);
         if (client is null)
         {
             return this.Conflict(new { error = "A client with that key already exists." });
@@ -399,6 +410,7 @@ public sealed class ClientsController(
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">ADO credential details — all three fields required.</param>
+    /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Credentials stored.</response>
     /// <response code="400">One or more fields are missing or blank.</response>
@@ -412,6 +424,7 @@ public sealed class ClientsController(
     public async Task<IActionResult> PutAdoCredentials(
         Guid clientId,
         [FromBody] SetAdoCredentialsRequest request,
+        [FromServices] IValidator<SetAdoCredentialsRequest> validator,
         CancellationToken ct = default)
     {
         if (this.HttpContext.Items["IsAdmin"] is not true)
@@ -419,11 +432,10 @@ public sealed class ClientsController(
             return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
         }
 
-        if (string.IsNullOrWhiteSpace(request.TenantId) ||
-            string.IsNullOrWhiteSpace(request.ClientId) ||
-            string.IsNullOrWhiteSpace(request.Secret))
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
         {
-            return this.BadRequest(new { error = "TenantId, ClientId, and Secret are all required." });
+            return validation;
         }
 
         if (!await clientAdminService.ExistsAsync(clientId, ct))
@@ -445,6 +457,7 @@ public sealed class ClientsController(
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">The ADO identity GUID of the AI service account.</param>
+    /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Reviewer identity stored.</response>
     /// <response code="400"><paramref name="request" /> contains an empty GUID.</response>
@@ -458,6 +471,7 @@ public sealed class ClientsController(
     public async Task<IActionResult> PutReviewerIdentity(
         Guid clientId,
         [FromBody] SetReviewerIdentityRequest request,
+        [FromServices] IValidator<SetReviewerIdentityRequest> validator,
         CancellationToken ct = default)
     {
         if (this.HttpContext.Items["IsAdmin"] is not true)
@@ -465,52 +479,53 @@ public sealed class ClientsController(
             return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
         }
 
-        if (request.ReviewerId == Guid.Empty)
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
         {
-            return this.BadRequest(new { error = "ReviewerId must not be an empty GUID." });
+            return validation;
         }
 
         var found = await clientAdminService.SetReviewerIdentityAsync(clientId, request.ReviewerId, ct);
         return found ? this.NoContent() : this.NotFound();
     }
-
-    /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
-    public sealed record ClientResponse(
-        Guid Id,
-        string DisplayName,
-        bool IsActive,
-        DateTimeOffset CreatedAt,
-        bool HasAdoCredentials,
-        Guid? ReviewerId);
-
-    /// <summary>Crawl configuration response.</summary>
-    public sealed record CrawlConfigResponse(
-        Guid Id,
-        Guid ClientId,
-        string OrganizationUrl,
-        string ProjectId,
-        int CrawlIntervalSeconds,
-        bool IsActive,
-        DateTimeOffset CreatedAt);
-
-    /// <summary>Request body for creating a client.</summary>
-    public sealed record CreateClientRequest(string Key, string DisplayName);
-
-    /// <summary>Request body for creating a crawl configuration.</summary>
-    public sealed record CreateCrawlConfigRequest(
-        string OrganizationUrl,
-        string ProjectId,
-        int CrawlIntervalSeconds = 60);
-
-    /// <summary>Request body for patching a client. All fields are optional; omitted fields are left unchanged.</summary>
-    public sealed record PatchClientRequest(bool? IsActive = null, string? DisplayName = null);
-
-    /// <summary>Request body for patching a crawl configuration's active status.</summary>
-    public sealed record PatchCrawlConfigRequest(bool IsActive);
-
-    /// <summary>Request body for setting ADO service principal credentials.</summary>
-    public sealed record SetAdoCredentialsRequest(string TenantId, string ClientId, string Secret);
-
-    /// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
-    public sealed record SetReviewerIdentityRequest(Guid ReviewerId);
 }
+
+/// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
+public sealed record ClientResponse(
+    Guid Id,
+    string DisplayName,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    bool HasAdoCredentials,
+    Guid? ReviewerId);
+
+/// <summary>Crawl configuration response.</summary>
+public sealed record CrawlConfigResponse(
+    Guid Id,
+    Guid ClientId,
+    string OrganizationUrl,
+    string ProjectId,
+    int CrawlIntervalSeconds,
+    bool IsActive,
+    DateTimeOffset CreatedAt);
+
+/// <summary>Request body for creating a client.</summary>
+public sealed record CreateClientRequest(string Key, string DisplayName);
+
+/// <summary>Request body for creating a crawl configuration.</summary>
+public sealed record CreateCrawlConfigRequest(
+    string OrganizationUrl,
+    string ProjectId,
+    int CrawlIntervalSeconds = 60);
+
+/// <summary>Request body for patching a client. All fields are optional; omitted fields are left unchanged.</summary>
+public sealed record PatchClientRequest(bool? IsActive = null, string? DisplayName = null);
+
+/// <summary>Request body for patching a crawl configuration's active status.</summary>
+public sealed record PatchCrawlConfigRequest(bool IsActive);
+
+/// <summary>Request body for setting ADO service principal credentials.</summary>
+public sealed record SetAdoCredentialsRequest(string TenantId, string ClientId, string Secret);
+
+/// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
+public sealed record SetReviewerIdentityRequest(Guid ReviewerId);
