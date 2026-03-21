@@ -21,7 +21,6 @@ public sealed class AdminKeyMiddleware(RequestDelegate next, IConfiguration conf
         // We only block /clients top-level admin endpoints here.
         // But AdminKeyMiddleware is applied to all; controllers verify appropriately.
         // For simplicity, let controllers decide — middleware just validates and sets a flag.
-
         if (!string.IsNullOrWhiteSpace(adminKey))
         {
             var providedKey = context.Request.Headers[AdminKeyHeader].FirstOrDefault();

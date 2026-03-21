@@ -22,7 +22,7 @@ public sealed class ClientsController(
             client.DisplayName,
             client.IsActive,
             client.CreatedAt,
-            client.AdoTenantId != null && client.AdoClientId != null && client.AdoClientSecret != null,
+            client is { AdoTenantId: not null, AdoClientId: not null, AdoClientSecret: not null },
             client.AdoTenantId,
             client.AdoClientId,
             client.ReviewerId);

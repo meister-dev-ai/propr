@@ -1,0 +1,18 @@
+# Normalize all text files to LF in the repository.
+# Overrides core.autocrlf on Windows — LF is canonical for this Linux container project.
+* text=auto eol=lf
+
+# Binary files — no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.zip binary
+*.gz binary
+*.tar binary
