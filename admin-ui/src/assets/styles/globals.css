@@ -83,6 +83,18 @@ tr:hover td { background: var(--color-bg); }
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
+
+.app-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.app-icon {
+    height: 2rem;
+    width: 2rem;
+    border-radius: 0.25rem;
+}
 .app-title { font-weight: 700; font-size: 1.125rem; }
 .logout-btn { background: transparent; color: var(--color-muted); }
 .logout-btn:hover { color: var(--color-danger); background: transparent; }
@@ -142,3 +154,20 @@ tr:hover td { background: var(--color-bg); }
 
 /* Login */
 .login-view { max-width: 24rem; }
+
+.login-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.login-icon {
+    height: 3rem;
+    width: 3rem;
+    border-radius: 0.375rem;
+}
+
+.login-brand h1 {
+    margin: 0;
+}

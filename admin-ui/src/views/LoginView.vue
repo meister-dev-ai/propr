@@ -1,6 +1,9 @@
 <template>
   <div class="login-view">
-    <h1>Meister ProPR Admin</h1>
+      <div class="login-brand">
+          <img :src="icon" alt="" aria-hidden="true" class="login-icon"/>
+          <h1>Meister ProPR Admin</h1>
+      </div>
     <form @submit.prevent="handleSubmit">
       <div v-if="validationError" class="error">{{ validationError }}</div>
       <div v-if="authError" class="error">{{ authError }}</div>
@@ -21,10 +24,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { createAdminClient, UnauthorizedError } from '@/services/api'
-import { useSession } from '@/composables/useSession'
+import {ref} from 'vue'
+import {useRouter} from 'vue-router'
+import {createAdminClient, UnauthorizedError} from '@/services/api'
+import {useSession} from '@/composables/useSession'
+import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
 const { setAdminKey } = useSession()

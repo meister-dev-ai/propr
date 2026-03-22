@@ -1,6 +1,7 @@
 <p align="center">
-  <h1 align="center">Meister ProPR</h1>
-  <p align="center">AI-powered code review for Azure DevOps pull requests</p>
+  <img src="resources/images/logo.png" alt="Meister ProPR" width="180">
+  <br>
+  <em>AI-powered code review for Azure DevOps pull requests</em>
 </p>
 
 <p align="center">

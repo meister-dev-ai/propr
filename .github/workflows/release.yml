@@ -1,4 +1,4 @@
-﻿name: Release
+name: Release
 
 on:
   push:
@@ -61,9 +61,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - name: Extract version from tag
+      - name: Parse version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/release/}" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/release/}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Stable: exactly N.N.N — anything else (alpha, beta, rc …) is pre-release
+          if echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set image names (lowercase)
         id: images
@@ -71,6 +79,37 @@ jobs:
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "backend=${{ env.REGISTRY }}/${REPO}" >> "$GITHUB_OUTPUT"
           echo "frontend=${{ env.REGISTRY }}/${REPO}/admin-ui" >> "$GITHUB_OUTPUT"
+
+      - name: Compute Docker tags
+        id: tags
+        run: |
+          BACKEND="${{ steps.images.outputs.backend }}"
+          FRONTEND="${{ steps.images.outputs.frontend }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "true" ]; then
+            # Pre-release: version tag only — do not move latest
+            {
+              echo "backend<<ENDOFTAGS"
+              echo "${BACKEND}:${VERSION}"
+              echo "ENDOFTAGS"
+              echo "frontend<<ENDOFTAGS"
+              echo "${FRONTEND}:${VERSION}"
+              echo "ENDOFTAGS"
+            } >> "$GITHUB_OUTPUT"
+          else
+            # Stable release: version tag + latest
+            {
+              echo "backend<<ENDOFTAGS"
+              echo "${BACKEND}:${VERSION}"
+              echo "${BACKEND}:latest"
+              echo "ENDOFTAGS"
+              echo "frontend<<ENDOFTAGS"
+              echo "${FRONTEND}:${VERSION}"
+              echo "${FRONTEND}:latest"
+              echo "ENDOFTAGS"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
@@ -82,7 +121,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Backend image ──────────────────────────────────────────────────────
+      # Backend image
 
       - name: Build and push backend image
         id: build-backend
@@ -91,9 +130,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: |
-            ${{ steps.images.outputs.backend }}:${{ steps.version.outputs.version }}
-            ${{ steps.images.outputs.backend }}:latest
+          tags: ${{ steps.tags.outputs.backend }}
           labels: |
             org.opencontainers.image.title=MeisterProPR
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
@@ -109,7 +146,7 @@ jobs:
           subject-digest: ${{ steps.build-backend.outputs.digest }}
           push-to-registry: true
 
-      # ── Frontend image ─────────────────────────────────────────────────────
+      # Frontend image
 
       - name: Build and push frontend image
         id: build-frontend
@@ -118,9 +155,7 @@ jobs:
           context: .
           file: admin-ui/Dockerfile
           push: true
-          tags: |
-            ${{ steps.images.outputs.frontend }}:${{ steps.version.outputs.version }}
-            ${{ steps.images.outputs.frontend }}:latest
+          tags: ${{ steps.tags.outputs.frontend }}
           labels: |
             org.opencontainers.image.title=MeisterProPR Admin UI
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
