@@ -83,12 +83,18 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         int limit,
         int offset,
         JobStatus? status,
+        Guid? clientId = null,
         CancellationToken ct = default)
     {
         var query = dbContext.ReviewJobs.AsQueryable();
         if (status.HasValue)
         {
             query = query.Where(j => j.Status == status.Value);
+        }
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(j => j.ClientId == clientId.Value);
         }
 
         var total = await query.CountAsync(ct);
@@ -128,6 +134,19 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         job.ErrorMessage = errorMessage;
         job.Status = JobStatus.Failed;
         job.CompletedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        dbContext.ReviewJobs.Remove(job);
         await dbContext.SaveChangesAsync(ct);
     }
 

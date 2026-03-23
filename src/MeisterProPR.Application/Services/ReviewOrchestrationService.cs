@@ -76,9 +76,8 @@ public sealed partial class ReviewOrchestrationService(
             if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId.Value))
             {
                 LogSkippedNoChange(logger, job.Id, job.PullRequestId);
-                var emptyResult = new ReviewResult("No new commits or replies since last processing.", []);
-                await jobs.SetResultAsync(job.Id, emptyResult, ct);
                 await this.SaveScanAsync(job, reviewerThreads, reviewerId.Value, ct);
+                await jobs.DeleteAsync(job.Id, ct);
                 return;
             }
 
@@ -98,6 +97,14 @@ public sealed partial class ReviewOrchestrationService(
             }
 
             var result = await aiCore.ReviewAsync(pr, ct);
+
+            if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
+            {
+                LogSkippedEmptyReview(logger, job.Id, job.PullRequestId);
+                await this.SaveScanAsync(job, GetReviewerThreads(pr, reviewerId.Value), reviewerId.Value, ct);
+                await jobs.DeleteAsync(job.Id, ct);
+                return;
+            }
 
             await commentPoster.PostAsync(
                 job.OrganizationUrl,
@@ -276,6 +283,9 @@ public sealed partial class ReviewOrchestrationService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Skipping review for job {JobId} PR#{PrId} — no new commits or replies")]
     private static partial void LogSkippedNoChange(ILogger logger, Guid jobId, int prId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Skipping review for job {JobId} PR#{PrId} — AI returned empty review")]
+    private static partial void LogSkippedEmptyReview(ILogger logger, Guid jobId, int prId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Completed review for job {JobId}")]
     private static partial void LogReviewCompleted(ILogger logger, Guid jobId);

@@ -90,6 +90,11 @@
                 />
             </section>
 
+            <section class="reviews-section">
+                <h3>Review History</h3>
+                <ReviewHistorySection :clientId="client.id" />
+            </section>
+
             <section class="danger-zone">
                 <button class="delete-btn btn-danger" @click="showDeleteDialog = true">Delete Client</button>
                 <ConfirmDialog
@@ -108,6 +113,7 @@ import {onMounted, ref} from 'vue'
 import {RouterLink, useRoute, useRouter} from 'vue-router'
 import AdoCredentialsForm from '@/components/AdoCredentialsForm.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ReviewHistorySection from '@/components/ReviewHistorySection.vue'
 import {createAdminClient} from '@/services/api'
 
 interface Client {
@@ -268,6 +274,14 @@ async function handleDelete() {
 </script>
 
 <style scoped>
+.reviews-section {
+    margin-top: 2rem;
+}
+
+.reviews-section h3 {
+    margin-bottom: 1rem;
+}
+
 .success {
     color: green;
     margin-left: 0.5rem;

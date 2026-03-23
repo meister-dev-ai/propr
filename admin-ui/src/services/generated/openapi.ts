@@ -932,6 +932,11 @@ export interface paths {
                     offset?: number;
                     /** @description Optional status filter: Pending, Processing, Completed, or Failed. */
                     status?: components["schemas"]["JobStatus"];
+                    /**
+                     * @description Optional client filter: only return jobs for this client.
+                     * Format: uuid
+                     */
+                    clientId?: string;
                 };
                 header?: never;
                 path?: never;

@@ -158,6 +158,9 @@ public sealed class AdoCommentPoster(
         return authorId.HasValue && botId.HasValue && authorId.Value == botId.Value;
     }
 
+    /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
+    internal const int MaxCommentLength = 30_000;
+
     private static async Task CreateThreadAsync(
         GitHttpClient gitClient,
         string projectId,
@@ -168,9 +171,10 @@ public sealed class AdoCommentPoster(
         GitPullRequestCommentThreadContext? prThreadContext,
         CancellationToken ct)
     {
+        var content = TruncateIfNeeded(message);
         var thread = new GitPullRequestCommentThread
         {
-            Comments = [new Comment { Content = message, CommentType = CommentType.Text }],
+            Comments = [new Comment { Content = content, CommentType = CommentType.Text }],
             Status = CommentThreadStatus.Active,
             ThreadContext = threadContext,
             PullRequestThreadContext = prThreadContext,
@@ -181,6 +185,26 @@ public sealed class AdoCommentPoster(
             pullRequestId,
             projectId,
             ct);
+    }
+
+    internal static string TruncateIfNeeded(string message)
+    {
+        if (message.Length <= MaxCommentLength)
+        {
+            return message;
+        }
+
+        const string notice = "\n\n> *(Review comment truncated — view the full review in the MeisterProPR admin UI)*";
+        var cutoff = MaxCommentLength - notice.Length;
+
+        // Trim to last whitespace boundary so we don't cut mid-word.
+        var boundary = message.LastIndexOf(' ', cutoff);
+        if (boundary < 1)
+        {
+            boundary = cutoff;
+        }
+
+        return message[..boundary] + notice;
     }
 
     private static string NormalizePath(string path)

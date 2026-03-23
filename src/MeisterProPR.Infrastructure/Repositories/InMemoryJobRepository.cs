@@ -66,12 +66,18 @@ public sealed class InMemoryJobRepository : IJobRepository
         int limit,
         int offset,
         JobStatus? status,
+        Guid? clientId = null,
         CancellationToken ct = default)
     {
         var query = this._jobs.Values.AsEnumerable();
         if (status.HasValue)
         {
             query = query.Where(j => j.Status == status.Value);
+        }
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(j => j.ClientId == clientId.Value);
         }
 
         var ordered = query.OrderByDescending(j => j.SubmittedAt).ToList();
@@ -109,6 +115,13 @@ public sealed class InMemoryJobRepository : IJobRepository
             }
         }
 
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        this._jobs.TryRemove(id, out _);
         return Task.CompletedTask;
     }
 

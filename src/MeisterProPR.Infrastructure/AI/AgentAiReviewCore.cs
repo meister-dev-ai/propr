@@ -21,7 +21,8 @@ public sealed class AgentAiReviewCore(IChatClient chatClient) : IAiReviewCore
             new(ChatRole.User, ReviewPrompts.BuildUserMessage(pullRequest)),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
+        var options = new ChatOptions { MaxOutputTokens = 8192 };
+        var response = await chatClient.GetResponseAsync(messages, options, cancellationToken);
         var json = response.Text ?? "";
 
         return ParseReviewResult(json);

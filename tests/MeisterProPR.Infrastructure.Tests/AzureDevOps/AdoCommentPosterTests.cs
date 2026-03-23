@@ -1,5 +1,6 @@
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AzureDevOps;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -82,5 +83,44 @@ public class AdoCommentPosterTests
         var comment = new ReviewComment(null, null, CommentSeverity.Info, "PR-level comment.");
         Assert.Null(comment.FilePath);
         Assert.Null(comment.LineNumber);
+    }
+
+    // T008 — Content-length truncation tests
+
+    [Fact]
+    public void TruncateIfNeeded_ShortMessage_ReturnsUnchanged()
+    {
+        var message = "Short message.";
+        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        Assert.Equal(message, result);
+    }
+
+    [Fact]
+    public void TruncateIfNeeded_ExactlyAtLimit_ReturnsUnchanged()
+    {
+        var message = new string('x', AdoCommentPoster.MaxCommentLength);
+        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        Assert.Equal(message, result);
+    }
+
+    [Fact]
+    public void TruncateIfNeeded_OverLimit_TruncatesAndAppendsNotice()
+    {
+        var message = new string('a', AdoCommentPoster.MaxCommentLength + 5_000);
+        var result = AdoCommentPoster.TruncateIfNeeded(message);
+        Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
+        Assert.Contains("truncated", result);
+        Assert.Contains("admin UI", result);
+    }
+
+    [Fact]
+    public void TruncateIfNeeded_OverLimit_TruncatesAtWordBoundary()
+    {
+        // Build a message where the cutoff lands in the middle of "boundary"
+        var prefix = new string('x', AdoCommentPoster.MaxCommentLength - 10) + " boundary extra";
+        var result = AdoCommentPoster.TruncateIfNeeded(prefix);
+        Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
+        // Result should not start mid-word from the overflow
+        Assert.DoesNotContain("boundary", result.Split('\n')[0]);
     }
 }

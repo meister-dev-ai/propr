@@ -32,6 +32,7 @@ public interface IJobRepository
         int limit,
         int offset,
         JobStatus? status,
+        Guid? clientId = null,
         CancellationToken ct = default);
 
     /// <summary>Gets a job by id, or null if not found.</summary>
@@ -45,6 +46,9 @@ public interface IJobRepository
 
     /// <summary>Marks the job as failed with an error message.</summary>
     Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default);
+
+    /// <summary>Deletes a job by id. No-op if the job does not exist.</summary>
+    Task DeleteAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Sets the review result for a completed job.</summary>
     Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default);

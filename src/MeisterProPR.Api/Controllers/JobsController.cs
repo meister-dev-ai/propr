@@ -15,6 +15,7 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
     /// <param name="limit">Maximum number of items to return (1–1000, default 100).</param>
     /// <param name="offset">Number of items to skip for pagination (default 0).</param>
     /// <param name="status">Optional status filter: Pending, Processing, Completed, or Failed.</param>
+    /// <param name="clientId">Optional client filter: only return jobs for this client.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Paginated list of all jobs.</returns>
     /// <response code="200">Jobs returned.</response>
@@ -26,6 +27,7 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         [FromQuery] JobStatus? status = null,
+        [FromQuery] Guid? clientId = null,
         CancellationToken cancellationToken = default)
     {
         if (this.HttpContext.Items["IsAdmin"] is not true)
@@ -36,16 +38,14 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Max(offset, 0);
 
-        var (total, items) = await jobRepository.GetAllJobsAsync(limit, offset, status, cancellationToken);
+        var (total, items) = await jobRepository.GetAllJobsAsync(limit, offset, status, clientId, cancellationToken);
 
-        // S1 fix: never expose raw clientKey in the response.
-        // ClientId UUID is not yet stored on ReviewJob (requires FK column); returns null for now.
         return this.Ok(
             new JobListResponse(
                 total,
                 items.Select(j => new JobListItem(
                         j.Id,
-                        null,
+                        j.ClientId,
                         j.OrganizationUrl,
                         j.ProjectId,
                         j.RepositoryId,

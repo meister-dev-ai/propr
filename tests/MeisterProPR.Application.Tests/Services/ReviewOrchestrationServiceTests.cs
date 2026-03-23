@@ -494,10 +494,10 @@ public class ReviewOrchestrationServiceTests
         await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>());
     }
 
-    // T027 — Skip logic: same iteration ID + no new thread replies → AI not called, job set to empty result
+    // T027 / T005 — Skip logic: same iteration ID + no new thread replies → AI not called, job deleted (no DB row persisted)
 
     [Fact]
-    public async Task ProcessAsync_SameIterationNoNewReplies_SkipsAiReviewAndSetsEmptyResult()
+    public async Task ProcessAsync_SameIterationNoNewReplies_SkipsAiReviewAndDeletesJob()
     {
         var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger) = CreateDeps();
 
@@ -527,8 +527,46 @@ public class ReviewOrchestrationServiceTests
 
         // AI review must NOT be called (no new commits or replies)
         await aiCore.DidNotReceiveWithAnyArgs().ReviewAsync(default!);
-        // Job should be set to a result (the "no new commits" empty result), not failed
-        await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>());
+        // Job must be deleted — no DB row should remain for an idle cycle
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
+        await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>());
+    }
+
+    // T005 — Empty AI review response → no comment posted, job deleted (not persisted)
+
+    [Fact]
+    public async Task ProcessAsync_EmptyAiReviewResult_DeletesJobWithoutPosting()
+    {
+        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger) = CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var emptyResult = new ReviewResult("   ", new List<ReviewComment>().AsReadOnly());
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
+            .Returns(emptyResult);
+
+        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // No comment should be posted for an empty review
+        await commentPoster.DidNotReceiveWithAnyArgs()
+            .PostAsync(default!, default!, default!, default, default, default!);
+        // Job must be deleted — empty review is treated as no-op
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
         await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>());
     }
 

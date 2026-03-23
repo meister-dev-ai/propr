@@ -8,6 +8,7 @@
         placeholder="Search by name…"
         class="search-input"
       />
+      <RouterLink to="/reviews" class="btn-secondary">Review History</RouterLink>
       <button class="btn-primary" @click="showCreateForm = true">New Client</button>
     </div>
 
@@ -25,6 +26,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import ClientTable from '@/components/ClientTable.vue'
 import ClientForm from '@/components/ClientForm.vue'
 import { createAdminClient } from '@/services/api'
