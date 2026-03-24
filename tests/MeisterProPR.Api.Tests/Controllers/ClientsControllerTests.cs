@@ -357,6 +357,150 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
+    // T036 — PATCH /clients/{id} customSystemMessage (admin)
+
+    [Fact]
+    public async Task PatchClient_CustomSystemMessage_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            Key = "patch-csm-key-12345",
+            DisplayName = "CSM Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Content = JsonContent.Create(new { customSystemMessage = "Focus on security." });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Focus on security.", body.RootElement.GetProperty("customSystemMessage").GetString());
+    }
+
+    [Fact]
+    public async Task PatchClient_CustomSystemMessageTooLong_Returns400()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Content = JsonContent.Create(new { customSystemMessage = new string('x', 20_001) });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchClient_NullCustomSystemMessage_LeavesExistingValueUnchanged()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            Key = "patch-csm-null-key-1",
+            DisplayName = "CSM Null Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CustomSystemMessage = "Original message.",
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Content = JsonContent.Create(new { isActive = true }); // no customSystemMessage field
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Original message.", body.RootElement.GetProperty("customSystemMessage").GetString());
+    }
+
+    [Fact]
+    public async Task PatchClient_EmptyCustomSystemMessage_ClearsValue()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            Key = "patch-csm-clear-key1",
+            DisplayName = "CSM Clear Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CustomSystemMessage = "Will be cleared.",
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Content = JsonContent.Create(new { customSystemMessage = "" });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(
+            body.RootElement.GetProperty("customSystemMessage").ValueKind == JsonValueKind.Null,
+            "customSystemMessage should be null after clearing with empty string");
+    }
+
+    // T037 — PATCH /client/me customSystemMessage (client self-service)
+
+    [Fact]
+    public async Task PatchClientMe_CustomSystemMessage_PersistedAndReturned()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
+        request.Headers.Add("X-Client-Key", ValidClientKey);
+        request.Content = JsonContent.Create(new { customSystemMessage = "Self-service guidance." });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Self-service guidance.", body.RootElement.GetProperty("customSystemMessage").GetString());
+    }
+
+    [Fact]
+    public async Task PatchClientMe_CustomSystemMessageTooLong_Returns400()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
+        request.Headers.Add("X-Client-Key", ValidClientKey);
+        request.Content = JsonContent.Create(new { customSystemMessage = new string('y', 20_001) });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchClientMe_WithoutClientKey_Returns401()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
+        request.Content = JsonContent.Create(new { customSystemMessage = "Test" });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
 
     public sealed class ClientsApiFactory : WebApplicationFactory<Program>
     {

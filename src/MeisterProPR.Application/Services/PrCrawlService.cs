@@ -79,10 +79,10 @@ public sealed partial class PrCrawlService(
     private static partial void LogJobAlreadyExists(ILogger logger, int prId, int iterationId, Guid jobId);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Trace,
         Message = "Created new review job {JobId} for PR #{PrId} iteration {IterationId}")]
     private static partial void LogJobCreated(ILogger logger, Guid jobId, int prId, int iterationId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Discovered {Count} assigned PRs in {OrgUrl}/{ProjectId}")]
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Discovered {Count} assigned PRs in {OrgUrl}/{ProjectId}")]
     private static partial void LogPrsDiscovered(ILogger logger, int count, string orgUrl, string projectId);
 }

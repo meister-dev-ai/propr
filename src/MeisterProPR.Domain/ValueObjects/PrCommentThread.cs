@@ -7,11 +7,16 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="FilePath">File path the thread is anchored to, or <c>null</c> for PR-level threads.</param>
 /// <param name="LineNumber">Line number the thread is anchored to, or <c>null</c> for file- or PR-level threads.</param>
 /// <param name="Comments">Comments within this thread, ordered chronologically.</param>
+/// <param name="Status">
+///     ADO thread status string (e.g. "Active", "Fixed", "Closed", "WontFix", "ByDesign").
+///     <c>null</c> when not provided or unknown.
+/// </param>
 public sealed record PrCommentThread(
     int ThreadId,
     string? FilePath,
     int? LineNumber,
-    IReadOnlyList<PrThreadComment> Comments);
+    IReadOnlyList<PrThreadComment> Comments,
+    string? Status = null);
 
 /// <summary>
 ///     Represents a single comment within a <see cref="PrCommentThread" />.

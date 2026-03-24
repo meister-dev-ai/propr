@@ -69,6 +69,13 @@ public sealed class EnvVarClientRegistry : IClientRegistry
         return Task.FromResult(CommentResolutionBehavior.Silent);
     }
 
+    /// <inheritdoc />
+    /// <remarks>Env-var mode has no database storage; custom system messages are not supported.</remarks>
+    public Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<string?>(null);
+    }
+
     /// <summary>Derives a stable, deterministic UUID from the key string using MD5.</summary>
     private static Guid DeterministicGuid(string key)
     {

@@ -143,6 +143,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "A crawl configuration for this organisation and project already exists.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -719,7 +739,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Updates one or more fields of a client (display name, active status). Requires `X-Admin-Key`.",
+        "summary": "Updates one or more fields of a client (display name, active status, custom system message).\r\nRequires `X-Admin-Key`.",
         "parameters": [
           {
             "name": "clientId",
@@ -769,6 +789,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -1166,6 +1206,96 @@
         }
       }
     },
+    "/client/me": {
+      "patch": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Updates the custom AI system message for the authenticated client (self-service).\r\nRequires `X-Client-Key`. The client ID is resolved from the key.\r\nSend an empty string as `customSystemMessage` to clear an existing value.",
+        "requestBody": {
+          "description": "Fields to update; omit a field to leave it unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Client updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-Client-Key`.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/profile": {
       "get": {
         "tags": [
@@ -1398,6 +1528,15 @@
             "description": "Optional status filter: Pending, Processing, Completed, or Failed.",
             "schema": {
               "$ref": "#/components/schemas/JobStatus"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional client filter: only return jobs for this client.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1776,6 +1915,10 @@
           },
           "commentResolutionBehavior": {
             "$ref": "#/components/schemas/CommentResolutionBehavior"
+          },
+          "customSystemMessage": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -1788,7 +1931,7 @@
           "withReply"
         ],
         "type": "string",
-        "description": "Controls how the reviewer handles thread resolution: disabled skips resolution; silent resolves without a reply; withReply posts a reply before resolving."
+        "description": "Specifies how the automated reviewer behaves when automatically resolving a comment thread."
       },
       "CommentSeverity": {
         "enum": [
@@ -1986,12 +2129,15 @@
             "nullable": true
           },
           "commentResolutionBehavior": {
-            "$ref": "#/components/schemas/CommentResolutionBehavior",
+            "$ref": "#/components/schemas/CommentResolutionBehavior"
+          },
+          "customSystemMessage": {
+            "type": "string",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\r\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value."
       },
       "PatchCrawlConfigRequest": {
         "type": "object",
@@ -2028,7 +2174,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": {}
+        "additionalProperties": { }
       },
       "ReviewCommentDto": {
         "type": "object",

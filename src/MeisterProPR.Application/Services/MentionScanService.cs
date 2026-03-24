@@ -195,7 +195,14 @@ public sealed partial class MentionScanService(
         }
 
         await scanRepository.UpsertPrScanAsync(updatedPrScan, ct);
-        LogPrScanCompleted(logger, pullRequestId, newMentionsEnqueued);
+        if (newMentionsEnqueued == 0)
+        {
+            LogPrScanCompletedNoMentions(logger, pullRequestId);
+        }
+        else
+        {
+            LogPrScanCompletedWithMentions(logger, pullRequestId, newMentionsEnqueued);
+        }
     }
 
     [LoggerMessage(
@@ -209,7 +216,7 @@ public sealed partial class MentionScanService(
     private static partial void LogSkippedNoReviewerId(ILogger logger, Guid configId, Guid clientId);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Trace,
         Message = "MentionScanService: {PrCount} recently updated PRs in {OrganizationUrl}/{ProjectId}")]
     private static partial void LogPrsFound(ILogger logger, string organizationUrl, string projectId, int prCount);
 
@@ -239,9 +246,14 @@ public sealed partial class MentionScanService(
     private static partial void LogMentionEnqueued(ILogger logger, int pullRequestId, int threadId, int commentId);
 
     [LoggerMessage(
+        Level = LogLevel.Trace,
+        Message = "MentionScanService: finished scanning PR #{PullRequestId} — no new mentions")]
+    private static partial void LogPrScanCompletedNoMentions(ILogger logger, int pullRequestId);
+
+    [LoggerMessage(
         Level = LogLevel.Information,
         Message = "MentionScanService: finished scanning PR #{PullRequestId} — {NewMentions} new mention(s) enqueued")]
-    private static partial void LogPrScanCompleted(ILogger logger, int pullRequestId, int newMentions);
+    private static partial void LogPrScanCompletedWithMentions(ILogger logger, int pullRequestId, int newMentions);
 
     [LoggerMessage(
         Level = LogLevel.Error,

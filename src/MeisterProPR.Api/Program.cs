@@ -21,6 +21,7 @@ using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
+using Serilog.Sinks.Grafana.Loki;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -83,6 +84,14 @@ try
         {
             configuration.WriteTo.Console(new JsonFormatter());
         }
+
+        var lokiUrl = context.Configuration["LOKI_URL"];
+        if (!string.IsNullOrWhiteSpace(lokiUrl))
+        {
+            configuration.WriteTo.GrafanaLoki(
+                lokiUrl,
+                labels: [new LokiLabel { Key = "app", Value = "meisterpropr" }]);
+        }
     });
 
     builder.Services.Configure<HostOptions>(opts =>
@@ -95,6 +104,7 @@ try
     builder.Services.AddSingleton<IValidator<CreateCrawlConfigRequest>, CreateCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
+    builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
 
     // Only registered in DB mode — PrCrawlService depends on ICrawlConfigurationRepository
     // which is only available when DB_CONNECTION_STRING is configured.
@@ -260,7 +270,13 @@ try
         }
     }
 
-    app.UseSerilogRequestLogging();
+    app.UseSerilogRequestLogging(opts =>
+    {
+        opts.GetLevel = (httpContext, _, _) =>
+            httpContext.Request.Path.StartsWithSegments("/healthz")
+                ? LogEventLevel.Verbose // Verbose = Trace in Serilog
+                : LogEventLevel.Information;
+    });
 
     if (app.Environment.IsDevelopment())
     {

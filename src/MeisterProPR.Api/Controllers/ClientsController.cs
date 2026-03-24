@@ -30,7 +30,8 @@ public sealed partial class ClientsController(
             client.CreatedAt,
             client.HasAdoCredentials,
             client.ReviewerId,
-            client.CommentResolutionBehavior);
+            client.CommentResolutionBehavior,
+            client.CustomSystemMessage);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -60,12 +61,14 @@ public sealed partial class ClientsController(
     /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
     /// <response code="403">Caller does not own this client.</response>
     /// <response code="404">Client not found.</response>
+    /// <response code="409">A crawl configuration for this organisation and project already exists.</response>
     [HttpPost("clients/{clientId:guid}/crawl-configurations")]
     [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddCrawlConfiguration(
         Guid clientId,
         [FromBody] CreateCrawlConfigRequest request,
@@ -337,25 +340,46 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Updates one or more fields of a client (display name, active status). Requires <c>X-Admin-Key</c>.
+    ///     Updates one or more fields of a client (display name, active status, custom system message).
+    ///     Requires <c>X-Admin-Key</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
+    /// <param name="validator">Validator for the request body.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Client updated.</response>
+    /// <response code="400">Validation failure.</response>
     /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
     /// <response code="404">Client not found.</response>
     [HttpPatch("clients/{clientId:guid}")]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> PatchClient(Guid clientId, [FromBody] PatchClientRequest request)
+    public async Task<IActionResult> PatchClient(
+        Guid clientId,
+        [FromBody] PatchClientRequest request,
+        [FromServices] IValidator<PatchClientRequest> validator,
+        CancellationToken ct = default)
     {
         if (this.HttpContext.Items["IsAdmin"] is not true)
         {
             return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
         }
 
-        var client = await clientAdminService.PatchAsync(clientId, request.IsActive, request.DisplayName, request.CommentResolutionBehavior);
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        var client = await clientAdminService.PatchAsync(
+            clientId,
+            request.IsActive,
+            request.DisplayName,
+            request.CommentResolutionBehavior,
+            request.CustomSystemMessage,
+            ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 
@@ -525,6 +549,59 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
+    ///     Updates the custom AI system message for the authenticated client (self-service).
+    ///     Requires <c>X-Client-Key</c>. The client ID is resolved from the key.
+    ///     Send an empty string as <c>customSystemMessage</c> to clear an existing value.
+    /// </summary>
+    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
+    /// <param name="validator">Validator for the request body.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Client updated.</response>
+    /// <response code="400">Validation failure.</response>
+    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
+    [HttpPatch("client/me")]
+    [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PatchClientMe(
+        [FromBody] PatchClientRequest request,
+        [FromServices] IValidator<PatchClientRequest> validator,
+        CancellationToken ct = default)
+    {
+        var callerKey = this.HttpContext.Items["ClientKey"] as string;
+        if (string.IsNullOrWhiteSpace(callerKey))
+        {
+            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+        }
+
+        var clientId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
+        if (clientId is null)
+        {
+            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+        }
+
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        var client = await clientAdminService.PatchAsync(
+            clientId.Value,
+            isActive: null,
+            displayName: null,
+            commentResolutionBehavior: null,
+            request.CustomSystemMessage,
+            ct);
+
+        // PatchAsync returns null only when the client doesn't exist;
+        // since we resolved the ID from a valid key, this is unexpected.
+        return client is null
+            ? this.Unauthorized(new { error = "Valid X-Client-Key required." })
+            : this.Ok(ToClientResponse(client));
+    }
+
+    /// <summary>
     ///     Returns the profile of the specified client. Requires <c>X-Client-Key</c> that owns the client.
     ///     Exposes a subset of client data safe for client-level callers; does not include admin-only fields.
     /// </summary>
@@ -577,7 +654,8 @@ public sealed record ClientResponse(
     DateTimeOffset CreatedAt,
     bool HasAdoCredentials,
     Guid? ReviewerId,
-    CommentResolutionBehavior CommentResolutionBehavior);
+    CommentResolutionBehavior CommentResolutionBehavior,
+    string? CustomSystemMessage);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(
@@ -598,11 +676,15 @@ public sealed record CreateCrawlConfigRequest(
     string ProjectId,
     int CrawlIntervalSeconds = 60);
 
-/// <summary>Request body for patching a client. All fields are optional; omitted fields are left unchanged.</summary>
+/// <summary>
+///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
+///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
+/// </summary>
 public sealed record PatchClientRequest(
     bool? IsActive = null,
     string? DisplayName = null,
-    CommentResolutionBehavior? CommentResolutionBehavior = null);
+    CommentResolutionBehavior? CommentResolutionBehavior = null,
+    string? CustomSystemMessage = null);
 
 /// <summary>Request body for patching a crawl configuration's active status.</summary>
 public sealed record PatchCrawlConfigRequest(bool IsActive);

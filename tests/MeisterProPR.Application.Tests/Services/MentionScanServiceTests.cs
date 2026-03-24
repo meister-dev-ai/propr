@@ -66,7 +66,7 @@ public sealed class MentionScanServiceTests
         await this._sut.ScanAsync();
 
         // Assert: no thread fetching occurred
-        await this._pullRequestFetcher.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default!, default, default);
+        await this._pullRequestFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class MentionScanServiceTests
         await this._sut.ScanAsync();
 
         // Assert: no thread fetching occurred for the skipped PR
-        await this._pullRequestFetcher.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default!, default, default);
+        await this._pullRequestFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
     }
 
     [Fact]

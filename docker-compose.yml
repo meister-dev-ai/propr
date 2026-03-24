@@ -1,5 +1,33 @@
 version: '3.8'
 services:
+  loki:
+    image: grafana/loki:3.4.1
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready | grep -q 'ready'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - loki_data:/loki
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+
   postgres:
     image: postgres:17-alpine
     environment:
@@ -43,6 +71,8 @@ services:
         condition: service_healthy
       admin-ui:
         condition: service_healthy
+      grafana:
+        condition: service_started
 
   meisterpropr:
     build:
@@ -50,6 +80,8 @@ services:
       dockerfile: Dockerfile
     depends_on:
       postgres:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     environment:
       - MEISTER_CLIENT_KEYS=${MEISTER_CLIENT_KEYS:-}
@@ -62,6 +94,7 @@ services:
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - LOKI_URL=http://loki:3100
       - ASPNETCORE_ENVIRONMENT=Production
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/healthz" ]
@@ -73,3 +106,5 @@ services:
 volumes:
   postgres_data:
   nginx_certs:
+  loki_data:
+  grafana_data:

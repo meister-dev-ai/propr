@@ -102,6 +102,13 @@ public sealed class AdoReviewerManagerTests
         var reviewerId = Guid.NewGuid();
         var gitClient = BuildGitClient();
 
+        gitClient.GetPullRequestReviewersAsync(
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<IdentityRefWithVote>()));
+
         gitClient.CreatePullRequestReviewerAsync(
                 Arg.Any<IdentityRefWithVote>(),
                 Arg.Any<string>(),
@@ -121,6 +128,81 @@ public sealed class AdoReviewerManagerTests
                     r.Vote == 0 &&
                     r.IsRequired == false &&
                     r.Id == reviewerId.ToString()),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddOptionalReviewerAsync_ReviewerAlreadyPresent_SkipsCreateCall()
+    {
+        var reviewerId = Guid.NewGuid();
+        var gitClient = BuildGitClient();
+
+        // Reviewer is already in the list returned by ADO
+        var existing = new List<IdentityRefWithVote>
+        {
+            new() { Id = reviewerId.ToString() },
+        };
+        gitClient.GetPullRequestReviewersAsync(
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(existing));
+
+        var sut = BuildSut(gitClient);
+
+        await sut.AddOptionalReviewerAsync(OrgUrl, ProjectId, RepositoryId, PrId, reviewerId);
+
+        // Create must NOT be called when reviewer is already on the PR
+        await gitClient.DidNotReceive()
+            .CreatePullRequestReviewerAsync(
+                Arg.Any<IdentityRefWithVote>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddOptionalReviewerAsync_ReviewerNotPresent_CallsCreate()
+    {
+        var reviewerId = Guid.NewGuid();
+        var otherReviewerId = Guid.NewGuid();
+        var gitClient = BuildGitClient();
+
+        // List contains a different reviewer, not ours
+        var existing = new List<IdentityRefWithVote>
+        {
+            new() { Id = otherReviewerId.ToString() },
+        };
+        gitClient.GetPullRequestReviewersAsync(
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(existing));
+
+        gitClient.CreatePullRequestReviewerAsync(
+                Arg.Any<IdentityRefWithVote>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IdentityRefWithVote()));
+
+        var sut = BuildSut(gitClient);
+
+        await sut.AddOptionalReviewerAsync(OrgUrl, ProjectId, RepositoryId, PrId, reviewerId);
+
+        await gitClient.Received(1)
+            .CreatePullRequestReviewerAsync(
+                Arg.Is<IdentityRefWithVote>(r => r.Id == reviewerId.ToString()),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<string>(),

@@ -177,9 +177,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("ConfidenceEvaluations")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("confidence_evaluations");
+
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
+
+                    b.Property<int?>("FinalConfidence")
+                        .HasColumnType("integer")
+                        .HasColumnName("final_confidence");
 
                     b.Property<int>("IterationId")
                         .HasColumnType("integer")
@@ -220,6 +228,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("SubmittedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("submitted_at");
+
+                    b.Property<int>("ToolCallCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tool_call_count");
+
+                    b.Property<string>("ToolCalls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tool_calls");
 
                     b.HasKey("Id");
 
@@ -315,11 +333,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
+                        .HasSentinel(1)
                         .HasColumnName("comment_resolution_behavior");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("CustomSystemMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("custom_system_message");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()

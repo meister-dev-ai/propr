@@ -24,6 +24,13 @@ public interface IClientRegistry
     /// <param name="ct">Cancellation token.</param>
     Task<CommentResolutionBehavior> GetCommentResolutionBehaviorAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns the custom AI system message configured for the given client, or <see langword="null" /> if not set.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default);
+
     /// <summary>Returns true if the provided client key is registered and valid.</summary>
     bool IsValidKey(string clientKey);
 }

@@ -226,7 +226,8 @@ public sealed partial class AdoPullRequestFetcher(
                                 ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
                                 : null))
                         .ToList()
-                        .AsReadOnly()))
+                        .AsReadOnly(),
+                    t.Status.ToString()))
                 .ToList()
                 .AsReadOnly();
         }

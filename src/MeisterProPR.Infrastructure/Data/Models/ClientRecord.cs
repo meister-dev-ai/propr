@@ -20,4 +20,7 @@ public sealed class ClientRecord
     ///     Defaults to <see cref="Domain.Enums.CommentResolutionBehavior.Silent" />.
     /// </summary>
     public CommentResolutionBehavior CommentResolutionBehavior { get; set; } = CommentResolutionBehavior.Silent;
+
+    /// <summary>Optional custom AI system message for this client.</summary>
+    public string? CustomSystemMessage { get; set; }
 }

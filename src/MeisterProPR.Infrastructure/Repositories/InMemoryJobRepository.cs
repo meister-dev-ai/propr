@@ -141,6 +141,29 @@ public sealed class InMemoryJobRepository : IJobRepository
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task SetAgenticMetadataAsync(
+        Guid id,
+        int toolCallCount,
+        string? toolCalls,
+        string? confidenceEvaluations,
+        int? finalConfidence,
+        CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            lock (job)
+            {
+                job.ToolCallCount = toolCallCount;
+                job.ToolCalls = toolCalls;
+                job.ConfidenceEvaluations = confidenceEvaluations;
+                job.FinalConfidence = finalConfidence;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     /// <summary>Synchronous compare-and-swap on Status. Used internally and by tests.</summary>
     public bool TryTransition(Guid id, JobStatus from, JobStatus to)
     {

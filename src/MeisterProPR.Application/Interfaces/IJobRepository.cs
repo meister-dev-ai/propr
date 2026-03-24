@@ -58,4 +58,19 @@ public interface IJobRepository
     ///     Returns <c>false</c> if the current status does not match <paramref name="from" />.
     /// </summary>
     Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default);
+
+    /// <summary>Persists agentic review loop metadata after a review completes.</summary>
+    /// <param name="id">The job identifier.</param>
+    /// <param name="toolCallCount">Total number of tool calls made during the loop.</param>
+    /// <param name="toolCalls">JSON-serialised array of tool call records, or <see langword="null" />.</param>
+    /// <param name="confidenceEvaluations">JSON-serialised confidence evaluation array, or <see langword="null" />.</param>
+    /// <param name="finalConfidence">Final aggregated confidence score, or <see langword="null" />.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task SetAgenticMetadataAsync(
+        Guid id,
+        int toolCallCount,
+        string? toolCalls,
+        string? confidenceEvaluations,
+        int? finalConfidence,
+        CancellationToken ct = default);
 }

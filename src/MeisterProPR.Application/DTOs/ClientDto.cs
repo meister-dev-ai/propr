@@ -15,4 +15,5 @@ public sealed record ClientDto(
     string? AdoTenantId,
     string? AdoClientId,
     Guid? ReviewerId,
-    CommentResolutionBehavior CommentResolutionBehavior);
+    CommentResolutionBehavior CommentResolutionBehavior,
+    string? CustomSystemMessage);

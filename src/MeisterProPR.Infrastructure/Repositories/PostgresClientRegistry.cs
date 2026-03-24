@@ -63,6 +63,15 @@ public sealed partial class PostgresClientRegistry(
             .FirstOrDefaultAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => c.CustomSystemMessage)
+            .FirstOrDefaultAsync(ct);
+    }
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "Client registry: key is null or whitespace")]
     private static partial void LogKeyNullOrWhitespace(ILogger logger);
 

@@ -32,12 +32,17 @@ public interface IClientAdminService
     /// <param name="isActive">When non-null, sets the active flag.</param>
     /// <param name="displayName">When non-null, replaces the display name.</param>
     /// <param name="commentResolutionBehavior">When non-null, sets the comment resolution behavior.</param>
+    /// <param name="customSystemMessage">
+    ///     When non-null, updates the custom AI system message.
+    ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
         bool? isActive,
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
+        string? customSystemMessage = null,
         CancellationToken ct = default);
 
     /// <summary>

@@ -164,4 +164,26 @@ public sealed class PostgresJobRepository(MeisterProPRDbContext dbContext) : IJo
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task SetAgenticMetadataAsync(
+        Guid id,
+        int toolCallCount,
+        string? toolCalls,
+        string? confidenceEvaluations,
+        int? finalConfidence,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.ToolCallCount = toolCallCount;
+        job.ToolCalls = toolCalls;
+        job.ConfidenceEvaluations = confidenceEvaluations;
+        job.FinalConfidence = finalConfidence;
+        await dbContext.SaveChangesAsync(ct);
+    }
 }

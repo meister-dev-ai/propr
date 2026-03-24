@@ -81,7 +81,7 @@ internal sealed partial class AdoActivePrFetcher(
     }
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Trace,
         Message = "AdoActivePrFetcher: fetched {Count} active PRs for {OrganizationUrl}/{ProjectId}")]
     private static partial void LogPrsFetched(ILogger logger, string organizationUrl, string projectId, int count);
 

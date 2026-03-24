@@ -6,11 +6,10 @@ namespace MeisterProPR.Api.Middleware;
 ///     Middleware that validates the presence and correctness of the X-Client-Key header for incoming requests.
 /// </summary>
 /// <param name="next">The next middleware in the pipeline.</param>
-/// <param name="clientRegistry">The client registry used to validate client keys.</param>
-public sealed class ClientKeyMiddleware(RequestDelegate next, IClientRegistry clientRegistry)
+public sealed class ClientKeyMiddleware(RequestDelegate next)
 {
     /// <summary>Validates X-Client-Key header and stores it in HttpContext.Items when valid.</summary>
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IClientRegistry clientRegistry)
     {
         // /healthz, /metrics, and admin-authenticated requests bypass client key validation
         if (context.Request.Path.StartsWithSegments("/healthz") ||

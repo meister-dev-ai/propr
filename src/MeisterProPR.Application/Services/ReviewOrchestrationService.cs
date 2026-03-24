@@ -1,7 +1,7 @@
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +20,9 @@ namespace MeisterProPR.Application.Services;
 /// <param name="threadClient">Updates comment thread status in ADO.</param>
 /// <param name="threadReplier">Posts replies to existing threads in ADO.</param>
 /// <param name="resolutionCore">AI core for evaluating thread resolution.</param>
+/// <param name="reviewContextToolsFactory">Factory for creating per-review tool providers.</param>
+/// <param name="instructionFetcher">Fetches repository-level review instructions from the target branch.</param>
+/// <param name="instructionEvaluator">Evaluates relevance of fetched instructions for a pull request.</param>
 /// <param name="logger">The logger for logging review orchestration events.</param>
 public sealed partial class ReviewOrchestrationService(
     IJobRepository jobs,
@@ -32,6 +35,9 @@ public sealed partial class ReviewOrchestrationService(
     IAdoThreadClient threadClient,
     IAdoThreadReplier threadReplier,
     IAiCommentResolutionCore resolutionCore,
+    IReviewContextToolsFactory reviewContextToolsFactory,
+    IRepositoryInstructionFetcher instructionFetcher,
+    IRepositoryInstructionEvaluator instructionEvaluator,
     ILogger<ReviewOrchestrationService> logger)
 {
     /// <summary>Processes the given review job end-to-end.</summary>
@@ -96,7 +102,30 @@ public sealed partial class ReviewOrchestrationService(
                 await this.EvaluateReviewerThreadsAsync(job, pr, reviewerThreads, scan, isNewIteration, behavior, reviewerId.Value, ct);
             }
 
-            var result = await aiCore.ReviewAsync(pr, ct);
+            var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
+            var reviewTools = reviewContextToolsFactory.Create(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                job.ClientId);
+
+            // Fetch repository-level instructions from the TARGET branch only (prevents prompt injection)
+            var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
+            var fetchedInstructions = await instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pr.TargetBranch,
+                job.ClientId,
+                ct);
+            var relevantInstructions = fetchedInstructions.Count > 0
+                ? await instructionEvaluator.EvaluateRelevanceAsync(fetchedInstructions, changedFilePaths, ct)
+                : (IReadOnlyList<RepositoryInstruction>)[];
+
+            var systemContext = new ReviewSystemContext(customSystemMessage, relevantInstructions, reviewTools);
+            var result = await aiCore.ReviewAsync(pr, systemContext, ct);
 
             if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
             {
@@ -118,6 +147,18 @@ public sealed partial class ReviewOrchestrationService(
                 ct);
 
             await jobs.SetResultAsync(job.Id, result, ct);
+
+            if (systemContext.LoopMetrics is not null)
+            {
+                await jobs.SetAgenticMetadataAsync(
+                    job.Id,
+                    systemContext.LoopMetrics.ToolCallCount,
+                    systemContext.LoopMetrics.ToolCallsJson,
+                    systemContext.LoopMetrics.ConfidenceEvaluationsJson,
+                    systemContext.LoopMetrics.FinalConfidence,
+                    ct);
+            }
+
             LogReviewCompleted(logger, job.Id);
         }
         catch (Exception ex)
@@ -176,6 +217,15 @@ public sealed partial class ReviewOrchestrationService(
 
         foreach (var thread in reviewerThreads)
         {
+            // Skip threads that ADO already reports as resolved — no AI call needed.
+            if (string.Equals(thread.Status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(thread.Status, "Closed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(thread.Status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(thread.Status, "ByDesign", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             try
             {
                 ThreadResolutionResult resolution;
@@ -275,13 +325,13 @@ public sealed partial class ReviewOrchestrationService(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reviewer identity not configured for client {ClientId} — failing job {JobId}")]
     private static partial void LogReviewerIdentityMissing(ILogger logger, Guid clientId, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Starting review for job {JobId} PR#{PrId}")]
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Starting review for job {JobId} PR#{PrId}")]
     private static partial void LogReviewStarted(ILogger logger, Guid jobId, int prId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "PR #{PrId} is no longer active (status: {Status}) — failing job {JobId}")]
     private static partial void LogPrNoLongerActive(ILogger logger, int prId, PrStatus status, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Skipping review for job {JobId} PR#{PrId} — no new commits or replies")]
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Skipping review for job {JobId} PR#{PrId} — no new commits or replies")]
     private static partial void LogSkippedNoChange(ILogger logger, Guid jobId, int prId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Skipping review for job {JobId} PR#{PrId} — AI returned empty review")]

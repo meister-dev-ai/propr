@@ -116,8 +116,8 @@ public sealed class MentionReplyServiceTests
         await this._sut.ProcessAsync(job);
 
         // Assert: no PR fetch, no reply, no state change
-        await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(default!, default!, default!, default, default);
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default!, default!, default!, default, default, default!);
+        await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(null!, null!, null!, 0, 0, null!);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class MentionReplyServiceTests
                 job.Id,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default!, default!, default!, default, default, default!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(null!, null!, null!, 0, 0, null!);
     }
 
     [Fact]

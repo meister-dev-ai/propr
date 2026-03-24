@@ -54,6 +54,7 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
         bool? isActive,
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
+        string? customSystemMessage = null,
         CancellationToken ct = default)
     {
         var client = await dbContext.Clients.FindAsync([clientId], ct);
@@ -75,6 +76,14 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
         if (commentResolutionBehavior.HasValue)
         {
             client.CommentResolutionBehavior = commentResolutionBehavior.Value;
+        }
+
+        if (customSystemMessage is not null)
+        {
+            // Empty string clears the stored value; any other non-null value sets it.
+            client.CustomSystemMessage = string.IsNullOrEmpty(customSystemMessage)
+                ? null
+                : customSystemMessage;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -126,6 +135,7 @@ public sealed class PostgresClientAdminService(MeisterProPRDbContext dbContext) 
             client.AdoTenantId,
             client.AdoClientId,
             client.ReviewerId,
-            client.CommentResolutionBehavior);
+            client.CommentResolutionBehavior,
+            client.CustomSystemMessage);
     }
 }

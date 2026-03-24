@@ -121,4 +121,22 @@ public sealed class ReviewJob
     ///     Error message if the job failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>Total number of tool calls made during the agentic review loop. Defaults to zero.</summary>
+    public int ToolCallCount { get; set; }
+
+    /// <summary>
+    ///     JSON-serialised array of <c>ReviewToolCall</c> records captured during the review loop.
+    ///     <see langword="null" /> when no tool calls were recorded.
+    /// </summary>
+    public string? ToolCalls { get; set; }
+
+    /// <summary>
+    ///     JSON-serialised array of <c>ConfidenceScore</c> records produced during the review loop.
+    ///     <see langword="null" /> when no evaluations were recorded.
+    /// </summary>
+    public string? ConfidenceEvaluations { get; set; }
+
+    /// <summary>Final aggregated confidence score (0–100) at the end of the review loop, if available.</summary>
+    public int? FinalConfidence { get; set; }
 }

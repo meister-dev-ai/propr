@@ -42,6 +42,26 @@ public class PrCommentThreadTests
     }
 
     [Fact]
+    public void PrCommentThread_DefaultStatus_IsNull()
+    {
+        var thread = new PrCommentThread(5, "/src/Foo.cs", 1, new List<PrThreadComment>().AsReadOnly());
+
+        Assert.Null(thread.Status);
+    }
+
+    [Theory]
+    [InlineData("Fixed")]
+    [InlineData("Closed")]
+    [InlineData("Active")]
+    [InlineData("WontFix")]
+    public void PrCommentThread_WithStatus_ReturnsExpectedStatus(string status)
+    {
+        var thread = new PrCommentThread(6, "/src/Bar.cs", 2, new List<PrThreadComment>().AsReadOnly(), status);
+
+        Assert.Equal(status, thread.Status);
+    }
+
+    [Fact]
     public void PrThreadComment_StoresAuthorAndContent()
     {
         var comment = new PrThreadComment("Alice", "Looks good to me.");

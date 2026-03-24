@@ -8,6 +8,7 @@ using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.AzureDevOps;
 using MeisterProPR.Infrastructure.Configuration;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -15,6 +16,8 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using IAiReviewCore = MeisterProPR.Application.Interfaces.IAiReviewCore;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
 
@@ -121,9 +124,82 @@ public static class InfrastructureServiceExtensions
             aiDeployment,
             configuration["AI_API_KEY"]));
 
-        services.AddSingleton<IAiReviewCore, AgentAiReviewCore>();
+        // AiReviewOptions — bound from individual env vars (not a config section)
+        services.AddOptions<AiReviewOptions>()
+            .Configure(opts =>
+            {
+                if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
+                {
+                    opts.MaxIterations = maxIter;
+                }
+
+                if (int.TryParse(configuration["AI_FILE_BATCH_LINES"], out var batchLines))
+                {
+                    opts.FileBatchLines = batchLines;
+                }
+
+                if (int.TryParse(configuration["AI_CONFIDENCE_THRESHOLD"], out var threshold))
+                {
+                    opts.ConfidenceThreshold = threshold;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_FILE_SIZE_BYTES"], out var maxSize))
+                {
+                    opts.MaxFileSizeBytes = maxSize;
+                }
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // AiEvaluatorOptions — bound from individual env vars; only validated and registered when both are provided.
+        var evaluatorEndpoint = configuration["AI_EVALUATOR_ENDPOINT"];
+        var evaluatorDeployment = configuration["AI_EVALUATOR_DEPLOYMENT"];
+        if (!string.IsNullOrWhiteSpace(evaluatorEndpoint) && !string.IsNullOrWhiteSpace(evaluatorDeployment))
+        {
+            services.AddOptions<AiEvaluatorOptions>()
+                .Configure(opts =>
+                {
+                    opts.Endpoint = evaluatorEndpoint;
+                    opts.Deployment = evaluatorDeployment;
+                })
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
+
+            // Keyed IChatClient for the instruction relevance evaluator
+            services.AddKeyedSingleton<IChatClient>(
+                "evaluator",
+                (_, _) =>
+                    CreateChatClient(evaluatorEndpoint, evaluatorDeployment, configuration["AI_API_KEY"]));
+        }
+
+        services.AddSingleton<IAiReviewCore, ToolAwareAiReviewCore>();
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
         services.AddSingleton<IMentionAnswerService, AgentMentionAnswerService>();
+
+        if (configuration.GetValue<bool>("ADO_STUB_PR"))
+        {
+            services.AddSingleton<IReviewContextToolsFactory, StubReviewContextToolsFactory>();
+            services.AddSingleton<IRepositoryInstructionFetcher, NullRepositoryInstructionFetcher>();
+        }
+        else
+        {
+            services.AddSingleton<IReviewContextToolsFactory>(sp =>
+                new AdoReviewContextToolsFactory(
+                    sp.GetRequiredService<VssConnectionFactory>(),
+                    sp.GetRequiredService<IClientAdoCredentialRepository>(),
+                    sp.GetRequiredService<IOptions<AiReviewOptions>>()));
+            services.AddSingleton<IRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>();
+        }
+
+        // Register instruction evaluator: use AI evaluator when endpoint is configured, otherwise pass-through
+        if (!string.IsNullOrWhiteSpace(evaluatorEndpoint) && !string.IsNullOrWhiteSpace(evaluatorDeployment))
+        {
+            services.AddSingleton<IRepositoryInstructionEvaluator, AiRepositoryInstructionEvaluator>();
+        }
+        else
+        {
+            services.AddSingleton<IRepositoryInstructionEvaluator, PassThroughRepositoryInstructionEvaluator>();
+        }
 
         return services;
     }
@@ -147,9 +223,16 @@ public static class InfrastructureServiceExtensions
             uri = new Uri($"{uri.Scheme}://{uri.Host}/");
         }
 
+        // Reasoning models can take several minutes to generate a response.
+        // The default NetworkTimeout of 100 s is too short — raise it to 10 min.
+        var options = new AzureOpenAIClientOptions
+        {
+            NetworkTimeout = TimeSpan.FromMinutes(10),
+        };
+
         var azureClient = string.IsNullOrWhiteSpace(apiKey)
-            ? new AzureOpenAIClient(uri, new DefaultAzureCredential())
-            : new AzureOpenAIClient(uri, new ApiKeyCredential(apiKey));
+            ? new AzureOpenAIClient(uri, new DefaultAzureCredential(), options)
+            : new AzureOpenAIClient(uri, new ApiKeyCredential(apiKey), options);
 
         // GetResponsesClient targets the Responses API endpoint instead of the
         // legacy Chat Completions endpoint, enabling reasoning and tool use.

@@ -34,6 +34,20 @@ public sealed partial class AdoReviewerManager(
 
         var gitClient = await this.ResolveGitClientAsync(organizationUrl, clientId, cancellationToken);
 
+        // Check if the reviewer is already on the PR — ADO is idempotent but we avoid
+        // the misleading log and the unnecessary API call.
+        var existingReviewers = await gitClient.GetPullRequestReviewersAsync(
+            repositoryId,
+            pullRequestId,
+            projectId,
+            cancellationToken);
+
+        if (existingReviewers?.Any(r => string.Equals(r.Id, reviewerId.ToString(), StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            LogReviewerAlreadyPresent(logger, reviewerId, pullRequestId);
+            return;
+        }
+
         var reviewer = new IdentityRefWithVote
         {
             Id = reviewerId.ToString(),
@@ -57,6 +71,15 @@ public sealed partial class AdoReviewerManager(
         Level = LogLevel.Information,
         Message = "Added optional reviewer {ReviewerId} to PR #{PullRequestId}")]
     private static partial void LogReviewerAdded(
+        ILogger logger,
+        Guid reviewerId,
+        int pullRequestId);
+
+    [LoggerMessage(
+        EventId = 5003,
+        Level = LogLevel.Trace,
+        Message = "Reviewer {ReviewerId} is already on PR #{PullRequestId} — skipping add")]
+    private static partial void LogReviewerAlreadyPresent(
         ILogger logger,
         Guid reviewerId,
         int pullRequestId);

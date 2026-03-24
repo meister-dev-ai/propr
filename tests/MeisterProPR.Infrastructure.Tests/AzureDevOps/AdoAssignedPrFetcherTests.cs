@@ -149,8 +149,8 @@ public sealed class AdoAssignedPrFetcherTests
         // ADO was never called since we short-circuit on null ReviewerId
         await gitClient.DidNotReceiveWithAnyArgs()
             .GetPullRequestsByProjectAsync(
-                default(string)!,
-                default!);
+                null!,
+                null!);
     }
 
     [Fact]

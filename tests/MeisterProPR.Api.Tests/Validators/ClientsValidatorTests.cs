@@ -10,6 +10,7 @@ public sealed class ClientsValidatorTests
     private static readonly CreateCrawlConfigRequestValidator CreateCrawlConfigValidator = new();
     private static readonly SetAdoCredentialsRequestValidator SetAdoCredentialsValidator = new();
     private static readonly SetReviewerIdentityRequestValidator SetReviewerIdentityValidator = new();
+    private static readonly PatchClientRequestValidator PatchClientValidator = new();
 
     [Fact]
     public void CreateClient_ValidRequest_Passes()
@@ -127,5 +128,36 @@ public sealed class ClientsValidatorTests
         Assert.Contains(
             result.Errors,
             e => e.PropertyName == nameof(SetReviewerIdentityRequest.ReviewerId));
+    }
+
+    // T035 — PatchClientRequest.CustomSystemMessage validation
+
+    [Fact]
+    public void PatchClient_NullCustomSystemMessage_Passes()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest());
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_EmptyCustomSystemMessage_Passes()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(CustomSystemMessage: ""));
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_CustomSystemMessage20000Chars_Passes()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(CustomSystemMessage: new string('a', 20_000)));
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_CustomSystemMessage20001Chars_FailsOnCustomSystemMessage()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(CustomSystemMessage: new string('a', 20_001)));
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.CustomSystemMessage));
     }
 }

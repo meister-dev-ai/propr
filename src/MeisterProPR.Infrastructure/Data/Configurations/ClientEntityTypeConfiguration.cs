@@ -49,7 +49,12 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
         builder.Property(c => c.CommentResolutionBehavior)
             .HasColumnName("comment_resolution_behavior")
             .HasConversion<int>()
-            .HasDefaultValue(CommentResolutionBehavior.Silent);
+            .HasDefaultValue(CommentResolutionBehavior.Silent)
+            .HasSentinel(CommentResolutionBehavior.Silent);
+
+        builder.Property(c => c.CustomSystemMessage)
+            .HasColumnName("custom_system_message")
+            .IsRequired(false);
 
         builder.HasIndex(c => c.Key)
             .IsUnique()

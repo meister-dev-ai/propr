@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
@@ -13,6 +14,11 @@ public class AgentAiReviewCoreTests
     {
         var message = new ChatMessage(ChatRole.Assistant, content);
         return new ChatResponse(message);
+    }
+
+    private static ReviewSystemContext EmptyContext()
+    {
+        return new ReviewSystemContext(null, Array.Empty<RepositoryInstruction>(), null);
     }
 
     private static PullRequest CreatePullRequest(IReadOnlyList<ChangedFile>? files = null)
@@ -54,7 +60,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        var result = await core.ReviewAsync(CreatePullRequest());
+        var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
 
         // Assert
         Assert.Equal(CommentSeverity.Info, result.Comments[0].Severity);
@@ -81,7 +87,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        await core.ReviewAsync(CreatePullRequest(), cts.Token);
+        await core.ReviewAsync(CreatePullRequest(), EmptyContext(), cts.Token);
 
         // Assert - the cancellation token was forwarded
         Assert.Equal(cts.Token, capturedToken);
@@ -101,7 +107,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        var result = await core.ReviewAsync(CreatePullRequest());
+        var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
 
         // Assert
         Assert.Equal("No issues found.", result.Summary);
@@ -120,7 +126,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act & Assert
-        await Assert.ThrowsAsync<JsonException>(() => core.ReviewAsync(CreatePullRequest()));
+        await Assert.ThrowsAsync<JsonException>(() => core.ReviewAsync(CreatePullRequest(), EmptyContext()));
     }
 
     [Fact]
@@ -139,7 +145,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        await core.ReviewAsync(CreatePullRequest());
+        await core.ReviewAsync(CreatePullRequest(), EmptyContext());
 
         // Assert - both system and user messages sent
         Assert.NotNull(capturedMessages);
@@ -169,7 +175,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        var result = await core.ReviewAsync(CreatePullRequest());
+        var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
 
         // Assert - unknown severity defaults to Info
         Assert.Equal(CommentSeverity.Info, result.Comments[0].Severity);
@@ -197,7 +203,7 @@ public class AgentAiReviewCoreTests
         var core = new AgentAiReviewCore(mockClient);
 
         // Act
-        var result = await core.ReviewAsync(CreatePullRequest());
+        var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
 
         // Assert
         Assert.Equal("Overall the PR looks good.", result.Summary);

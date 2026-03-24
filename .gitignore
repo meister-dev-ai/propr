@@ -54,3 +54,5 @@ admin-ui/dist/
 admin-ui/coverage/
 admin-ui/.env.local
 admin-ui/.env.*.local
+# Derived from root openapi.json — not checked in
+admin-ui/openapi.json

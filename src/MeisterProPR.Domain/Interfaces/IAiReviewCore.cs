@@ -1,10 +1,11 @@
-using MeisterProPR.Domain.ValueObjects;
-
 namespace MeisterProPR.Domain.Interfaces;
 
-/// <summary>Core AI review contract. Accepts domain value objects only; returns domain value objects only.</summary>
+/// <summary>
+///     Preserved for reference only. The active AI review contract has moved to
+///     <c>MeisterProPR.Application.Interfaces.IAiReviewCore</c> so that it can accept
+///     Application-layer context types without violating Clean Architecture layering.
+/// </summary>
+[Obsolete("Use MeisterProPR.Application.Interfaces.IAiReviewCore instead.", false)]
 public interface IAiReviewCore
 {
-    /// <summary>Performs an AI code review of the given pull request.</summary>
-    Task<ReviewResult> ReviewAsync(PullRequest pullRequest, CancellationToken cancellationToken = default);
 }
