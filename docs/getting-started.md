@@ -1,6 +1,6 @@
-﻿# Getting Started — Meister ProPR Backend
+﻿# Getting Started — Meister DEV's ProPR Backend
 
-Meister ProPR is an ASP.NET Core 10 backend that accepts Azure DevOps pull request review
+Meister DEV's ProPR is an ASP.NET Core 10 backend that accepts Azure DevOps pull request review
 requests, fetches the changed files using a backend-controlled Azure identity, runs an AI review
 via the **Azure OpenAI Responses API** (reasoning + tool use), and posts the findings back as
 PR thread comments.
@@ -38,7 +38,7 @@ run under that client's identity — or fall back to the global backend identity
 
 ## Quick Start (Docker)
 
-The fastest way to run Meister ProPR locally is `docker compose`, which starts the API and a
+The fastest way to run Meister DEV's ProPR locally is `docker compose`, which starts the API and a
 PostgreSQL 17 container together.
 
 ### Step 1 — Create a `.env` file

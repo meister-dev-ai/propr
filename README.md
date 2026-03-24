@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/images/logo.png" alt="Meister ProPR" width="180">
+  <img src="resources/images/logo.png" alt="ProPR" width="180">
   <br>
   <em>AI-powered code review for Azure DevOps pull requests</em>
 </p>
@@ -12,7 +12,7 @@
 
 ---
 
-Meister ProPR is a self-hosted ASP.NET Core backend that watches Azure DevOps pull requests,
+Meister DEV's ProPR is a self-hosted ASP.NET Core backend that watches Azure DevOps pull requests,
 runs an AI review against them using Microsoft Foundry and the Microsoft Agent Framework, and posts the findings
 back as threaded comments — anchored to the relevant file and line number.
 
@@ -44,7 +44,7 @@ flowchart TD
     EXT["External Caller\n(ADO Extension / CI)"]
     PG[("PostgreSQL")]
 
-    subgraph backend["Meister ProPR Backend"]
+    subgraph backend["Meister DEV's ProPR Backend"]
         API["ASP.NET Core API"]
         WORKER["ReviewJobWorker"]
         CRAWLER["PrCrawlerWorker"]

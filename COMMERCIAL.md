@@ -1,6 +1,6 @@
-# Meister ProPR Licensing Options
+# Meister DEV's ProPR Licensing Options
 
-We offer two ways to use Meister ProPR. Whether you are a hobbyist, a researcher, or a scaling enterprise, there is a
+We offer two ways to use Meister DEV's ProPR. Whether you are a hobbyist, a researcher, or a scaling enterprise, there is a
 path for you.
 
 ## 1. The Community Edition (AGPLv3)
@@ -16,7 +16,7 @@ Perfect for individuals, home labs, and open-source projects.
 ## 2. The Commercial Edition
 
 Designed for businesses that need to keep their infrastructure private, require professional support, or wish to offer
-Meister ProPR as a service.
+Meister DEV's ProPR as a service.
 
 | Feature                   | Community (AGPLv3)               | Commercial                    |
 |---------------------------|----------------------------------|-------------------------------|
@@ -32,14 +32,14 @@ Meister ProPR as a service.
 Most businesses choose the Commercial License to bypass the Network Copyleft requirements of the AGPLv3. If your
 company:
 
-- Plans to integrate Meister ProPR into a proprietary platform.
+- Plans to integrate Meister DEV's ProPR into a proprietary platform.
 - Does not wish to share internal patches or custom features with the public.
 - Requires a legal contract that guarantees "no copyleft" obligations.
 - Needs a direct line to the core developers for bug fixes and architectural advice.
 
 > [!NOTE]
 > **Building a Business?**
-> If you intend to build a commercial "Managed Service" or SaaS offering on top of Meister ProPR, the Commercial License
+> If you intend to build a commercial "Managed Service" or SaaS offering on top of Meister DEV's ProPR, the Commercial License
 > is required to protect your intellectual property and comply with our terms of service.
 
 ## Get a Commercial License

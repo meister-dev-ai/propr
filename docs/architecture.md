@@ -1,4 +1,4 @@
-# Architecture — Meister ProPR
+# Architecture — Meister DEV's ProPR
 
 ## Table of Contents
 
@@ -23,7 +23,7 @@ flowchart TD
     EXT["External Caller (ADO Extension / CI)"]
     PG[("PostgreSQL")]
 
-    subgraph backend["Meister ProPR Backend"]
+    subgraph backend["Meister DEV's ProPR Backend"]
         API["ASP.NET Core API"]
         WORKER["ReviewJobWorker (BackgroundService)"]
         CRAWLER["PrCrawlerWorker (BackgroundService)"]
