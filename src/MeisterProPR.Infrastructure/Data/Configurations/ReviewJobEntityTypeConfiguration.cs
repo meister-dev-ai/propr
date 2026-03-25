@@ -58,6 +58,11 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("error_message")
             .IsRequired(false);
 
+        builder.Property(j => j.RetryCount)
+            .HasColumnName("retry_count")
+            .HasDefaultValue(0)
+            .IsRequired();
+
         // Store ReviewResult as two separate columns: summary text + comments JSONB
         builder.Property(j => j.Result)
             .HasColumnName("result_json")
@@ -67,24 +72,15 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => v == null ? null : JsonSerializer.Deserialize<ReviewResult>(v, (JsonSerializerOptions?)null));
 
-        builder.Property(j => j.ToolCallCount)
-            .HasColumnName("tool_call_count")
-            .HasDefaultValue(0)
-            .IsRequired();
+        builder.HasMany(j => j.Protocols)
+            .WithOne()
+            .HasForeignKey(p => p.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        builder.Property(j => j.ToolCalls)
-            .HasColumnName("tool_calls")
-            .HasColumnType("jsonb")
-            .IsRequired(false);
-
-        builder.Property(j => j.ConfidenceEvaluations)
-            .HasColumnName("confidence_evaluations")
-            .HasColumnType("jsonb")
-            .IsRequired(false);
-
-        builder.Property(j => j.FinalConfidence)
-            .HasColumnName("final_confidence")
-            .IsRequired(false);
+        builder.HasMany(j => j.FileReviewResults)
+            .WithOne()
+            .HasForeignKey(r => r.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(j => j.Status).HasDatabaseName("ix_review_jobs_status");
         builder.HasIndex(j => j.ClientId).HasDatabaseName("ix_review_jobs_client_id");

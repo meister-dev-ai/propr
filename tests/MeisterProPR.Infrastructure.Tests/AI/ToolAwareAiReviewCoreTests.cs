@@ -1,9 +1,9 @@
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
-using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -121,7 +121,7 @@ public class ToolAwareAiReviewCoreTests
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(10, 70),
+            DefaultOptions(10),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
@@ -158,7 +158,7 @@ public class ToolAwareAiReviewCoreTests
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(3, 70),
+            DefaultOptions(3),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
@@ -276,5 +276,120 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
         Assert.Equal("Simple review.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithProtocolRecorder_RecordsAiCallEvent()
+    {
+        // Arrange
+        var mockClient = Substitute.For<IChatClient>();
+        var json = """{"summary":"All good.","comments":[]}""";
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+
+        // Act
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        // Assert — AI call event was recorded
+        await recorder.Received(1)
+            .RecordAiCallAsync(
+                protocolId,
+                Arg.Any<int>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithToolCallAndProtocolRecorder_RecordsToolCallEvent()
+    {
+        // Arrange
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var finalJson = """{"summary":"Done.","comments":[]}""";
+
+        // First response: tool call; second response: final review
+        var toolCallResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent("call-1", "get_changed_files"),
+                ]));
+        var finalResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, finalJson));
+
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(toolCallResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+
+        // Act
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        // Assert — tool call event was recorded
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "get_changed_files",
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithProtocolRecorder_PopulatesTokensInLoopMetrics()
+    {
+        // Arrange
+        var mockClient = Substitute.For<IChatClient>();
+        var json = """{"summary":"All good.","comments":[]}""";
+        var usage = new UsageDetails { InputTokenCount = 100, OutputTokenCount = 50 };
+        var chatResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, json)) { Usage = usage };
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(chatResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var context = CreateContext();
+
+        // Act
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        // Assert — token counts accumulated in LoopMetrics
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(100L, context.LoopMetrics!.TotalInputTokens);
+        Assert.Equal(50L, context.LoopMetrics.TotalOutputTokens);
     }
 }

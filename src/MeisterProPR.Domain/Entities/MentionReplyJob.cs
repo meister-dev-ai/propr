@@ -34,40 +34,13 @@ public sealed class MentionReplyJob
             throw new ArgumentException("ClientId must not be empty.", nameof(clientId));
         }
 
-        if (string.IsNullOrWhiteSpace(organizationUrl))
-        {
-            throw new ArgumentException("OrganizationUrl required.", nameof(organizationUrl));
-        }
-
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            throw new ArgumentException("ProjectId required.", nameof(projectId));
-        }
-
-        if (string.IsNullOrWhiteSpace(repositoryId))
-        {
-            throw new ArgumentException("RepositoryId required.", nameof(repositoryId));
-        }
-
-        if (pullRequestId < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(pullRequestId));
-        }
-
-        if (threadId < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(threadId));
-        }
-
-        if (commentId < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(commentId));
-        }
-
-        if (string.IsNullOrWhiteSpace(mentionText))
-        {
-            throw new ArgumentException("MentionText required.", nameof(mentionText));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(organizationUrl);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pullRequestId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(threadId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(commentId, 1);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mentionText);
 
         this.Id = id;
         this.ClientId = clientId;

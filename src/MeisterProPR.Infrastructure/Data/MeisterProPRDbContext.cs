@@ -16,6 +16,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
 
+    /// <summary>Per-file results of a review job.</summary>
+    public DbSet<ReviewFileResult> ReviewFileResults => this.Set<ReviewFileResult>();
+
     /// <summary>Mention reply jobs table.</summary>
     public DbSet<MentionReplyJob> MentionReplyJobs => this.Set<MentionReplyJob>();
 
@@ -30,6 +33,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Per-thread reply watermarks within a review PR scan.</summary>
     public DbSet<ReviewPrScanThread> ReviewPrScanThreads => this.Set<ReviewPrScanThread>();
+
+    /// <summary>Review job protocol records (one per job attempt).</summary>
+    public DbSet<ReviewJobProtocol> ReviewJobProtocols => this.Set<ReviewJobProtocol>();
+
+    /// <summary>Individual step events within a review job protocol.</summary>
+    public DbSet<ProtocolEvent> ProtocolEvents => this.Set<ProtocolEvent>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

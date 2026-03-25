@@ -10,7 +10,7 @@ public sealed record ChangedFile
     /// <summary>
     ///     Creates a new <see cref="ChangedFile" />.
     /// </summary>
-    public ChangedFile(string path, ChangeType changeType, string fullContent, string unifiedDiff)
+    public ChangedFile(string path, ChangeType changeType, string fullContent, string unifiedDiff, bool isBinary = false, string? originalPath = null)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -21,6 +21,8 @@ public sealed record ChangedFile
         this.ChangeType = changeType;
         this.FullContent = fullContent ?? "";
         this.UnifiedDiff = unifiedDiff ?? "";
+        this.IsBinary = isBinary;
+        this.OriginalPath = originalPath;
     }
 
     /// <summary>File path relative to the repository root.</summary>
@@ -34,4 +36,17 @@ public sealed record ChangedFile
 
     /// <summary>Unified diff for the file.</summary>
     public string UnifiedDiff { get; init; }
+
+    /// <summary>
+    ///     <see langword="true" /> when the file is detected as binary based on its extension.
+    ///     Binary files are listed by name only; their content and diff are not sent to the AI.
+    /// </summary>
+    public bool IsBinary { get; init; }
+
+    /// <summary>
+    ///     The path of this file at the base (target-branch) commit, populated only when
+    ///     <see cref="ChangeType" /> is <see cref="ChangeType.Rename" />.
+    ///     <see langword="null" /> for all other change types.
+    /// </summary>
+    public string? OriginalPath { get; init; }
 }

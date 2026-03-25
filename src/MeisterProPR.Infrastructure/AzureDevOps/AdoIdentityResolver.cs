@@ -63,7 +63,7 @@ public sealed class AdoIdentityResolver(
 
     private sealed class IdentityQueryResult
     {
-        public List<IdentityEntry>? Value { get; set; }
+        public List<IdentityEntry>? Value { get; init; }
     }
 
     private sealed class IdentityEntry

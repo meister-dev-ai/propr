@@ -23,7 +23,7 @@ public sealed class PrCrawlServiceTests
     private readonly ICrawlConfigurationRepository _crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
 
-    private readonly IAssignedPullRequestFetcher _prFetcher = Substitute.For<IAssignedPullRequestFetcher>();
+    private readonly IAssignedPrFetcher _prFetcher = Substitute.For<IAssignedPrFetcher>();
     private readonly PrCrawlService _sut;
 
     public PrCrawlServiceTests()

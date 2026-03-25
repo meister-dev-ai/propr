@@ -17,10 +17,8 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="ProcessingStartedAt">When the job began processing, if applicable.</param>
 /// <param name="CompletedAt">When the job completed, if applicable.</param>
 /// <param name="ErrorMessage">Error message if the job failed.</param>
-/// <param name="ToolCallCount">Total number of tool calls made during the agentic review loop.</param>
-/// <param name="ToolCalls">Tool call records captured during the review loop, if any.</param>
-/// <param name="ConfidenceEvaluations">Confidence score snapshots captured during the review loop, if any.</param>
-/// <param name="FinalConfidence">Final aggregated confidence score at the end of the review loop, if available.</param>
+/// <param name="TotalInputTokens">Total input tokens consumed across all AI calls in this review, from the protocol record.</param>
+/// <param name="TotalOutputTokens">Total output tokens generated across all AI calls in this review, from the protocol record.</param>
 public sealed record ReviewJobDto(
     Guid Id,
     Guid ClientId,
@@ -34,10 +32,8 @@ public sealed record ReviewJobDto(
     DateTimeOffset? ProcessingStartedAt,
     DateTimeOffset? CompletedAt,
     string? ErrorMessage,
-    int ToolCallCount,
-    IReadOnlyList<ReviewToolCallDto>? ToolCalls,
-    IReadOnlyList<ConfidenceSnapshotDto>? ConfidenceEvaluations,
-    int? FinalConfidence);
+    long? TotalInputTokens,
+    long? TotalOutputTokens);
 
 /// <summary>
 ///     Represents a single tool invocation captured during an agentic review pass.

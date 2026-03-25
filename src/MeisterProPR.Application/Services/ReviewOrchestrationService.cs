@@ -1,33 +1,22 @@
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Application.Services;
 
 /// <summary>
 ///     Orchestrates the end-to-end process of handling a review job.
 /// </summary>
-/// <param name="jobs">The job repository for managing review jobs.</param>
-/// <param name="prFetcher">The pull request fetcher for retrieving PR details.</param>
-/// <param name="aiCore">The AI review core for performing the review.</param>
-/// <param name="commentPoster">The comment poster for posting review results to Azure DevOps.</param>
-/// <param name="reviewerManager">Adds the AI identity as an optional reviewer on the PR.</param>
-/// <param name="clientRegistry">Registry for looking up per-client configuration.</param>
-/// <param name="prScanRepository">Tracks per-PR processing state for skip-on-no-new-commits logic.</param>
-/// <param name="threadClient">Updates comment thread status in ADO.</param>
-/// <param name="threadReplier">Posts replies to existing threads in ADO.</param>
-/// <param name="resolutionCore">AI core for evaluating thread resolution.</param>
-/// <param name="reviewContextToolsFactory">Factory for creating per-review tool providers.</param>
-/// <param name="instructionFetcher">Fetches repository-level review instructions from the target branch.</param>
-/// <param name="instructionEvaluator">Evaluates relevance of fetched instructions for a pull request.</param>
-/// <param name="logger">The logger for logging review orchestration events.</param>
 public sealed partial class ReviewOrchestrationService(
     IJobRepository jobs,
     IPullRequestFetcher prFetcher,
-    IAiReviewCore aiCore,
+    IFileByFileReviewOrchestrator fileByFileOrchestrator,
     IAdoCommentPoster commentPoster,
     IAdoReviewerManager reviewerManager,
     IClientRegistry clientRegistry,
@@ -38,8 +27,11 @@ public sealed partial class ReviewOrchestrationService(
     IReviewContextToolsFactory reviewContextToolsFactory,
     IRepositoryInstructionFetcher instructionFetcher,
     IRepositoryInstructionEvaluator instructionEvaluator,
+    IOptions<AiReviewOptions> options,
     ILogger<ReviewOrchestrationService> logger)
 {
+    private readonly AiReviewOptions _opts = options.Value;
+
     /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
     {
@@ -125,7 +117,7 @@ public sealed partial class ReviewOrchestrationService(
                 : (IReadOnlyList<RepositoryInstruction>)[];
 
             var systemContext = new ReviewSystemContext(customSystemMessage, relevantInstructions, reviewTools);
-            var result = await aiCore.ReviewAsync(pr, systemContext, ct);
+            var result = await fileByFileOrchestrator.ReviewAsync(job, pr, systemContext, ct);
 
             if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
             {
@@ -148,18 +140,27 @@ public sealed partial class ReviewOrchestrationService(
 
             await jobs.SetResultAsync(job.Id, result, ct);
 
-            if (systemContext.LoopMetrics is not null)
+            LogReviewCompleted(logger, job.Id);
+        }
+        catch (PartialReviewFailureException ex)
+        {
+            LogPartialReviewFailure(logger, job.Id, ex.FailedCount, ex.TotalCount);
+
+            job.RetryCount++;
+            await jobs.UpdateRetryCountAsync(job.Id, job.RetryCount, ct);
+
+            if (job.RetryCount >= this._opts.MaxFileReviewRetries)
             {
-                await jobs.SetAgenticMetadataAsync(
-                    job.Id,
-                    systemContext.LoopMetrics.ToolCallCount,
-                    systemContext.LoopMetrics.ToolCallsJson,
-                    systemContext.LoopMetrics.ConfidenceEvaluationsJson,
-                    systemContext.LoopMetrics.FinalConfidence,
-                    ct);
+                await jobs.SetFailedAsync(job.Id, $"Max retries reached. {ex.Message}", ct);
+            }
+            else
+            {
+                // Re-queue the job so the worker picks it up again without waiting for a restart.
+                // FileByFileReviewOrchestrator skips already-completed file results on the next pass.
+                await jobs.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, ct);
             }
 
-            LogReviewCompleted(logger, job.Id);
+            return;
         }
         catch (Exception ex)
         {
@@ -321,34 +322,4 @@ public sealed partial class ReviewOrchestrationService(
             LogScanSaveFailed(logger, job.Id, ex);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Reviewer identity not configured for client {ClientId} — failing job {JobId}")]
-    private static partial void LogReviewerIdentityMissing(ILogger logger, Guid clientId, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Starting review for job {JobId} PR#{PrId}")]
-    private static partial void LogReviewStarted(ILogger logger, Guid jobId, int prId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "PR #{PrId} is no longer active (status: {Status}) — failing job {JobId}")]
-    private static partial void LogPrNoLongerActive(ILogger logger, int prId, PrStatus status, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Skipping review for job {JobId} PR#{PrId} — no new commits or replies")]
-    private static partial void LogSkippedNoChange(ILogger logger, Guid jobId, int prId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Skipping review for job {JobId} PR#{PrId} — AI returned empty review")]
-    private static partial void LogSkippedEmptyReview(ILogger logger, Guid jobId, int prId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Completed review for job {JobId}")]
-    private static partial void LogReviewCompleted(ILogger logger, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Thread {ThreadId} on PR#{PrId} marked as fixed")]
-    private static partial void LogThreadResolved(ILogger logger, int threadId, int prId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Thread {ThreadId} evaluation failed on PR#{PrId} — skipping")]
-    private static partial void LogThreadEvaluationFailed(ILogger logger, int threadId, int prId, Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to save ReviewPrScan for job {JobId} — processing continues")]
-    private static partial void LogScanSaveFailed(ILogger logger, Guid jobId, Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Review failed for job {JobId}")]
-    private static partial void LogReviewFailed(ILogger logger, Guid jobId, Exception ex);
 }

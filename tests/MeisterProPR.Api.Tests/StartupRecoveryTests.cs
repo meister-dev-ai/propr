@@ -55,7 +55,7 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         Guid stalJobId;
         await using (var db = new MeisterProPRDbContext(options))
         {
-            var repo = new PostgresJobRepository(db);
+            var repo = new JobRepository(db);
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -84,7 +84,7 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
                     services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                     services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                     services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                    services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
+                    services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
                 });
             });
 

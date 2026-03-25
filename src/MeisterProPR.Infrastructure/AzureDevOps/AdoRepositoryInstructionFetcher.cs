@@ -76,7 +76,7 @@ public partial class AdoRepositoryInstructionFetcher(
     /// <param name="clientId">Optional client identifier for credential lookup.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of (fileName, content) tuples, or <see langword="null" /> if folder absent.</returns>
-    protected internal virtual async Task<IReadOnlyList<(string FileName, string Content)>?> FetchInstructionFilesAsync(
+    protected virtual async Task<IReadOnlyList<(string FileName, string Content)>?> FetchInstructionFilesAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,

@@ -1,10 +1,12 @@
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -15,7 +17,7 @@ public class ReviewOrchestrationServiceTests
     private static (
         IJobRepository jobs,
         IPullRequestFetcher prFetcher,
-        IAiReviewCore aiCore,
+        IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
         IAdoReviewerManager reviewerManager,
         IClientRegistry clientRegistry,
@@ -43,7 +45,7 @@ public class ReviewOrchestrationServiceTests
         return (
             Substitute.For<IJobRepository>(),
             Substitute.For<IPullRequestFetcher>(),
-            Substitute.For<IAiReviewCore>(),
+            Substitute.For<IFileByFileReviewOrchestrator>(),
             Substitute.For<IAdoCommentPoster>(),
             Substitute.For<IAdoReviewerManager>(),
             clientRegistry,
@@ -83,7 +85,7 @@ public class ReviewOrchestrationServiceTests
     private static ReviewOrchestrationService CreateService(
         IJobRepository jobs,
         IPullRequestFetcher prFetcher,
-        IAiReviewCore aiCore,
+        IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
         IAdoReviewerManager reviewerManager,
         IClientRegistry clientRegistry,
@@ -106,7 +108,7 @@ public class ReviewOrchestrationServiceTests
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -117,6 +119,7 @@ public class ReviewOrchestrationServiceTests
             reviewContextToolsFactory,
             fetcher,
             evaluator,
+            Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
     }
 
@@ -149,7 +152,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_AiException_TransitionsJobToFailed()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -165,10 +168,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Throws(new Exception("AI error"));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -183,7 +186,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_CallsAddOptionalReviewerBeforePostAsync()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -201,7 +204,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
         var callOrder = new List<string>();
@@ -229,7 +232,7 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("post"));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
         await service.ProcessAsync(job, CancellationToken.None);
 
         Assert.Equal(["reviewer", "post"], callOrder);
@@ -239,7 +242,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_CommentPostException_TransitionsJobToFailed()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -256,7 +259,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
         commentPoster.PostAsync(
                 Arg.Any<string>(),
@@ -270,7 +273,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("Comment post error"));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -283,7 +286,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_FetchException_TransitionsJobToFailed()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -298,7 +301,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("ADO fetch error"));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -313,7 +316,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_NullReviewerId_CallsSetFailedWithNotConfiguredMessage()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var clientId = Guid.NewGuid();
@@ -322,7 +325,7 @@ public class ReviewOrchestrationServiceTests
         clientRegistry.GetReviewerIdAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<Guid?>(null));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -337,7 +340,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_PassesExistingThreadsToCommentPoster()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -365,10 +368,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -394,7 +397,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_PrNotActive_CallsSetFailedWithoutCallingAi(PrStatus status)
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -411,14 +414,14 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(closedPr);
 
-        var sut = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await sut.ProcessAsync(job, CancellationToken.None);
 
         // Assert: job is marked failed with the EC-002 message; AI is never called
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(m => m.Contains("closed or abandoned")));
-        await aiCore.DidNotReceiveWithAnyArgs().ReviewAsync(null!, null!);
+        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
     }
 
     // T034 — AddOptionalReviewerAsync throws → PostAsync NOT called, job fails
@@ -426,7 +429,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_ReviewerAddThrows_PostAsyncNotCalledAndJobFails()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -452,7 +455,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("Permission denied"));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -465,7 +468,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_SuccessfulFlow_CallsCommentPosterWithCorrectParameters()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -482,10 +485,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -508,7 +511,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_SuccessfulFlow_TransitionsJobToCompleted()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -525,10 +528,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -554,7 +557,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_SameIterationNoNewReplies_SkipsAiReviewAndDeletesJob()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var reviewerId = Guid.NewGuid();
@@ -577,24 +580,24 @@ public class ReviewOrchestrationServiceTests
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
         // AI review must NOT be called (no new commits or replies)
-        await aiCore.DidNotReceiveWithAnyArgs().ReviewAsync(null!, null!);
+        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
         // Job must be deleted — no DB row should remain for an idle cycle
         await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
         await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
         await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>());
     }
 
-    // T005 — Empty AI review response → no comment posted, job deleted (not persisted)
+    // T005 — Empty AI review response -> no comment posted, job deleted (not persisted)
 
     [Fact]
     public async Task ProcessAsync_EmptyAiReviewResult_DeletesJobWithoutPosting()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -611,10 +614,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(emptyResult);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -630,13 +633,13 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_SameIterationButNewRepliesOnReviewerThread_RunsConversationalPath()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var reviewerId = Guid.NewGuid();
         var job = CreateJob(); // IterationId = 1
         var result = CreateReviewResult();
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
 
         // Thread authored by reviewerId with 2 comments currently
         var thread = new PrCommentThread(
@@ -687,7 +690,7 @@ public class ReviewOrchestrationServiceTests
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -698,6 +701,7 @@ public class ReviewOrchestrationServiceTests
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
@@ -708,20 +712,20 @@ public class ReviewOrchestrationServiceTests
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 42),
                 Arg.Any<CancellationToken>());
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ProcessAsync_NewIteration_OnlyEvaluatesThreadsAuthoredByReviewer()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var reviewerId = Guid.NewGuid();
         var otherId = Guid.NewGuid();
         var job = CreateJob(); // IterationId = 1
         var result = CreateReviewResult();
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
 
         // Two threads: one by reviewer, one by someone else
         var reviewerThread = new PrCommentThread(
@@ -770,7 +774,7 @@ public class ReviewOrchestrationServiceTests
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -781,6 +785,7 @@ public class ReviewOrchestrationServiceTests
             stubToolsFactory2,
             CreateDefaultInstructionFetcher(),
             CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
@@ -803,7 +808,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_SuccessfulFlow_SavesScanWithCurrentIteration()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob(); // IterationId = 1
@@ -820,10 +825,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -842,7 +847,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_PassesReviewContextToolsToAiCore()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -859,15 +864,15 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
         ReviewSystemContext? capturedContext = null;
-        aiCore
-            .When(x => x.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()))
-            .Do(ci => capturedContext = ci.ArgAt<ReviewSystemContext>(1));
+        orchestrator
+            .When(x => x.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()))
+            .Do(ci => capturedContext = ci.ArgAt<ReviewSystemContext>(2));
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -876,60 +881,12 @@ public class ReviewOrchestrationServiceTests
         Assert.NotNull(capturedContext!.ReviewTools);
     }
 
-    // T019 — SetAgenticMetadataAsync is called after a completed review when LoopMetrics are present
-
-    [Fact]
-    public async Task ProcessAsync_WithLoopMetrics_CallsSetAgenticMetadataAsync()
-    {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var job = CreateJob();
-        var pr = CreatePullRequest();
-        var result = CreateReviewResult();
-        var expectedMetrics = new ReviewLoopMetrics(3, "[...]", "[...]", 85);
-
-        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(pr);
-
-        // Simulate ToolAwareAiReviewCore setting LoopMetrics on the context
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
-            {
-                var ctx = ci.ArgAt<ReviewSystemContext>(1);
-                ctx.LoopMetrics = expectedMetrics;
-                return Task.FromResult(result);
-            });
-
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        // Assert
-        await jobs.Received(1)
-            .SetAgenticMetadataAsync(
-                job.Id,
-                expectedMetrics.ToolCallCount,
-                expectedMetrics.ToolCallsJson,
-                expectedMetrics.ConfidenceEvaluationsJson,
-                expectedMetrics.FinalConfidence,
-                Arg.Any<CancellationToken>());
-    }
-
     // T019 — Target branch (not source branch) is what gets passed for repository instruction fetch
 
     [Fact]
     public async Task ProcessAsync_PassesTargetBranchInSystemContext()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -956,10 +913,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger, instructionFetcher);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger, instructionFetcher);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -988,7 +945,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_WithConfiguredReviewerId_CallsAddOptionalReviewerWithThatGuid()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1006,10 +963,10 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
         await service.ProcessAsync(job, CancellationToken.None);
 
         await reviewerManager.Received(1)
@@ -1028,7 +985,7 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_InstructionFetcherCalledWithTargetBranch_NotSourceBranch()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1056,13 +1013,13 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
         var service = CreateService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -1100,7 +1057,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_ClientSystemMessage_ReachesAiReviewCore()
     {
         // Arrange
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1120,17 +1077,18 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(result);
 
-        var service = CreateService(jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert — IAiReviewCore received a ReviewSystemContext with the expected ClientSystemMessage
-        await aiCore.Received(1)
+        await orchestrator.Received(1)
             .ReviewAsync(
+                Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
                 Arg.Is<ReviewSystemContext>(ctx => ctx.ClientSystemMessage == expectedMessage),
                 Arg.Any<CancellationToken>());
@@ -1141,13 +1099,13 @@ public class ReviewOrchestrationServiceTests
     [Fact]
     public async Task ProcessAsync_ThreadWithFixedStatus_IsSkippedWithoutAiCall()
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
         var reviewerId = Guid.NewGuid();
         var job = CreateJob();
         var result = CreateReviewResult();
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
 
         // Reviewer-authored thread that ADO already set to "Fixed"
         var fixedThread = new PrCommentThread(
@@ -1179,7 +1137,7 @@ public class ReviewOrchestrationServiceTests
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -1190,6 +1148,7 @@ public class ReviewOrchestrationServiceTests
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
 
         await service.ProcessAsync(job, CancellationToken.None);
@@ -1208,13 +1167,13 @@ public class ReviewOrchestrationServiceTests
     [InlineData("ByDesign")]
     public async Task ProcessAsync_ThreadWithResolvedStatus_NeverCallsResolutionAi(string resolvedStatus)
     {
-        var (jobs, prFetcher, aiCore, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
         var reviewerId = Guid.NewGuid();
         var job = CreateJob();
         var result = CreateReviewResult();
-        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
 
         var resolvedThread = new PrCommentThread(
             100,
@@ -1245,7 +1204,7 @@ public class ReviewOrchestrationServiceTests
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            aiCore,
+            orchestrator,
             commentPoster,
             reviewerManager,
             clientRegistry,
@@ -1256,6 +1215,7 @@ public class ReviewOrchestrationServiceTests
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
 
         await service.ProcessAsync(job, CancellationToken.None);

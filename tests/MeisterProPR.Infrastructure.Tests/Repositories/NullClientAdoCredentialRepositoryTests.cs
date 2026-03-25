@@ -1,5 +1,5 @@
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Repositories.Stub;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 

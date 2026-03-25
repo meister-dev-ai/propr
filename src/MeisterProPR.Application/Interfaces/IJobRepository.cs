@@ -44,6 +44,9 @@ public interface IJobRepository
     /// <summary>Returns all jobs currently in the Processing state.</summary>
     Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default);
 
+    /// <summary>Updates the retry count for a review job.</summary>
+    Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default);
+
     /// <summary>Marks the job as failed with an error message.</summary>
     Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default);
 
@@ -59,18 +62,29 @@ public interface IJobRepository
     /// </summary>
     Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default);
 
-    /// <summary>Persists agentic review loop metadata after a review completes.</summary>
-    /// <param name="id">The job identifier.</param>
-    /// <param name="toolCallCount">Total number of tool calls made during the loop.</param>
-    /// <param name="toolCalls">JSON-serialised array of tool call records, or <see langword="null" />.</param>
-    /// <param name="confidenceEvaluations">JSON-serialised confidence evaluation array, or <see langword="null" />.</param>
-    /// <param name="finalConfidence">Final aggregated confidence score, or <see langword="null" />.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task SetAgenticMetadataAsync(
-        Guid id,
-        int toolCallCount,
-        string? toolCalls,
-        string? confidenceEvaluations,
-        int? finalConfidence,
-        CancellationToken ct = default);
+    /// <summary>
+    ///     Returns the <see cref="ReviewJob" /> with <c>FileReviewResults</c>
+    ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.
+    /// </summary>
+    Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Adds a per-file review result for a job.</summary>
+    Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default);
+
+    /// <summary>Updates a per-file review result for a job.</summary>
+    Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the <see cref="ReviewJob" /> with <c>Protocols</c> and <c>Protocols.Events</c>
+    ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.
+    /// </summary>
+    Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the <see cref="ReviewJob" /> with <c>Protocol</c> and <c>Protocol.Events</c>
+    ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.
+    ///     This is the only sanctioned path for reading protocol data (ReviewJob is the aggregate root).
+    /// </summary>
+    [Obsolete("Use GetByIdWithProtocolsAsync instead.")]
+    Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default);
 }

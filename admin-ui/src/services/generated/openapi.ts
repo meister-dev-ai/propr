@@ -135,6 +135,17 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description A crawl configuration for this organisation and project already exists. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -480,7 +491,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Updates one or more fields of a client (display name, active status). Requires `X-Admin-Key`. */
+        /**
+         * Updates one or more fields of a client (display name, active status, custom system message).
+         *     Requires `X-Admin-Key`.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -509,6 +523,17 @@ export interface paths {
                         "text/plain": components["schemas"]["ClientResponse"];
                         "application/json": components["schemas"]["ClientResponse"];
                         "text/json": components["schemas"]["ClientResponse"];
+                    };
+                };
+                /** @description Validation failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Missing or invalid `X-Admin-Key`. */
@@ -768,6 +793,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/client/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Updates the custom AI system message for the authenticated client (self-service).
+         *     Requires `X-Client-Key`. The client ID is resolved from the key.
+         *     Send an empty string as `customSystemMessage` to clear an existing value.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Fields to update; omit a field to leave it unchanged. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchClientRequest"];
+                    "text/json": components["schemas"]["PatchClientRequest"];
+                    "application/*+json": components["schemas"]["PatchClientRequest"];
+                };
+            };
+            responses: {
+                /** @description Client updated. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientResponse"];
+                        "application/json": components["schemas"]["ClientResponse"];
+                        "text/json": components["schemas"]["ClientResponse"];
+                    };
+                };
+                /** @description Validation failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid `X-Client-Key`. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/clients/{clientId}/profile": {
         parameters: {
             query?: never;
@@ -932,10 +1028,7 @@ export interface paths {
                     offset?: number;
                     /** @description Optional status filter: Pending, Processing, Completed, or Failed. */
                     status?: components["schemas"]["JobStatus"];
-                    /**
-                     * @description Optional client filter: only return jobs for this client.
-                     * Format: uuid
-                     */
+                    /** @description Optional client filter: only return jobs for this client. */
                     clientId?: string;
                 };
                 header?: never;
@@ -957,6 +1050,69 @@ export interface paths {
                 };
                 /** @description Missing or invalid `X-Admin-Key` header. */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{id}/protocol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the protocol (agentic trace) for a single review job. Requires `X-Admin-Key`. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The review job identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Protocols returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobProtocolDto"][];
+                        "application/json": components["schemas"]["ReviewJobProtocolDto"][];
+                        "text/json": components["schemas"]["ReviewJobProtocolDto"][];
+                    };
+                };
+                /** @description Missing or invalid `X-Admin-Key` header. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job or protocol not found. */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1168,9 +1324,7 @@ export interface paths {
         trace?: never;
     };
 }
-
 export type webhooks = Record<string, never>;
-
 export interface components {
     schemas: {
         /**
@@ -1199,9 +1353,10 @@ export interface components {
             /** Format: uuid */
             reviewerId?: string | null;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
+            customSystemMessage?: string | null;
         };
         /**
-         * @description Controls how the reviewer handles thread resolution: disabled skips resolution; silent resolves without a reply; withReply posts a reply before resolving.
+         * @description Specifies how the automated reviewer behaves when automatically resolving a comment thread.
          * @enum {string}
          */
         CommentResolutionBehavior: "disabled" | "silent" | "withReply";
@@ -1268,6 +1423,10 @@ export interface components {
             completedAt?: string | null;
             resultSummary?: string | null;
             errorMessage?: string | null;
+            /** Format: int64 */
+            totalInputTokens?: number | null;
+            /** Format: int64 */
+            totalOutputTokens?: number | null;
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {
@@ -1280,11 +1439,15 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "processing" | "completed" | "failed";
-        /** @description Request body for patching a client. All fields are optional; omitted fields are left unchanged. */
+        /**
+         * @description Request body for patching a client. All fields are optional; omitted fields are left unchanged.
+         *     Set MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
+         */
         PatchClientRequest: {
             isActive?: boolean | null;
             displayName?: string | null;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
+            customSystemMessage?: string | null;
         };
         /** @description Request body for patching a crawl configuration's active status. */
         PatchCrawlConfigRequest: {
@@ -1300,6 +1463,43 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** @description Carries data for a single event in a review protocol. */
+        ProtocolEventDto: {
+            /**
+             * Format: uuid
+             * @description Unique identifier of the event.
+             */
+            id?: string;
+            kind?: components["schemas"]["ProtocolEventKind"];
+            /** @description Human-readable name of the event (e.g. "ai_call_iter_1", "get_changed_files"). */
+            name?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC timestamp when the event occurred.
+             */
+            occurredAt?: string;
+            /**
+             * Format: int64
+             * @description Input tokens for this event, or null.
+             */
+            inputTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Output tokens for this event, or null.
+             */
+            outputTokens?: number | null;
+            /** @description First 4000 characters of input text, or null. */
+            inputTextSample?: string | null;
+            /** @description First 1000 characters of output, or null. */
+            outputSummary?: string | null;
+            /** @description Error message if this event failed, or null. */
+            error?: string | null;
+        };
+        /**
+         * @description Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent.
+         * @enum {string}
+         */
+        ProtocolEventKind: "aiCall" | "toolCall";
         /** @description DTO for a single review comment. */
         ReviewCommentDto: {
             filePath?: string | null;
@@ -1307,6 +1507,70 @@ export interface components {
             lineNumber?: number | null;
             severity?: components["schemas"]["CommentSeverity"];
             message?: string | null;
+        };
+        /** @description Carries protocol data for a single review job execution attempt. */
+        ReviewJobProtocolDto: {
+            /**
+             * Format: uuid
+             * @description Unique identifier of the protocol record.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description The review job this protocol belongs to.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The attempt number (always 1 for now).
+             */
+            attemptNumber?: number;
+            /** @description Human-readable label for this protocol pass (e.g. file path or "synthesis"). */
+            label?: string | null;
+            /**
+             * Format: uuid
+             * @description The file result this protocol pass belongs to, or null.
+             */
+            fileResultId?: string | null;
+            /**
+             * Format: date-time
+             * @description When the agentic loop started.
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description When the agentic loop finished, or null if still in progress.
+             */
+            completedAt?: string | null;
+            /** @description Short outcome string (e.g. "Completed", "Failed"). */
+            outcome?: string | null;
+            /**
+             * Format: int64
+             * @description Sum of input tokens across all AI calls.
+             */
+            totalInputTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Sum of output tokens across all AI calls.
+             */
+            totalOutputTokens?: number | null;
+            /**
+             * Format: int32
+             * @description Number of loop iterations completed.
+             */
+            iterationCount?: number | null;
+            /**
+             * Format: int32
+             * @description Total tool calls made during the loop.
+             */
+            toolCallCount?: number | null;
+            /**
+             * Format: int32
+             * @description Final aggregated confidence score (0–100), or null if unavailable.
+             */
+            finalConfidence?: number | null;
+            /** @description Ordered list of events captured during the loop. */
+            events?: components["schemas"]["ProtocolEventDto"][] | null;
         };
         /** @description Response returned when a review job is accepted. */
         ReviewJobResponse: {
@@ -1382,6 +1646,5 @@ export interface components {
     headers: never;
     pathItems: never;
 }
-
 export type $defs = Record<string, never>;
 export type operations = Record<string, never>;

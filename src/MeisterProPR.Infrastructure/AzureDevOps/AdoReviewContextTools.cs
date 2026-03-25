@@ -1,10 +1,11 @@
 using System.Text;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
+using Microsoft.VisualStudio.Services.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;
 
@@ -28,7 +29,7 @@ public class AdoReviewContextTools : IReviewContextTools
     private readonly string _repositoryId;
 
     /// <summary>
-    ///     Initialises a new <see cref="AdoReviewContextTools" /> scoped to the given pull request.
+    ///     Initializes a new <see cref="AdoReviewContextTools" /> scoped to the given pull request.
     /// </summary>
     /// <param name="connectionFactory">Factory used to resolve ADO connections.</param>
     /// <param name="credentialRepository">Repository for per-client ADO credentials.</param>
@@ -72,22 +73,12 @@ public class AdoReviewContextTools : IReviewContextTools
             this._iterationId,
             cancellationToken: ct);
 
-        var summaries = new List<ChangedFileSummary>();
-        foreach (var change in changes.ChangeEntries ?? [])
-        {
-            if (change.Item?.IsFolder == true)
-            {
-                continue;
-            }
-
-            var path = change.Item?.Path ?? "";
-            if (string.IsNullOrEmpty(path))
-            {
-                continue;
-            }
-
-            summaries.Add(new ChangedFileSummary(path, MapChangeType(change.ChangeType)));
-        }
+        var summaries = (
+            from change in changes.ChangeEntries ?? []
+            where change.Item?.IsFolder != true
+            let path = change.Item?.Path ?? string.Empty
+            where !string.IsNullOrEmpty(path)
+            select new ChangedFileSummary(path, MapChangeType(change.ChangeType))).ToList();
 
         return summaries.AsReadOnly();
     }
@@ -106,7 +97,7 @@ public class AdoReviewContextTools : IReviewContextTools
                 branch,
                 cancellationToken: ct);
         }
-        catch (Microsoft.VisualStudio.Services.WebApi.VssServiceResponseException)
+        catch (VssServiceResponseException)
         {
             // Branch does not exist in this repository.
             return [];
@@ -119,17 +110,17 @@ public class AdoReviewContextTools : IReviewContextTools
         }
 
         var tree = await gitClient.GetTreeAsync(
-            this._projectId,
-            this._repositoryId,
-            commitSha,
-            null, // projectId (overload disambiguation)
-            true, // recursive
-            null, // userState
-            ct);
+            projectId: this._projectId,
+            repositoryId: this._repositoryId,
+            sha1: commitSha,
+            recursive: true,
+            fileName: null,
+            userState: null,
+            cancellationToken: ct);
 
         return (tree?.TreeEntries ?? [])
             .Where(e => e.GitObjectType == GitObjectType.Blob)
-            .Select(e => e.RelativePath ?? "")
+            .Select(e => e.RelativePath ?? string.Empty)
             .Where(p => !string.IsNullOrEmpty(p))
             .ToList()
             .AsReadOnly();
@@ -138,6 +129,11 @@ public class AdoReviewContextTools : IReviewContextTools
     /// <inheritdoc />
     public async Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct)
     {
+        if (BinaryFileDetector.IsBinary(path))
+        {
+            return $"[Binary file — content not available: {path}]";
+        }
+
         var cacheKey = $"{branch}:{path}";
 
         if (!this._fileCache.TryGetValue(cacheKey, out var content))
@@ -149,12 +145,12 @@ public class AdoReviewContextTools : IReviewContextTools
             }
             catch
             {
-                return "";
+                return string.Empty;
             }
 
             if (rawContent is null)
             {
-                return "";
+                return string.Empty;
             }
 
             var byteSize = Encoding.UTF8.GetByteCount(rawContent);
@@ -169,19 +165,14 @@ public class AdoReviewContextTools : IReviewContextTools
 
         if (string.IsNullOrEmpty(content))
         {
-            return "";
+            return string.Empty;
         }
 
         var lines = content.Split('\n');
         var clampedStart = Math.Max(1, startLine);
         var clampedEnd = Math.Min(lines.Length, endLine);
 
-        if (clampedStart > clampedEnd)
-        {
-            return "";
-        }
-
-        return string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+        return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
     }
 
     /// <summary>
@@ -218,13 +209,16 @@ public class AdoReviewContextTools : IReviewContextTools
     }
 
     /// <summary>Maps a <see cref="VersionControlChangeType" /> to the domain <see cref="ChangeType" />.</summary>
-    internal static ChangeType MapChangeType(VersionControlChangeType adoChangeType) => adoChangeType switch
+    internal static ChangeType MapChangeType(VersionControlChangeType adoChangeType)
     {
-        VersionControlChangeType.Add => ChangeType.Add,
-        VersionControlChangeType.Edit => ChangeType.Edit,
-        VersionControlChangeType.Delete => ChangeType.Delete,
-        _ => ChangeType.Edit,
-    };
+        return adoChangeType switch
+        {
+            VersionControlChangeType.Add => ChangeType.Add,
+            VersionControlChangeType.Edit => ChangeType.Edit,
+            VersionControlChangeType.Delete => ChangeType.Delete,
+            _ => ChangeType.Edit,
+        };
+    }
 
     private async Task<GitHttpClient> GetGitClientAsync(CancellationToken ct)
     {

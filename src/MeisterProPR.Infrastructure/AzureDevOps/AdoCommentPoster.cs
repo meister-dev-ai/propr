@@ -9,6 +9,9 @@ public sealed class AdoCommentPoster(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository) : IAdoCommentPoster
 {
+    /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
+    internal const int MaxCommentLength = 30_000;
+
     public async Task PostAsync(
         string organizationUrl,
         string projectId,
@@ -28,7 +31,7 @@ public sealed class AdoCommentPoster(
         var botId = connection.AuthorizedIdentity?.Id;
         var gitClient = connection.GetClient<GitHttpClient>();
 
-        // Build a map of normalised file path → changeTrackingId for inline comment anchoring.
+        // Build a map of normalized file path → changeTrackingId for inline comment anchoring.
         // changeTrackingId is required by ADO to resolve a file thread against the correct diff.
         var changes = await gitClient.GetPullRequestIterationChangesAsync(
             projectId,
@@ -36,6 +39,7 @@ public sealed class AdoCommentPoster(
             pullRequestId,
             iterationId,
             cancellationToken: cancellationToken);
+
         var changeTrackingIds = (changes.ChangeEntries ?? [])
             .Where(c => c.Item?.Path is not null)
             .ToDictionary(
@@ -65,7 +69,7 @@ public sealed class AdoCommentPoster(
 
             if (comment.FilePath is not null)
             {
-                // ADO requires paths with a leading '/'; normalise in case the AI omits it.
+                // ADO requires paths with a leading '/'; normalize in case the AI omits it.
                 normalizedFilePath = NormalizePath(comment.FilePath);
                 threadContext = new CommentThreadContext
                 {
@@ -157,9 +161,6 @@ public sealed class AdoCommentPoster(
     {
         return authorId.HasValue && botId.HasValue && authorId.Value == botId.Value;
     }
-
-    /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
-    internal const int MaxCommentLength = 30_000;
 
     private static async Task CreateThreadAsync(
         GitHttpClient gitClient,

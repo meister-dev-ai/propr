@@ -3,13 +3,16 @@ using Azure.AI.OpenAI;
 using Azure.Core;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Infrastructure.AzureDevOps.Stub;
 using MeisterProPR.Infrastructure.Configuration;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Repositories.Stub;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
@@ -17,7 +20,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using IAiReviewCore = MeisterProPR.Application.Interfaces.IAiReviewCore;
+using ApplicationIAiReviewCore = MeisterProPR.Application.Interfaces.IAiReviewCore;
+using NoOpAdoCommentPoster = MeisterProPR.Infrastructure.AzureDevOps.Stub.NoOpAdoCommentPoster;
+using StubActivePrFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubActivePrFetcher;
+using StubAdoThreadClient = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadClient;
+using StubAdoThreadReplier = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadReplier;
+using StubPullRequestFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubPullRequestFetcher;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
 
@@ -43,14 +51,21 @@ public static class InfrastructureServiceExtensions
                     // the schema is correct — suppress the spurious warning.
                     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
-            services.AddScoped<IJobRepository, PostgresJobRepository>();
-            services.AddScoped<IClientRegistry, PostgresClientRegistry>();
-            services.AddScoped<IClientAdminService, PostgresClientAdminService>();
-            services.AddScoped<ICrawlConfigurationRepository, PostgresCrawlConfigurationRepository>();
-            services.AddScoped<IClientAdoCredentialRepository, PostgresClientAdoCredentialRepository>();
+            // Protocol recorder uses a factory so it can open short-lived contexts per event write.
+            services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                options
+                    .UseNpgsql(dbConnectionString)
+                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+
+            services.AddScoped<IJobRepository, JobRepository>();
+            services.AddScoped<IClientRegistry, DbClientRegistry>();
+            services.AddScoped<IClientAdminService, ClientAdminService>();
+            services.AddScoped<ICrawlConfigurationRepository, CrawlConfigurationRepository>();
+            services.AddScoped<IClientAdoCredentialRepository, ClientAdoCredentialRepository>();
             services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
             services.AddScoped<IReviewPrScanRepository, EfReviewPrScanRepository>();
+            services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
         }
         else
         {
@@ -59,6 +74,7 @@ public static class InfrastructureServiceExtensions
             services.AddSingleton<IClientRegistry, EnvVarClientRegistry>();
             services.AddSingleton<IClientAdoCredentialRepository, NullClientAdoCredentialRepository>();
             services.AddSingleton<IReviewPrScanRepository, NullReviewPrScanRepository>();
+            services.AddSingleton<IProtocolRecorder, NullProtocolRecorder>();
         }
 
         // ADO token validation (identity verification only).
@@ -87,7 +103,7 @@ public static class InfrastructureServiceExtensions
         {
             services.AddScoped<IPullRequestFetcher, StubPullRequestFetcher>();
             services.AddScoped<IAdoCommentPoster, NoOpAdoCommentPoster>();
-            services.AddScoped<IAssignedPullRequestFetcher, StubAssignedPrFetcher>();
+            services.AddScoped<IAssignedPrFetcher, StubAssignedPrFetcher>();
             services.AddScoped<IIdentityResolver, StubIdentityResolver>();
             services.AddSingleton<IAdoReviewerManager, StubAdoReviewerManager>();
             services.AddSingleton<IActivePrFetcher, StubActivePrFetcher>();
@@ -98,9 +114,9 @@ public static class InfrastructureServiceExtensions
         {
             var credential = ResolveCredential(configuration);
             services.AddSingleton<VssConnectionFactory>(_ => new VssConnectionFactory(credential));
-            services.AddScoped<IPullRequestFetcher, AdoPullRequestFetcher>();
+            services.AddScoped<IPullRequestFetcher, AdoPrFetcher>();
             services.AddScoped<IAdoCommentPoster, AdoCommentPoster>();
-            services.AddScoped<IAssignedPullRequestFetcher, AdoAssignedPrFetcher>();
+            services.AddScoped<IAssignedPrFetcher, AdoAssignedPrFetcher>();
             services.AddHttpClient("AdoIdentity");
             services.AddScoped<IIdentityResolver>(sp =>
                 new AdoIdentityResolver(
@@ -147,6 +163,16 @@ public static class InfrastructureServiceExtensions
                 {
                     opts.MaxFileSizeBytes = maxSize;
                 }
+
+                if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_CONCURRENCY"], out var concurrency))
+                {
+                    opts.MaxFileReviewConcurrency = concurrency;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_RETRIES"], out var retries))
+                {
+                    opts.MaxFileReviewRetries = retries;
+                }
             })
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -172,7 +198,8 @@ public static class InfrastructureServiceExtensions
                     CreateChatClient(evaluatorEndpoint, evaluatorDeployment, configuration["AI_API_KEY"]));
         }
 
-        services.AddSingleton<IAiReviewCore, ToolAwareAiReviewCore>();
+        services.AddSingleton<ApplicationIAiReviewCore, ToolAwareAiReviewCore>();
+        services.AddSingleton<IFileByFileReviewOrchestrator, FileByFileReviewOrchestrator>();
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
         services.AddSingleton<IMentionAnswerService, AgentMentionAnswerService>();
 

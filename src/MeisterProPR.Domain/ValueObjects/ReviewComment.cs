@@ -24,14 +24,14 @@ public sealed record ReviewComment
     }
 
     /// <summary>Optional file path the comment refers to.</summary>
-    public string? FilePath { get; init; }
+    public string? FilePath { get; }
 
     /// <summary>Optional line number within the file.</summary>
-    public int? LineNumber { get; init; }
+    public int? LineNumber { get; }
 
     /// <summary>Severity of the comment.</summary>
-    public CommentSeverity Severity { get; init; }
+    public CommentSeverity Severity { get; }
 
     /// <summary>Comment message text.</summary>
-    public string Message { get; init; }
+    public string Message { get; }
 }

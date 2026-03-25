@@ -60,7 +60,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         await using (var db = new MeisterProPRDbContext(dbOptions))
         {
             // Migrations already applied by PostgresContainerFixture.InitializeAsync().
-            var repo = new PostgresJobRepository(db);
+            var repo = new JobRepository(db);
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -89,7 +89,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>(new[] { config }));
 
         // Step 3 — mock fetcher returning PR #42 iteration 1
-        var prFetcher = Substitute.For<IAssignedPullRequestFetcher>();
+        var prFetcher = Substitute.For<IAssignedPrFetcher>();
         prFetcher
             .GetAssignedOpenPullRequestsAsync(Arg.Any<CrawlConfigurationDto>(), Arg.Any<CancellationToken>())
             .Returns(

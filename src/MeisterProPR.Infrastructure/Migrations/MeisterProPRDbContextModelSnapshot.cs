@@ -163,6 +163,107 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("mention_reply_jobs", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProtocolEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<string>("InputTextSample")
+                        .HasMaxLength(50000)
+                        .HasColumnType("character varying(50000)")
+                        .HasColumnName("input_text_sample");
+
+                    b.Property<long?>("InputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("OutputSummary")
+                        .HasMaxLength(50000)
+                        .HasColumnType("character varying(50000)")
+                        .HasColumnName("output_summary");
+
+                    b.Property<long?>("OutputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<Guid>("ProtocolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("protocol_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProtocolId")
+                        .HasDatabaseName("ix_protocol_events_protocol_id");
+
+                    b.ToTable("protocol_events", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewFileResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comments")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("comments_json");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_path");
+
+                    b.Property<bool>("IsComplete")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_complete");
+
+                    b.Property<bool>("IsFailed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_failed");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("PerFileSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("per_file_summary");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("ix_review_file_results_job_id");
+
+                    b.HasIndex("JobId", "FilePath")
+                        .IsUnique()
+                        .HasDatabaseName("ix_review_file_results_job_file");
+
+                    b.ToTable("review_file_results", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -177,17 +278,9 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
-                    b.Property<string>("ConfidenceEvaluations")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("confidence_evaluations");
-
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
-
-                    b.Property<int?>("FinalConfidence")
-                        .HasColumnType("integer")
-                        .HasColumnName("final_confidence");
 
                     b.Property<int>("IterationId")
                         .HasColumnType("integer")
@@ -220,6 +313,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("result_json");
 
+                    b.Property<int>("RetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("retry_count");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text")
@@ -228,16 +327,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("SubmittedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("submitted_at");
-
-                    b.Property<int>("ToolCallCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("tool_call_count");
-
-                    b.Property<string>("ToolCalls")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("tool_calls");
 
                     b.HasKey("Id");
 
@@ -251,6 +340,73 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_review_jobs_pr_identity");
 
                     b.ToTable("review_jobs", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJobProtocol", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_number");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid?>("FileResultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("file_result_id");
+
+                    b.Property<int?>("FinalConfidence")
+                        .HasColumnType("integer")
+                        .HasColumnName("final_confidence");
+
+                    b.Property<int?>("IterationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("iteration_count");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("outcome");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<int?>("ToolCallCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("tool_call_count");
+
+                    b.Property<long?>("TotalInputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_input_tokens");
+
+                    b.Property<long?>("TotalOutputTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_output_tokens");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileResultId")
+                        .HasDatabaseName("ix_review_job_protocols_file_result_id");
+
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("ix_review_job_protocols_job_id");
+
+                    b.ToTable("review_job_protocols", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewPrScan", b =>
@@ -333,7 +489,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
-                        .HasSentinel(1)
                         .HasColumnName("comment_resolution_behavior");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -452,6 +607,38 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProtocolEvent", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.ReviewJobProtocol", null)
+                        .WithMany("Events")
+                        .HasForeignKey("ProtocolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewFileResult", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.ReviewJob", null)
+                        .WithMany("FileReviewResults")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJobProtocol", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.ReviewFileResult", null)
+                        .WithMany()
+                        .HasForeignKey("FileResultId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MeisterProPR.Domain.Entities.ReviewJob", null)
+                        .WithMany("Protocols")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewPrScan", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
@@ -481,6 +668,18 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJob", b =>
+                {
+                    b.Navigation("FileReviewResults");
+
+                    b.Navigation("Protocols");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJobProtocol", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewPrScan", b =>

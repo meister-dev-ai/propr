@@ -122,21 +122,20 @@ public sealed class ReviewJob
     /// </summary>
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Total number of tool calls made during the agentic review loop. Defaults to zero.</summary>
-    public int ToolCallCount { get; set; }
+    /// <summary>
+    ///     Number of retries performed for this job.
+    /// </summary>
+    public int RetryCount { get; set; } = 0;
 
     /// <summary>
-    ///     JSON-serialised array of <c>ReviewToolCall</c> records captured during the review loop.
-    ///     <see langword="null" /> when no tool calls were recorded.
+    ///     The protocol records for this job's execution attempts.
+    ///     Populated only when the job has been loaded via <c>IJobRepository.GetByIdWithProtocolsAsync</c>.
     /// </summary>
-    public string? ToolCalls { get; set; }
+    public ICollection<ReviewJobProtocol> Protocols { get; } = [];
 
     /// <summary>
-    ///     JSON-serialised array of <c>ConfidenceScore</c> records produced during the review loop.
-    ///     <see langword="null" /> when no evaluations were recorded.
+    ///     The per-file results of this review job.
+    ///     Populated only when the job has been loaded via <c>IJobRepository.GetByIdWithFileResultsAsync</c>.
     /// </summary>
-    public string? ConfidenceEvaluations { get; set; }
-
-    /// <summary>Final aggregated confidence score (0–100) at the end of the review loop, if available.</summary>
-    public int? FinalConfidence { get; set; }
+    public ICollection<ReviewFileResult> FileReviewResults { get; } = [];
 }

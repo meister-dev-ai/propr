@@ -148,7 +148,7 @@ public class AdoRepositoryInstructionFetcherTests
         }
 
         /// <inheritdoc />
-        protected internal override Task<IReadOnlyList<(string FileName, string Content)>?> FetchInstructionFilesAsync(
+        protected override Task<IReadOnlyList<(string FileName, string Content)>?> FetchInstructionFilesAsync(
             string organizationUrl,
             string projectId,
             string repositoryId,

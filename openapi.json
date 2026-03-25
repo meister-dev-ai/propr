@@ -1584,6 +1584,91 @@
         }
       }
     },
+    "/jobs/{id}/protocol": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the protocol (agentic trace) for a single review job. Requires `X-Admin-Key`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Protocols returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-Admin-Key` header.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job or protocol not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/Reviews/{jobId}": {
       "get": {
         "tags": [
@@ -2084,6 +2169,16 @@
           "errorMessage": {
             "type": "string",
             "nullable": true
+          },
+          "totalInputTokens": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "totalOutputTokens": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -2176,6 +2271,66 @@
         },
         "additionalProperties": { }
       },
+      "ProtocolEventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the event.",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProtocolEventKind"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name of the event (e.g. \"ai_call_iter_1\", \"get_changed_files\").",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "UTC timestamp when the event occurred.",
+            "format": "date-time"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "description": "Input tokens for this event, or null.",
+            "format": "int64",
+            "nullable": true
+          },
+          "outputTokens": {
+            "type": "integer",
+            "description": "Output tokens for this event, or null.",
+            "format": "int64",
+            "nullable": true
+          },
+          "inputTextSample": {
+            "type": "string",
+            "description": "First 4000 characters of input text, or null.",
+            "nullable": true
+          },
+          "outputSummary": {
+            "type": "string",
+            "description": "First 1000 characters of output, or null.",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if this event failed, or null.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Carries data for a single event in a review protocol."
+      },
+      "ProtocolEventKind": {
+        "enum": [
+          "aiCall",
+          "toolCall"
+        ],
+        "type": "string",
+        "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
+      },
       "ReviewCommentDto": {
         "type": "object",
         "properties": {
@@ -2198,6 +2353,93 @@
         },
         "additionalProperties": false,
         "description": "DTO for a single review comment."
+      },
+      "ReviewJobProtocolDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the protocol record.",
+            "format": "uuid"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "The review job this protocol belongs to.",
+            "format": "uuid"
+          },
+          "attemptNumber": {
+            "type": "integer",
+            "description": "The attempt number (always 1 for now).",
+            "format": "int32"
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label for this protocol pass (e.g. file path or \"synthesis\").",
+            "nullable": true
+          },
+          "fileResultId": {
+            "type": "string",
+            "description": "The file result this protocol pass belongs to, or null.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When the agentic loop started.",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "When the agentic loop finished, or null if still in progress.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "outcome": {
+            "type": "string",
+            "description": "Short outcome string (e.g. \"Completed\", \"Failed\").",
+            "nullable": true
+          },
+          "totalInputTokens": {
+            "type": "integer",
+            "description": "Sum of input tokens across all AI calls.",
+            "format": "int64",
+            "nullable": true
+          },
+          "totalOutputTokens": {
+            "type": "integer",
+            "description": "Sum of output tokens across all AI calls.",
+            "format": "int64",
+            "nullable": true
+          },
+          "iterationCount": {
+            "type": "integer",
+            "description": "Number of loop iterations completed.",
+            "format": "int32",
+            "nullable": true
+          },
+          "toolCallCount": {
+            "type": "integer",
+            "description": "Total tool calls made during the loop.",
+            "format": "int32",
+            "nullable": true
+          },
+          "finalConfidence": {
+            "type": "integer",
+            "description": "Final aggregated confidence score (0–100), or null if unavailable.",
+            "format": "int32",
+            "nullable": true
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProtocolEventDto"
+            },
+            "description": "Ordered list of events captured during the loop.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Carries protocol data for a single review job execution attempt."
       },
       "ReviewJobResponse": {
         "type": "object",

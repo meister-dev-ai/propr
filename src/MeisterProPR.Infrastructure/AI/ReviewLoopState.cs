@@ -12,6 +12,12 @@ internal sealed class ReviewLoopState
     /// <summary>Gets the total number of tool calls recorded so far.</summary>
     public int ToolCallCount { get; private set; }
 
+    /// <summary>Gets the cumulative input token count across all AI calls.</summary>
+    public long TotalInputTokens { get; private set; }
+
+    /// <summary>Gets the cumulative output token count across all AI calls.</summary>
+    public long TotalOutputTokens { get; private set; }
+
     /// <summary>Gets the ordered history of tool invocations.</summary>
     public List<ReviewToolCall> ToolCallHistory { get; } = [];
 
@@ -29,6 +35,15 @@ internal sealed class ReviewLoopState
     {
         this.ToolCallHistory.Add(new ReviewToolCall(toolName, arguments, result, DateTimeOffset.UtcNow));
         this.ToolCallCount++;
+    }
+
+    /// <summary>Accumulates token usage from one AI response.</summary>
+    /// <param name="inputTokens">Input token count reported by the response, or <see langword="null" /> when unavailable.</param>
+    /// <param name="outputTokens">Output token count reported by the response, or <see langword="null" /> when unavailable.</param>
+    public void AccumulateTokens(long? inputTokens, long? outputTokens)
+    {
+        this.TotalInputTokens += inputTokens ?? 0L;
+        this.TotalOutputTokens += outputTokens ?? 0L;
     }
 
     /// <summary>Records a snapshot of confidence scores produced at the current iteration.</summary>

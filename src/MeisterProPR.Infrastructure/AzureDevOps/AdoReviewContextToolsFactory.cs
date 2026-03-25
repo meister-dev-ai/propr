@@ -1,5 +1,5 @@
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.Options;
+using MeisterProPR.Application.Options;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;

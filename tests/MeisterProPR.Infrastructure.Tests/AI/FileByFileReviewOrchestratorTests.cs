@@ -1,0 +1,340 @@
+using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
+using MeisterProPR.Application.ValueObjects;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+
+namespace MeisterProPR.Infrastructure.Tests.AI;
+
+public class FileByFileReviewOrchestratorTests
+{
+    private static IOptions<AiReviewOptions> DefaultOptions()
+    {
+        return Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3 });
+    }
+
+    private static ReviewJob CreateJob()
+    {
+        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+    }
+
+    private static ChangedFile CreateFile(string path)
+    {
+        return new ChangedFile(path, ChangeType.Edit, "content", "diff");
+    }
+
+    private static PullRequest CreatePr(params ChangedFile[] files)
+    {
+        return new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            1,
+            1,
+            "Test PR",
+            null,
+            "feature/x",
+            "main",
+            files.ToList().AsReadOnly());
+    }
+
+    private static ReviewSystemContext CreateContext()
+    {
+        return new ReviewSystemContext(null, [], null);
+    }
+
+    private static ReviewResult CreateResult(string summary = "ok")
+    {
+        return new ReviewResult(summary, new List<ReviewComment>().AsReadOnly());
+    }
+
+    private static FileByFileReviewOrchestrator CreateOrchestrator(
+        IAiReviewCore aiCore,
+        IProtocolRecorder protocolRecorder,
+        IJobRepository jobRepository,
+        IChatClient chatClient,
+        IOptions<AiReviewOptions>? options = null)
+    {
+        return new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepository,
+            chatClient,
+            options ?? DefaultOptions(),
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>());
+    }
+
+    private static IJobRepository CreateJobRepo(ReviewJob? jobWithResults = null)
+    {
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(jobWithResults);
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return repo;
+    }
+
+    private static IProtocolRecorder CreateProtocolRecorder()
+    {
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Guid.NewGuid()));
+        recorder.SetCompletedAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        recorder.RecordAiCallAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return recorder;
+    }
+
+    // T033 — 3-file PR results in 3 IAiReviewCore.ReviewAsync calls
+    [Fact]
+    public async Task ReviewAsync_ThreeFilePr_CallsAiCoreThreeTimes()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var job = CreateJob();
+        var files = new[] { CreateFile("a.cs"), CreateFile("b.cs"), CreateFile("c.cs") };
+        var pr = CreatePr(files);
+
+        var repo = CreateJobRepo();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, Substitute.For<IChatClient>());
+
+        // Setup synthesis chatclient to return something
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+        var sut2 = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        await sut2.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    // T033 — A failed file does not stop remaining files
+    [Fact]
+    public async Task ReviewAsync_OneFileFails_OtherFilesStillReviewed()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        var callCount = 0;
+
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var count = Interlocked.Increment(ref callCount);
+                // Second call (index 1) fails
+                if (count == 2)
+                {
+                    throw new InvalidOperationException("AI failed for file 2");
+                }
+
+                return Task.FromResult(CreateResult($"ok-{count}"));
+            });
+
+        var job = CreateJob();
+        var files = new[] { CreateFile("a.cs"), CreateFile("b.cs"), CreateFile("c.cs") };
+        var pr = CreatePr(files);
+
+        var repo = CreateJobRepo();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        await Assert.ThrowsAsync<PartialReviewFailureException>(() =>
+            sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None));
+
+        // All 3 files were attempted despite 1 failure (concurrency = 1 processes sequentially but all run)
+        await aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    // T033 — Retry-resume skips completed files
+    [Fact]
+    public async Task ReviewAsync_RetryResume_SkipsAlreadyCompletedFiles()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var job = CreateJob();
+        var aFile = CreateFile("a.cs");
+        var bFile = CreateFile("b.cs");
+        var cFile = CreateFile("c.cs");
+        var pr = CreatePr(aFile, bFile, cFile);
+
+        // Simulate a.cs already completed from previous attempt
+        var completedResult = new ReviewFileResult(job.Id, "a.cs");
+        completedResult.MarkCompleted("a done", new List<ReviewComment>().AsReadOnly());
+
+        var jobWithResults = CreateJob();
+        // Must return the same job id
+        var repo = Substitute.For<IJobRepository>();
+        // Return job with one completed file result
+        repo.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(null));
+        // We need a ReviewJob whose FileReviewResults contains completedResult
+        // Use a sub that supports FileReviewResults collection inspection  
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var mockJob = new ReviewJob(job.Id, job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId);
+                mockJob.FileReviewResults.Add(completedResult);
+                return Task.FromResult<ReviewJob?>(mockJob);
+            });
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Only b.cs and c.cs should be reviewed (a.cs is already complete)
+        await aiCore.Received(2).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    // T034 — All file comments appear in aggregated result
+    [Fact]
+    public async Task ReviewAsync_AllFileComments_AppearInSynthesisResult()
+    {
+        var commentA = new ReviewComment("a.cs", 1, CommentSeverity.Warning, "issue in A");
+        var commentB = new ReviewComment("b.cs", 2, CommentSeverity.Error, "issue in B");
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path == "a.cs")),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("summary A", new List<ReviewComment> { commentA }.AsReadOnly()));
+        aiCore.ReviewAsync(
+                Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path == "b.cs")),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("summary B", new List<ReviewComment> { commentB }.AsReadOnly()));
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("a.cs"), CreateFile("b.cs"));
+
+        // Mock repo: initially no file results, then returns them after updates
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        Assert.Equal("synthesis summary", result.Summary);
+        Assert.Contains(result.Comments, c => c.Message == "issue in A");
+        Assert.Contains(result.Comments, c => c.Message == "issue in B");
+    }
+
+    // T034 — Synthesis fallback triggers when IChatClient throws
+    [Fact]
+    public async Task ReviewAsync_SynthesisFails_FallsBackToConcatenatedSummaries()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var pr = ci.Arg<PullRequest>();
+                var file = pr.ChangedFiles[0];
+                return Task.FromResult(new ReviewResult($"Summary for {file.Path}", new List<ReviewComment>().AsReadOnly()));
+            });
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("a.cs"), CreateFile("b.cs"));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("synthesis service unavailable"));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Fallback: summary is a concatenation of per-file summaries
+        Assert.Contains("a.cs", result.Summary);
+        Assert.Contains("b.cs", result.Summary);
+    }
+
+    private static ReviewJob BuildJobWithResults(ReviewJob original, IEnumerable<ReviewFileResult> results)
+    {
+        var job = new ReviewJob(
+            original.Id,
+            original.ClientId,
+            original.OrganizationUrl,
+            original.ProjectId,
+            original.RepositoryId,
+            original.PullRequestId,
+            original.IterationId);
+        foreach (var r in results)
+        {
+            job.FileReviewResults.Add(r);
+        }
+
+        return job;
+    }
+}

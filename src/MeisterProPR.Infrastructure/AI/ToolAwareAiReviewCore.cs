@@ -2,10 +2,10 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -40,9 +40,34 @@ public sealed partial class ToolAwareAiReviewCore(
         var opts = options.Value;
         var state = new ReviewLoopState();
 
-        var systemPrompt = ReviewPrompts.BuildSystemPrompt(systemContext);
+        string systemPrompt;
+        string userMessage;
+
+        if (systemContext.PerFileHint is { } hint)
+        {
+            // Per-file review path (US4): use file-scoped prompts
+            systemPrompt = ReviewPrompts.BuildPerFileSystemPrompt(systemContext, hint.FilePath, hint.FileIndex, hint.TotalFiles);
+            userMessage = pullRequest.ChangedFiles.Count == 1
+                ? ReviewPrompts.BuildPerFileUserMessage(
+                    pullRequest.ChangedFiles[0],
+                    hint.FileIndex,
+                    hint.TotalFiles,
+                    hint.AllChangedFiles,
+                    pullRequest.ExistingThreads ?? [],
+                    pullRequest.Title,
+                    pullRequest.SourceBranch,
+                    pullRequest.TargetBranch)
+                : ReviewPrompts.BuildUserMessage(pullRequest);
+        }
+        else
+        {
+            // Whole-PR review path (default)
+            systemPrompt = ReviewPrompts.BuildSystemPrompt(systemContext);
+            userMessage = ReviewPrompts.BuildUserMessage(pullRequest);
+        }
+
         state.Messages.Add(new ChatMessage(ChatRole.System, systemPrompt));
-        state.Messages.Add(new ChatMessage(ChatRole.User, ReviewPrompts.BuildUserMessage(pullRequest)));
+        state.Messages.Add(new ChatMessage(ChatRole.User, userMessage));
 
         var registeredTools = BuildTools(systemContext.ReviewTools, cancellationToken);
         var chatOptions = new ChatOptions
@@ -63,9 +88,32 @@ public sealed partial class ToolAwareAiReviewCore(
         {
             LogIterationStarted(logger, state.Iteration, opts.MaxIterations);
 
+            // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
+            // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
+            var inputSample = GetInputSample(state.Messages);
+
             var response = await chatClient.GetResponseAsync(state.Messages, chatOptions, cancellationToken);
+            state.Messages.AddRange(response.Messages);
             var responseMessage = response.Messages.Last();
-            state.Messages.Add(responseMessage);
+
+            var inputTokens = response.Usage?.InputTokenCount;
+            var outputTokens = response.Usage?.OutputTokenCount;
+            state.AccumulateTokens(inputTokens, outputTokens);
+
+            if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+            {
+                // When the response is function calls only, .Text is null; summarise the calls instead.
+                var outputSample = responseMessage.Text
+                                   ?? GetFunctionCallSummary(responseMessage);
+                await systemContext.ProtocolRecorder.RecordAiCallAsync(
+                    systemContext.ActiveProtocolId.Value,
+                    state.Iteration,
+                    inputTokens,
+                    outputTokens,
+                    inputSample,
+                    outputSample,
+                    cancellationToken);
+            }
 
             var functionCalls = responseMessage.Contents.OfType<FunctionCallContent>().ToList();
 
@@ -79,6 +127,16 @@ public sealed partial class ToolAwareAiReviewCore(
                     var resultText = await this.InvokeToolAsync(call, registeredTools, cancellationToken);
                     toolResultContents.Add(new FunctionResultContent(call.CallId, resultText));
                     state.RecordToolCall(call.Name ?? "", JsonSerializer.Serialize(call.Arguments), resultText);
+
+                    if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+                    {
+                        await systemContext.ProtocolRecorder.RecordToolCallAsync(
+                            systemContext.ActiveProtocolId.Value,
+                            call.Name ?? "",
+                            JsonSerializer.Serialize(call.Arguments),
+                            resultText,
+                            cancellationToken);
+                    }
                 }
 
                 state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
@@ -133,6 +191,7 @@ public sealed partial class ToolAwareAiReviewCore(
                     "Respond with valid JSON ONLY — no markdown fences, no preamble."));
             var finalOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens };
             var finalResponse = await chatClient.GetResponseAsync(state.Messages, finalOptions, cancellationToken);
+            state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
             lastTextResponse = finalResponse.Text ?? "";
 
             if (string.IsNullOrWhiteSpace(lastTextResponse))
@@ -218,6 +277,41 @@ public sealed partial class ToolAwareAiReviewCore(
         }
     }
 
+    private static string? GetInputSample(IList<ChatMessage> messages)
+    {
+        var last = messages.Count > 0 ? messages[^1] : null;
+        if (last is null)
+        {
+            return null;
+        }
+
+        // User/assistant messages with text content
+        if (last.Text is { Length: > 0 } text)
+        {
+            return text;
+        }
+
+        // Tool result messages: serialize each function result
+        var results = last.Contents.OfType<FunctionResultContent>().ToList();
+        if (results.Count > 0)
+        {
+            return string.Join("\n---\n", results.Select(r => $"[{r.CallId}]\n{r.Result}"));
+        }
+
+        return null;
+    }
+
+    private static string? GetFunctionCallSummary(ChatMessage message)
+    {
+        var calls = message.Contents.OfType<FunctionCallContent>().ToList();
+        if (calls.Count == 0)
+        {
+            return null;
+        }
+
+        return "[tool calls: " + string.Join(", ", calls.Select(c => c.Name)) + "]";
+    }
+
     private static bool TryParseAgenticResponse(string json, out AgenticResponseDto? dto)
     {
         dto = null;
@@ -285,7 +379,14 @@ public sealed partial class ToolAwareAiReviewCore(
             }
         }
 
-        return new ReviewLoopMetrics(state.ToolCallCount, toolCallsJson, confidenceJson, finalConfidence);
+        return new ReviewLoopMetrics(
+            state.ToolCallCount,
+            toolCallsJson,
+            confidenceJson,
+            finalConfidence,
+            state.TotalInputTokens,
+            state.TotalOutputTokens,
+            state.Iteration);
     }
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Agentic review loop started for PR#{PrId} iteration {IterationId} (max iterations: {MaxIterations})")]

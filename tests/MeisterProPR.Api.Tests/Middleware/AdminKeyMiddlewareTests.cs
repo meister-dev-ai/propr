@@ -83,7 +83,7 @@ public sealed class AdminKeyMiddlewareTests(AdminKeyMiddlewareTests.AdminKeyFact
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
             });
         }
     }

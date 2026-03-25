@@ -13,4 +13,7 @@ public enum ChangeType
 
     /// <summary>Removal of content.</summary>
     Delete,
+
+    /// <summary>File was moved or renamed (may also include content edits).</summary>
+    Rename,
 }

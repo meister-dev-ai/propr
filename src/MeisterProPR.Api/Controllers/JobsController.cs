@@ -1,3 +1,4 @@
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -56,8 +57,72 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
                         j.ProcessingStartedAt,
                         j.CompletedAt,
                         j.Result?.Summary,
-                        j.ErrorMessage))
+                        j.ErrorMessage,
+                        j.Protocols.Sum(p => (long?)p.TotalInputTokens),
+                        j.Protocols.Sum(p => (long?)p.TotalOutputTokens)))
                     .ToList()));
+    }
+
+    /// <summary>
+    ///     Returns the protocol (agentic trace) for a single review job. Requires <c>X-Admin-Key</c>.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The protocol records with all captured events, or 404 if the job has no protocols.</returns>
+    /// <response code="200">Protocols returned.</response>
+    /// <response code="401">Missing or invalid <c>X-Admin-Key</c> header.</response>
+    /// <response code="404">Job not found.</response>
+    [HttpGet("{id:guid}/protocol")]
+    [ProducesResponseType(typeof(IReadOnlyList<ReviewJobProtocolDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetJobProtocol(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+        }
+
+        var job = await jobRepository.GetByIdWithProtocolsAsync(id, cancellationToken);
+        if (job is null)
+        {
+            return this.NotFound();
+        }
+
+        if (!job.Protocols.Any())
+        {
+            return this.NotFound();
+        }
+
+        var dtos = job.Protocols.Select(protocol => new ReviewJobProtocolDto(
+                protocol.Id,
+                protocol.JobId,
+                protocol.AttemptNumber,
+                protocol.Label,
+                protocol.FileResultId,
+                protocol.StartedAt,
+                protocol.CompletedAt,
+                protocol.Outcome,
+                protocol.TotalInputTokens,
+                protocol.TotalOutputTokens,
+                protocol.IterationCount,
+                protocol.ToolCallCount,
+                protocol.FinalConfidence,
+                protocol.Events.Select(e => new ProtocolEventDto(
+                        e.Id,
+                        e.Kind,
+                        e.Name,
+                        e.OccurredAt,
+                        e.InputTokens,
+                        e.OutputTokens,
+                        e.InputTextSample,
+                        e.OutputSummary,
+                        e.Error))
+                    .ToList()
+                    .AsReadOnly()))
+            .ToList();
+
+        return this.Ok(dtos);
     }
 
     /// <summary>Single job item in the list response.</summary>
@@ -74,7 +139,9 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
         DateTimeOffset? ProcessingStartedAt,
         DateTimeOffset? CompletedAt,
         string? ResultSummary,
-        string? ErrorMessage);
+        string? ErrorMessage,
+        long? TotalInputTokens,
+        long? TotalOutputTokens);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);

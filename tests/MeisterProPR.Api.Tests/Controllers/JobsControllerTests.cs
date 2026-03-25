@@ -162,6 +162,90 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetJobProtocol_WithoutAdminKey_Returns401()
+    {
+        var client = factory.CreateClient();
+        var jobId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{jobId}/protocol");
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_ForNonExistentJob_Returns404()
+    {
+        var client = factory.CreateClient();
+        var jobId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{jobId}/protocol");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_ForJobWithoutProtocol_Returns404()
+    {
+        // Seed a job without a protocol
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 999, 1);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_ForJobWithProtocol_Returns200WithProtocolData()
+    {
+        // Seed a job with a protocol (using the in-memory repo's direct access)
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 888, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+            TotalInputTokens = 1500L,
+            TotalOutputTokens = 750L,
+            IterationCount = 2,
+            ToolCallCount = 3,
+            FinalConfidence = 90,
+        };
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var firstProtocol = body.RootElement.EnumerateArray().First();
+        Assert.Equal(protocol.Id.ToString(), firstProtocol.GetProperty("id").GetString());
+        Assert.Equal(job.Id.ToString(), firstProtocol.GetProperty("jobId").GetString());
+        Assert.Equal(1500L, firstProtocol.GetProperty("totalInputTokens").GetInt64());
+        Assert.Equal(750L, firstProtocol.GetProperty("totalOutputTokens").GetInt64());
+        Assert.Equal("Completed", firstProtocol.GetProperty("outcome").GetString());
+    }
+
     public sealed class JobsApiFactory : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -177,7 +261,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
             });
         }
     }

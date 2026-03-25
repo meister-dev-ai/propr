@@ -103,6 +103,20 @@ public sealed class InMemoryJobRepository : IJobRepository
     }
 
     /// <inheritdoc />
+    public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            lock (job)
+            {
+                job.RetryCount = retryCount;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
         if (this._jobs.TryGetValue(id, out var job))
@@ -142,26 +156,55 @@ public sealed class InMemoryJobRepository : IJobRepository
     }
 
     /// <inheritdoc />
-    public Task SetAgenticMetadataAsync(
-        Guid id,
-        int toolCallCount,
-        string? toolCalls,
-        string? confidenceEvaluations,
-        int? finalConfidence,
-        CancellationToken ct = default)
+    public Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job))
+        return Task.FromResult(this._jobs.GetValueOrDefault(id));
+    }
+
+    /// <inheritdoc />
+    public Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(result.JobId, out var job))
         {
             lock (job)
             {
-                job.ToolCallCount = toolCallCount;
-                job.ToolCalls = toolCalls;
-                job.ConfidenceEvaluations = confidenceEvaluations;
-                job.FinalConfidence = finalConfidence;
+                job.FileReviewResults.Add(result);
             }
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
+    {
+        // In-memory update is implicit since the object is shared, 
+        // but we ensure it's in the job's collection just in case.
+        if (this._jobs.TryGetValue(result.JobId, out var job))
+        {
+            lock (job)
+            {
+                if (!job.FileReviewResults.Contains(result))
+                {
+                    job.FileReviewResults.Add(result);
+                }
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default)
+    {
+        return Task.FromResult(this._jobs.GetValueOrDefault(id));
+    }
+
+    /// <inheritdoc />
+    [Obsolete("Use GetByIdWithProtocolsAsync instead.")]
+    public Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default)
+    {
+        return this.GetByIdWithProtocolsAsync(id, ct);
     }
 
     /// <summary>Synchronous compare-and-swap on Status. Used internally and by tests.</summary>

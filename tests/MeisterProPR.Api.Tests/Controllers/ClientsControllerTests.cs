@@ -529,13 +529,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
 
                 // Provide an in-memory EF Core DB backing IClientAdminService.
                 // The explicit InMemoryDatabaseRoot guarantees all context instances share the same store.
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
-                services.AddScoped<IClientAdminService, PostgresClientAdminService>();
+                services.AddScoped<IClientAdminService, ClientAdminService>();
 
                 // Provide a stub ICrawlConfigurationRepository for crawl config endpoints
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();

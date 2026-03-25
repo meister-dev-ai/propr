@@ -6,11 +6,11 @@ using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;
 
-/// <summary>ADO-backed implementation of <see cref="IAssignedPullRequestFetcher" />.</summary>
+/// <summary>ADO-backed implementation of <see cref="IAssignedPrFetcher" />.</summary>
 public sealed partial class AdoAssignedPrFetcher(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository,
-    ILogger<AdoAssignedPrFetcher> logger) : IAssignedPullRequestFetcher
+    ILogger<AdoAssignedPrFetcher> logger) : IAssignedPrFetcher
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 

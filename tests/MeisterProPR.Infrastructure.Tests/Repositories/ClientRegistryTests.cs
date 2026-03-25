@@ -8,13 +8,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
 /// <summary>
-///     Tests for <see cref="PostgresClientRegistry.GetReviewerIdAsync" />.
+///     Tests for <see cref="DbClientRegistry.GetReviewerIdAsync" />.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     private MeisterProPRDbContext _dbContext = null!;
-    private PostgresClientRegistry _registry = null!;
+    private DbClientRegistry _registry = null!;
 
     public async Task InitializeAsync()
     {
@@ -23,7 +23,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         await this._dbContext.Clients.ExecuteDeleteAsync();
-        this._registry = new PostgresClientRegistry(this._dbContext, NullLogger<PostgresClientRegistry>.Instance);
+        this._registry = new DbClientRegistry(this._dbContext, NullLogger<DbClientRegistry>.Instance);
     }
 
     public async Task DisposeAsync()

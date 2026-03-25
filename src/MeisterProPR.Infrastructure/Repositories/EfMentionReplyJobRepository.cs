@@ -73,6 +73,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
         }
         catch (DbUpdateConcurrencyException)
         {
+            // Concurrency conflict occurred, another process likely updated the job. Reload the entity to get the latest state.
             await dbContext.Entry(job).ReloadAsync(ct);
             return false;
         }

@@ -81,12 +81,12 @@ public sealed partial class ReviewJobWorker(
         }
         catch (OperationCanceledException)
         {
-            await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
+            await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, stoppingToken);
         }
         catch (Exception ex)
         {
             LogJobProcessingError(logger, job.Id, ex);
-            await jobRepository.SetFailedAsync(job.Id, ex.Message);
+            await jobRepository.SetFailedAsync(job.Id, ex.Message, stoppingToken);
         }
     }
 

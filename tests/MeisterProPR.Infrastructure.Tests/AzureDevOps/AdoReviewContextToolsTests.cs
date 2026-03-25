@@ -1,9 +1,8 @@
 using Azure.Core;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AzureDevOps;
-using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using NSubstitute;
@@ -128,9 +127,8 @@ public class AdoReviewContextToolsTests
     [InlineData(VersionControlChangeType.Add, ChangeType.Add)]
     [InlineData(VersionControlChangeType.Edit, ChangeType.Edit)]
     [InlineData(VersionControlChangeType.Delete, ChangeType.Delete)]
-    [InlineData(VersionControlChangeType.Rename, ChangeType.Edit)]   // unknown → Edit
-    public void MapChangeType_MapsAdoChangeTypeTodomainChangeType(
-        VersionControlChangeType adoType, ChangeType expected)
+    [InlineData(VersionControlChangeType.Rename, ChangeType.Edit)] // unknown → Edit
+    public void MapChangeType_MapsAdoChangeTypeTodomainChangeType(VersionControlChangeType adoType, ChangeType expected)
     {
         Assert.Equal(expected, AdoReviewContextTools.MapChangeType(adoType));
     }

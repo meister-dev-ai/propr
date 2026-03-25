@@ -392,11 +392,11 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
 
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
-                services.AddScoped<IClientAdminService, PostgresClientAdminService>();
+                services.AddScoped<IClientAdminService, ClientAdminService>();
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
