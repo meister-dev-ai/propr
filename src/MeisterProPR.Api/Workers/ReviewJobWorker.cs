@@ -1,17 +1,21 @@
 using System.Collections.Concurrent;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Api.Workers;
 
 /// <summary>Background worker that pulls pending jobs and runs reviews.</summary>
 public sealed partial class ReviewJobWorker(
     IServiceScopeFactory scopeFactory,
+    IOptions<WorkerOptions> workerOptions,
     ILogger<ReviewJobWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, Task> _inflight = new();
+    private DateTimeOffset _lastCleanupAt = DateTimeOffset.MinValue;
 
     /// <summary>True while the worker loop is active.</summary>
     public bool IsRunning { get; private set; }
@@ -21,12 +25,22 @@ public sealed partial class ReviewJobWorker(
     {
         this.IsRunning = true;
         LogWorkerStarted(logger);
+
+        // Clean up any jobs left stuck in Processing from a previous run before entering the main loop.
+        await this.CleanUpStuckJobsAsync(CancellationToken.None);
+
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
 
         try
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
+                // Periodic stuck-job cleanup every 10 minutes.
+                if (DateTimeOffset.UtcNow - this._lastCleanupAt >= TimeSpan.FromMinutes(10))
+                {
+                    await this.CleanUpStuckJobsAsync(stoppingToken);
+                }
+
                 using var tickScope = scopeFactory.CreateScope();
                 var jobRepository = tickScope.ServiceProvider.GetRequiredService<IJobRepository>();
 
@@ -101,4 +115,32 @@ public sealed partial class ReviewJobWorker(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "ReviewJobWorker: unhandled exception processing job {JobId}")]
     private static partial void LogJobProcessingError(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ReviewJobWorker: transitioning stuck job {JobId} (in Processing since {ProcessingStartedAt}) to Failed")]
+    private static partial void LogStuckJobDetected(ILogger logger, Guid jobId, DateTimeOffset? processingStartedAt);
+
+    /// <summary>Finds jobs stuck in <c>Processing</c> and marks them <c>Failed</c>.</summary>
+    private async Task CleanUpStuckJobsAsync(CancellationToken ct)
+    {
+        this._lastCleanupAt = DateTimeOffset.UtcNow;
+        var timeout = TimeSpan.FromMinutes(workerOptions.Value.StuckJobTimeoutMinutes);
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var jobRepository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+            var stuckJobs = await jobRepository.GetStuckProcessingJobsAsync(timeout, ct);
+            foreach (var job in stuckJobs)
+            {
+                LogStuckJobDetected(logger, job.Id, job.ProcessingStartedAt);
+                await jobRepository.SetFailedAsync(
+                    job.Id,
+                    $"Job was stuck in Processing state for more than {workerOptions.Value.StuckJobTimeoutMinutes} minutes and was automatically transitioned to Failed.",
+                    ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ReviewJobWorker: error during stuck-job cleanup");
+        }
+    }
 }

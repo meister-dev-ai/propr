@@ -130,6 +130,13 @@ public sealed class EfProtocolRecorder(
             protocol.ToolCallCount = toolCallCount;
             protocol.FinalConfidence = finalConfidence;
             await db.SaveChangesAsync(ct);
+
+            var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
+            if (job is not null)
+            {
+                job.AccumulateTokens(totalInputTokens, totalOutputTokens);
+                await db.SaveChangesAsync(ct);
+            }
         }
         catch (Exception ex)
         {

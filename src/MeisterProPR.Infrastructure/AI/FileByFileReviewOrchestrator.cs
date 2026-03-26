@@ -33,6 +33,13 @@ public sealed partial class FileByFileReviewOrchestrator(
             .ToHashSet();
 
         var filesToReview = pr.ChangedFiles.Where(f => !completedFiles.Contains(f.Path)).ToList();
+
+        // Priority ordering: largest content first; deleted/binary files last; stable secondary sort by path.
+        filesToReview = [.. filesToReview
+            .OrderBy(f => f.IsBinary || f.ChangeType == MeisterProPR.Domain.Enums.ChangeType.Delete ? 1 : 0)
+            .ThenByDescending(f => (f.FullContent?.Length ?? 0) + (f.UnifiedDiff?.Length ?? 0))
+            .ThenBy(f => f.Path)];
+
         var exceptions = new List<Exception>();
 
         if (filesToReview.Count > 0)

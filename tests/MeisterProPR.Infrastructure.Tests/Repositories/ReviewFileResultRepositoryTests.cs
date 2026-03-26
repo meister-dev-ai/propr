@@ -29,7 +29,8 @@ public sealed class ReviewFileResultRepositoryTests(PostgresContainerFixture fix
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
-        this._repo = new JobRepository(this._dbContext);
+        var contextFactory = new TestDbContextFactory(options);
+        this._repo = new JobRepository(this._dbContext, contextFactory);
     }
 
     private static ReviewJob MakeJob()

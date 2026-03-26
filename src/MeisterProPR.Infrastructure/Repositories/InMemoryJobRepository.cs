@@ -96,6 +96,16 @@ public sealed class InMemoryJobRepository : IJobRepository
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
+    {
+        var staleBeforeUtc = DateTimeOffset.UtcNow - threshold;
+        var result = (IReadOnlyList<ReviewJob>)this._jobs.Values
+            .Where(j => j.Status == JobStatus.Processing && j.ProcessingStartedAt < staleBeforeUtc)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <inheritdoc />
     public Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
         this.Add(job);

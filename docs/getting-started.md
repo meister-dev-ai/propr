@@ -15,6 +15,7 @@ run under that client's identity — or fall back to the global backend identity
 - [Running Locally (dotnet)](#running-locally-dotnet)
 - [Azure Setup](#azure-setup)
 - [Environment Variables](#environment-variables)
+- [Admin Authentication](#admin-authentication)
 - [Per-Client ADO Credentials](#per-client-ado-credentials)
 - [Client Management API](#client-management-api)
 - [API Usage](#api-usage)
@@ -46,8 +47,15 @@ PostgreSQL 17 container together.
 Create `.env` at the repo root (next to `docker-compose.yml`):
 
 ```env
-# --- Admin & client keys ---
-MEISTER_ADMIN_KEY=your-admin-key-here
+# --- Admin user bootstrap (DB mode — seeds first admin on startup) ---
+MEISTER_BOOTSTRAP_ADMIN_USER=admin
+MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password-here>
+MEISTER_JWT_SECRET=<random-string-at-least-32-chars>
+
+# --- Legacy admin key (deprecated — use JWT login instead) ---
+# MEISTER_ADMIN_KEY=your-admin-key-here
+
+# --- Client keys (bootstrap seed in DB mode) ---
 MEISTER_CLIENT_KEYS=your-client-key-here
 
 # --- AI ---
@@ -86,28 +94,54 @@ docker compose up --build
 The API is available on `https://localhost:5443` (HTTPS) and `http://localhost:8080` (HTTP).
 The container runs as a non-root user and performs its own health check every 30 seconds.
 
-### Step 3 — Register your first client
+### Step 3 — Log in to the admin API and UI
+
+On first startup the server seeds an admin account from the bootstrap env vars. Exchange
+your credentials for a JWT:
 
 ```bash
-# Replace your-admin-key-here with the value from your .env file
+curl -k -X POST https://localhost:5443/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "<strong-password-here>"}'
+```
+
+Response:
+
+```json
+{
+  "accessToken": "eyJ...",
+  "refreshToken": "VmF...",
+  "expiresIn": 900,
+  "tokenType": "Bearer"
+}
+```
+
+Store the `accessToken` and pass it as `Authorization: Bearer <token>` on all subsequent
+admin calls. The Admin UI handles this automatically. Tokens expire after 15 minutes;
+use `POST /auth/refresh` with the refresh token to obtain a new one.
+
+### Step 4 — Register your first client
+
+```bash
+# Use the accessToken from the login step
 curl -k -X POST https://localhost:5443/clients \
   -H "Content-Type: application/json" \
-  -H "X-Admin-Key: your-admin-key-here" \
+  -H "Authorization: Bearer <accessToken>" \
   -d '{"key": "my-secret-client-key", "displayName": "My First Client"}'
 ```
 
 Note the returned `id` (a UUID) — you will need it in subsequent steps.
 
-### Step 4 — (Optional) Set per-client ADO credentials
+### Step 5 — (Optional) Set per-client ADO credentials
 
 If you want a client to authenticate against Azure DevOps using its **own** service principal
 rather than the global backend identity, store the credentials:
 
 ```bash
-# <client-id> is the UUID from Step 3
+# <client-id> is the UUID from Step 4
 curl -k -X PUT https://localhost:5443/clients/<client-id>/ado-credentials \
   -H "Content-Type: application/json" \
-  -H "X-Admin-Key: your-admin-key-here" \
+  -H "Authorization: Bearer <accessToken>" \
   -d '{
     "tenantId": "<azure-tenant-id>",
     "clientId": "<service-principal-appId>",
@@ -121,10 +155,10 @@ To remove per-client credentials and revert to the global identity:
 
 ```bash
 curl -k -X DELETE https://localhost:5443/clients/<client-id>/ado-credentials \
-  -H "X-Admin-Key: your-admin-key-here"
+  -H "Authorization: Bearer <accessToken>"
 ```
 
-### Step 5 — Add a crawl configuration
+### Step 6 — Add a crawl configuration
 
 Tell the backend which Azure DevOps project to monitor for PRs assigned to a specific reviewer:
 
@@ -158,9 +192,11 @@ cd meister-propr
 # Set required config via user secrets
 dotnet user-secrets set "AI_ENDPOINT"         "https://myresource.openai.azure.com/"  --project src/MeisterProPR.Api
 dotnet user-secrets set "AI_DEPLOYMENT"       "gpt-4o"                                --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_ADMIN_KEY"   "my-admin-key"                          --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_CLIENT_KEYS" "my-secret-key"                         --project src/MeisterProPR.Api
 dotnet user-secrets set "DB_CONNECTION_STRING" "Host=localhost;Database=meisterpropr;Username=postgres;Password=devpassword" --project src/MeisterProPR.Api
+dotnet user-secrets set "MEISTER_JWT_SECRET"               "dev-jwt-secret-at-least-32-chars-ok!!" --project src/MeisterProPR.Api
+dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_USER"     "admin"                    --project src/MeisterProPR.Api
+dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_PASSWORD" "AdminPass1!"              --project src/MeisterProPR.Api
+dotnet user-secrets set "MEISTER_CLIENT_KEYS" "my-secret-key"                         --project src/MeisterProPR.Api
 
 # Global service principal for DefaultAzureCredential (if not using Azure CLI / VS auth)
 dotnet user-secrets set "AZURE_CLIENT_ID"     "<appId>"    --project src/MeisterProPR.Api
@@ -273,10 +309,17 @@ EF Core runs migrations automatically on startup — no manual schema setup is n
 |-----------------------|-------------------------------------------------------------------------------|
 | `AI_ENDPOINT`         | Azure OpenAI endpoint (`https://….openai.azure.com/`) **or** Azure AI Foundry project URL (`https://….services.ai.azure.com/api/projects/…`) |
 | `AI_DEPLOYMENT`       | Model deployment name, e.g. `gpt-4o` or `o4-mini`                            |
-| `MEISTER_ADMIN_KEY`   | Admin API key sent in the `X-Admin-Key` header when managing clients          |
 | `MEISTER_CLIENT_KEYS` | Comma-separated client keys — required when `DB_CONNECTION_STRING` is not set; acts as bootstrap seed when it is set |
 
-The application **will not start** if required variables are missing or empty.
+### Required in DB mode
+
+| Variable                           | Description                                                                       |
+|------------------------------------|-----------------------------------------------------------------------------------|
+| `MEISTER_JWT_SECRET`               | HS256 signing key for JWT tokens — minimum 32 characters, cryptographically random |
+| `MEISTER_BOOTSTRAP_ADMIN_USER`     | Username for the admin account seeded on first startup                            |
+| `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Password for the admin account seeded on first startup                            |
+
+The application **will not start** in DB mode if `MEISTER_JWT_SECRET` is absent or shorter than 32 characters, or if no admin user exists and the bootstrap variables are not set.
 
 ### Optional
 
@@ -305,6 +348,80 @@ The application **will not start** if required variables are missing or empty.
 |-----------------------------|-------------------------------------------------------------------------------------|
 | `ADO_SKIP_TOKEN_VALIDATION` | `true` — accept any non-empty `X-Ado-Token` without calling the VSS endpoint       |
 | `ADO_STUB_PR`               | `true` — use a fake PR and skip ADO comment posting; real AI endpoint still called  |
+
+---
+
+## Admin Authentication
+
+In DB mode, admin access is protected by per-user accounts rather than a shared key.
+
+### User accounts
+
+The first admin account is seeded automatically on startup from the bootstrap env vars:
+
+```bash
+MEISTER_BOOTSTRAP_ADMIN_USER=admin
+MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password>
+MEISTER_JWT_SECRET=<random-32+-char-string>
+```
+
+Additional users are managed via the `/admin/users` endpoints (requires an Admin JWT).
+
+### Login
+
+```bash
+curl -X POST https://localhost:5443/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "<password>"}'
+# → { "accessToken": "eyJ...", "refreshToken": "VmF...", "expiresIn": 900 }
+```
+
+The `accessToken` is a 15-minute JWT. Pass it as `Authorization: Bearer <token>` on admin
+requests. Use `POST /auth/refresh` with the 7-day `refreshToken` to get a new access token
+without re-entering credentials.
+
+### Personal Access Tokens (PATs)
+
+For long-running scripts or CI pipelines, generate a named PAT:
+
+```bash
+curl -X POST https://localhost:5443/users/me/pats \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{"label": "CI pipeline"}'
+# → { "id": "...", "label": "CI pipeline", "token": "mpr_abc123..." }
+```
+
+The `token` value is returned **once only**. Pass it as `X-User-Pat: mpr_abc123...` on
+subsequent requests. PATs can be revoked via `DELETE /users/me/pats/{id}`.
+
+### Client key rotation
+
+Client API keys are stored as BCrypt hashes. To rotate a key (Admin only):
+
+```bash
+curl -X POST https://localhost:5443/admin/clients/<client-id>/rotate-key \
+  -H "Authorization: Bearer <accessToken>"
+# → { "newKey": "mpr_...", "oldKeyExpiresAt": "2026-04-02T..." }
+```
+
+The old key continues to work for 7 days to allow a smooth rollover. The new plaintext key
+is returned **once only** — store it securely.
+
+### User management endpoints
+
+| Method   | Path                                   | Description                                        |
+|----------|----------------------------------------|----------------------------------------------------|
+| `POST`   | `/auth/login`                          | Exchange username + password for JWT + refresh token |
+| `POST`   | `/auth/refresh`                        | Refresh an access token                            |
+| `GET`    | `/admin/users`                         | List all users                                     |
+| `POST`   | `/admin/users`                         | Create a user                                      |
+| `DELETE` | `/admin/users/{id}`                    | Disable user + revoke all tokens and PATs          |
+| `POST`   | `/admin/users/{id}/clients`            | Assign a client role to a user                     |
+| `DELETE` | `/admin/users/{id}/clients/{clientId}` | Remove a client role assignment                    |
+| `POST`   | `/users/me/pats`                       | Generate a PAT (plaintext returned once)           |
+| `GET`    | `/users/me/pats`                       | List own PATs                                      |
+| `DELETE` | `/users/me/pats/{id}`                  | Revoke a PAT                                       |
 
 ---
 
@@ -350,7 +467,8 @@ flowchart TD
 
 ## Client Management API
 
-All client management endpoints require the `X-Admin-Key` header.
+All client management endpoints require an Admin JWT (`Authorization: Bearer <token>`) or,
+for legacy deployments, the `X-Admin-Key` header.
 
 | Method   | Path                                         | Description                                 |
 |----------|----------------------------------------------|---------------------------------------------|
@@ -364,6 +482,7 @@ All client management endpoints require the `X-Admin-Key` header.
 | `POST`   | `/clients/{id}/crawl-configurations`         | Add a crawl configuration                   |
 | `GET`    | `/clients/{id}/crawl-configurations`         | List crawl configurations for a client      |
 | `DELETE` | `/clients/{id}/crawl-configurations/{cfgId}` | Remove a crawl configuration                |
+| `POST`   | `/admin/clients/{id}/rotate-key`             | Rotate the client key (7-day grace period)  |
 
 ---
 
@@ -449,7 +568,11 @@ While processing, `status` is `"pending"` or `"processing"`. When done:
 dotnet test
 ```
 
-235 tests across four projects should pass without additional setup. The API integration tests
+478 tests across four projects should pass without additional setup. The API integration tests
 use `WebApplicationFactory` with fake credentials and in-memory stubs. Infrastructure
 integration tests spin up a real PostgreSQL 17 container automatically via Testcontainers
 (Docker or Podman required).
+
+DB-mode tests that exercise the full HTTP stack are grouped in the `PostgresApiIntegration`
+collection. They require the `DB_CONNECTION_STRING` to be set or the Testcontainers Docker
+socket to be available — they are skipped automatically in pure in-memory mode.

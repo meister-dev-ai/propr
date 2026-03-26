@@ -35,7 +35,7 @@ public sealed class AiReviewOptions
     ///     Bound to <c>AI_MAX_FILE_REVIEW_CONCURRENCY</c>.
     /// </summary>
     [Range(1, 10, ErrorMessage = "MaxFileReviewConcurrency must be between 1 and 10.")]
-    public int MaxFileReviewConcurrency { get; set; } = 2;
+    public int MaxFileReviewConcurrency { get; set; } = 3;
 
     /// <summary>
     ///     Maximum number of retries for a review job with failed file passes.
@@ -43,4 +43,18 @@ public sealed class AiReviewOptions
     /// </summary>
     [Range(1, 10, ErrorMessage = "MaxFileReviewRetries must be between 1 and 10.")]
     public int MaxFileReviewRetries { get; set; } = 3;
+
+    /// <summary>
+    ///     Maximum number of transparent retries for rate-limit (429) responses from the AI endpoint.
+    ///     Bound to <c>AI_MAX_RATE_LIMIT_RETRIES</c>.
+    /// </summary>
+    [Range(1, 10, ErrorMessage = "MaxRateLimitRetries must be between 1 and 10.")]
+    public int MaxRateLimitRetries { get; set; } = 3;
+
+    /// <summary>
+    ///     Maximum backoff delay in seconds between 429 retries.
+    ///     Bound to <c>AI_MAX_BACKOFF_SECONDS</c>.
+    /// </summary>
+    [Range(5, 120, ErrorMessage = "MaxBackoffSeconds must be between 5 and 120.")]
+    public int MaxBackoffSeconds { get; set; } = 30;
 }

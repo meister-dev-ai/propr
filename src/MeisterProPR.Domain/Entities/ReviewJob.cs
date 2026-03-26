@@ -138,4 +138,17 @@ public sealed class ReviewJob
     ///     Populated only when the job has been loaded via <c>IJobRepository.GetByIdWithFileResultsAsync</c>.
     /// </summary>
     public ICollection<ReviewFileResult> FileReviewResults { get; } = [];
+
+    /// <summary>Running aggregate of input tokens across all protocol passes.</summary>
+    public long? TotalInputTokensAggregated { get; private set; }
+
+    /// <summary>Running aggregate of output tokens across all protocol passes.</summary>
+    public long? TotalOutputTokensAggregated { get; private set; }
+
+    /// <summary>Increments the token aggregates. Called after each protocol pass completes.</summary>
+    public void AccumulateTokens(long inputTokens, long outputTokens)
+    {
+        this.TotalInputTokensAggregated = (this.TotalInputTokensAggregated ?? 0) + inputTokens;
+        this.TotalOutputTokensAggregated = (this.TotalOutputTokensAggregated ?? 0) + outputTokens;
+    }
 }

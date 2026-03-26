@@ -8,7 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>Implementation of <see cref="IJobRepository" /> using EF Core.</summary>
-public sealed class JobRepository(MeisterProPRDbContext dbContext) : IJobRepository
+public sealed class JobRepository(
+    MeisterProPRDbContext dbContext,
+    IDbContextFactory<MeisterProPRDbContext> contextFactory) : IJobRepository
 {
     /// <inheritdoc />
     public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
@@ -99,7 +101,7 @@ public sealed class JobRepository(MeisterProPRDbContext dbContext) : IJobReposit
 
         var total = await query.CountAsync(ct);
         var items = await query
-            .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber).Take(1))
+            .Include(j => j.Protocols)
             .OrderByDescending(j => j.SubmittedAt)
             .Skip(offset)
             .Take(limit)
@@ -188,17 +190,27 @@ public sealed class JobRepository(MeisterProPRDbContext dbContext) : IJobReposit
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     Uses a short-lived <see cref="MeisterProPRDbContext" /> from the factory so concurrent
+    ///     calls from parallel file-review tasks cannot share the same context instance.
+    /// </remarks>
     public async Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
     {
-        dbContext.ReviewFileResults.Add(result);
-        await dbContext.SaveChangesAsync(ct);
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.ReviewFileResults.Add(result);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     Uses a short-lived <see cref="MeisterProPRDbContext" /> from the factory so concurrent
+    ///     calls from parallel file-review tasks cannot share the same context instance.
+    /// </remarks>
     public async Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
     {
-        dbContext.ReviewFileResults.Update(result);
-        await dbContext.SaveChangesAsync(ct);
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.ReviewFileResults.Update(result);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
@@ -208,6 +220,15 @@ public sealed class JobRepository(MeisterProPRDbContext dbContext) : IJobReposit
             .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber))
             .ThenInclude(p => p.Events.OrderBy(e => e.OccurredAt))
             .FirstOrDefaultAsync(j => j.Id == id, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
+    {
+        var staleBeforeUtc = DateTimeOffset.UtcNow - threshold;
+        return await dbContext.ReviewJobs
+            .Where(j => j.Status == JobStatus.Processing && j.ProcessingStartedAt < staleBeforeUtc)
+            .ToListAsync(ct);
     }
 
     /// <inheritdoc />

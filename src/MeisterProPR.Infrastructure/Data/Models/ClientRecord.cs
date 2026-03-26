@@ -23,4 +23,24 @@ public sealed class ClientRecord
 
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
+
+    // --- Key hardening fields (T046 / US6) ---
+
+    /// <summary>BCrypt hash of the current active key. When set, used instead of legacy plaintext <see cref="Key"/>.</summary>
+    public string? KeyHash { get; set; }
+
+    /// <summary>When the current key expires (null = never).</summary>
+    public DateTimeOffset? KeyExpiresAt { get; set; }
+
+    /// <summary>BCrypt hash of the previous key, valid during the grace period after rotation.</summary>
+    public string? PreviousKeyHash { get; set; }
+
+    /// <summary>When the previous key's grace period ends.</summary>
+    public DateTimeOffset? PreviousKeyExpiresAt { get; set; }
+
+    /// <summary>When the key was last rotated.</summary>
+    public DateTimeOffset? KeyRotatedAt { get; set; }
+
+    /// <summary>Bitmask of allowed API scopes for keys belonging to this client. Defaults to All.</summary>
+    public int AllowedScopes { get; set; } = (int)ClientKeyScope.All;
 }

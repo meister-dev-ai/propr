@@ -6,6 +6,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.AzureDevOps;
 using MeisterProPR.Infrastructure.AzureDevOps.Stub;
 using MeisterProPR.Infrastructure.Configuration;
@@ -66,6 +67,16 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
             services.AddScoped<IReviewPrScanRepository, EfReviewPrScanRepository>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
+
+            // User auth repositories (DB mode only)
+            services.AddScoped<IUserRepository, AppUserRepository>();
+            services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+            services.AddScoped<IUserPatRepository, UserPatRepository>();
+
+            // Auth services
+            services.AddSingleton<IPasswordHashService, PasswordHashService>();
+            services.AddSingleton<IJwtTokenService, JwtTokenService>();
+            services.AddTransient<AdminBootstrapService>();
         }
         else
         {
@@ -135,10 +146,15 @@ public static class InfrastructureServiceExtensions
         var aiDeployment = configuration["AI_DEPLOYMENT"]
                            ?? throw new InvalidOperationException("AI_DEPLOYMENT environment variable is not set.");
 
-        services.AddSingleton<IChatClient>(_ => CreateChatClient(
+        services.AddKeyedSingleton<IChatClient>("base", (_, _) => CreateChatClient(
             aiEndpoint,
             aiDeployment,
             configuration["AI_API_KEY"]));
+
+        services.AddSingleton<IChatClient>(sp => new ResilientChatClientDecorator(
+            sp.GetRequiredKeyedService<IChatClient>("base"),
+            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<ILogger<ResilientChatClientDecorator>>()));
 
         // AiReviewOptions — bound from individual env vars (not a config section)
         services.AddOptions<AiReviewOptions>()
@@ -172,6 +188,28 @@ public static class InfrastructureServiceExtensions
                 if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_RETRIES"], out var retries))
                 {
                     opts.MaxFileReviewRetries = retries;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_RATE_LIMIT_RETRIES"], out var rateLimitRetries))
+                {
+                    opts.MaxRateLimitRetries = rateLimitRetries;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_BACKOFF_SECONDS"], out var backoff))
+                {
+                    opts.MaxBackoffSeconds = backoff;
+                }
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // WorkerOptions — bound from individual env vars
+        services.AddOptions<WorkerOptions>()
+            .Configure(opts =>
+            {
+                if (int.TryParse(configuration["WORKER_STUCK_JOB_TIMEOUT_MINUTES"], out var timeout))
+                {
+                    opts.StuckJobTimeoutMinutes = timeout;
                 }
             })
             .ValidateDataAnnotations()

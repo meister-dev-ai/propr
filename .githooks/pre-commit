@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# pre-commit hook: enforces format, build, and test checks before every commit.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+# Or run: bash scripts/setup-hooks.sh / scripts/setup-hooks.ps1
+set -euo pipefail
+
+# Skip if no C# files are staged (avoids the overhead on docs-only commits).
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '\.cs$'; then
+    exit 0
+fi
+
+# ── 1. Format ────────────────────────────────────────────────────────────────
+
+echo "pre-commit: running dotnet format check..."
+
+if ! dotnet format --verify-no-changes 2>&1; then
+    echo ""
+    echo "pre-commit: FAILED -- code style violations detected."
+    echo "Run 'dotnet format' to fix them, re-stage the changed files, and commit again."
+    exit 1
+fi
+
+echo "pre-commit: format check passed."
+
+# ── 2. Build ─────────────────────────────────────────────────────────────────
+
+echo "pre-commit: running dotnet build..."
+
+if ! dotnet build --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
+    echo ""
+    echo "pre-commit: FAILED -- build errors detected."
+    echo "Fix the compilation errors and commit again."
+    exit 1
+fi
+
+echo "pre-commit: build passed."
+
+# ── 3. Test ──────────────────────────────────────────────────────────────────
+
+echo "pre-commit: running dotnet test..."
+
+if ! dotnet test --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
+    echo ""
+    echo "pre-commit: FAILED -- one or more tests failed."
+    echo "Fix the failing tests and commit again."
+    exit 1
+fi
+
+echo "pre-commit: all tests passed."
+

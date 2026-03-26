@@ -1,11 +1,13 @@
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Workers;
@@ -16,6 +18,8 @@ public class ReviewJobWorkerTests
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, 1);
     }
+
+    private static IOptions<WorkerOptions> DefaultWorkerOptions => Options.Create(new WorkerOptions());
 
     private static IServiceScopeFactory CreateScopeFactory(IJobRepository? repo = null)
     {
@@ -37,7 +41,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
 
         using var cts = new CancellationTokenSource();
 
@@ -63,7 +67,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
 
         Assert.False(worker.IsRunning);
     }
@@ -88,7 +92,7 @@ public class ReviewJobWorkerTests
         // causing SetFailed to be called on the job.
         sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
 
-        var worker = new ReviewJobWorker(scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
@@ -108,7 +112,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
 
         using var cts = new CancellationTokenSource();
         _ = worker.StartAsync(cts.Token);
@@ -142,7 +146,7 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, logger);
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         _ = worker.StartAsync(cts.Token);

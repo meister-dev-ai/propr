@@ -28,6 +28,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/pats',
+      name: 'pats',
+      component: () => import('@/views/PatsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/users',
+      name: 'users',
+      component: () => import('@/views/UsersView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/:id',
       name: 'client-detail',
       component: () => import('@/views/ClientDetailView.vue'),
@@ -37,9 +49,12 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const { isAuthenticated } = useSession()
+  const { isAuthenticated, isAdmin } = useSession()
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     return { name: 'login' }
+  }
+  if (to.meta.requiresAdmin && !isAdmin.value) {
+    return { name: 'clients' }
   }
   if (to.name === 'login' && isAuthenticated.value) {
     return { name: 'clients' }

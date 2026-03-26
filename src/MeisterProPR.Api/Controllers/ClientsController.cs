@@ -644,6 +644,46 @@ public sealed partial class ClientsController(
                 client.CreatedAt,
                 client.ReviewerId));
     }
+
+    /// <summary>
+    ///     Rotates the client key: generates a new random key, BCrypt-hashes it, and retains the old
+    ///     hash with a 7-day grace period. The new plaintext key is returned once. Requires <c>X-Admin-Key</c>.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">New key info returned.</response>
+    /// <response code="401">Missing or invalid admin credentials.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpPost("admin/clients/{clientId:guid}/rotate-key")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RotateKey(Guid clientId, CancellationToken ct = default)
+    {
+        if (this.HttpContext.Items["IsAdmin"] is not true)
+        {
+            return this.Unauthorized(new { error = "Admin credentials required." });
+        }
+
+        var registry = clientRegistry as MeisterProPR.Infrastructure.Repositories.DbClientRegistry;
+        if (registry is null)
+        {
+            return this.StatusCode(StatusCodes.Status501NotImplemented, new { error = "Key rotation is only available in database mode." });
+        }
+
+        var gracePeriod = TimeSpan.FromDays(7);
+        var newKey = await registry.RotateKeyAsync(clientId, gracePeriod, ct);
+        if (newKey is null)
+        {
+            return this.NotFound();
+        }
+
+        return this.Ok(new
+        {
+            newKey,
+            oldKeyExpiresAt = DateTimeOffset.UtcNow.Add(gracePeriod),
+        });
+    }
 }
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>

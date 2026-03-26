@@ -14,13 +14,13 @@
                     name="displayName"
                     type="text"
                 />
-                <button :disabled="saving" class="save-btn" @click="saveDisplayName">Save</button>
+                <button :disabled="saving" class="save-btn btn-primary" @click="saveDisplayName">Save</button>
                 <span v-if="saveError" class="error">{{ saveError }}</span>
             </section>
 
             <section class="status-section">
                 <span>Status: {{ client.isActive ? 'Active' : 'Inactive' }}</span>
-                <button :disabled="saving" class="toggle-status-btn" @click="toggleStatus">
+                <button :disabled="saving" class="toggle-status-btn" :class="client.isActive ? 'btn-danger' : 'btn-primary'" @click="toggleStatus">
                     {{ client.isActive ? 'Disable' : 'Enable' }}
                 </button>
             </section>
@@ -52,7 +52,7 @@
                         type="text"
                     />
                 </div>
-                <button :disabled="resolving" class="resolve-btn" @click="resolveIdentity">
+                <button :disabled="resolving" class="resolve-btn btn-secondary" @click="resolveIdentity">
                     {{ resolving ? 'Resolving…' : 'Resolve' }}
                 </button>
                 <span v-if="resolveError" class="error">{{ resolveError }}</span>
@@ -72,7 +72,7 @@
                 <button
                     v-if="selectedIdentityId"
                     :disabled="saving"
-                    class="save-btn"
+                    class="save-btn btn-primary"
                     @click="saveReviewerId"
                 >
                     Save Reviewer Identity
@@ -283,12 +283,13 @@ async function handleDelete() {
 }
 
 .success {
-    color: green;
+    color: var(--color-success);
     margin-left: 0.5rem;
+    font-weight: 500;
 }
 
 .muted {
-    color: #888;
+    color: var(--color-text-muted);
 }
 
 .current-reviewer {
@@ -306,27 +307,34 @@ async function handleDelete() {
 .identity-list {
     list-style: none;
     padding: 0;
-    margin: 0.5rem 0;
+    margin: 1rem 0;
 }
 
 .identity-list li {
-    padding: 0.4rem 0.6rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin-bottom: 0.25rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
     cursor: pointer;
     display: flex;
     flex-direction: column;
+    background: var(--color-bg);
+    transition: all 0.2s;
+}
+
+.identity-list li:hover {
+    border-color: var(--color-text-muted);
 }
 
 .identity-list li.selected {
-    border-color: #007bff;
-    background: #e8f0fe;
+    border-color: var(--color-accent);
+    background: var(--color-surface);
 }
 
 .guid {
-    font-size: 0.75rem;
-    color: #555;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
     font-family: monospace;
+    margin-top: 0.25rem;
 }
 </style>

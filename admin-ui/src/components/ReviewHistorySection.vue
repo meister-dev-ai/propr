@@ -36,13 +36,20 @@
                             :class="rowClass(item)"
                         >
                             <td class="status-cell">
-                                <span :class="statusBadgeClass(item.status)">{{ item.status }}</span>
+                                <div style="display: flex; align-items: center; gap: 0.5rem">
+                                    <span :class="statusBadgeClass(item.status)">
+                                        {{ item.status === 'processing' ? `Pass ${item.iterationId ?? 1}` : item.status }}
+                                    </span>
+                                    <ProgressOrb v-if="item.status === 'processing'" />
+                                </div>
                             </td>
                             <td class="date-cell">{{ formatItemDate(item) }}</td>
                             <td class="iter-cell">#{{ item.iterationId }}</td>
-                            <td class="tokens-cell">{{ formatTokens(item.totalInputTokens) }}</td>
-                            <td class="tokens-cell">{{ formatTokens(item.totalOutputTokens) }}</td>
-                            <td class="summary-cell">{{ item.resultSummary ?? item.errorMessage ?? '—' }}</td>
+                            <td class="tokens-cell fat-tokens">{{ formatTokens(item.totalInputTokens) }}</td>
+                            <td class="tokens-cell fat-tokens">{{ formatTokens(item.totalOutputTokens) }}</td>
+                            <td class="summary-cell summary-truncate" @click="openSummaryModal(item)">
+                                {{ item.resultSummary ?? item.errorMessage ?? '—' }}
+                            </td>
                             <td class="protocol-cell">
                                 <RouterLink :to="`/jobs/${item.id}/protocol`" class="protocol-link">
                                     Protocol
@@ -59,12 +66,20 @@
                 </table>
             </section>
         </template>
+        
+        <ModalDialog v-model:isOpen="isSummaryModalOpen" title="Review Summary">
+            <div class="summary-modal-content">
+                {{ selectedSummary }}
+            </div>
+        </ModalDialog>
     </div>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import ModalDialog from '@/components/ModalDialog.vue'
+import ProgressOrb from '@/components/ProgressOrb.vue'
 import { createAdminClient } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
@@ -88,8 +103,21 @@ const loading = ref(false)
 const error = ref('')
 const groups = ref<PrGroup[]>([])
 
-onMounted(async () => {
-    loading.value = true
+const isSummaryModalOpen = ref(false)
+const selectedSummary = ref('')
+
+function openSummaryModal(item: JobListItem) {
+    const text = item.resultSummary ?? item.errorMessage
+    if (text && text.trim() !== '') {
+        selectedSummary.value = text
+        isSummaryModalOpen.value = true
+    }
+}
+
+let pollInterval: ReturnType<typeof setInterval> | null = null
+
+async function loadJobs(showLoadingIndicator = false) {
+    if (showLoadingIndicator) loading.value = true
     try {
         const { data } = await createAdminClient().GET('/jobs', {
             params: {
@@ -101,11 +129,27 @@ onMounted(async () => {
         })
         const items = (data as { items?: JobListItem[] })?.items ?? []
         groups.value = buildGroups(items)
+        
+        const isProcessing = items.some(i => i.status === 'processing' || i.status === 'pending')
+        if (isProcessing && !pollInterval) {
+            pollInterval = setInterval(() => loadJobs(false), 3000)
+        } else if (!isProcessing && pollInterval) {
+            clearInterval(pollInterval)
+            pollInterval = null
+        }
     } catch {
-        error.value = 'Failed to load review history.'
+        if (showLoadingIndicator) error.value = 'Failed to load review history.'
     } finally {
-        loading.value = false
+        if (showLoadingIndicator) loading.value = false
     }
+}
+
+onMounted(() => {
+    loadJobs(true)
+})
+
+onUnmounted(() => {
+    if (pollInterval) clearInterval(pollInterval)
 })
 
 function buildGroups(items: JobListItem[]): PrGroup[] {
@@ -203,19 +247,21 @@ function statusBadgeClass(status: JobStatus | undefined): string {
 <style scoped>
 .empty-state,
 .loading {
-    color: #888;
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
 .error {
-    color: #c00;
+    color: var(--color-danger);
 }
 
 .pr-group {
     margin-bottom: 2rem;
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg);
     overflow: hidden;
+    padding: 0;
 }
 
 .pr-group-header {
@@ -223,25 +269,19 @@ function statusBadgeClass(status: JobStatus | undefined): string {
     align-items: center;
     gap: 0.75rem;
     margin: 0;
-    padding: 0.6rem 1rem;
-    background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--color-border);
     font-size: 1rem;
 }
 
 .pr-link {
-    font-weight: bold;
-    color: #0366d6;
-    text-decoration: none;
-}
-
-.pr-link:hover {
-    text-decoration: underline;
+    font-weight: 600;
 }
 
 .repo-name {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--color-text-muted);
     font-weight: normal;
 }
 
@@ -253,15 +293,15 @@ function statusBadgeClass(status: JobStatus | undefined): string {
 
 .review-table th,
 .review-table td {
-    padding: 0.5rem 1rem;
+    padding: 0.75rem 1rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .review-table th {
-    background: #fafafa;
+    background: rgba(255, 255, 255, 0.01);
     font-weight: 600;
-    color: #444;
+    color: var(--color-text-muted);
 }
 
 .review-table tbody tr:last-child td {
@@ -275,79 +315,103 @@ function statusBadgeClass(status: JobStatus | undefined): string {
 
 .status-badge {
     display: inline-block;
-    padding: 0.1rem 0.5rem;
-    border-radius: 0.75rem;
-    font-size: 0.78rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
     font-weight: 600;
     text-transform: capitalize;
 }
 
 .status-completed {
-    background: #d1fae5;
-    color: #065f46;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--color-success);
 }
 
 .status-processing {
-    background: #dbeafe;
-    color: #1e40af;
+    background: rgba(34, 211, 238, 0.15);
+    color: var(--color-accent);
+    animation: pulseBadge 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseBadge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 .status-pending {
-    background: #fef9c3;
-    color: #713f12;
+    background: rgba(161, 161, 170, 0.15);
+    color: var(--color-text-muted);
 }
 
 .status-failed {
-    background: #fee2e2;
-    color: #991b1b;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-danger);
 }
 
 /* Row variants */
 .row-failed td {
-    background: #fff5f5;
+    background: rgba(239, 68, 68, 0.05);
 }
 
 .row-processing td {
-    background: #f0f7ff;
+    background: rgba(34, 211, 238, 0.05);
 }
 
 .row-pending td {
-    background: #fffbeb;
+    background: rgba(255, 255, 255, 0.02);
 }
 
 /* Totals aggregate row */
 .totals-row td {
-    background: #f5f5f5;
-    border-top: 2px solid #ddd;
+    background: rgba(255, 255, 255, 0.03);
+    border-top: 2px solid var(--color-border);
     font-weight: 600;
-    color: #333;
+    color: var(--color-text);
 }
 
 .totals-label {
-    color: #555;
+    color: var(--color-text-muted);
     font-size: 0.85rem;
 }
 
 .date-cell {
     white-space: nowrap;
-    color: #555;
+    color: var(--color-text-muted);
     min-width: 14rem;
 }
 
 .iter-cell {
     white-space: nowrap;
-    color: #777;
+    color: var(--color-text-muted);
     width: 5rem;
 }
 
 .summary-cell {
-    color: #333;
+    color: var(--color-text);
+}
+
+.summary-truncate {
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.summary-truncate:hover {
+    color: var(--color-accent);
+}
+
+.summary-modal-content {
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .tokens-cell {
     text-align: right;
     font-family: monospace;
-    color: #555;
+    color: var(--color-text-muted);
     white-space: nowrap;
 }
 
@@ -357,11 +421,6 @@ function statusBadgeClass(status: JobStatus | undefined): string {
 
 .protocol-link {
     font-size: 0.82rem;
-    color: #0366d6;
-    text-decoration: none;
-}
-
-.protocol-link:hover {
-    text-decoration: underline;
+    font-weight: 500;
 }
 </style>

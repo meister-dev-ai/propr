@@ -58,8 +58,8 @@ public sealed class JobsController(IJobRepository jobRepository) : ControllerBas
                         j.CompletedAt,
                         j.Result?.Summary,
                         j.ErrorMessage,
-                        j.Protocols.Sum(p => (long?)p.TotalInputTokens),
-                        j.Protocols.Sum(p => (long?)p.TotalOutputTokens)))
+                        j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalInputTokens),
+                        j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalOutputTokens)))
                     .ToList()));
     }
 

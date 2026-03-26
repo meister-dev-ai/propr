@@ -98,6 +98,9 @@ try
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
 
     builder.Services.AddInfrastructure(builder.Configuration);
+
+    // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret)
+    builder.Services.AddDataProtection();
     builder.Services.AddTransient<ReviewOrchestrationService>();
 
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
@@ -267,6 +270,13 @@ try
                 "Startup recovery: job {JobId} for PR#{PrId} was stale (Processing); reset to Pending",
                 job.Id,
                 job.PullRequestId);
+        }
+
+        // Seed bootstrap admin user if none exists
+        var bootstrapService = scope.ServiceProvider.GetService<MeisterProPR.Infrastructure.Auth.AdminBootstrapService>();
+        if (bootstrapService is not null)
+        {
+            await bootstrapService.SeedAsync();
         }
     }
 

@@ -162,7 +162,10 @@ public sealed partial class ToolAwareAiReviewCore(
                 LogConfidenceSnapshot(logger, state.Iteration, scores.Count);
 
                 var allMeetThreshold = scores.Count > 0 && scores.All(s => s.Score >= opts.ConfidenceThreshold);
-                if (allMeetThreshold || dto.LoopComplete)
+                // investigation_complete: false means the AI explicitly signals it needs more tool calls;
+                // honour that regardless of confidence scores. Only LoopComplete is an unconditional escape hatch.
+                var investigationIncomplete = dto.InvestigationComplete == false;
+                if (dto.LoopComplete || (allMeetThreshold && !investigationIncomplete))
                 {
                     LogLoopComplete(logger, state.Iteration, allMeetThreshold, dto.LoopComplete);
                     break;
@@ -188,6 +191,7 @@ public sealed partial class ToolAwareAiReviewCore(
                     ChatRole.User,
                     "Iteration limit reached. Please provide your final review now as a JSON object " +
                     "with summary, comments, confidence_evaluations, and loop_complete: true. " +
+                    "Set investigation_complete to true. " +
                     "Respond with valid JSON ONLY — no markdown fences, no preamble."));
             var finalOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens };
             var finalResponse = await chatClient.GetResponseAsync(state.Messages, finalOptions, cancellationToken);
@@ -423,7 +427,8 @@ public sealed partial class ToolAwareAiReviewCore(
         string? Summary,
         List<ReviewCommentDto>? Comments,
         List<ConfidenceEvaluationDto>? ConfidenceEvaluations,
-        bool LoopComplete);
+        bool LoopComplete,
+        bool? InvestigationComplete);  // null = absent = treated as complete (backward compat)
 
     private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message);
 

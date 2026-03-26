@@ -56,6 +56,31 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("custom_system_message")
             .IsRequired(false);
 
+        // Key hardening (US6)
+        builder.Property(c => c.KeyHash)
+            .HasColumnName("key_hash")
+            .IsRequired(false);
+
+        builder.Property(c => c.KeyExpiresAt)
+            .HasColumnName("key_expires_at")
+            .IsRequired(false);
+
+        builder.Property(c => c.PreviousKeyHash)
+            .HasColumnName("previous_key_hash")
+            .IsRequired(false);
+
+        builder.Property(c => c.PreviousKeyExpiresAt)
+            .HasColumnName("previous_key_expires_at")
+            .IsRequired(false);
+
+        builder.Property(c => c.KeyRotatedAt)
+            .HasColumnName("key_rotated_at")
+            .IsRequired(false);
+
+        builder.Property(c => c.AllowedScopes)
+            .HasColumnName("allowed_scopes")
+            .HasDefaultValue((int)ClientKeyScope.All);
+
         builder.HasIndex(c => c.Key)
             .IsUnique()
             .HasDatabaseName("ix_clients_key");

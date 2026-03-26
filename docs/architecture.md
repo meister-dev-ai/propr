@@ -4,7 +4,7 @@
 
 - [System Context](#system-context)
 - [Request Flow: POST /reviews](#request-flow-post-reviews)
-- [Clean Architecture Layers](#clean-architecture-layers)
+- [Authentication Flow](#authentication-flow)
 - [Job State Machine](#job-state-machine)
 - [Credential Resolution](#credential-resolution)
 - [PR Crawler Flow](#pr-crawler-flow)
@@ -79,6 +79,58 @@ sequenceDiagram
 
 ---
 
+## Authentication Flow
+
+How Admin UI and API callers obtain and renew credentials.
+
+```mermaid
+sequenceDiagram
+    actor User as User / Admin UI
+    participant Auth as AuthController
+    participant MW as AdminKeyMiddleware
+    participant JT as JwtTokenService
+    participant UR as UserRepository
+    participant PR as UserPatRepository
+
+    User->>Auth: POST /auth/login { username, password }
+    Auth->>UR: GetByUsernameAsync()
+    UR-->>Auth: AppUser (BCrypt password hash)
+    Auth->>Auth: BCrypt.Verify(password, hash)
+    Auth->>JT: GenerateAccessToken(user)
+    Auth->>UR: persist RefreshToken (SHA-256 hash, 7 days)
+    Auth-->>User: { accessToken (15 min), refreshToken (7 days) }
+
+    Note over User,Auth: Silent refresh within 60 s of expiry
+
+    User->>Auth: POST /auth/refresh { refreshToken }
+    Auth->>UR: GetActiveByHashAsync(sha256(token))
+    Auth->>JT: GenerateAccessToken(user)
+    Auth-->>User: { accessToken (15 min) }
+```
+
+### AdminKeyMiddleware — evaluation order
+
+```mermaid
+flowchart TD
+    REQ([Inbound Request]) --> B1
+
+    B1{"Authorization: Bearer JWT?"}-- valid JWT --> SET_JWT["Set UserId + IsAdmin from claims"]
+    B1 -- no/invalid --> B2
+
+    B2{"X-User-Pat header?"}-- PAT found & BCrypt match --> SET_PAT["Set UserId + IsAdmin from user record"]
+    B2 -- no/invalid --> B3
+
+    B3{"X-Admin-Key header?\n(legacy — deprecated)"}-- matches MEISTER_ADMIN_KEY --> WARN["Log deprecation warning\nSet IsAdmin = true"]
+    B3 -- no --> DEFAULT["IsAdmin = false"]
+
+    SET_JWT --> NEXT([next()])
+    SET_PAT --> NEXT
+    WARN --> NEXT
+    DEFAULT --> NEXT
+```
+
+---
+
 ## Job State Machine
 
 All possible states of a `ReviewJob` and their transitions.
@@ -90,13 +142,19 @@ stateDiagram-v2
     Processing --> Completed : AI review posted to ADO
     Processing --> Failed : Exception / ADO error
     Failed --> Pending : Retry (if retry count < max)
+    Processing --> Failed : Stuck — no heartbeat > StuckJobTimeoutMinutes
     Completed --> [*]
     Failed --> [*] : Max retries exceeded
 
     note right of Processing
         AdoPullRequestFetcher
-        AgentAiReviewCore
+        FileByFileReviewOrchestrator
         AdoCommentPoster
+    end note
+
+    note left of Failed
+        ReviewJobWorker cleanup
+        runs on startup + every 10 min
     end note
 ```
 
@@ -161,9 +219,15 @@ PostgreSQL entities and their relationships.
 erDiagram
     Client {
         uuid Id PK
-        string Key
+        string Key "legacy plaintext (deprecated)"
+        string KeyHash "BCrypt hash of active key"
+        string PreviousKeyHash "BCrypt hash (7-day grace period after rotation)"
+        datetime KeyExpiresAt
+        datetime PreviousKeyExpiresAt
+        datetime KeyRotatedAt
+        int AllowedScopes
         string DisplayName
-        bool IsEnabled
+        bool IsActive
         datetime CreatedAt
     }
 
@@ -172,7 +236,7 @@ erDiagram
         uuid ClientId FK
         string TenantId
         string AzureClientId
-        string Secret
+        string Secret "encrypted via ASP.NET Data Protection"
     }
 
     CrawlConfiguration {
@@ -180,7 +244,6 @@ erDiagram
         uuid ClientId FK
         string OrganizationUrl
         string ProjectId
-        string ReviewerDisplayName
         int CrawlIntervalSeconds
         bool IsActive
     }
@@ -198,9 +261,72 @@ erDiagram
         datetime CompletedAt
         jsonb Result
         int RetryCount
+        long TotalInputTokensAggregated
+        long TotalOutputTokensAggregated
+    }
+
+    ReviewJobProtocol {
+        uuid Id PK
+        uuid JobId FK
+        uuid FileResultId FK
+        int PassNumber
+        int InputTokens
+        int OutputTokens
+    }
+
+    ReviewFileResult {
+        uuid Id PK
+        uuid JobId FK
+        string FilePath
+        bool IsComplete
+        bool IsFailed
+    }
+
+    AppUser {
+        uuid Id PK
+        string Username "unique, case-insensitive"
+        string PasswordHash "BCrypt"
+        string GlobalRole "Admin / User"
+        bool IsActive
+        datetime CreatedAt
+    }
+
+    UserClientRole {
+        uuid Id PK
+        uuid UserId FK
+        uuid ClientId FK
+        string Role "ClientAdministrator / ClientUser"
+        datetime AssignedAt
+    }
+
+    UserPat {
+        uuid Id PK
+        uuid UserId FK
+        string TokenHash "BCrypt (mpr_ prefix)"
+        string Label
+        datetime ExpiresAt
+        datetime CreatedAt
+        datetime LastUsedAt
+        bool IsRevoked
+    }
+
+    RefreshToken {
+        uuid Id PK
+        uuid UserId FK
+        string TokenHash "SHA-256"
+        datetime ExpiresAt
+        datetime CreatedAt
+        datetime RevokedAt
     }
 
     Client ||--o| ClientAdoCredential : "has (optional)"
     Client ||--o{ CrawlConfiguration : "has"
     Client ||--o{ ReviewJob : "owns"
+    Client ||--o{ UserClientRole : "scoped to"
+    ReviewJob ||--o{ ReviewJobProtocol : "has passes"
+    ReviewJob ||--o{ ReviewFileResult : "has file results"
+    ReviewJobProtocol }o--|| ReviewFileResult : "linked to"
+    AppUser ||--o{ UserClientRole : "has"
+    AppUser ||--o{ UserPat : "has"
+    AppUser ||--o{ RefreshToken : "has"
 ```

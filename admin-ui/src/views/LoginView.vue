@@ -1,39 +1,48 @@
 <template>
-  <div class="login-view">
-      <div class="login-brand">
-          <img :src="icon" alt="" aria-hidden="true" class="login-icon"/>
-          <h1>Meister ProPR Admin</h1>
-      </div>
-    <form @submit.prevent="handleSubmit">
-      <div v-if="validationError" class="error">{{ validationError }}</div>
-      <div v-if="authError" class="error">{{ authError }}</div>
-      <label for="admin-key">Admin Key</label>
-      <input
-        id="admin-key"
-        v-model="adminKey"
-        type="password"
-        placeholder="Enter admin key"
-        autocomplete="current-password"
-        style="margin-bottom: 16px;"
-      />
-      <button type="submit" :disabled="loading">
-        {{ loading ? 'Signing in…' : 'Sign in' }}
-      </button>
-    </form>
+  <div class="login-container">
+    <div class="login-view">
+        <div class="login-brand">
+            <img :src="icon" alt="" aria-hidden="true" class="login-icon"/>
+            <h1>Meister ProPR Admin</h1>
+        </div>
+      <form @submit.prevent="handleSubmit" class="login-form">
+        <div v-if="validationError" class="error">{{ validationError }}</div>
+        <div v-if="authError" class="error">{{ authError }}</div>
+        <label for="username">Username</label>
+        <input
+          id="username"
+          v-model="username"
+          type="text"
+          placeholder="Enter username"
+          autocomplete="username"
+        />
+        <label for="password">Password</label>
+        <input
+          id="password"
+          v-model="password"
+          type="password"
+          placeholder="Enter password"
+          autocomplete="current-password"
+        />
+        <button type="submit" :disabled="loading">
+          {{ loading ? 'Signing in…' : 'Sign in' }}
+        </button>
+      </form>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import {ref} from 'vue'
 import {useRouter} from 'vue-router'
-import {createAdminClient, UnauthorizedError} from '@/services/api'
 import {useSession} from '@/composables/useSession'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { setAdminKey } = useSession()
+const { setTokens } = useSession()
 
-const adminKey = ref('')
+const username = ref('')
+const password = ref('')
 const loading = ref(false)
 const validationError = ref('')
 const authError = ref('')
@@ -42,25 +51,44 @@ async function handleSubmit() {
   validationError.value = ''
   authError.value = ''
 
-  if (!adminKey.value.trim()) {
-    validationError.value = 'Admin key is required'
+  if (!username.value.trim()) {
+    validationError.value = 'Username is required'
+    return
+  }
+  if (!password.value) {
+    validationError.value = 'Password is required'
     return
   }
 
   loading.value = true
   try {
-    // Verify candidate key against backend before storing in sessionStorage
-    await createAdminClient({ overrideKey: adminKey.value }).GET('/clients', {})
-    setAdminKey(adminKey.value)
-    router.push('/')
-  } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      authError.value = 'Invalid admin key'
-    } else {
-      authError.value = 'Connection error. Please try again.'
+    const res = await fetch(
+      (import.meta.env.VITE_API_BASE_URL ?? '') + '/auth/login',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.value, password: password.value }),
+      },
+    )
+
+    if (res.status === 401) {
+      authError.value = 'Invalid username or password'
+      return
     }
+
+    if (!res.ok) {
+      authError.value = 'Login failed. Please try again.'
+      return
+    }
+
+    const data = await res.json() as { accessToken: string; refreshToken: string }
+    setTokens(data.accessToken, data.refreshToken)
+    router.push('/')
+  } catch {
+    authError.value = 'Connection error. Please try again.'
   } finally {
     loading.value = false
   }
 }
 </script>
+

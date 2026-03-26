@@ -55,7 +55,7 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         Guid stalJobId;
         await using (var db = new MeisterProPRDbContext(options))
         {
-            var repo = new JobRepository(db);
+            var repo = new JobRepository(db, new Fixtures.TestDbContextFactory(options));
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -79,6 +79,9 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
                 builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
                 builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
                 builder.UseSetting("MEISTER_ADMIN_KEY", "admin-key-min-16-chars-ok");
+                builder.UseSetting("MEISTER_BOOTSTRAP_ADMIN_USER", "testadmin");
+                builder.UseSetting("MEISTER_BOOTSTRAP_ADMIN_PASSWORD", "TestAdminPass1!");
+                builder.UseSetting("MEISTER_JWT_SECRET", "test-jwt-secret-at-least-32-chars-ok!!");
                 builder.ConfigureServices(services =>
                 {
                     services.AddSingleton(Substitute.For<IAdoTokenValidator>());

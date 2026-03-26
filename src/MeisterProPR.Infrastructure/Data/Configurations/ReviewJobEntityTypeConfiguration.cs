@@ -72,6 +72,14 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => v == null ? null : JsonSerializer.Deserialize<ReviewResult>(v, (JsonSerializerOptions?)null));
 
+        builder.Property(j => j.TotalInputTokensAggregated)
+            .HasColumnName("total_input_tokens_aggregated")
+            .IsRequired(false);
+
+        builder.Property(j => j.TotalOutputTokensAggregated)
+            .HasColumnName("total_output_tokens_aggregated")
+            .IsRequired(false);
+
         builder.HasMany(j => j.Protocols)
             .WithOne()
             .HasForeignKey(p => p.JobId)

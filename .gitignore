@@ -30,6 +30,7 @@ artifacts/
 
 # IDE
 .idea
+.vscode/settings.json
 *.DS_Store
 Thumbs.db
 
@@ -43,10 +44,11 @@ specs/
 
 # Claude / Copilot / Gemini
 .claude
-.github/agents
-.github/prompts
-.github/instructions
+.github
 .gemini
+.agents
+!.github/workflows
+skills-lock.json
 
 # Node / admin-ui
 admin-ui/node_modules/

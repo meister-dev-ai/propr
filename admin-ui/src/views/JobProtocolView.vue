@@ -1,6 +1,6 @@
 <template>
     <div class="job-protocol-view">
-        <div class="toolbar">
+        <div class="header-stack">
             <RouterLink class="back-link" to="/reviews">← Back to reviews</RouterLink>
             <h2>Job Protocol</h2>
         </div>
@@ -31,153 +31,148 @@
                 </table>
             </section>
 
-            <!-- One accordion section per protocol pass -->
-            <div
-                v-for="(pass, index) in protocols"
-                :key="pass.id"
-                class="pass-card"
-            >
-                <button
-                    type="button"
-                    class="pass-header"
-                    :class="{ 'pass-header--open': expandedPasses.has(pass.id) }"
-                    @click="togglePass(pass.id)"
-                >
-                    <span class="pass-label">{{ pass.label ?? `Pass ${index + 1}` }}</span>
-                    <span class="pass-meta">
-                        {{ pass.outcome ?? '…' }}
-                        · {{ formatDate(pass.startedAt) }}
-                        · {{ formatTokens((pass.totalInputTokens ?? 0) + (pass.totalOutputTokens ?? 0)) }} tokens
-                    </span>
-                    <span class="pass-chevron">{{ expandedPasses.has(pass.id) ? '▲' : '▼' }}</span>
-                </button>
-
-                <div v-if="expandedPasses.has(pass.id)" class="pass-body">
-                    <div class="pass-layout" :class="{ 'drawer-open': selectedEvent?.passId === pass.id && selectedEvent !== null }">
-                        <div class="pass-main">
-                            <table class="summary-table pass-summary">
-                                <tbody>
-                                    <tr>
-                                        <th>Started</th>
-                                        <td>{{ formatDate(pass.startedAt) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Completed</th>
-                                        <td>{{ formatDate(pass.completedAt) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Outcome</th>
-                                        <td>{{ pass.outcome ?? '—' }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Iterations</th>
-                                        <td>{{ pass.iterationCount ?? '—' }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Tool Calls</th>
-                                        <td>{{ pass.toolCallCount ?? '—' }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Final Confidence</th>
-                                        <td>{{ pass.finalConfidence != null ? `${pass.finalConfidence}%` : '—' }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Input Tokens</th>
-                                        <td>{{ formatTokens(pass.totalInputTokens) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Output Tokens</th>
-                                        <td>{{ formatTokens(pass.totalOutputTokens) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-
-                            <section class="events-section">
-                                <h4>Events ({{ pass.events?.length ?? 0 }})</h4>
-                                <p v-if="!pass.events?.length" class="empty-state">No events recorded.</p>
-                                <table v-else class="events-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Time</th>
-                                            <th>Kind</th>
-                                            <th>Name</th>
-                                            <th>Input Tokens</th>
-                                            <th>Output Tokens</th>
-                                            <th>Error</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr
-                                            v-for="event in pass.events"
-                                            :key="event.id"
-                                            :class="{
-                                                'row-error': !!event.error,
-                                                'row-selected': selectedEvent?.event.id === event.id,
-                                                'row-clickable': hasContent(event),
-                                            }"
-                                            @click="toggleDrawer(pass.id, event)"
-                                        >
-                                            <td class="date-cell">{{ formatDate(event.occurredAt) }}</td>
-                                            <td class="kind-cell">{{ event.kind }}</td>
-                                            <td class="name-cell">{{ event.name }}</td>
-                                            <td class="tokens-cell">{{ formatTokens(event.inputTokens) }}</td>
-                                            <td class="tokens-cell">{{ formatTokens(event.outputTokens) }}</td>
-                                            <td class="error-cell">{{ event.error ?? '' }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </section>
+            <!-- Master-Detail Layout -->
+            <div class="protocol-master-detail">
+                <!-- Left Sidebar: Pass Navigation -->
+                <nav class="protocol-sidebar" aria-label="Pass Navigation">
+                    <button
+                        v-for="(pass, index) in protocols"
+                        :key="pass.id"
+                        class="pass-nav-item"
+                        :class="{ 'active': activePassId === pass.id || (!activePassId && index === 0) }"
+                        @click="activePassId = pass.id ?? null"
+                    >
+                        <div class="pass-nav-icon" :class="statusIconClass(pass.outcome)">
+                            <template v-if="pass.outcome?.toLowerCase() === 'success' || pass.outcome?.toLowerCase() === 'completed'">✓</template>
+                            <template v-else-if="pass.outcome?.toLowerCase() === 'processing'">
+                                <ProgressOrb class="sidebar-orb" />
+                            </template>
+                            <template v-else-if="pass.outcome?.toLowerCase() === 'failed'">✕</template>
+                            <template v-else>○</template>
                         </div>
+                        <div class="pass-nav-info">
+                            <span class="pass-nav-title" :title="pass.label ?? `Pass ${index + 1}`">{{ pass.label ?? `Pass ${index + 1}` }}</span>
+                            <span class="pass-nav-meta">
+                                <span class="fat-tokens">{{ formatTokens((pass.totalInputTokens ?? 0) + (pass.totalOutputTokens ?? 0)) }} tokens</span>
+                            </span>
+                        </div>
+                    </button>
+                </nav>
 
-                        <!-- Side Drawer (scoped per pass) -->
-                        <aside
-                            v-if="selectedEvent !== null && selectedEvent.passId === pass.id"
-                            class="event-drawer"
-                        >
-                            <div class="drawer-header">
-                                <span class="drawer-title">{{ selectedEvent.event.name }}</span>
-                                <button class="drawer-close" @click="selectedEvent = null" aria-label="Close">✕</button>
-                            </div>
-                            <div class="drawer-body">
-                                <section class="drawer-section">
-                                    <h4>Input</h4>
-                                    <pre v-if="selectedEvent.event.inputTextSample" class="content-block">{{ selectedEvent.event.inputTextSample }}</pre>
-                                    <p v-else class="no-content">No input captured.</p>
-                                </section>
-                                <section class="drawer-section">
-                                    <h4>Output</h4>
-                                    <pre v-if="selectedEvent.event.outputSummary" class="content-block">{{ selectedEvent.event.outputSummary }}</pre>
-                                    <p v-else class="no-content">No output captured.</p>
-                                </section>
-                            </div>
-                        </aside>
+                <!-- Right Detail: Active Pass -->
+                <div class="protocol-content" v-if="activePass">
+                    <div class="pass-main">
+                        <dl class="summary-grid pass-summary">
+                            <div><dt>Started</dt><dd>{{ formatDate(activePass.startedAt) }}</dd></div>
+                            <div><dt>Completed</dt><dd>{{ formatDate(activePass.completedAt) }}</dd></div>
+                            <div><dt>Outcome</dt><dd>{{ activePass.outcome ?? '—' }}</dd></div>
+                            <div><dt>Iterations</dt><dd>{{ activePass.iterationCount ?? '—' }}</dd></div>
+                            <div><dt>Tool Calls</dt><dd>{{ activePass.toolCallCount ?? '—' }}</dd></div>
+                            <div><dt>Confidence</dt><dd>{{ activePass.finalConfidence != null ? `${activePass.finalConfidence}%` : '—' }}</dd></div>
+                            <div><dt>In Tokens</dt><dd class="fat-tokens">{{ formatTokens(activePass.totalInputTokens) }}</dd></div>
+                            <div><dt>Out Tokens</dt><dd class="fat-tokens">{{ formatTokens(activePass.totalOutputTokens) }}</dd></div>
+                        </dl>
+
+                        <section class="events-section">
+                            <h4>Events ({{ activePass.events?.length ? Math.ceil(activePass.events.length / 2) : 0 }})</h4>
+                            <p v-if="!activePass.events?.length" class="empty-state">No events recorded.</p>
+                            <table v-else class="events-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Name</th>
+                                        <th>Input Tokens</th>
+                                        <th>Output Tokens</th>
+                                        <th>Error</th>
+                                    </tr>
+                                </thead>
+                                <TransitionGroup name="list" tag="tbody">
+                                    <tr
+                                        v-for="merged in processEvents(activePass.events)"
+                                        :key="merged.id"
+                                        class="row-clickable"
+                                        :class="{
+                                            'row-error': !!merged.callDetails.error || !!merged.resultDetails?.error,
+                                            'row-processing': !merged.resultDetails
+                                        }"
+                                        @click="openMergedModal(merged)"
+                                    >
+                                        <td class="date-cell">{{ formatDate(merged.time) }}</td>
+                                        <td class="name-cell">
+                                            {{ merged.name }}
+                                            <span v-if="merged.resultDetails?.outputSummary === null && merged.resultDetails?.error === null" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
+                                        </td>
+                                        <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.inputTokens) }}</td>
+                                        <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.outputTokens) }}</td>
+                                        <td class="error-cell">{{ merged.callDetails.error ?? '' }}</td>
+                                    </tr>
+                                </TransitionGroup>
+                            </table>
+                        </section>
                     </div>
                 </div>
             </div>
+            
+            <ModalDialog v-model:isOpen="isEventModalOpen" :title="selectedMergedEvent?.name ?? 'Event Protocol'">
+                <div v-if="selectedMergedEvent" class="merged-modal-layout">
+                    <section class="drawer-section">
+                        <h4>Input</h4>
+                        <pre v-if="selectedMergedEvent.callDetails.inputTextSample" class="content-block">{{ selectedMergedEvent.callDetails.inputTextSample }}</pre>
+                        <p v-else class="no-content">No input captured.</p>
+                    </section>
+                    
+                    <div class="modal-arrow">
+                        <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </div>
+
+                    <section class="drawer-section">
+                        <h4>Output</h4>
+                        <template v-if="selectedMergedEvent.resultDetails">
+                            <pre v-if="selectedMergedEvent.resultDetails.outputSummary !== null" class="content-block">{{ selectedMergedEvent.resultDetails.outputSummary }}</pre>
+                            <template v-else-if="selectedMergedEvent.resultDetails.error !== null">
+                                <pre class="content-block" style="color: var(--color-danger);">{{ selectedMergedEvent.resultDetails.error }}</pre>
+                            </template>
+                            <p v-else-if="selectedMergedEvent.resultDetails.outputSummary === null && selectedMergedEvent.resultDetails.error === null" class="no-content" style="color: var(--color-accent); font-weight: bold;">Currently Executing...</p>
+                        </template>
+                    </section>
+                </div>
+            </ModalDialog>
         </template>
     </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import ModalDialog from '@/components/ModalDialog.vue'
+import ProgressOrb from '@/components/ProgressOrb.vue'
 import { createAdminClient } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
 type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 type ProtocolEventDto = components['schemas']['ProtocolEventDto']
 
-interface SelectedEvent {
-    passId: string
-    event: ProtocolEventDto
+interface MergedEvent {
+    id: string
+    time: string
+    name: string
+    callDetails: ProtocolEventDto
+    resultDetails: ProtocolEventDto | null
 }
 
 const route = useRoute()
 const loading = ref(false)
 const error = ref('')
 const protocols = ref<ReviewJobProtocolDto[]>([])
-const expandedPasses = ref(new Set<string>())
-const selectedEvent = ref<SelectedEvent | null>(null)
+const activePassId = ref<string | null>(null)
+const selectedMergedEvent = ref<MergedEvent | null>(null)
+
+const activePass = computed(() => {
+    if (!protocols.value.length) return null
+    return protocols.value.find(p => p.id === activePassId.value) ?? protocols.value[0]
+})
 
 const totalInputTokens = computed(() =>
     protocols.value.reduce((sum, p) => sum + (p.totalInputTokens ?? 0), 0),
@@ -186,51 +181,83 @@ const totalOutputTokens = computed(() =>
     protocols.value.reduce((sum, p) => sum + (p.totalOutputTokens ?? 0), 0),
 )
 
-onMounted(async () => {
-    const jobId = route.params.id as string
-    loading.value = true
+let pollInterval: ReturnType<typeof setInterval> | null = null
+
+async function loadProtocol(showLoading = false) {
+    if (showLoading) loading.value = true
     try {
-        const { data, error: fetchError } = await createAdminClient().GET('/jobs/{id}/protocol', {
+        const jobId = route.params.id as string
+        const { data, fetchError } = await createAdminClient().GET('/jobs/{id}/protocol', {
             params: { path: { id: jobId } },
-        })
+        }) as any
+        
         if (fetchError) {
-            error.value = 'Protocol not found for this job.'
-        } else if (Array.isArray(data) && data.length > 0) {
+            if (showLoading) error.value = 'Protocol not found for this job.'
+        } else if (Array.isArray(data)) {
             protocols.value = data
-            // Expand first pass by default
-            if (data[0].id) {
-                expandedPasses.value.add(data[0].id)
+            if (showLoading && data.length > 0 && data[0].id) {
+                activePassId.value = data[0].id
+            }
+            const isProcessing = data.some(p => !p.completedAt)
+            if (isProcessing && !pollInterval) {
+                pollInterval = setInterval(() => loadProtocol(false), 3000)
+            } else if (!isProcessing && pollInterval) {
+                clearInterval(pollInterval)
+                pollInterval = null
             }
         }
     } catch {
-        error.value = 'Failed to load protocol.'
+        if (showLoading) error.value = 'Failed to load protocol.'
     } finally {
-        loading.value = false
+        if (showLoading) loading.value = false
     }
+}
+
+onMounted(() => {
+    loadProtocol(true)
 })
 
-function togglePass(passId: string | undefined): void {
-    if (!passId) return
-    if (expandedPasses.value.has(passId)) {
-        expandedPasses.value.delete(passId)
-        if (selectedEvent.value?.passId === passId) {
-            selectedEvent.value = null
-        }
-    } else {
-        expandedPasses.value.add(passId)
+onUnmounted(() => {
+    if (pollInterval) clearInterval(pollInterval)
+})
+
+function processEvents(events: ProtocolEventDto[] | undefined | null): MergedEvent[] {
+    if (!events) return []
+    return events.map((ev, i) => ({
+        id: ev.id ?? String(i),
+        time: ev.occurredAt ?? '',
+        name: ev.name ?? ev.kind ?? 'Unknown',
+        callDetails: ev,
+        resultDetails: ev
+    }))
+}
+
+function statusIconClass(status: string | undefined | null): string {
+    switch (status?.toLowerCase()) {
+        case 'completed':
+        case 'success':
+            return 'icon-success'
+        case 'processing': return 'icon-processing'
+        case 'failed': return 'icon-failed'
+        default: return 'icon-pending'
     }
 }
 
-function hasContent(event: ProtocolEventDto): boolean {
-    return !!(event.inputTextSample || event.outputSummary)
+const isEventModalOpen = ref(false)
+
+function openMergedModal(event: MergedEvent): void {
+    selectedMergedEvent.value = event
+    isEventModalOpen.value = true
 }
 
-function toggleDrawer(passId: string | undefined, event: ProtocolEventDto): void {
-    if (!hasContent(event) || !passId) return
-    if (selectedEvent.value?.event.id === event.id) {
-        selectedEvent.value = null
-    } else {
-        selectedEvent.value = { passId, event }
+function statusBadgeClass(status: string | undefined | null): string {
+    switch (status?.toLowerCase()) {
+        case 'completed':
+        case 'success':
+            return 'status-badge status-completed'
+        case 'processing': return 'status-badge status-processing'
+        case 'failed': return 'status-badge status-failed'
+        default: return 'status-badge status-pending'
     }
 }
 
@@ -246,107 +273,203 @@ function formatTokens(n: number | null | undefined): string {
 </script>
 
 <style scoped>
-.job-protocol-view {
-    padding: 1rem;
-}
-
 .toolbar {
     display: flex;
     align-items: center;
     gap: 1rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
 }
 
 .toolbar h2 {
     margin: 0;
 }
 
-.back-link {
-    font-size: 0.9rem;
-    color: #555;
-    text-decoration: none;
-}
-
-.back-link:hover {
-    text-decoration: underline;
-}
-
 .loading,
 .empty-state {
-    color: #888;
+    color: var(--color-text-muted);
     font-style: italic;
 }
 
 .error {
-    color: #c00;
+    color: var(--color-danger);
 }
 
 /* Totals card */
 .totals-card {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
 }
 
-/* Per-pass accordion */
-.pass-card {
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 1rem;
+/* Animations */
+.list-enter-active,
+.list-leave-active {
+    transition: all 0.5s ease;
+}
+.list-enter-from,
+.list-leave-to {
+    opacity: 0;
+    transform: translateY(-10px);
 }
 
-.pass-header {
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-processing {
+    background: rgba(34, 211, 238, 0.15);
+    color: var(--color-accent);
+    animation: flash 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.row-processing td {
+    background: rgba(34, 211, 238, 0.05);
+}
+
+@keyframes flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.merged-modal-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .merged-modal-layout {
+        flex-direction: row;
+        align-items: stretch;
+    }
+    .merged-modal-layout .drawer-section {
+        flex: 1;
+        min-width: 0; 
+        margin: 0;
+    }
+}
+
+.modal-arrow {
     display: flex;
     align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+}
+
+@media (max-width: 767px) {
+    .modal-arrow {
+        transform: rotate(90deg);
+    }
+}
+
+/* Master-Detail Architecture */
+.protocol-master-detail {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .protocol-master-detail {
+        grid-template-columns: 1fr;
+    }
+}
+
+.protocol-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: sticky;
+    top: 2rem;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+}
+
+.pass-nav-item {
+    display: flex;
+    align-items: flex-start;
     gap: 0.75rem;
     width: 100%;
-    padding: 0.6rem 1rem;
-    background: #f5f5f5;
-    color: #333;
-    border: none;
-    cursor: pointer;
     text-align: left;
-    font-size: 0.95rem;
-}
-
-.pass-header:hover {
-    background: #ececec;
-}
-
-.pass-header--open {
-    background: #e8f0fe;
-    border-bottom: 1px solid #ddd;
-}
-
-.pass-label {
-    font-weight: 600;
-    flex: 1;
+    padding: 1rem;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pass-meta {
-    font-size: 0.82rem;
-    color: #666;
-    white-space: nowrap;
-}
-
-.pass-chevron {
-    font-size: 0.7rem;
-    color: #888;
     flex-shrink: 0;
 }
 
-.pass-body {
-    padding: 1rem;
+.pass-nav-item:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Layout with optional side drawer */
-.pass-layout {
+.pass-nav-item.active {
+    background: rgba(59, 130, 246, 0.05);
+    border-color: var(--color-accent);
+}
+
+.pass-nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.sidebar-orb {
+    transform: scale(0.65);
+}
+
+.icon-success { color: var(--color-success); }
+.icon-failed { color: var(--color-danger); }
+.icon-processing { color: var(--color-accent); }
+.icon-pending { color: var(--color-text-muted); }
+
+.pass-nav-info {
     display: flex;
-    gap: 1.5rem;
-    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.pass-nav-title {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    width: 100%;
+}
+
+.pass-nav-meta {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.protocol-content {
+    background: var(--color-surface);
+    border-radius: 12px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .pass-main {
@@ -356,122 +479,157 @@ function formatTokens(n: number | null | undefined): string {
 
 /* Summary table shared styles */
 .summary-card {
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
     overflow: hidden;
+    background: var(--color-surface);
 }
 
 .summary-card h3 {
     margin: 0;
-    padding: 0.6rem 1rem;
-    background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 1.1rem;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin: 0;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.summary-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.summary-grid dt {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.summary-grid dd {
+    margin: 0;
     font-size: 1rem;
+    color: var(--color-text);
 }
 
 .pass-summary {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
 }
 
 .summary-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
 }
 
 .summary-table th,
 .summary-table td {
-    padding: 0.4rem 1rem;
+    padding: 0.75rem 1.5rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .summary-table th {
     width: 12rem;
-    color: #555;
+    color: var(--color-text-muted);
     font-weight: 600;
-    background: #fafafa;
+    background: var(--color-bg);
 }
 
 /* Events */
 .events-section {
-    margin-bottom: 1rem;
+    padding: 1.5rem;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .events-section h4 {
-    margin: 0 0 0.5rem;
-    font-size: 0.95rem;
-    color: #444;
+    margin: 0 0 1rem;
+    font-size: 1rem;
+    color: var(--color-text);
 }
 
 .events-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.88rem;
+    font-size: 0.9rem;
 }
 
 .events-table th,
 .events-table td {
-    padding: 0.4rem 0.75rem;
+    padding: 0.75rem 1rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .events-table th {
-    background: #fafafa;
+    background: var(--color-surface);
     font-weight: 600;
-    color: #444;
+    color: var(--color-text);
 }
 
 .row-error td {
-    background: #fff5f5;
+    background: rgba(239, 68, 68, 0.1);
 }
 
 .row-clickable {
     cursor: pointer;
+    transition: background 0.15s;
 }
 
 .row-clickable:hover td {
-    background: #f0f7ff;
+    background: var(--color-border);
 }
 
 .row-selected td {
-    background: #e6f0ff;
+    background: var(--color-border);
+    border-left: 2px solid var(--color-accent);
 }
 
 .row-selected.row-error td {
-    background: #ffe6e6;
+    background: rgba(239, 68, 68, 0.2);
 }
 
 .date-cell {
     white-space: nowrap;
-    color: #555;
+    color: var(--color-text-muted);
     min-width: 11rem;
 }
 
 .kind-cell {
     white-space: nowrap;
-    color: #777;
+    color: var(--color-text-muted);
 }
 
 .tokens-cell {
     text-align: right;
     font-family: monospace;
-    color: #333;
+    color: var(--color-text);
 }
 
 .error-cell {
-    color: #c00;
-    font-size: 0.8rem;
+    color: var(--color-danger);
+    font-size: 0.85rem;
 }
 
 /* Side Drawer */
 .event-drawer {
     width: 380px;
     flex-shrink: 0;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
     position: sticky;
     top: 1rem;
     max-height: calc(100vh - 6rem);
@@ -484,15 +642,15 @@ function formatTokens(n: number | null | undefined): string {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.6rem 1rem;
-    background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    padding: 1rem 1.5rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
     gap: 0.5rem;
 }
 
 .drawer-title {
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 1rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -501,53 +659,54 @@ function formatTokens(n: number | null | undefined): string {
 .drawer-close {
     background: none;
     border: none;
-    font-size: 1rem;
+    font-size: 1.2rem;
     cursor: pointer;
-    color: #666;
+    color: var(--color-text-muted);
     flex-shrink: 0;
     padding: 0 0.25rem;
 }
 
 .drawer-close:hover {
-    color: #000;
+    color: var(--color-danger);
 }
 
 .drawer-body {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 1.5rem;
 }
 
 .drawer-section {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
 }
 
 .drawer-section h4 {
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.75rem;
     font-size: 0.85rem;
-    color: #555;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
 .content-block {
-    background: #f8f8f8;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 0.75rem;
-    font-size: 0.8rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.85rem;
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 40vh;
     overflow-y: auto;
     margin: 0;
+    color: var(--color-text-muted);
 }
 
 .no-content {
-    color: #aaa;
+    color: var(--color-text-muted);
     font-style: italic;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     margin: 0;
 }
 </style>

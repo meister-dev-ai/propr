@@ -1,37 +1,92 @@
+using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
+
 namespace MeisterProPR.Api.Middleware;
 
-/// <summary>Validates the <c>X-Admin-Key</c> header for admin-only endpoints.</summary>
-public sealed class AdminKeyMiddleware(RequestDelegate next, IConfiguration configuration)
+/// <summary>
+///     Resolves the caller identity and sets <c>context.Items["IsAdmin"]</c> and
+///     <c>context.Items["UserId"]</c> by evaluating three credential paths in order:
+///     <list type="number">
+///       <item><description><c>Authorization: Bearer {jwt}</c> — validated locally.</description></item>
+///       <item><description><c>X-User-Pat</c> header — BCrypt-verified against stored PAT hashes.</description></item>
+///       <item><description><c>X-Admin-Key</c> — legacy shared-secret; logs a deprecation warning.</description></item>
+///     </list>
+/// </summary>
+public sealed class AdminKeyMiddleware(
+    RequestDelegate next,
+    IConfiguration configuration,
+    ILogger<AdminKeyMiddleware> logger)
 {
     private const string AdminKeyHeader = "X-Admin-Key";
+    private const string PatHeader = "X-User-Pat";
 
     /// <inheritdoc cref="IMiddleware.InvokeAsync" />
     public async Task InvokeAsync(HttpContext context)
     {
+        // Default: not authenticated as admin
+        context.Items["IsAdmin"] = false;
+
+        // 1. JWT Bearer token
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var token = authHeader["Bearer ".Length..].Trim();
+            var jwtService = context.RequestServices.GetService<IJwtTokenService>();
+            if (jwtService is not null)
+            {
+                var principal = jwtService.ValidateAccessToken(token);
+                if (principal is not null)
+                {
+                    var sub = principal.FindFirst("sub")?.Value;
+                    var role = principal.FindFirst("global_role")?.Value;
+                    if (!string.IsNullOrEmpty(sub))
+                    {
+                        context.Items["UserId"] = sub;
+                        context.Items["IsAdmin"] = role == AppUserRole.Admin.ToString();
+                    }
+
+                    await next(context);
+                    return;
+                }
+            }
+        }
+
+        // 2. Personal Access Token (X-User-Pat)
+        var pat = context.Request.Headers[PatHeader].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(pat))
+        {
+            var patRepo = context.RequestServices.GetService<IUserPatRepository>();
+            var userRepo = context.RequestServices.GetService<IUserRepository>();
+            if (patRepo is not null && userRepo is not null)
+            {
+                var patEntity = await patRepo.GetActiveByRawTokenAsync(pat);
+                if (patEntity is not null)
+                {
+                    var user = await userRepo.GetByIdAsync(patEntity.UserId);
+                    if (user is not null && user.IsActive)
+                    {
+                        context.Items["UserId"] = user.Id.ToString();
+                        context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
+                        await next(context);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 3. Legacy X-Admin-Key (deprecated)
         var adminKey = configuration["MEISTER_ADMIN_KEY"];
-
-        // Only enforce on routes that opted in via the [RequireAdminKey] attribute or policy
-        // For simplicity: enforce on all /clients (admin ops) and /jobs routes
-        var path = context.Request.Path.Value ?? string.Empty;
-        var isAdminRoute = path.StartsWith("/clients", StringComparison.OrdinalIgnoreCase) ||
-                           path.StartsWith("/jobs", StringComparison.OrdinalIgnoreCase);
-
-        // Routes that are NOT admin-only even though under /clients: crawl-configurations sub-resource
-        // handled by ClientKeyMiddleware via [RequireClientKey] (ownership check in controller)
-        // We only block /clients top-level admin endpoints here.
-        // But AdminKeyMiddleware is applied to all; controllers verify appropriately.
-        // For simplicity, let controllers decide — middleware just validates and sets a flag.
         if (!string.IsNullOrWhiteSpace(adminKey))
         {
             var providedKey = context.Request.Headers[AdminKeyHeader].FirstOrDefault();
-            // Store whether admin key was provided and valid
-            context.Items["IsAdmin"] = !string.IsNullOrWhiteSpace(providedKey) &&
-                                       providedKey == adminKey;
-        }
-        else
-        {
-            // No admin key configured — admin endpoints are effectively disabled
-            context.Items["IsAdmin"] = false;
+            var isValid = !string.IsNullOrWhiteSpace(providedKey) && providedKey == adminKey;
+            if (isValid)
+            {
+                logger.LogWarning(
+                    "X-Admin-Key is deprecated and will be removed in a future release. " +
+                    "Migrate to username/password login (/auth/login) or personal access tokens.");
+                context.Items["IsAdmin"] = true;
+            }
         }
 
         await next(context);

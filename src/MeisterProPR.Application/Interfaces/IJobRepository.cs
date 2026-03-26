@@ -44,6 +44,9 @@ public interface IJobRepository
     /// <summary>Returns all jobs currently in the Processing state.</summary>
     Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default);
 
+    /// <summary>Returns jobs that have been in <c>Processing</c> state for longer than the given threshold.</summary>
+    Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default);
+
     /// <summary>Updates the retry count for a review job.</summary>
     Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default);
 

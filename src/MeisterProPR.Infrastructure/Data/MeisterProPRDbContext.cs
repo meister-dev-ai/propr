@@ -40,6 +40,18 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Individual step events within a review job protocol.</summary>
     public DbSet<ProtocolEvent> ProtocolEvents => this.Set<ProtocolEvent>();
 
+    /// <summary>Application users.</summary>
+    public DbSet<AppUserRecord> AppUsers => this.Set<AppUserRecord>();
+
+    /// <summary>Per-client role assignments for users.</summary>
+    public DbSet<UserClientRoleRecord> UserClientRoles => this.Set<UserClientRoleRecord>();
+
+    /// <summary>User-generated Personal Access Tokens.</summary>
+    public DbSet<UserPatRecord> UserPats => this.Set<UserPatRecord>();
+
+    /// <summary>Server-persisted refresh tokens.</summary>
+    public DbSet<RefreshTokenRecord> RefreshTokens => this.Set<RefreshTokenRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

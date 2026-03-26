@@ -48,11 +48,14 @@ internal static class ReviewPrompts
                                                   "confidence_evaluations": [
                                                     { "concern": "<area such as 'security', 'code_quality', 'architecture', 'correctness'>", "confidence": <0-100> }
                                                   ],
+                                                  "investigation_complete": true|false,
                                                   "loop_complete": true|false
                                                 }
 
                                                 Set loop_complete to true when you have sufficient confidence in your review and no further investigation is needed.
                                                 Set loop_complete to false when you intend to call tools to gather more context before finalising.
+                                                Set investigation_complete to false if you have not yet called any tools to inspect related files and the PR contains multiple changed files.
+                                                Set investigation_complete to true once you have gathered sufficient cross-file context.
                                                 """;
 
     /// <summary>
@@ -121,6 +124,16 @@ internal static class ReviewPrompts
             $"You are reviewing **{filePath}** ({fileIndex} of {totalFiles}). " +
             "The other changed files are listed in the manifest below — their content is not provided. " +
             "Call `get_file_content` on any sibling file when its content is needed for an accurate analysis of the file under review.");
+
+        if (totalFiles > 1)
+        {
+            sb.AppendLine();
+            sb.AppendLine(
+                "**Mandatory investigation requirement**: Before emitting your final review JSON, you MUST call " +
+                "`get_file_content` on at least one related file from the change manifest. " +
+                "Set `investigation_complete` to `true` only after you have done so. " +
+                "If there are no related files worth inspecting, set `investigation_complete` to `true` and explain why in the summary.");
+        }
 
         if (context is null)
         {

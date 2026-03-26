@@ -119,9 +119,13 @@ public sealed partial class AdoPrFetcher(
 
         // For renames/moves, the original path is stored in SourceServerItem.
         // We must fetch base content at that path on the base commit; the new path didn't exist there.
+        // SourceServerItem may be null when ADO does not populate it (e.g. cross-tree moves); skip the
+        // base fetch in that case rather than using the new path which would produce a spurious 404.
         var originalPath = changeType == ChangeType.Rename
             ? change.SourceServerItem
             : null;
+
+        var renameWithMissingSource = changeType == ChangeType.Rename && originalPath is null;
 
         var isBinary = BinaryFileDetector.IsBinary(path);
 
@@ -130,15 +134,23 @@ public sealed partial class AdoPrFetcher(
 
         if (!isBinary)
         {
-            if (changeType != ChangeType.Delete && !string.IsNullOrEmpty(sourceCommit))
+            if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
             {
                 headContent = await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, path, sourceCommit, cancellationToken);
             }
 
-            if (changeType != ChangeType.Add && !string.IsNullOrEmpty(baseCommit))
+            if (changeType != ChangeType.Add && !renameWithMissingSource && baseCommit.Length >= 6)
             {
                 var basePathToFetch = originalPath ?? path;
                 baseContent = await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, basePathToFetch, baseCommit, cancellationToken);
+            }
+            else if (renameWithMissingSource)
+            {
+                logger.LogInformation("Skipping base content fetch for renamed file {Path}: SourceServerItem is not available", path);
+            }
+            else if (changeType != ChangeType.Add && baseCommit.Length < 6)
+            {
+                logger.LogInformation("Skipping base content fetch for {Path}: base commit SHA is absent or malformed", path);
             }
         }
 
@@ -253,10 +265,10 @@ public sealed partial class AdoPrFetcher(
         return sb.ToString();
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to fetch head content for {Path} at commit {Commit}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Failed to fetch head content for {Path} at commit {Commit}")]
     private static partial void LogHeadContentFetchWarning(ILogger logger, string path, string commit, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to fetch base content for {Path} at commit {Commit}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Failed to fetch base content for {Path} at commit {Commit}")]
     private static partial void LogBaseContentFetchWarning(ILogger logger, string path, string commit, Exception ex);
 
     [LoggerMessage(
