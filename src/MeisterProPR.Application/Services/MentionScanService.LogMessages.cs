@@ -20,7 +20,7 @@ public sealed partial class MentionScanService
     private static partial void LogPrsFound(ILogger logger, string organizationUrl, string projectId, int prCount);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Trace,
         Message = "MentionScanService: evaluating comment thread={ThreadId} commentId={CommentId} content='{Content}'")]
     private static partial void LogCommentContent(ILogger logger, int threadId, int commentId, string content);
 

@@ -124,6 +124,23 @@ public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClien
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ClientDto>> GetByIdsAsync(
+        IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+        {
+            return [];
+        }
+
+        var clients = await dbContext.Clients
+            .Where(c => idList.Contains(c.Id))
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(ct);
+        return clients.Select(ToDto).ToList().AsReadOnly();
+    }
+
     private static ClientDto ToDto(ClientRecord client)
     {
         return new ClientDto(

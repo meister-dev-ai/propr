@@ -6,9 +6,17 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="RepositoryId">ADO repository ID.</param>
 /// <param name="PullRequestId">Numeric pull request ID.</param>
 /// <param name="LatestIterationId">ID of the latest PR iteration.</param>
+/// <param name="PrTitle">PR display title from ADO (optional — may be null when unavailable).</param>
+/// <param name="RepositoryName">Repository display name from ADO (optional).</param>
+/// <param name="SourceBranch">Source branch display name (optional, refs/heads/ stripped).</param>
+/// <param name="TargetBranch">Target branch display name (optional, refs/heads/ stripped).</param>
 public sealed record AssignedPullRequestRef(
     string OrganizationUrl,
     string ProjectId,
     string RepositoryId,
     int PullRequestId,
-    int LatestIterationId);
+    int LatestIterationId,
+    string? PrTitle = null,
+    string? RepositoryName = null,
+    string? SourceBranch = null,
+    string? TargetBranch = null);

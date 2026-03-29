@@ -2,11 +2,12 @@
 
 Meister DEV's ProPR is an ASP.NET Core 10 backend that accepts Azure DevOps pull request review
 requests, fetches the changed files using a backend-controlled Azure identity, runs an AI review
-via the **Azure OpenAI Responses API** (reasoning + tool use), and posts the findings back as
-PR thread comments.
+via the **Microsoft Agent Framework** (`Microsoft.Extensions.AI`) with per-file agentic tool
+calling, and posts the findings back as PR thread comments.
 
 Each API client can supply its own Azure service principal credentials so that all ADO operations
-run under that client's identity — or fall back to the global backend identity.
+run under that client's identity — or fall back to the global backend identity. Clients can also
+configure dedicated AI connections to use different models or endpoints.
 
 ## Table of Contents
 
@@ -17,7 +18,12 @@ run under that client's identity — or fall back to the global backend identity
 - [Environment Variables](#environment-variables)
 - [Admin Authentication](#admin-authentication)
 - [Per-Client ADO Credentials](#per-client-ado-credentials)
+- [Per-Client AI Connections](#per-client-ai-connections)
 - [Client Management API](#client-management-api)
+- [File Exclusion Rules](#file-exclusion-rules)
+- [Prompt Overrides](#prompt-overrides)
+- [Finding Dismissals](#finding-dismissals)
+- [Admin UI](#admin-ui)
 - [API Usage](#api-usage)
 - [Observability](#observability)
 - [Running the Tests](#running-the-tests)
@@ -35,6 +41,11 @@ run under that client's identity — or fall back to the global backend identity
 | PostgreSQL 17 (or Docker)                         | 17.x                |
 | Docker (optional, for container runs)             | any recent version  |
 
+> **SDK version policy:** `global.json` pins `10.0.103` as the minimum SDK and sets
+> `rollForward: latestFeature`, which allows any `10.0.x` feature-band SDK to satisfy the
+> requirement. If you have a newer `10.0.x` SDK installed (e.g. `10.0.200`), it will be used
+> automatically. Builds are not guaranteed with SDK major versions other than 10.
+
 ---
 
 ## Quick Start (Docker)
@@ -44,7 +55,7 @@ PostgreSQL 17 container together.
 
 ### Step 1 — Create a `.env` file
 
-Create `.env` at the repo root (next to `docker-compose.yml`):
+Create `.env` at the repository root (same folder as your compose file):
 
 ```env
 # --- Admin user bootstrap (DB mode — seeds first admin on startup) ---
@@ -229,7 +240,8 @@ In `Development` mode, Swagger UI is available at `https://localhost:5443/swagge
 
 ### 1 — AI endpoint
 
-The backend uses the **Azure OpenAI Responses API** and accepts endpoints from two sources:
+The backend uses `Microsoft.Extensions.AI` with the Azure OpenAI chat client and accepts
+endpoints from two sources:
 
 **Option A — Azure OpenAI**
 
@@ -440,7 +452,7 @@ clients, each client can have its own Azure service principal:
 2. **Grant it access** to the relevant Azure DevOps projects (see
    [Azure Setup — step 3](#3--grant-the-service-principal-access-in-azure-devops)).
 3. **Store the credentials** via `PUT /clients/{id}/ado-credentials` (see
-   [Step 4](#step-4--optional-set-per-client-ado-credentials) above).
+   [Step 5](#step-5--optional-set-per-client-ado-credentials) above).
 
 The `GET /clients` and `GET /clients/{id}` responses include `hasAdoCredentials`,
 `adoTenantId`, and `adoClientId` — the secret is never returned.
@@ -465,24 +477,284 @@ flowchart TD
 
 ---
 
+## Per-Client AI Connections
+
+By default all AI review calls use the **global AI endpoint** configured via `AI_ENDPOINT` and
+`AI_DEPLOYMENT`. You can override this per-client by registering one or more named AI connections
+and activating them. This lets you use different models for different clients — for example a
+cost-efficient model for high-volume clients and a reasoning model for critical reviews.
+
+### Register an AI connection
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "gpt-4o production",
+    "endpointUrl": "https://myresource.openai.azure.com/",
+    "models": ["gpt-4o", "gpt-4o-mini"],
+    "apiKey": "<optional-api-key>"
+  }'
+```
+
+Omit `apiKey` to use `DefaultAzureCredential` for the connection. API keys are stored encrypted
+and are never returned in GET responses.
+
+### Activate a connection
+
+Only one AI connection can be active per client at a time. Activating a connection sets the
+model used for all future reviews for that client:
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/<connection-id>/activate \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "model": "gpt-4o" }'
+```
+
+To fall back to the global endpoint, deactivate the connection:
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/<connection-id>/deactivate \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+### Discover available models
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/discover-models \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "endpointUrl": "https://myresource.openai.azure.com/", "apiKey": "<optional>" }'
+```
+
+### AI connection endpoints
+
+| Method   | Path                                                             | Description                                 |
+|----------|------------------------------------------------------------------|---------------------------------------------|
+| `GET`    | `/clients/{id}/ai-connections`                                   | List all AI connections for a client        |
+| `POST`   | `/clients/{id}/ai-connections`                                   | Register a new AI connection                |
+| `PATCH`  | `/clients/{id}/ai-connections/{connectionId}`                    | Update display name, URL, models, or API key |
+| `DELETE` | `/clients/{id}/ai-connections/{connectionId}`                    | Remove an AI connection                     |
+| `POST`   | `/clients/{id}/ai-connections/{connectionId}/activate`           | Activate a connection with a specific model |
+| `POST`   | `/clients/{id}/ai-connections/{connectionId}/deactivate`         | Deactivate (revert to global endpoint)      |
+| `POST`   | `/clients/{id}/ai-connections/discover-models`                   | Probe an endpoint and list available models |
+
+---
+
 ## Client Management API
 
 All client management endpoints require an Admin JWT (`Authorization: Bearer <token>`) or,
 for legacy deployments, the `X-Admin-Key` header.
 
-| Method   | Path                                         | Description                                 |
-|----------|----------------------------------------------|---------------------------------------------|
-| `POST`   | `/clients`                                   | Register a new client                       |
-| `GET`    | `/clients`                                   | List all clients                            |
-| `GET`    | `/clients/{id}`                              | Get a single client                         |
-| `PATCH`  | `/clients/{id}`                              | Enable or disable a client                  |
-| `DELETE` | `/clients/{id}`                              | Delete a client                             |
-| `PUT`    | `/clients/{id}/ado-credentials`              | Set (or replace) per-client ADO credentials |
-| `DELETE` | `/clients/{id}/ado-credentials`              | Clear per-client ADO credentials            |
-| `POST`   | `/clients/{id}/crawl-configurations`         | Add a crawl configuration                   |
-| `GET`    | `/clients/{id}/crawl-configurations`         | List crawl configurations for a client      |
-| `DELETE` | `/clients/{id}/crawl-configurations/{cfgId}` | Remove a crawl configuration                |
-| `POST`   | `/admin/clients/{id}/rotate-key`             | Rotate the client key (7-day grace period)  |
+| Method   | Path                                                                  | Description                                 |
+|----------|-----------------------------------------------------------------------|---------------------------------------------|
+| `POST`   | `/clients`                                                            | Register a new client                       |
+| `GET`    | `/clients`                                                            | List all clients                            |
+| `GET`    | `/clients/{id}`                                                       | Get a single client                         |
+| `PATCH`  | `/clients/{id}`                                                       | Enable or disable a client                  |
+| `DELETE` | `/clients/{id}`                                                       | Delete a client                             |
+| `PUT`    | `/clients/{id}/ado-credentials`                                       | Set (or replace) per-client ADO credentials |
+| `DELETE` | `/clients/{id}/ado-credentials`                                       | Clear per-client ADO credentials            |
+| `POST`   | `/clients/{id}/crawl-configurations`                                  | Add a crawl configuration                   |
+| `GET`    | `/clients/{id}/crawl-configurations`                                  | List crawl configurations for a client      |
+| `DELETE` | `/clients/{id}/crawl-configurations/{cfgId}`                          | Remove a crawl configuration                |
+| `GET`    | `/clients/{id}/prompt-overrides`                                      | List prompt overrides for a client          |
+| `POST`   | `/clients/{id}/prompt-overrides`                                      | Create a prompt override                    |
+| `PUT`    | `/clients/{id}/prompt-overrides/{overrideId}`                         | Replace a prompt override                   |
+| `DELETE` | `/clients/{id}/prompt-overrides/{overrideId}`                         | Delete a prompt override                    |
+| `GET`    | `/clients/{id}/finding-dismissals`                                    | List finding dismissals for a client        |
+| `POST`   | `/clients/{id}/finding-dismissals`                                    | Create a finding dismissal                  |
+| `PATCH`  | `/clients/{id}/finding-dismissals/{dismissalId}`                      | Update dismissal label                      |
+| `DELETE` | `/clients/{id}/finding-dismissals/{dismissalId}`                      | Delete a finding dismissal                  |
+| `POST`   | `/admin/clients/{id}/rotate-key`                                      | Rotate the client key (7-day grace period)  |
+
+---
+
+## File Exclusion Rules
+
+Meister DEV's ProPR can skip specific files from AI review entirely — no tokens are spent on them
+and they are recorded in the job audit trail as `Excluded` with zero input/output tokens.
+
+### Built-in default patterns
+
+When no per-repo exclusion file is present, the following built-in patterns are applied
+automatically:
+
+| Pattern | Matches |
+|---------|---------|
+| `**/Migrations/*.Designer.cs` | EF Core migration designer snapshots |
+| `**/Migrations/*ModelSnapshot.cs` | EF Core model snapshot files |
+
+These cover the most common generated files that provide no actionable review signal.
+
+### Per-repository exclusion file
+
+To customise exclusion patterns for a repository, create `.meister-propr/exclude` on the target
+branch. The backend reads this file from the branch that the PR targets, so no deployment
+changes are needed — push an update to the file and the next review honours it automatically.
+
+**File format** — one glob pattern per line, gitignore-style:
+
+```
+# Lines starting with # are comments and are ignored.
+# Blank lines are also ignored.
+
+# Skip all auto-generated gRPC stubs
+src/Generated/**
+
+# Skip OpenAPI client wrappers
+**/ApiClient.Generated.cs
+
+# Skip EF Core migrations entirely (overrides built-in partial match)
+**/Migrations/**
+```
+
+Patterns use [gitignore glob syntax](https://git-scm.com/docs/gitignore#_pattern_format): `*`
+matches within a path segment, `**` matches across segments, and patterns are
+case-insensitive.
+
+### Empty exclusion file
+
+If `.meister-propr/exclude` exists but is empty (or contains only comments), **no exclusions
+are applied** — not even the built-in defaults. This lets you opt out of the defaults for a
+specific repository.
+
+### Excluded files in review results
+
+Each excluded file appears in the review job result with:
+
+- `isExcluded: true`
+- `exclusionReason`: the pattern that matched (e.g. `**/Migrations/*.Designer.cs`)
+- Zero input and output tokens recorded in the protocol
+
+The overall review summary and comment threads are generated from the non-excluded files only.
+
+---
+
+## Prompt Overrides
+
+Prompt overrides let you replace any of the hardcoded AI review prompt segments on a
+per-client or per-crawl-config basis. When the review pipeline assembles prompts it checks for
+an active override and substitutes it in place of the global default.
+
+### Valid prompt keys
+
+| Key | What it controls |
+|-----|-----------------|
+| `SystemPrompt` | Core reviewer persona and JSON output schema |
+| `AgenticLoopGuidance` | Rules governing tool calls, certainty thresholds, and suggestion blocks |
+| `SynthesisSystemPrompt` | Prompt for the cross-file narrative summary pass |
+| `QualityFilterSystemPrompt` | Prompt for the cross-file quality-filter pass |
+| `PerFileContextPrompt` | Per-file framing message sent to the AI at the start of each file review |
+
+### Scope
+
+An override can be scoped to an entire **client** (`clientScope`) or to a specific
+**crawl configuration** (`crawlConfigScope`). Crawl-config scope takes precedence over
+client scope during lookup.
+
+### Create an override
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/prompt-overrides \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scope": "clientScope",
+    "crawlConfigId": null,
+    "promptKey": "AgenticLoopGuidance",
+    "overrideText": "Your custom guidance here..."
+  }'
+```
+
+For `crawlConfigScope`, set `"scope": "crawlConfigScope"` and provide the `crawlConfigId` UUID.
+
+### Replace or delete an override
+
+```bash
+# Replace
+curl -k -X PUT https://localhost:5443/clients/<client-id>/prompt-overrides/<override-id> \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "overrideText": "Updated guidance..." }'
+
+# Delete (reverts to global default)
+curl -k -X DELETE https://localhost:5443/clients/<client-id>/prompt-overrides/<override-id> \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Only one override per `(clientId, crawlConfigId, promptKey)` combination is allowed — a
+`409 Conflict` is returned if you try to create a duplicate.
+
+---
+
+## Finding Dismissals
+
+When the AI repeatedly reports a finding that your team has decided to accept or ignore, you
+can dismiss it. The normalized pattern text is injected into the AI system prompt as an
+exclusion rule — the reviewer will not re-report it on future reviews for that client.
+
+### Dismiss a finding
+
+```bash
+curl -k -X POST https://localhost:5443/clients/<client-id>/finding-dismissals \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "originalMessage": "Consider adding null checks before accessing this property.",
+    "label": "Accepted — nullable reference types enabled project-wide"
+  }'
+```
+
+`label` is optional but helpful for admin UI clarity. `originalMessage` is the exact finding
+text from the AI review. It is normalised (lowercased, punctuation stripped, truncated to
+200 chars) into a `patternText` that is matched against future findings.
+
+### Update the label or delete a dismissal
+
+```bash
+# Update label
+curl -k -X PATCH https://localhost:5443/clients/<client-id>/finding-dismissals/<dismissal-id> \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "label": "Updated note" }'
+
+# Delete (finding will reappear in future reviews)
+curl -k -X DELETE https://localhost:5443/clients/<client-id>/finding-dismissals/<dismissal-id> \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+---
+
+## Admin UI
+
+A web-based admin interface is included in the `admin-ui/` directory. It is a Vue 3 SPA served
+separately from the API and connects to it at runtime.
+
+**Features:**
+
+- Review job dashboard with status, token usage, and file-level results
+- Per-file comment browser with severity filtering and inline dismiss actions
+- Crawl configuration management
+- Prompt override management
+- Finding dismissal management
+- Client and user administration
+
+**Running the Admin UI locally:**
+
+```bash
+cd admin-ui
+npm install
+npm run dev
+```
+
+The dev server starts on `http://localhost:5173` by default and proxies API calls to
+`https://localhost:5443`. Set `VITE_API_BASE_URL` to point at a different API host.
+
+**Docker:** The `docker-compose.yml` includes the Admin UI as a separate service served by
+nginx on port `3000`.
 
 ---
 
@@ -568,7 +840,7 @@ While processing, `status` is `"pending"` or `"processing"`. When done:
 dotnet test
 ```
 
-478 tests across four projects should pass without additional setup. The API integration tests
+496 tests across four projects should pass without additional setup. The API integration tests
 use `WebApplicationFactory` with fake credentials and in-memory stubs. Infrastructure
 integration tests spin up a real PostgreSQL 17 container automatically via Testcontainers
 (Docker or Podman required).

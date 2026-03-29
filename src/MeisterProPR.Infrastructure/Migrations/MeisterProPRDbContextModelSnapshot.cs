@@ -17,7 +17,7 @@ namespace MeisterProPR.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -231,14 +231,30 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<string>("ExclusionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("exclusion_reason");
+
                     b.Property<string>("FilePath")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("file_path");
 
+                    b.Property<bool>("IsCarriedForward")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_carried_forward");
+
                     b.Property<bool>("IsComplete")
                         .HasColumnType("boolean")
                         .HasColumnName("is_complete");
+
+                    b.Property<bool>("IsExcluded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_excluded");
 
                     b.Property<bool>("IsFailed")
                         .HasColumnType("boolean")
@@ -270,6 +286,15 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AiConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_connection_id");
+
+                    b.Property<string>("AiModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("ai_model");
+
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
@@ -290,6 +315,26 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("organization_url");
+
+                    b.Property<string>("PrRepositoryName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pr_repository_name");
+
+                    b.Property<string>("PrSourceBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pr_source_branch");
+
+                    b.Property<string>("PrTargetBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pr_target_branch");
+
+                    b.Property<string>("PrTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("pr_title");
 
                     b.Property<DateTimeOffset?>("ProcessingStartedAt")
                         .HasColumnType("timestamp with time zone")
@@ -475,6 +520,76 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("review_pr_scan_threads", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.AiConnectionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActiveModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("active_model");
+
+                    b.Property<string>("ApiKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("api_key");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("EndpointUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("endpoint_url");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_active");
+
+                    b.Property<short?>("ModelCategory")
+                        .HasColumnType("smallint")
+                        .HasColumnName("model_category");
+
+                    b.PrimitiveCollection<string>("Models")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("models");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_connections_client_id_active")
+                        .HasFilter("is_active = true");
+
+                    b.HasIndex("ClientId", "DisplayName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_connections_client_id_display_name");
+
+                    b.HasIndex("ClientId", "ModelCategory")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_connections_client_id_model_category")
+                        .HasFilter("model_category IS NOT NULL");
+
+                    b.ToTable("ai_connections", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.AppUserRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -652,6 +767,131 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_crawl_configurations_unique_config");
 
                     b.ToTable("crawl_configurations", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlRepoFilterRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CrawlConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crawl_configuration_id");
+
+                    b.Property<string>("RepositoryName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("repository_name");
+
+                    b.PrimitiveCollection<string>("TargetBranchPatterns")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_branch_patterns");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CrawlConfigurationId", "RepositoryName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_crawl_repo_filters_config_repo");
+
+                    b.ToTable("crawl_repo_filters", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.FindingDismissalRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("label");
+
+                    b.Property<string>("OriginalMessage")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("original_message");
+
+                    b.Property<string>("PatternText")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pattern_text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("idx_finding_dismissals_client_id");
+
+                    b.ToTable("finding_dismissals", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid?>("CrawlConfigId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crawl_config_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("OverrideText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("override_text");
+
+                    b.Property<string>("PromptKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("prompt_key");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CrawlConfigId");
+
+                    b.HasIndex("ClientId", "PromptKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_prompt_overrides_client_scope")
+                        .HasFilter("crawl_config_id IS NULL");
+
+                    b.HasIndex("ClientId", "CrawlConfigId", "PromptKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_prompt_overrides_crawl_config_scope")
+                        .HasFilter("crawl_config_id IS NOT NULL");
+
+                    b.HasIndex("ClientId", "Scope", "PromptKey")
+                        .HasDatabaseName("ix_prompt_overrides_client_id_scope_key");
+
+                    b.ToTable("prompt_overrides", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
@@ -851,6 +1091,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("ReviewPrScan");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.AiConnectionRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -860,6 +1111,46 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlRepoFilterRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", "CrawlConfiguration")
+                        .WithMany("RepoFilters")
+                        .HasForeignKey("CrawlConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CrawlConfiguration");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.FindingDismissalRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", "CrawlConfig")
+                        .WithMany()
+                        .HasForeignKey("CrawlConfigId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("CrawlConfig");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
@@ -919,6 +1210,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("Pats");
 
                     b.Navigation("RefreshTokens");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", b =>
+                {
+                    b.Navigation("RepoFilters");
                 });
 #pragma warning restore 612, 618
         }

@@ -66,6 +66,7 @@ public class ReviewOrchestrationServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "Test PR",
@@ -92,18 +93,20 @@ public class ReviewOrchestrationServiceTests
         IReviewPrScanRepository prScanRepository,
         ILogger<ReviewOrchestrationService> logger,
         IRepositoryInstructionFetcher? instructionFetcher = null,
-        IRepositoryInstructionEvaluator? instructionEvaluator = null)
+        IRepositoryInstructionEvaluator? instructionEvaluator = null,
+        IRepositoryExclusionFetcher? exclusionFetcher = null)
     {
         var threadClient = Substitute.For<IAdoThreadClient>();
         var threadReplier = Substitute.For<IAdoThreadReplier>();
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         reviewContextToolsFactory
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
 
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
+        var exclusionFetcherResolved = exclusionFetcher ?? CreateDefaultExclusionFetcher();
 
         return new ReviewOrchestrationService(
             jobs,
@@ -116,8 +119,10 @@ public class ReviewOrchestrationServiceTests
             threadClient,
             threadReplier,
             resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             fetcher,
+            exclusionFetcherResolved,
             evaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
@@ -139,6 +144,15 @@ public class ReviewOrchestrationServiceTests
             .EvaluateRelevanceAsync(Arg.Any<IReadOnlyList<RepositoryInstruction>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
         return evaluator;
+    }
+
+    private static IRepositoryExclusionFetcher CreateDefaultExclusionFetcher()
+    {
+        var fetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        fetcher
+            .FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewExclusionRules.Empty));
+        return fetcher;
     }
 
     /// <summary>Set up the clientRegistry to return a non-null reviewerId for the given job's ClientId.</summary>
@@ -165,6 +179,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -182,6 +197,87 @@ public class ReviewOrchestrationServiceTests
     }
 
     // T025 — AddOptionalReviewerAsync is called with client's ReviewerId before PostAsync
+
+    // T007 (US1) — reviewContextToolsFactory.Create is called with pr.SourceBranch as the 4th argument
+    [Fact]
+    public async Task ProcessAsync_PassesPrSourceBranchToReviewContextToolsFactory()
+    {
+        // Arrange
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        const string expectedSourceBranch = "refs/heads/feature/my-pr";
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "Test PR",
+            null,
+            expectedSourceBranch,
+            "main",
+            new List<ChangedFile>().AsReadOnly(),
+            PrStatus.Active,
+            null);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
+
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        reviewContextToolsFactory
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Returns(Substitute.For<IReviewContextTools>());
+
+        var threadClient = Substitute.For<IAdoThreadClient>();
+        var threadReplier = Substitute.For<IAdoThreadReplier>();
+        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
+
+        var service = new ReviewOrchestrationService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            threadClient,
+            threadReplier,
+            resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
+            reviewContextToolsFactory,
+            instructionFetcher,
+            CreateDefaultExclusionFetcher(),
+            instructionEvaluator,
+            Substitute.For<Microsoft.Extensions.Options.IOptions<AiReviewOptions>>(),
+            logger);
+
+        // Act
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Assert — 4th arg (sourceBranch) must be the PR's source branch
+        reviewContextToolsFactory.Received(1).Create(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            expectedSourceBranch,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<Guid?>());
+    }
 
     [Fact]
     public async Task ProcessAsync_CallsAddOptionalReviewerBeforePostAsync()
@@ -201,6 +297,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -256,6 +353,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -297,6 +395,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("ADO fetch error"));
@@ -330,10 +429,10 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("not configured")));
-        await reviewerManager.DidNotReceiveWithAnyArgs()
-            .AddOptionalReviewerAsync(null!, null!, null!, 0, Guid.Empty);
-        await commentPoster.DidNotReceiveWithAnyArgs()
-            .PostAsync(null!, null!, null!, 0, 0, null!);
+        await reviewerManager.DidNotReceive()
+            .AddOptionalReviewerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        await commentPoster.DidNotReceive()
+            .PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(), Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -365,6 +464,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -391,17 +491,15 @@ public class ReviewOrchestrationServiceTests
     }
 
 
-    [Theory]
-    [InlineData(PrStatus.Abandoned)]
-    [InlineData(PrStatus.Completed)]
-    public async Task ProcessAsync_PrNotActive_CallsSetFailedWithoutCallingAi(PrStatus status)
+    [Fact]
+    public async Task ProcessAsync_CompletedPrAtFetchTime_CallsSetFailedWithoutCallingAi()
     {
-        // Arrange
+        // T019 renames: Completed PR still calls SetFailedAsync (only Abandoned triggers SetCancelledAsync)
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
-        var closedPr = CreatePullRequest() with { Status = status };
+        var closedPr = CreatePullRequest() with { Status = PrStatus.Completed };
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prFetcher.FetchAsync(
@@ -410,6 +508,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(closedPr);
@@ -421,7 +520,7 @@ public class ReviewOrchestrationServiceTests
 
         // Assert: job is marked failed with the EC-002 message; AI is never called
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(m => m.Contains("closed or abandoned")));
-        await orchestrator.DidNotReceiveWithAnyArgs().ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive().ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
     }
 
     // T034 — AddOptionalReviewerAsync throws → PostAsync NOT called, job fails
@@ -442,6 +541,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -460,8 +560,8 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Any<string>());
-        await commentPoster.DidNotReceiveWithAnyArgs()
-            .PostAsync(null!, null!, null!, 0, 0, null!);
+        await commentPoster.DidNotReceive()
+            .PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(), Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -482,6 +582,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -525,6 +626,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -571,6 +673,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -611,6 +714,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -661,6 +765,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -685,7 +790,7 @@ public class ReviewOrchestrationServiceTests
         // Build service with custom resolutionCore
         var stubToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         stubToolsFactory
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
         var service = new ReviewOrchestrationService(
             jobs,
@@ -698,8 +803,10 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
@@ -713,6 +820,13 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>());
         await resolutionCore.DidNotReceiveWithAnyArgs()
             .EvaluateCodeChangeAsync(null!, null!, Arg.Any<CancellationToken>());
+
+        // File-by-file review must NOT run — no new commit was pushed
+        await orchestrator.DidNotReceiveWithAnyArgs()
+            .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>(), null);
+
+        // Job must be cleaned up after conversational reply
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -755,6 +869,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -769,7 +884,7 @@ public class ReviewOrchestrationServiceTests
 
         var stubToolsFactory2 = Substitute.For<IReviewContextToolsFactory>();
         stubToolsFactory2
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
         var service = new ReviewOrchestrationService(
             jobs,
@@ -782,8 +897,10 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
             stubToolsFactory2,
             CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
@@ -822,6 +939,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -861,6 +979,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -894,6 +1013,7 @@ public class ReviewOrchestrationServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "Test PR",
@@ -910,6 +1030,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -960,6 +1081,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -994,6 +1116,7 @@ public class ReviewOrchestrationServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "Test PR",
@@ -1010,6 +1133,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -1074,6 +1198,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -1124,6 +1249,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -1131,7 +1257,7 @@ public class ReviewOrchestrationServiceTests
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var stubToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         stubToolsFactory
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
 
         var service = new ReviewOrchestrationService(
@@ -1145,8 +1271,10 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
@@ -1191,6 +1319,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
@@ -1198,7 +1327,7 @@ public class ReviewOrchestrationServiceTests
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var stubToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         stubToolsFactory
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
 
         var service = new ReviewOrchestrationService(
@@ -1212,8 +1341,10 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
             logger);
@@ -1224,5 +1355,362 @@ public class ReviewOrchestrationServiceTests
             .EvaluateCodeChangeAsync(null!, null!);
         await resolutionCore.DidNotReceiveWithAnyArgs()
             .EvaluateConversationalReplyAsync(null!);
+    }
+
+    // --- T012: US1 PR Abandonment tests (failing until T019 is implemented) ---
+
+    [Fact]
+    public async Task ProcessAsync_AbandonedPr_CallsSetCancelledAsyncNotSetFailedAsync()
+    {
+        // T012 (a): pr.Status == Abandoned → SetCancelledAsync called, no AI calls
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var abandonedPr = CreatePullRequest() with { Status = PrStatus.Abandoned };
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(abandonedPr);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: SetCancelledAsync called; SetFailedAsync NOT called; AI not invoked
+        await jobs.Received(1).SetCancelledAsync(job.Id, Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetFailedAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_JobCancelledBetweenPrFetchAndFileReview_ExitsWithoutAiCalls()
+    {
+        // T012 (b): job status flips to Cancelled after PR fetch → no AI calls
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        // GetById returns a Cancelled job (CAS by another worker)
+        var cancelledJob = new ReviewJob(job.Id, job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId);
+        cancelledJob.Status = JobStatus.Cancelled;
+        jobs.GetById(job.Id).Returns(cancelledJob);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: orchestrator never called; no comment posted
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+        await commentPoster.DidNotReceive().PostAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_JobCancelledAfterFileReview_DiscardsResultNoCommentPost()
+    {
+        // T012 (c): job status flips to Cancelled between file-review and synthesis → no comment posted
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest(new List<PrCommentThread>());
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        var reviewResult = new ReviewResult("A thorough review summary.", new List<ReviewComment>().AsReadOnly());
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(reviewResult));
+
+        // Pre-review checkpoint: GetById returns non-Cancelled (let pre-check pass)
+        // Post-review checkpoint: GetById returns Cancelled
+        var normalJob = new ReviewJob(job.Id, job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId);
+        var cancelledJob = new ReviewJob(job.Id, job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId);
+        cancelledJob.Status = JobStatus.Cancelled;
+        // First call (pre-review check) returns the normal job; second call (post-review check) returns Cancelled
+        jobs.GetById(job.Id).Returns(normalJob, cancelledJob);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: comment NEVER posted; result not committed
+        await commentPoster.DidNotReceive().PostAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_CompletedPr_DoesNotCallSetCancelledAsync()
+    {
+        // T012 (d): pr.Status == Completed → SetCancelledAsync NOT called (only Abandoned triggers cancellation)
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var completedPr = CreatePullRequest() with { Status = PrStatus.Completed };
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(completedPr);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: SetCancelledAsync never called (completed PRs use SetFailedAsync or are silently skipped)
+        await jobs.DidNotReceive().SetCancelledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    // --- T022: US2 Incremental Review tests (failing until T024 is implemented) ---
+
+    /// <summary>
+    /// Helper: sets up a prior completed ReviewJob for iteration <paramref name="iteration"/>
+    /// with completed file results for each path in <paramref name="priorFilePaths"/>.
+    /// </summary>
+    private static ReviewJob BuildPriorJob(ReviewJob currentJob, int iteration, params string[] priorFilePaths)
+    {
+        var priorJobId = Guid.NewGuid();
+        var priorJob = new ReviewJob(priorJobId, currentJob.ClientId, currentJob.OrganizationUrl,
+            currentJob.ProjectId, currentJob.RepositoryId, currentJob.PullRequestId, iteration);
+        foreach (var path in priorFilePaths)
+        {
+            var result = new ReviewFileResult(priorJobId, path);
+            result.MarkCompleted($"summary for {path}", new List<ReviewComment>().AsReadOnly());
+            priorJob.FileReviewResults.Add(result);
+        }
+        return priorJob;
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PriorCompletedJobExists_CarriesForwardUnchangedFiles()
+    {
+        // T022 (a): prior Completed job exists → GetCompletedJobWithFileResultsAsync called,
+        // carried-forward results persisted for unchanged files, AI calls for delta only
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        // Job is for iteration 2; prior iteration was 1
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "new content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl, job.ProjectId, job.RepositoryId,
+            job.RepositoryId, job.PullRequestId, job.IterationId, "Test PR", null, "feature/x", "main",
+            new List<ChangedFile> { changedFile }.AsReadOnly(),
+            PrStatus.Active, null);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateReviewResult());
+
+        // Scan shows prior iteration was 1
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(scan));
+
+        // Prior job (iteration 1) has both Changed.cs and Unchanged.cs
+        var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
+        jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), 1, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert 1: carry-forward result persisted for the unchanged file only
+        await jobs.Received(1).AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Unchanged.cs"),
+            Arg.Any<CancellationToken>());
+
+        // Assert 2: carry-forward was NOT created for the changed file
+        await jobs.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Changed.cs"),
+            Arg.Any<CancellationToken>());
+
+        // Assert 3: AI orchestrator was still called (for the delta file Changed.cs)
+        await orchestrator.Received(1).ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NoPriorCompletedJob_ReviewsAllFilesNormally()
+    {
+        // T022 (b): no prior job → no carry-forward, all files reviewed in full
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        var changedFile = new ChangedFile("src/AFile.cs", ChangeType.Edit, "content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl, job.ProjectId, job.RepositoryId,
+            job.RepositoryId, job.PullRequestId, job.IterationId, "Test PR", null, "feature/x", "main",
+            new List<ChangedFile> { changedFile }.AsReadOnly(),
+            PrStatus.Active, null);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateReviewResult());
+
+        // Scan shows prior iteration 1 (so compareToIterationId will be 1)
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(scan));
+
+        // No prior completed job
+        jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(null));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: no carry-forward files added
+        await jobs.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
+            Arg.Any<CancellationToken>());
+
+        // Assert: AI orchestrator was called normally
+        await orchestrator.Received(1).ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EmptyDeltaWithPriorJob_DeletesJobWithoutAiCalls()
+    {
+        // T022 (c): delta is empty (no changed files) but prior job exists →
+        //           job deleted, no AI calls, all prior results carried forward
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        // PR has NO changed files
+        var pr = new PullRequest(
+            job.OrganizationUrl, job.ProjectId, job.RepositoryId,
+            job.RepositoryId, job.PullRequestId, job.IterationId, "Test PR", null, "feature/x", "main",
+            new List<ChangedFile>().AsReadOnly(),
+            PrStatus.Active, null);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        // Scan shows prior iteration 1
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(scan));
+
+        // Prior job has files (all will be carried forward since delta is empty)
+        var priorJob = BuildPriorJob(job, 1, "src/Alpha.cs", "src/Beta.cs");
+        jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: AI orchestrator was NOT called (nothing new to review)
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+
+        // Assert: job was deleted (no new comments to post)
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PriorJobExists_CarriedForwardPathsPopulatedInResult()
+    {
+        // T022 (d)/(e): synthesis receives carried-forward entries;
+        //               ReviewResult.CarriedForwardFilePaths populated correctly
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl, job.ProjectId, job.RepositoryId,
+            job.RepositoryId, job.PullRequestId, job.IterationId, "Test PR", null, "feature/x", "main",
+            new List<ChangedFile> { changedFile }.AsReadOnly(),
+            PrStatus.Active, null);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateReviewResult());
+
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(scan));
+
+        // Prior job: Changed.cs and Unchanged.cs; only Unchanged.cs will be carried forward
+        var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
+        jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        // Act
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Assert: SetResultAsync was called with CarriedForwardFilePaths containing the unchanged file
+        await jobs.Received(1).SetResultAsync(
+            job.Id,
+            Arg.Is<ReviewResult>(r => r.CarriedForwardFilePaths.Contains("src/Unchanged.cs")),
+            Arg.Any<CancellationToken>());
+
+        // Assert: the carried-forward path is NOT in the delta list (Changed.cs is the delta)
+        await jobs.Received(1).SetResultAsync(
+            job.Id,
+            Arg.Is<ReviewResult>(r => !r.CarriedForwardFilePaths.Contains("src/Changed.cs")),
+            Arg.Any<CancellationToken>());
     }
 }

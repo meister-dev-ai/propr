@@ -1,7 +1,9 @@
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -26,6 +28,7 @@ public sealed class AgentMentionAnswerServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "My PR",
@@ -46,7 +49,7 @@ public sealed class AgentMentionAnswerServiceTests
             .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
-        var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
         var rawMention = $"@<{BotGuid}> Is this method safe?";
 
         // Act
@@ -76,7 +79,7 @@ public sealed class AgentMentionAnswerServiceTests
                 new PrThreadComment("alice", $"@<{BotGuid}> Is this safe?", BotGuid),
             ]);
         var pr = MakePr(threads: [thread]);
-        var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act
         await sut.AnswerAsync(pr, $"@<{BotGuid}> Is this safe?", 5);
@@ -92,7 +95,7 @@ public sealed class AgentMentionAnswerServiceTests
     {
         // Arrange
         var chatClient = MakeChatClient("fine");
-        var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act & Assert: no exception, returns AI text
         var result = await sut.AnswerAsync(MakePr(), $"@<{BotGuid}> Hello?", 999);
@@ -104,7 +107,7 @@ public sealed class AgentMentionAnswerServiceTests
     {
         // Arrange
         var chatClient = MakeChatClient("Certainly, here is the answer.");
-        var sut = new AgentMentionAnswerService(chatClient, NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
 
         // Act
         var result = await sut.AnswerAsync(MakePr(), "any question", 1);

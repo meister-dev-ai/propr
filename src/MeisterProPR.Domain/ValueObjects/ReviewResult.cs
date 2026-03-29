@@ -7,4 +7,11 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="Comments">List of individual review comments.</param>
 public sealed record ReviewResult(
     string Summary,
-    IReadOnlyList<ReviewComment> Comments);
+    IReadOnlyList<ReviewComment> Comments)
+{
+    /// <summary>
+    ///     File paths whose results were carried forward from a prior iteration's review.
+    ///     Empty for full (non-incremental) reviews.
+    /// </summary>
+    public IReadOnlyList<string> CarriedForwardFilePaths { get; init; } = [];
+}

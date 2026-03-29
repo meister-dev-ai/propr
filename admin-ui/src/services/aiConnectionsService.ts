@@ -1,0 +1,85 @@
+/**
+ * Typed wrapper functions for the AI connections endpoints.
+ * All functions use the shared admin client from api.ts.
+ */
+
+import { createAdminClient } from '@/services/api'
+import type { components } from '@/services/generated/openapi'
+
+export type AiConnectionDto = components['schemas']['AiConnectionDto']
+export type CreateAiConnectionRequest = components['schemas']['CreateAiConnectionRequest']
+export type UpdateAiConnectionRequest = components['schemas']['UpdateAiConnectionRequest']
+export type ActivateAiConnectionRequest = components['schemas']['ActivateAiConnectionRequest']
+
+/** Lists all AI connections for the given client. */
+export async function listAiConnections(clientId: string): Promise<AiConnectionDto[]> {
+  const { data } = await createAdminClient().GET('/clients/{clientId}/ai-connections', {
+    params: { path: { clientId } },
+  })
+  return (data as AiConnectionDto[]) ?? []
+}
+
+/** Creates a new AI connection for the given client. Returns the new connection DTO. */
+export async function createAiConnection(
+  clientId: string,
+  request: CreateAiConnectionRequest,
+): Promise<AiConnectionDto> {
+  const { data } = await createAdminClient().POST('/clients/{clientId}/ai-connections', {
+    params: { path: { clientId } },
+    body: request,
+  })
+  return data as AiConnectionDto
+}
+
+/** Partially updates an AI connection. Returns the updated connection DTO. */
+export async function updateAiConnection(
+  clientId: string,
+  connectionId: string,
+  request: UpdateAiConnectionRequest,
+): Promise<AiConnectionDto> {
+  const { data } = await createAdminClient().PATCH(
+    '/clients/{clientId}/ai-connections/{connectionId}',
+    {
+      params: { path: { clientId, connectionId } },
+      body: request,
+    },
+  )
+  return data as AiConnectionDto
+}
+
+/** Deletes an AI connection. */
+export async function deleteAiConnection(clientId: string, connectionId: string): Promise<void> {
+  await createAdminClient().DELETE('/clients/{clientId}/ai-connections/{connectionId}', {
+    params: { path: { clientId, connectionId } },
+  })
+}
+
+/** Activates an AI connection with the given model. Returns the updated connection DTO. */
+export async function activateAiConnection(
+  clientId: string,
+  connectionId: string,
+  model: string,
+): Promise<AiConnectionDto> {
+  const { data } = await createAdminClient().POST(
+    '/clients/{clientId}/ai-connections/{connectionId}/activate',
+    {
+      params: { path: { clientId, connectionId } },
+      body: { model },
+    },
+  )
+  return data as AiConnectionDto
+}
+
+/** Deactivates an AI connection. Returns the updated connection DTO. */
+export async function deactivateAiConnection(
+  clientId: string,
+  connectionId: string,
+): Promise<AiConnectionDto> {
+  const { data } = await createAdminClient().POST(
+    '/clients/{clientId}/ai-connections/{connectionId}/deactivate',
+    {
+      params: { path: { clientId, connectionId } },
+    },
+  )
+  return data as AiConnectionDto
+}

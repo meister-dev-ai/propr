@@ -6,6 +6,8 @@ GEMINI.md
 bin/
 obj/
 out/
+analysis/
+.publish/
 
 # Visual Studio
 *.user
@@ -58,3 +60,4 @@ admin-ui/.env.local
 admin-ui/.env.*.local
 # Derived from root openapi.json — not checked in
 admin-ui/openapi.json
+admin-ui/src/services/generated/

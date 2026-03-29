@@ -13,4 +13,15 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     <c>CommentResolutionBehavior</c> is <c>WithReply</c>, or for conversational responses.
 ///     <c>null</c> when no reply is needed.
 /// </param>
-public sealed record ThreadResolutionResult(bool IsResolved, string? ReplyText);
+/// <param name="InputTokens">
+///     Input token count reported by the AI provider for this evaluation, or <see langword="null" />
+///     when usage data is unavailable. Used for protocol recording and cost attribution.
+/// </param>
+/// <param name="OutputTokens">
+///     Output token count reported by the AI provider for this evaluation, or <see langword="null" />.
+/// </param>
+public sealed record ThreadResolutionResult(
+    bool IsResolved,
+    string? ReplyText,
+    long? InputTokens = null,
+    long? OutputTokens = null);

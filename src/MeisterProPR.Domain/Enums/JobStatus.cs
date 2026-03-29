@@ -16,4 +16,7 @@ public enum JobStatus
 
     /// <summary>Job failed with an error.</summary>
     Failed,
+
+    /// <summary>Job was cancelled because the pull request was abandoned before the review completed.</summary>
+    Cancelled = 4,
 }

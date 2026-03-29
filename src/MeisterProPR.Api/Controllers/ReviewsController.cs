@@ -12,7 +12,8 @@ public sealed partial class ReviewsController(
     IJobRepository jobRepository,
     IAdoTokenValidator adoTokenValidator,
     IClientRegistry clientRegistry,
-    ILogger<ReviewsController> logger) : ControllerBase
+    ILogger<ReviewsController> logger,
+    IPullRequestFetcher? prFetcher = null) : ControllerBase
 {
     private static ReviewListItem MapToListItem(ReviewJob job)
     {
@@ -178,6 +179,29 @@ public sealed partial class ReviewsController(
 
         await jobRepository.AddAsync(job, ct);
 
+        // Attempt to populate PR context snapshot from ADO (non-blocking — failure must not prevent job creation).
+        if (prFetcher is not null)
+        {
+            try
+            {
+                var prData = await prFetcher.FetchAsync(
+                    request.OrganizationUrl,
+                    request.ProjectId,
+                    request.RepositoryId,
+                    request.PullRequestId,
+                    request.IterationId,
+                    clientId: clientId.Value,
+                    cancellationToken: ct);
+                job.SetPrContext(prData.Title, prData.RepositoryName, prData.SourceBranch, prData.TargetBranch);
+                await jobRepository.UpdatePrContextAsync(
+                    job.Id, prData.Title, prData.RepositoryName, prData.SourceBranch, prData.TargetBranch, ct);
+            }
+            catch (Exception ex)
+            {
+                this.LogPrContextFetchFailed(job.Id, ex);
+            }
+        }
+
         this.LogReviewJobCreated(job.Id, job.PullRequestId);
         return this.Accepted(new ReviewJobResponse(job.Id));
     }
@@ -187,6 +211,9 @@ public sealed partial class ReviewsController(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} created for PR#{PrId}")]
     private partial void LogReviewJobCreated(Guid jobId, int prId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to fetch PR context for job {JobId}; continuing without PR context.")]
+    private partial void LogPrContextFetchFailed(Guid jobId, Exception ex);
 }
 
 /// <summary>Request payload to submit a pull request for review.</summary>

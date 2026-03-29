@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
@@ -52,6 +53,15 @@ public sealed partial class AdoAssignedPrFetcher(
 
         activity?.SetTag("ado.prs_found", prs.Count);
 
+        // Apply repo and branch filters when the config specifies any.
+        if (config.RepoFilters.Count > 0)
+        {
+            prs = prs
+                .Where(pr => MatchesRepoFilters(config.RepoFilters, pr))
+                .ToList();
+            activity?.SetTag("ado.prs_after_filter", prs.Count);
+        }
+
         var results = new List<AssignedPullRequestRef>(prs.Count);
         foreach (var pr in prs)
         {
@@ -73,7 +83,11 @@ public sealed partial class AdoAssignedPrFetcher(
                         config.ProjectId,
                         pr.Repository.Id.ToString(),
                         pr.PullRequestId,
-                        latestIteration));
+                        latestIteration,
+                        PrTitle: pr.Title,
+                        RepositoryName: pr.Repository?.Name,
+                        SourceBranch: StripRefsHeads(pr.SourceRefName ?? string.Empty),
+                        TargetBranch: StripRefsHeads(pr.TargetRefName ?? string.Empty)));
             }
             catch (Exception ex)
             {
@@ -107,5 +121,44 @@ public sealed partial class AdoAssignedPrFetcher(
 
         var connection = await connectionFactory.GetConnectionAsync(config.OrganizationUrl, credentials, ct);
         return connection.GetClient<GitHttpClient>();
+    }
+
+    /// <summary>
+    ///     Returns true if the PR matches at least one repo filter (and its optional branch patterns).
+    /// </summary>
+    private static bool MatchesRepoFilters(
+        IReadOnlyList<CrawlRepoFilterDto> filters,
+        GitPullRequest pr)
+    {
+        var repoName = pr.Repository?.Name ?? string.Empty;
+
+        foreach (var filter in filters)
+        {
+            if (!string.Equals(filter.RepositoryName, repoName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Repo matched — check branch patterns (empty list = all branches accepted).
+            if (filter.TargetBranchPatterns.Count == 0)
+            {
+                return true;
+            }
+
+            var targetBranch = StripRefsHeads(pr.TargetRefName ?? string.Empty);
+            return MatchesBranchPatterns(filter.TargetBranchPatterns, targetBranch);
+        }
+
+        return false;
+    }
+
+    private static string StripRefsHeads(string branch) =>
+        branch.StartsWith("refs/heads/", StringComparison.Ordinal) ? branch[11..] : branch;
+
+    private static bool MatchesBranchPatterns(IReadOnlyList<string> patterns, string branch)
+    {
+        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+        matcher.AddIncludePatterns(patterns);
+        return matcher.Match(branch).HasMatches;
     }
 }

@@ -14,6 +14,7 @@ public sealed class StubReviewContextToolsFactory : IReviewContextToolsFactory
         string organizationUrl,
         string projectId,
         string repositoryId,
+        string sourceBranch,
         int pullRequestId,
         int iterationId,
         Guid? clientId)

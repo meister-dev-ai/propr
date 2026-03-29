@@ -10,6 +10,26 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext)
     : ICrawlConfigurationRepository
 {
+    private static CrawlConfigurationDto ToDto(CrawlConfigurationRecord c, Guid? reviewerId) =>
+        new(
+            c.Id,
+            c.ClientId,
+            c.OrganizationUrl,
+            c.ProjectId,
+            reviewerId,
+            c.CrawlIntervalSeconds,
+            c.IsActive,
+            c.CreatedAt,
+            c.RepoFilters
+                .Select(f => new CrawlRepoFilterDto(f.Id, f.RepositoryName, f.TargetBranchPatterns))
+                .ToList()
+                .AsReadOnly());
+
+    private IQueryable<CrawlConfigurationRecord> BaseQuery() =>
+        dbContext.CrawlConfigurations
+            .Include(c => c.Client)
+            .Include(c => c.RepoFilters);
+
     /// <inheritdoc />
     public async Task<bool> SetActiveAsync(Guid configId, Guid clientId, bool isActive, CancellationToken ct = default)
     {
@@ -60,24 +80,17 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
             clientReviewerId,
             record.CrawlIntervalSeconds,
             record.IsActive,
-            record.CreatedAt);
+            record.CreatedAt,
+            []);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default)
     {
-        return await dbContext.CrawlConfigurations
+        var records = await this.BaseQuery()
             .Where(c => c.IsActive)
-            .Select(c => new CrawlConfigurationDto(
-                c.Id,
-                c.ClientId,
-                c.OrganizationUrl,
-                c.ProjectId,
-                c.Client.ReviewerId,
-                c.CrawlIntervalSeconds,
-                c.IsActive,
-                c.CreatedAt))
             .ToListAsync(ct);
+        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -114,18 +127,102 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         Guid clientId,
         CancellationToken ct = default)
     {
-        return await dbContext.CrawlConfigurations
+        var records = await this.BaseQuery()
             .Where(c => c.ClientId == clientId)
             .OrderByDescending(c => c.CreatedAt)
-            .Select(c => new CrawlConfigurationDto(
-                c.Id,
-                c.ClientId,
-                c.OrganizationUrl,
-                c.ProjectId,
-                c.Client.ReviewerId,
-                c.CrawlIntervalSeconds,
-                c.IsActive,
-                c.CreatedAt))
             .ToListAsync(ct);
+        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CrawlConfigurationDto>> GetByClientIdsAsync(
+        IEnumerable<Guid> clientIds, CancellationToken ct = default)
+    {
+        var ids = clientIds.ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var records = await this.BaseQuery()
+            .Where(c => ids.Contains(c.ClientId))
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(ct);
+        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
+    }
+
+    /// <inheritdoc />
+    public async Task<CrawlConfigurationDto?> GetByIdAsync(Guid configId, CancellationToken ct = default)
+    {
+        var record = await this.BaseQuery()
+            .Where(c => c.Id == configId)
+            .FirstOrDefaultAsync(ct);
+        return record is null ? null : ToDto(record, record.Client.ReviewerId);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> UpdateAsync(
+        Guid configId,
+        int? crawlIntervalSeconds,
+        bool? isActive,
+        Guid? ownerClientId,
+        CancellationToken ct = default)
+    {
+        var query = dbContext.CrawlConfigurations.Where(c => c.Id == configId);
+        if (ownerClientId.HasValue)
+        {
+            query = query.Where(c => c.ClientId == ownerClientId.Value);
+        }
+
+        var record = await query.FirstOrDefaultAsync(ct);
+        if (record is null)
+        {
+            return false;
+        }
+
+        if (crawlIntervalSeconds.HasValue)
+        {
+            record.CrawlIntervalSeconds = crawlIntervalSeconds.Value;
+        }
+
+        if (isActive.HasValue)
+        {
+            record.IsActive = isActive.Value;
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> UpdateRepoFiltersAsync(
+        Guid configId,
+        IReadOnlyList<CrawlRepoFilterDto> filters,
+        CancellationToken ct = default)
+    {
+        var config = await dbContext.CrawlConfigurations
+            .Include(c => c.RepoFilters)
+            .FirstOrDefaultAsync(c => c.Id == configId, ct);
+        if (config is null)
+        {
+            return false;
+        }
+
+        // Full-replacement semantics: remove all existing filters, then insert new ones.
+        dbContext.CrawlRepoFilters.RemoveRange(config.RepoFilters);
+
+        foreach (var filter in filters)
+        {
+            config.RepoFilters.Add(new CrawlRepoFilterRecord
+            {
+                Id = Guid.NewGuid(),
+                CrawlConfigurationId = configId,
+                RepositoryName = filter.RepositoryName,
+                TargetBranchPatterns = filter.TargetBranchPatterns.ToArray(),
+            });
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        return true;
     }
 }

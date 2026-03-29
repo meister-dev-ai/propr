@@ -90,4 +90,29 @@ public interface IJobRepository
     /// </summary>
     [Obsolete("Use GetByIdWithProtocolsAsync instead.")]
     Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Marks the job as cancelled. No-op if the job does not exist or is already in a terminal state.</summary>
+    Task SetCancelledAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
+    Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        string organizationUrl, string projectId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the most-recent Completed job for the given PR iteration with
+    ///     <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or <see langword="null" />.
+    /// </summary>
+    Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        CancellationToken ct = default);
+
+    /// <summary>Persists the AI connection snapshot captured at job-start time.</summary>
+    Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default);
+
+    /// <summary>Persists the PR context snapshot captured after job creation.</summary>
+    Task UpdatePrContextAsync(Guid id, string? prTitle, string? prRepositoryName, string? prSourceBranch, string? prTargetBranch, CancellationToken ct = default);
 }

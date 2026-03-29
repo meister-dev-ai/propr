@@ -1,8 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
@@ -12,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
@@ -537,6 +544,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
 
+                // IUserRepository stub (GetClients now injects it for non-admin JWT users)
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<Domain.Entities.AppUser?>(null));
+                services.AddSingleton(userRepo);
+
                 // Provide a stub ICrawlConfigurationRepository for crawl config endpoints
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
@@ -558,7 +571,8 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                             null,
                             ci.ArgAt<int>(3),
                             true,
-                            DateTimeOffset.UtcNow)));
+                            DateTimeOffset.UtcNow,
+                            [])));
                 crawlRepo.SetActiveAsync(
                         Arg.Any<Guid>(),
                         Arg.Any<Guid>(),
@@ -607,6 +621,219 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                 });
+            db.SaveChanges();
+
+            return host;
+        }
+    }
+}
+
+/// <summary>
+///     T036 — integration tests covering JWT-based access to <c>GET /clients</c>.
+///     These tests are initially RED (failing) until T038 makes <c>GetClients</c> role-aware.
+/// </summary>
+public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory factory)
+    : IClassFixture<ClientsJwtGetTests.ClientsJwtApiFactory>
+{
+    // (a) Admin JWT → returns all clients
+    [Fact]
+    public async Task GetClients_AdminJwt_Returns200WithAllClients()
+    {
+        var http = factory.CreateClient();
+        var token = factory.GenerateToken(factory.AdminUserId, AppUserRole.Admin);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        // Admin should see all 3 seeded clients
+        Assert.Equal(3, items.GetArrayLength());
+    }
+
+    // (b) User JWT with 2 assigned clients — FAILING until T038
+    [Fact]
+    public async Task GetClients_UserJwtWithTwoAssignments_Returns200WithScopedClients()
+    {
+        var http = factory.CreateClient();
+        var token = factory.GenerateToken(factory.TestUserId, AppUserRole.User);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        // User should see only their 2 assigned clients, not all 3
+        Assert.Equal(2, items.GetArrayLength());
+    }
+
+    // (c) User JWT with zero assignments — FAILING until T038
+    [Fact]
+    public async Task GetClients_UserJwtWithNoAssignments_Returns200WithEmptyList()
+    {
+        var http = factory.CreateClient();
+        var token = factory.GenerateToken(factory.UnassignedUserId, AppUserRole.User);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        Assert.Equal(0, items.GetArrayLength());
+    }
+
+    // (d) No credentials → 401
+    [Fact]
+    public async Task GetClients_NoCredentials_Returns401()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    public sealed class ClientsJwtApiFactory : WebApplicationFactory<Program>
+    {
+        private const string TestJwtSecret = "test_jwt_secret_that_is_32_chars!";
+        private const string ValidAdminKey = "admin-key-min-16-chars-ok";
+        private const string ValidClientKey = "jwt-test-client-key-min-16-chars";
+
+        private readonly string _dbName = $"TestDb_ClientsJwt_{Guid.NewGuid()}";
+        private readonly InMemoryDatabaseRoot _dbRoot = new();
+
+        /// <summary>ID of the admin user.</summary>
+        public Guid AdminUserId { get; } = Guid.NewGuid();
+
+        /// <summary>ID of the normal user who has 2 client assignments.</summary>
+        public Guid TestUserId { get; } = Guid.NewGuid();
+
+        /// <summary>ID of a normal user with no client assignments.</summary>
+        public Guid UnassignedUserId { get; } = Guid.NewGuid();
+
+        /// <summary>IDs of the 3 seeded clients.</summary>
+        public Guid ClientAId { get; } = Guid.NewGuid();
+        public Guid ClientBId { get; } = Guid.NewGuid();
+        public Guid ClientCId { get; } = Guid.NewGuid();
+
+        public string GenerateToken(Guid userId, AppUserRole role)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var token = new JwtSecurityToken(
+                issuer: "meisterpropr",
+                audience: "meisterpropr",
+                claims:
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", role.ToString()),
+                ],
+                expires: DateTime.UtcNow.AddHours(1),
+                signingCredentials: creds);
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+            builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
+            builder.UseSetting("MEISTER_CLIENT_KEYS", ValidClientKey);
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+
+            var dbName = this._dbName;
+            var dbRoot = this._dbRoot;
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
+                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+
+                services.AddDbContext<MeisterProPRDbContext>(opts =>
+                    opts.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<IClientAdminService, ClientAdminService>();
+
+                // IJwtTokenService must be explicit for in-memory (non-DB) mode
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
+                // IUserRepository stub: two users with known assignments
+                var testUserId = this.TestUserId;
+                var unassignedUserId = this.UnassignedUserId;
+                var clientAId = this.ClientAId;
+                var clientBId = this.ClientBId;
+
+                var testUser = new AppUser
+                {
+                    Id = testUserId,
+                    Username = "testuser",
+                    GlobalRole = AppUserRole.User,
+                    IsActive = true,
+                };
+                testUser.ClientAssignments.Add(new UserClientRole { UserId = testUserId, ClientId = clientAId });
+                testUser.ClientAssignments.Add(new UserClientRole { UserId = testUserId, ClientId = clientBId });
+
+                var unassignedUser = new AppUser
+                {
+                    Id = unassignedUserId,
+                    Username = "unassigned",
+                    GlobalRole = AppUserRole.User,
+                    IsActive = true,
+                };
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(testUserId, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(testUser));
+                userRepo.GetByIdWithAssignmentsAsync(unassignedUserId, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(unassignedUser));
+                userRepo.GetByIdWithAssignmentsAsync(
+                        Arg.Is<Guid>(id => id != testUserId && id != unassignedUserId),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+                services.AddSingleton(userRepo);
+
+                // Stub ICrawlConfigurationRepository (not used by GetClients but needed for DI resolution)
+                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
+                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
+                crawlRepo.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
+                services.AddSingleton(crawlRepo);
+
+                // Stub IClientRegistry
+                var clientRegistry = Substitute.For<IClientRegistry>();
+                clientRegistry.IsValidKey(ValidClientKey).Returns(true);
+                clientRegistry.GetClientIdByKeyAsync(ValidClientKey, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<Guid?>(this.ClientAId));
+                services.AddSingleton(clientRegistry);
+
+                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
+                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
+                services.AddSingleton(adoCredRepo);
+            });
+        }
+
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            var host = base.CreateHost(builder);
+
+            // Seed 3 clients
+            using var scope = host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.AddRange(
+                new ClientRecord { Id = this.ClientAId, Key = "client-a-key-min-16", DisplayName = "Client A", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new ClientRecord { Id = this.ClientBId, Key = "client-b-key-min-16", DisplayName = "Client B", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new ClientRecord { Id = this.ClientCId, Key = "client-c-key-min-16", DisplayName = "Client C", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
             db.SaveChanges();
 
             return host;

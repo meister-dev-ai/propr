@@ -1,10 +1,5 @@
 <template>
   <div class="ado-credentials-form">
-    <h3>ADO Credentials</h3>
-    <p class="credentials-status">
-      Status: {{ hasCredentials ? 'Configured' : 'Not configured' }}
-    </p>
-
     <form @submit.prevent="handleSave">
       <div v-if="formError" class="error">{{ formError }}</div>
 
@@ -22,17 +17,17 @@
       </div>
 
       <div class="form-actions">
-        <button type="submit" :disabled="saving">
+        <button type="submit" class="btn-primary" :disabled="saving">
           {{ saving ? 'Saving…' : 'Save Credentials' }}
         </button>
         <button
           v-if="hasCredentials"
           type="button"
-          class="clear-btn btn-danger"
+          class="btn-danger"
           @click="handleClear"
           :disabled="saving"
         >
-          Clear
+          <i class="fi fi-rr-trash"></i> Remove Credentials
         </button>
       </div>
     </form>

@@ -3,6 +3,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.WebApi;
@@ -15,18 +16,20 @@ namespace MeisterProPR.Infrastructure.AzureDevOps;
 ///     File content is cached in memory for the lifetime of the instance to avoid
 ///     redundant network calls within a single review pass.
 /// </summary>
-public class AdoReviewContextTools : IReviewContextTools
+public partial class AdoReviewContextTools : IReviewContextTools
 {
     private readonly Guid? _clientId;
     private readonly VssConnectionFactory _connectionFactory;
     private readonly IClientAdoCredentialRepository _credentialRepository;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
     private readonly int _iterationId;
+    private readonly ILogger<AdoReviewContextTools> _logger;
     private readonly AiReviewOptions _options;
     private readonly string _organizationUrl;
     private readonly string _projectId;
     private readonly int _pullRequestId;
     private readonly string _repositoryId;
+    private readonly string _sourceBranch;
 
     /// <summary>
     ///     Initializes a new <see cref="AdoReviewContextTools" /> scoped to the given pull request.
@@ -40,6 +43,8 @@ public class AdoReviewContextTools : IReviewContextTools
     /// <param name="pullRequestId">Pull request numeric identifier.</param>
     /// <param name="iterationId">Pull request iteration identifier.</param>
     /// <param name="clientId">Optional client identifier for credential lookup.</param>
+    /// <param name="sourceBranch">PR source branch enforced for all file-fetch operations.</param>
+    /// <param name="logger">Logger for diagnostic messages.</param>
     public AdoReviewContextTools(
         VssConnectionFactory connectionFactory,
         IClientAdoCredentialRepository credentialRepository,
@@ -47,9 +52,11 @@ public class AdoReviewContextTools : IReviewContextTools
         string organizationUrl,
         string projectId,
         string repositoryId,
+        string sourceBranch,
         int pullRequestId,
         int iterationId,
-        Guid? clientId)
+        Guid? clientId,
+        ILogger<AdoReviewContextTools>? logger = null)
     {
         this._connectionFactory = connectionFactory;
         this._credentialRepository = credentialRepository;
@@ -57,9 +64,11 @@ public class AdoReviewContextTools : IReviewContextTools
         this._organizationUrl = organizationUrl;
         this._projectId = projectId;
         this._repositoryId = repositoryId;
+        this._sourceBranch = sourceBranch;
         this._pullRequestId = pullRequestId;
         this._iterationId = iterationId;
         this._clientId = clientId;
+        this._logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AdoReviewContextTools>.Instance;
     }
 
     /// <inheritdoc />
@@ -87,6 +96,7 @@ public class AdoReviewContextTools : IReviewContextTools
     public async Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct)
     {
         var gitClient = await this.GetGitClientAsync(ct);
+        var normalizedBranch = NormalizeBranchName(this._sourceBranch);
 
         GitBranchStats? branchRef;
         try
@@ -94,7 +104,7 @@ public class AdoReviewContextTools : IReviewContextTools
             branchRef = await gitClient.GetBranchAsync(
                 this._projectId,
                 this._repositoryId,
-                branch,
+                normalizedBranch,
                 cancellationToken: ct);
         }
         catch (VssServiceResponseException)
@@ -134,22 +144,25 @@ public class AdoReviewContextTools : IReviewContextTools
             return $"[Binary file — content not available: {path}]";
         }
 
-        var cacheKey = $"{branch}:{path}";
+        var normalizedBranch = NormalizeBranchName(this._sourceBranch);
+        var cacheKey = $"{normalizedBranch}:{path}";
 
         if (!this._fileCache.TryGetValue(cacheKey, out var content))
         {
             string? rawContent;
             try
             {
-                rawContent = await this.FetchRawFileContentAsync(path, branch, ct);
+                rawContent = await this.FetchRawFileContentAsync(path, normalizedBranch, ct);
             }
             catch
             {
+                LogFileNotFound(this._logger, path, normalizedBranch);
                 return string.Empty;
             }
 
             if (rawContent is null)
             {
+                LogFileNotFound(this._logger, path, normalizedBranch);
                 return string.Empty;
             }
 
@@ -220,6 +233,12 @@ public class AdoReviewContextTools : IReviewContextTools
         };
     }
 
+    /// <summary>Strips <c>refs/heads/</c> prefix from a branch name so it matches what ADO's branch-scoped APIs expect.</summary>
+    private static string NormalizeBranchName(string branch) =>
+        branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? branch["refs/heads/".Length..]
+            : branch;
+
     private async Task<GitHttpClient> GetGitClientAsync(CancellationToken ct)
     {
         var credentials = this._clientId.HasValue
@@ -228,4 +247,9 @@ public class AdoReviewContextTools : IReviewContextTools
         var connection = await this._connectionFactory.GetConnectionAsync(this._organizationUrl, credentials, ct);
         return connection.GetClient<GitHttpClient>();
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "File not found in repository (branch: {Branch}): {Path}")]
+    private static partial void LogFileNotFound(ILogger logger, string path, string branch);
 }

@@ -1,33 +1,42 @@
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
 const REFRESH_TOKEN_KEY = 'meisterpropr_refresh_token'
 
+// Initialize shared reactive state FROM storage
+const accessToken = ref<string | null>(sessionStorage.getItem(ACCESS_TOKEN_KEY))
+const refreshToken = ref<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY))
+
 export function useSession() {
-  function setTokens(accessToken: string, refreshToken: string): void {
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  function setTokens(at: string, rt: string): void {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, at)
+    localStorage.setItem(REFRESH_TOKEN_KEY, rt)
+    accessToken.value = at
+    refreshToken.value = rt
   }
 
   function getAccessToken(): string | null {
-    return sessionStorage.getItem(ACCESS_TOKEN_KEY)
+    return accessToken.value
   }
 
   function getRefreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY)
+    return refreshToken.value
   }
 
   function clearTokens(): void {
     sessionStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    accessToken.value = null
+    refreshToken.value = null
   }
 
   function setAccessToken(token: string): void {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, token)
+    accessToken.value = token
   }
 
   /** Returns true when an access token is present in this session. */
-  const isAuthenticated = computed(() => getAccessToken() !== null)
+  const isAuthenticated = computed(() => accessToken.value !== null)
 
   /**
    * Returns seconds until the access token expires, or 0 if expired/missing.
@@ -65,10 +74,10 @@ export function useSession() {
 
   // Legacy — kept for backward compatibility during migration
   function setAdminKey(key: string): void {
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, key)
+    setAccessToken(key)
   }
   function getAdminKey(): string | null {
-    return sessionStorage.getItem(ACCESS_TOKEN_KEY)
+    return getAccessToken()
   }
   function clearAdminKey(): void {
     clearTokens()
@@ -90,4 +99,5 @@ export function useSession() {
     clearAdminKey,
   }
 }
+
 

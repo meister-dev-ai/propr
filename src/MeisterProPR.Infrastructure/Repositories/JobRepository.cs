@@ -237,4 +237,76 @@ public sealed class JobRepository(
     {
         return await this.GetByIdWithProtocolsAsync(id, ct);
     }
+
+    /// <inheritdoc />
+    public async Task SetCancelledAsync(Guid id, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled)
+        {
+            return;
+        }
+
+        job.Status = JobStatus.Cancelled;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        string organizationUrl, string projectId, CancellationToken ct = default)
+    {
+        return await dbContext.ReviewJobs
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        (j.Status == JobStatus.Pending || j.Status == JobStatus.Processing))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        CancellationToken ct = default)
+    {
+        return await dbContext.ReviewJobs
+            .Include(j => j.FileReviewResults)
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        j.IterationId == iterationId &&
+                        j.Status == JobStatus.Completed)
+            .OrderByDescending(j => j.CompletedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.SetAiConfig(connectionId, model);
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdatePrContextAsync(Guid id, string? prTitle, string? prRepositoryName, string? prSourceBranch, string? prTargetBranch, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.SetPrContext(prTitle, prRepositoryName, prSourceBranch, prTargetBranch);
+        await dbContext.SaveChangesAsync(ct);
+    }
 }

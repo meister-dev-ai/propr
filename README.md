@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/saenridanra/meister-propr/actions/workflows/ci.yml"><img src="https://github.com/saenridanra/meister-propr/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml"><img src="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3"></a>
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
 </p>
@@ -24,53 +24,30 @@ The project was built for
 the [AI Dev Days Hackathon](https://github.com/Azure/AI-Dev-Days-Hackathon/blob/main/README.md).
 
 The submission state is available with tag `ai-dev-days-submission` commit
-`db1683a` [here](https://github.com/saenridanra/meister-propr/releases/tag/ai-dev-days-submission).
+`db1683a` [here](https://github.com/meister-dev-ai/propr/releases/tag/ai-dev-days-submission).
 
 ## Features
 
-- **AI review on demand** — POST a PR reference, get comments posted directly in ADO
+- **AI code reviews in Azure DevOps** - The code reviewer can automatically review changed files in a PR, comment on specific lines, and provide an overall summary of the review findings.
 - **Per-file agentic review** — each changed file gets its own AI pass with tool-calling for cross-file investigation
+- **Token-optimized reviews** — diff-only input (full file available on demand via tool call), cache-friendly parallel message structure, system prompt pruned from step 2+ of review loops, tool result excerpts capped at 1 000 chars in deep loops
+- **File exclusion rules** — generated files (EF Core migrations etc.) are skipped automatically; per-repo custom patterns via `.meister-propr/exclude` on the target branch using gitignore-style globs; excluded files are recorded in the audit trail with zero token cost
 - **Automatic crawling** — background worker polls for PRs assigned to a configured reviewer
 - **Per-user authentication** — username/password login with 15-minute JWT + 7-day refresh tokens; no shared secrets
 - **Personal access tokens** — users can issue scoped PATs for CI pipelines (`mpr_…` prefix)
+- **Job persistence + recovery mechanism** — review jobs survive restarts; stuck processing jobs auto-recovered
 - **Per-client Azure credentials** — each API client can use its own service principal or share the global backend identity
-- **BCrypt-hardened client keys** — client API keys stored as BCrypt hashes; rotation with 7-day grace period
-- **Job persistence + stuck-job recovery** — review jobs survive restarts; stuck processing jobs auto-recovered
-- **429 backoff** — transparent exponential retry for AI rate-limit responses
-- **Prometheus metrics + OpenTelemetry traces** — production-ready observability out of the box
-- **Docker-first** — Linux rootless container, env-var-only config, `docker compose up` to run
+- **Per-client and per Crawl Config prompt overrides** - Override predefined prompts to improve the AI output towards specific use cases.
+- **Per-client dismissals** - Dismiss specific findings for a client, preventing them from appearing in future reviews.
+- **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the admin UI.
+- **Beautiful UI** - The UI is tailored towards efficient triage of review comments, with a summary dashboard, file tree sidebar, and token consumption aggregates.
 
 ---
 
-## How it works
+## Limitations
 
-```mermaid
-flowchart TD
-    EXT["External Caller\n(ADO Extension / CI)"]
-    PG[("PostgreSQL")]
-
-    subgraph backend["Meister DEV's ProPR Backend"]
-        API["ASP.NET Core API"]
-        WORKER["ReviewJobWorker"]
-        CRAWLER["PrCrawlerWorker"]
-    end
-
-    ADO["Azure DevOps"]
-    AOAI["Azure OpenAI"]
-
-    EXT -- "POST /reviews X-Client-Key + X-Ado-Token" --> API
-    API -- "persist job" --> PG
-    WORKER -- "poll every 2 s" --> PG
-    WORKER -- "fetch PR diff" --> ADO
-    WORKER -- "AI review" --> AOAI
-    WORKER -- "post comment threads" --> ADO
-    CRAWLER -- "poll open PRs" --> ADO
-    CRAWLER -- "enqueue jobs" --> PG
-```
-
-The caller's `X-Ado-Token` is used **only** to verify that the caller has access to the ADO
-organisation. All ADO operations (fetching PR content, posting comments) use a
-**backend-controlled** Azure credential.
+- **Azure DevOps only** — no GitHub, GitLab, or Bitbucket support (yet)
+- **No auto-fixes** - the reviewer can suggest code changes but cannot apply them directly as PR commits or suggestions; all fixes must be manually applied by the developer (yet)
 
 ---
 
@@ -83,7 +60,7 @@ cp .env.example .env   # or create .env manually (see docs/getting-started.md)
 # 2. Start the API + PostgreSQL
 docker compose up --build
 
-# 3. Verify
+# 3. Verify (Docker port)
 curl http://localhost:8080/healthz
 ```
 
@@ -106,45 +83,14 @@ MEISTER_JWT_SECRET=<random-32+-char-string>
 Log in via `POST /auth/login` to receive a 15-minute JWT access token and a 7-day refresh token.
 The admin UI handles token refresh automatically.
 
-### Credential evaluation order
-
-The `AdminKeyMiddleware` evaluates each inbound request in this order:
-
-| Priority | Header / Mechanism | Notes |
-|----------|--------------------|-------|
-| 1 | `Authorization: Bearer {jwt}` | Locally-issued HS256 token |
-| 2 | `X-User-Pat` | BCrypt-verified personal access token |
-| 3 | `X-Admin-Key` | Legacy shared key — **deprecated**; logs a warning |
-
-### Personal Access Tokens (PATs)
-
-Authenticated users can generate long-lived PATs (`mpr_`-prefixed) via `POST /users/me/pats`.
-PAT hashes are stored with BCrypt; the plaintext is returned exactly once.
-
----
-
-## Tech Stack
-
-| Layer          | Technology                                                        |
-|----------------|-------------------------------------------------------------------|
-| Runtime        | .NET 10 / ASP.NET Core MVC                                        |
-| AI client      | `Microsoft.Extensions.AI` + Azure OpenAI Responses API           |
-| ADO client     | `Microsoft.TeamFoundationServer.Client`                           |
-| Auth           | JWT (HS256) + BCrypt PATs; legacy `Azure.Identity` for ADO calls |
-| Database       | PostgreSQL 17 via EF Core 10 + Npgsql                            |
-| Logging        | Serilog (structured JSON in production)                           |
-| Observability  | OpenTelemetry OTLP traces + Prometheus metrics                    |
-| Tests          | xUnit + NSubstitute + `WebApplicationFactory`                     |
-| Container      | Linux rootless (`mcr.microsoft.com/dotnet/aspnet:10.0`)          |
-
 ---
 
 ## Key Environment Variables
 
 | Variable                           | Required      | Description                                                                     |
 |------------------------------------|---------------|---------------------------------------------------------------------------------|
-| `AI_ENDPOINT`                      | Yes           | Azure OpenAI or AI Foundry endpoint URL                                         |
-| `AI_DEPLOYMENT`                    | Yes           | Model deployment name, e.g. `gpt-4o`                                            |
+| `AI_ENDPOINT`                      | No            | Azure OpenAI or AI Foundry endpoint URL                                         |
+| `AI_DEPLOYMENT`                    | No            | Model deployment name, e.g. `gpt-4o`                                            |
 | `DB_CONNECTION_STRING`             | No            | PostgreSQL connection string; enables DB mode when set                          |
 | `MEISTER_JWT_SECRET`               | Yes (DB mode) | HS256 signing secret — minimum 32 characters                                    |
 | `MEISTER_BOOTSTRAP_ADMIN_USER`     | Yes (DB mode) | Username for the initial admin account seeded on first startup                  |
@@ -170,19 +116,11 @@ Full variable reference: [docs/getting-started.md#environment-variables](docs/ge
 ## Running Tests
 
 ```bash
-dotnet test   # 478 tests — no Azure credentials or database required
+dotnet test   # 496 tests — no Azure credentials or database required
 ```
 
 Integration tests that require PostgreSQL are in the `PostgresApiIntegration` collection
 and are skipped automatically when `DB_CONNECTION_STRING` is not set.
-
----
-
-## Demo Video
-
-<a href="https://youtu.be/HFaO4oglM2s">
-  <img src="https://img.youtube.com/vi/HFaO4oglM2s/maxresdefault.jpg" alt="YouTube demo video" width="400">
-</a>
 
 ---
 

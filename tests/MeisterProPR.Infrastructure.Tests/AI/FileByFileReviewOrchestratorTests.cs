@@ -1,3 +1,4 @@
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -18,7 +19,7 @@ public class FileByFileReviewOrchestratorTests
 {
     private static IOptions<AiReviewOptions> DefaultOptions()
     {
-        return Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3 });
+        return Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" });
     }
 
     private static ReviewJob CreateJob()
@@ -36,6 +37,7 @@ public class FileByFileReviewOrchestratorTests
         return new PullRequest(
             "https://dev.azure.com/org",
             "proj",
+            "repo",
             "repo",
             1,
             1,
@@ -61,7 +63,9 @@ public class FileByFileReviewOrchestratorTests
         IProtocolRecorder protocolRecorder,
         IJobRepository jobRepository,
         IChatClient chatClient,
-        IOptions<AiReviewOptions>? options = null)
+        IOptions<AiReviewOptions>? options = null,
+        IAiConnectionRepository? aiConnectionRepository = null,
+        IAiChatClientFactory? aiClientFactory = null)
     {
         return new FileByFileReviewOrchestrator(
             aiCore,
@@ -69,7 +73,9 @@ public class FileByFileReviewOrchestratorTests
             jobRepository,
             chatClient,
             options ?? DefaultOptions(),
-            Substitute.For<ILogger<FileByFileReviewOrchestrator>>());
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
+            aiConnectionRepository,
+            aiClientFactory);
     }
 
     private static IJobRepository CreateJobRepo(ReviewJob? jobWithResults = null)
@@ -336,5 +342,243 @@ public class FileByFileReviewOrchestratorTests
         }
 
         return job;
+    }
+
+    // T013 — Files matching ExclusionRules are not dispatched to IAiReviewCore
+    [Fact]
+    public async Task ReviewAsync_ExcludedFile_NotPassedToAiCore()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult(CreateResult()));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        jobRepo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        jobRepo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var pr = CreatePr(
+            CreateFile("src/Migrations/20260101_Init.Designer.cs"),   // will be excluded
+            CreateFile("src/Application/Service.cs"));                // will be reviewed
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ExclusionRules = ReviewExclusionRules.Default,
+        };
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        // Only Service.cs should be sent to the AI; Designer.cs is excluded
+        await aiCore.Received(1).ReviewAsync(
+            Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path == "src/Application/Service.cs")),
+            Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>());
+        await aiCore.DidNotReceive().ReviewAsync(
+            Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path.EndsWith(".Designer.cs"))),
+            Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // T013 — Excluded files result in a protocol entry with zero tokens
+    [Fact]
+    public async Task ReviewAsync_ExcludedFile_ProtocolRecordedWithZeroTokens()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(CreateResult()));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        jobRepo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        jobRepo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var pr = CreatePr(CreateFile("src/Migrations/20260101_Init.Designer.cs"));
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ExclusionRules = ReviewExclusionRules.Default,
+        };
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await protocolRecorder.Received(1).SetCompletedAsync(
+            Arg.Any<Guid>(),
+            "Excluded",
+            0,
+            0,
+            0,
+            0,
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    // ─── T043: tier client resolution ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ReviewAsync_TierConnectionExists_UsesTierClientViaContext()
+    {
+        // Arrange
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/BigService.cs", ChangeType.Edit, "content", string.Concat(Enumerable.Repeat("+line\n", 200)))); // >150 lines → High tier
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var tierClient = Substitute.For<IChatClient>();
+        var aiClientFactory = Substitute.For<IAiChatClientFactory>();
+        aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
+
+        var tierDto = new AiConnectionDto(Guid.NewGuid(), job.ClientId, "Tier High", "https://high.openai.azure.com/", ["gpt-4o"], false, null, DateTimeOffset.UtcNow, AiConnectionModelCategory.HighEffort);
+        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
+        aiConnectionRepo.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, defaultChatClient, aiConnectionRepository: aiConnectionRepo, aiClientFactory: aiClientFactory);
+
+        // Act
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Assert: GetForTierAsync was called for the High tier
+        await aiConnectionRepo.Received(1).GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
+
+        // Assert: aiCore.ReviewAsync received a context with TierChatClient set to the tier client
+        await aiCore.Received(1).ReviewAsync(
+            Arg.Any<PullRequest>(),
+            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == tierClient),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_NoTierConnection_FallsBackToEffectiveClient()
+    {
+        // Arrange — repo returns null for tier lookup
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Simple.cs", ChangeType.Edit, "content", string.Concat(Enumerable.Repeat("+line\n", 5)))); // Low tier
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
+        aiConnectionRepo.GetForTierAsync(Arg.Any<Guid>(), Arg.Any<AiConnectionModelCategory>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(null));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, defaultChatClient,
+            aiConnectionRepository: aiConnectionRepo, aiClientFactory: Substitute.For<IAiChatClientFactory>());
+
+        // Act
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Assert: context has no TierChatClient (null → fallback to injected default)
+        await aiCore.Received(1).ReviewAsync(
+            Arg.Any<PullRequest>(),
+            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    // ─── T049: synthesis JSON cross_cutting_concerns ──────────────────────────────
+
+    [Fact]
+    public async Task ReviewAsync_SynthesisReturnsCrossCuttingConcerns_AddsProLevelComments()
+    {
+        const string synthesisJson =
+            """{"summary":"Overall good PR.","cross_cutting_concerns":[{"message":"Missing DI registration in multiple files","severity":"error"}]}""";
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult("file summary"));
+
+        var chatClient = Substitute.For<IChatClient>();
+        // synthesis call returns JSON with cross_cutting_concerns
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, chatClient);
+
+        // Act
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Assert: one PR-level comment (FilePath=null) for the cross-cutting concern
+        var prLevelComments = result.Comments?.Where(c => c.FilePath is null).ToList();
+        Assert.NotNull(prLevelComments);
+        Assert.Single(prLevelComments);
+        Assert.Contains("Missing DI registration in multiple files", prLevelComments[0].Message);
+        Assert.Equal(CommentSeverity.Error, prLevelComments[0].Severity);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_SynthesisJsonNoCrossCuttingConcerns_NoProLevelComments()
+    {
+        const string synthesisJson = """{"summary":"Overall good PR.","cross_cutting_concerns":[]}""";
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        var prLevelComments = result.Comments?.Where(c => c.FilePath is null).ToList();
+        Assert.True(prLevelComments is null || prLevelComments.Count == 0);
     }
 }

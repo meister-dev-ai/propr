@@ -62,7 +62,7 @@ public sealed class MentionReplyServiceTests
         string repoId = "repo",
         int prId = 1)
     {
-        return new PullRequest(orgUrl, projectId, repoId, prId, 1, "PR Title", null, "feat/x", "main", []);
+        return new PullRequest(orgUrl, projectId, repoId, repoId, prId, 1, "PR Title", null, "feat/x", "main", []);
     }
 
     [Fact]
@@ -81,6 +81,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
@@ -135,6 +136,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
@@ -169,6 +171,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);

@@ -77,12 +77,16 @@ public sealed class EfProtocolRecorder(
         string toolName,
         string arguments,
         string result,
+        int iteration,
         CancellationToken ct = default)
     {
         try
         {
             await using var db = await contextFactory.CreateDbContextAsync(ct);
             var sample = $"args={arguments}";
+            var effectiveResult = iteration > 3 && !string.IsNullOrEmpty(result) && result.Length > ProtocolLimits.ToolResultExcerptMaxLength
+                ? string.Concat(result.AsSpan(0, ProtocolLimits.ToolResultExcerptMaxLength), " [TRUNCATED]")
+                : result;
             var ev = new ProtocolEvent
             {
                 Id = Guid.NewGuid(),
@@ -91,7 +95,7 @@ public sealed class EfProtocolRecorder(
                 Name = toolName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(sample),
-                OutputSummary = Sanitize(result),
+                OutputSummary = Sanitize(effectiveResult),
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);

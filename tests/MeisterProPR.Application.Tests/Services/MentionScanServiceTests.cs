@@ -24,7 +24,8 @@ public sealed class MentionScanServiceTests
         ReviewerId,
         60,
         true,
-        DateTimeOffset.UtcNow);
+        DateTimeOffset.UtcNow,
+        []);
 
     private readonly IActivePrFetcher _activePrFetcher = Substitute.For<IActivePrFetcher>();
     private readonly Channel<MentionReplyJob> _channel;
@@ -119,6 +120,7 @@ public sealed class MentionScanServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "Test PR",
@@ -144,6 +146,7 @@ public sealed class MentionScanServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);
@@ -183,6 +186,7 @@ public sealed class MentionScanServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "PR",
@@ -208,6 +212,7 @@ public sealed class MentionScanServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);
@@ -236,6 +241,7 @@ public sealed class MentionScanServiceTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             5,
             1,
             "Empty PR",
@@ -262,6 +268,7 @@ public sealed class MentionScanServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
+                Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);

@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -11,7 +13,7 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     reviewer-authored comment thread has been resolved, using two distinct prompt paths:
 ///     (1) code-change evaluation and (2) conversational reply generation.
 /// </summary>
-public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCommentResolutionCore
+public sealed class AgentAiCommentResolutionCore(IChatClient chatClient, IOptions<AiReviewOptions> options) : IAiCommentResolutionCore
 {
     private const string CodeChangeSystemPrompt = """
                                                   You are an expert code reviewer. A pull request has received new commits since you last
@@ -27,17 +29,26 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCo
                                                       You are an expert code reviewer participating in a code review discussion. A developer has
                                                       replied to one of your comments. Read the thread history carefully and decide:
 
-                                                      1. If the developer has acknowledged the issue, confirmed they won't address it, explained why
-                                                         it's acceptable as-is, or explicitly asked you to close/resolve the thread — mark resolved=true
-                                                         and write a brief closing acknowledgement as replyText.
-                                                      2. If the developer is asking a question, requesting clarification, or the issue is still open
-                                                         — mark resolved=false and write a helpful response as replyText.
+                                                      1. RESOLVED (resolved=true): The developer has acknowledged the issue, confirmed they won't
+                                                         address it with a reasonable explanation, or explicitly asked to close the thread.
+                                                         You MUST provide a replyText that clearly states WHY you are closing this thread
+                                                         (e.g. "Closing — the added null-guard on line 12 directly addresses my concern." or
+                                                         "Closing — the explanation about backward-compatibility is reasonable and I accept the
+                                                         trade-off."). A closing comment without reasoning is not acceptable.
 
-                                                      Be willing to close threads when the developer makes a reasonable case. Do not insist on code
-                                                      changes if the developer explains why the current approach is acceptable.
+                                                      2. NOT RESOLVED (resolved=false): The issue is still open, the developer is asking a
+                                                         question, or the reply needs a substantive response.
+                                                         - Set replyText to a helpful response ONLY when you have something genuinely useful to
+                                                           add (e.g. answering a direct question, clarifying your original concern, or pointing
+                                                           to a specific fix).
+                                                         - Set replyText to null when you are simply waiting for code changes and have nothing
+                                                           new to contribute beyond what is already in the thread.
+
+                                                      Be willing to close threads when the developer makes a reasonable case. Do not insist on
+                                                      code changes if the developer explains why the current approach is acceptable.
 
                                                       Respond with valid JSON ONLY — no markdown fences, no preamble.
-                                                      Schema: { "resolved": true|false, "replyText": "<your response to the developer>" }
+                                                      Schema: { "resolved": true|false, "replyText": "<required reasoning when resolved, helpful message or null when not resolved>" }
                                                       """;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -55,8 +66,8 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCo
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
-        return ParseResult(response.Text ?? "");
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
+        return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 
     /// <inheritdoc />
@@ -71,8 +82,8 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCo
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
-        return ParseResult(response.Text ?? "");
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
+        return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 
     private static string BuildCodeChangeUserMessage(PrCommentThread thread, PullRequest pr)
@@ -83,23 +94,43 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCo
         sb.AppendLine();
         sb.AppendLine("## Thread to Evaluate");
         AppendThread(sb, thread);
+        sb.AppendLine();
 
-        if (pr.ChangedFiles.Count > 0)
+        if (thread.FilePath is not null)
         {
-            sb.AppendLine();
-            sb.AppendLine("## Changed Files (latest iteration)");
-            foreach (var file in pr.ChangedFiles)
+            // Only send the diff for the file this thread is anchored to.
+            var relevantFile = pr.ChangedFiles.FirstOrDefault(f =>
+                string.Equals(f.Path, thread.FilePath, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(f.OriginalPath, thread.FilePath, StringComparison.OrdinalIgnoreCase));
+
+            if (relevantFile is not null)
             {
-                sb.AppendLine();
-                sb.AppendLine($"=== {file.Path} [{file.ChangeType}] ===");
+                sb.AppendLine("## Relevant File Change (latest iteration)");
+                sb.AppendLine($"=== {relevantFile.Path} [{relevantFile.ChangeType}] ===");
                 sb.AppendLine("--- DIFF ---");
-                sb.AppendLine(file.UnifiedDiff);
+                sb.AppendLine(relevantFile.UnifiedDiff);
+            }
+            else
+            {
+                sb.AppendLine($"The file `{thread.FilePath}` was not changed in the latest iteration.");
+                sb.AppendLine("Other changed files: " + string.Join(", ", pr.ChangedFiles.Select(f => f.Path)));
             }
         }
         else
         {
-            sb.AppendLine();
-            sb.AppendLine("No file changes in this iteration.");
+            // PR-level thread: list changed files without their diffs to bound token usage.
+            if (pr.ChangedFiles.Count > 0)
+            {
+                sb.AppendLine("## Changed Files in Latest Iteration");
+                foreach (var file in pr.ChangedFiles)
+                {
+                    sb.AppendLine($"- {file.Path} [{file.ChangeType}]");
+                }
+            }
+            else
+            {
+                sb.AppendLine("No file changes in this iteration.");
+            }
         }
 
         return sb.ToString();
@@ -126,21 +157,21 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient) : IAiCo
         }
     }
 
-    private static ThreadResolutionResult ParseResult(string json)
+    private static ThreadResolutionResult ParseResult(string json, long? inputTokens, long? outputTokens)
     {
         try
         {
             var dto = JsonSerializer.Deserialize<ResolutionDto>(json, JsonOptions);
             if (dto is null)
             {
-                return new ThreadResolutionResult(false, null);
+                return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
             }
 
-            return new ThreadResolutionResult(dto.Resolved, dto.ReplyText);
+            return new ThreadResolutionResult(dto.Resolved, dto.ReplyText, inputTokens, outputTokens);
         }
         catch (JsonException)
         {
-            return new ThreadResolutionResult(false, null);
+            return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
         }
     }
 

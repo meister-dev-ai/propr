@@ -145,10 +145,47 @@ public sealed class ReviewJob
     /// <summary>Running aggregate of output tokens across all protocol passes.</summary>
     public long? TotalOutputTokensAggregated { get; private set; }
 
+    /// <summary>Snapshot of the AI connection ID used when the job started. Nullable for backward compat.</summary>
+    public Guid? AiConnectionId { get; private set; }
+
+    /// <summary>Snapshot of the AI model deployment used when the job started. Nullable for backward compat.</summary>
+    public string? AiModel { get; private set; }
+
+    /// <summary>PR display title captured from ADO at job-creation time. Null when unavailable.</summary>
+    public string? PrTitle { get; private set; }
+
+    /// <summary>Source branch display name (refs/heads/ stripped). Null when unavailable.</summary>
+    public string? PrSourceBranch { get; private set; }
+
+    /// <summary>Target branch display name (refs/heads/ stripped). Null when unavailable.</summary>
+    public string? PrTargetBranch { get; private set; }
+
+    /// <summary>Repository display name from ADO. Null when unavailable.</summary>
+    public string? PrRepositoryName { get; private set; }
+
     /// <summary>Increments the token aggregates. Called after each protocol pass completes.</summary>
     public void AccumulateTokens(long inputTokens, long outputTokens)
     {
         this.TotalInputTokensAggregated = (this.TotalInputTokensAggregated ?? 0) + inputTokens;
         this.TotalOutputTokensAggregated = (this.TotalOutputTokensAggregated ?? 0) + outputTokens;
     }
+
+    /// <summary>Records the AI connection and model used at job-start time.</summary>
+    public void SetAiConfig(Guid? connectionId, string? model)
+    {
+        this.AiConnectionId = connectionId;
+        this.AiModel = model;
+    }
+
+    /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>
+    public void SetPrContext(string? title, string? repositoryName, string? sourceBranch, string? targetBranch)
+    {
+        this.PrTitle = title;
+        this.PrRepositoryName = repositoryName;
+        this.PrSourceBranch = StripRefsHeads(sourceBranch);
+        this.PrTargetBranch = StripRefsHeads(targetBranch);
+    }
+
+    private static string? StripRefsHeads(string? branch) =>
+        branch?.StartsWith("refs/heads/", StringComparison.Ordinal) == true ? branch[11..] : branch;
 }

@@ -398,6 +398,11 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
 
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                services.AddSingleton(userRepo);
+
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
@@ -418,7 +423,8 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                             null,
                             ci.ArgAt<int>(3),
                             true,
-                            DateTimeOffset.UtcNow)));
+                            DateTimeOffset.UtcNow,
+                            [])));
                 services.AddSingleton(crawlRepo);
 
                 var clientRegistry = Substitute.For<IClientRegistry>();

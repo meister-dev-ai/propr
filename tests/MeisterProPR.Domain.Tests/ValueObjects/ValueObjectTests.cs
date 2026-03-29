@@ -69,6 +69,7 @@ public class ValueObjectTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "My PR",

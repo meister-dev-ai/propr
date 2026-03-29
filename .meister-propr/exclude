@@ -1,0 +1,17 @@
+# Meister DEV ProPR — AI reviewer exclusion patterns
+# Syntax: one glob pattern per line. Lines starting with # are comments.
+# NOTE: providing this file overrides the built-in defaults, so the
+# standard EF Core generated-file patterns are repeated here explicitly.
+
+# ── EF Core auto-generated files ──────────────────────────────────────────────
+# Migration designer snapshots and model snapshots are 100% tool-generated.
+# They reflect migrations and schema changes that are reviewed on the .cs files.
+**/Migrations/*.Designer.cs
+**/Migrations/*ModelSnapshot.cs
+
+# ── OpenAPI / generated client ─────────────────────────────────────────────────
+# openapi.json is generated from Swashbuckle attributes on controllers.
+# The TypeScript client under generated/ is produced from openapi.json.
+# Both are always derived from production code changes reviewed elsewhere.
+openapi.json
+admin-ui/src/services/generated/**

@@ -88,6 +88,11 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
 
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                services.AddSingleton(userRepo);
+
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 services.AddSingleton(crawlRepo);
 

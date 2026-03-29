@@ -1,4 +1,5 @@
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Domain.Tests.Entities;
@@ -78,5 +79,62 @@ public class ReviewFileResultTests
         result.MarkCompleted("summary", new List<ReviewComment>().AsReadOnly());
 
         Assert.Throws<InvalidOperationException>(() => result.MarkFailed("error"));
+    }
+
+    // --- T021: CreateCarriedForward tests ---
+
+    [Fact]
+    public void CreateCarriedForward_SetsIsCarriedForwardAndIsComplete()
+    {
+        var jobId = Guid.NewGuid();
+        var newJobId = Guid.NewGuid();
+        var prior = new ReviewFileResult(jobId, "src/Foo.cs");
+        var comments = new List<ReviewComment>().AsReadOnly();
+        prior.MarkCompleted("prior summary", comments);
+
+        var carried = ReviewFileResult.CreateCarriedForward(newJobId, prior);
+
+        Assert.True(carried.IsCarriedForward);
+        Assert.True(carried.IsComplete);
+    }
+
+    [Fact]
+    public void CreateCarriedForward_CopiesFilePathSummaryAndComments()
+    {
+        var jobId = Guid.NewGuid();
+        var newJobId = Guid.NewGuid();
+        var prior = new ReviewFileResult(jobId, "src/Bar.cs");
+        var comments = new List<ReviewComment> { new(null, null, CommentSeverity.Info, "comment text") }.AsReadOnly();
+        prior.MarkCompleted("original summary", comments);
+
+        var carried = ReviewFileResult.CreateCarriedForward(newJobId, prior);
+
+        Assert.Equal("src/Bar.cs", carried.FilePath);
+        Assert.Equal("original summary", carried.PerFileSummary);
+        Assert.Equal(comments, carried.Comments);
+        Assert.Equal(newJobId, carried.JobId);
+    }
+
+    [Fact]
+    public void CreateCarriedForward_DoesNotCopyIsFailedOrIsExcluded()
+    {
+        var prior = new ReviewFileResult(Guid.NewGuid(), "src/Baz.cs");
+        // Can't make IsExcluded=true directly without MarkExcluded method - just verify defaults
+        var carried = ReviewFileResult.CreateCarriedForward(Guid.NewGuid(), prior);
+
+        Assert.False(carried.IsFailed);
+        Assert.False(carried.IsExcluded);
+    }
+
+    [Fact]
+    public void MarkCompleted_OnCarriedForwardResult_ThrowsInvalidOperationException()
+    {
+        // T021 (c): a carried-forward result is already complete; MarkCompleted should be rejected
+        var prior = new ReviewFileResult(Guid.NewGuid(), "src/Qux.cs");
+        prior.MarkCompleted("summary", new List<ReviewComment>().AsReadOnly());
+        var carried = ReviewFileResult.CreateCarriedForward(Guid.NewGuid(), prior);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            carried.MarkCompleted("should throw", new List<ReviewComment>().AsReadOnly()));
     }
 }

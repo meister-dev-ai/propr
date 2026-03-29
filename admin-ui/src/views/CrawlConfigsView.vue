@@ -1,0 +1,306 @@
+<template>
+  <div class="page-view crawl-configs-view">
+    <h2 class="view-title">Crawl Configurations</h2>
+
+    <div class="section-card">
+      <div class="section-card-header">
+        <div class="crawl-header-left">
+          <h3>Configurations</h3>
+          <span v-if="!loading" class="chip chip-muted">{{ configs.length }} config{{ configs.length === 1 ? '' : 's' }}</span>
+          <p class="crawl-subtitle">Automated scanning schedules for Azure DevOps projects</p>
+        </div>
+        <div class="section-card-header-actions">
+          <button class="btn-primary" @click="openCreateForm">
+            <i class="fi fi-rr-plus"></i> New Config
+          </button>
+        </div>
+      </div>
+
+      <div v-if="loading" class="loading-state">
+        <ProgressOrb class="state-orb" />
+        <span>Loading configurations...</span>
+      </div>
+
+      <div v-else-if="error" class="error-state">
+        <i class="fi fi-rr-warning error-icon"></i>
+        <p>{{ error }}</p>
+        <button class="btn-slide" @click="loadConfigs">
+          <div class="sign"><i class="fi fi-rr-refresh"></i></div>
+          <span class="text">Try Again</span>
+        </button>
+      </div>
+
+      <div v-else-if="!configs.length" class="empty-state">
+        <i class="fi fi-rr-inbox empty-icon"></i>
+        <h3>No configurations found</h3>
+        <p>Get started by creating your first crawl schedule.</p>
+        <button class="btn-primary" @click="openCreateForm">
+          <i class="fi fi-rr-plus"></i> Create Config
+        </button>
+      </div>
+
+      <table v-else>
+        <thead>
+          <tr>
+            <th style="width: 120px">Status</th>
+            <th>Project</th>
+            <th>Azure Organization</th>
+            <th>Interval</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="config in configs" :key="config.id" class="row-clickable" @click="openEditForm(config)">
+            <td>
+              <span class="chip" :class="config.isActive ? 'chip-success' : 'chip-muted'">
+                {{ config.isActive ? 'Active' : 'Paused' }}
+              </span>
+            </td>
+            <td class="bold-cell">{{ config.projectId }}</td>
+            <td class="muted-cell">{{ config.organizationUrl }}</td>
+            <td>
+              <div class="interval-pill">
+                <i class="fi fi-rr-clock"></i> {{ formatInterval(config.crawlIntervalSeconds ?? 0) }}
+              </div>
+            </td>
+            <td class="actions-cell">
+              <div class="action-buttons" @click.stop>
+                <button class="action-btn delete" @click="deletingConfig = config" title="Delete"><i class="fi fi-rr-trash"></i></button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modals -->
+    <ModalDialog v-model:isOpen="showForm" :title="editingConfig ? 'Edit Configuration' : 'Create Configuration'">
+      <CrawlConfigForm
+        :config="editingConfig"
+        @config-saved="onConfigSaved"
+        @cancel="closeForm"
+      />
+    </ModalDialog>
+
+    <ConfirmDialog
+      :open="!!deletingConfig"
+      :message="`Delete crawl configuration for ${deletingConfig?.projectId ?? 'this project'}? This cannot be undone.`"
+      @confirm="confirmDelete"
+      @cancel="deletingConfig = null"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import CrawlConfigForm from '@/components/CrawlConfigForm.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ModalDialog from '@/components/ModalDialog.vue'
+import ProgressOrb from '@/components/ProgressOrb.vue'
+import { createAdminClient } from '@/services/api'
+import { useNotification } from '@/composables/useNotification'
+import type { components } from '@/services/generated/openapi'
+
+type CrawlConfigResponse = components['schemas']['CrawlConfigResponse']
+
+const configs = ref<CrawlConfigResponse[]>([])
+const loading = ref(false)
+const error = ref('')
+const showForm = ref(false)
+const editingConfig = ref<CrawlConfigResponse | undefined>(undefined)
+const deletingConfig = ref<CrawlConfigResponse | null>(null)
+
+const { notify } = useNotification()
+
+onMounted(() => loadConfigs())
+
+async function loadConfigs() {
+  loading.value = true
+  error.value = ''
+  try {
+    const { data, response } = await createAdminClient().GET('/admin/crawl-configurations', {})
+    if (!response.ok) {
+      error.value = 'Failed to load configurations.'
+      return
+    }
+    configs.value = (data as CrawlConfigResponse[]) ?? []
+  } catch {
+    error.value = 'Connection error. Please try again.'
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatInterval(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+  return `${Math.floor(seconds / 3600)}h`
+}
+
+function openCreateForm() {
+  editingConfig.value = undefined
+  showForm.value = true
+}
+
+function openEditForm(config: CrawlConfigResponse) {
+  editingConfig.value = config
+  showForm.value = true
+}
+
+function closeForm() {
+  showForm.value = false
+  editingConfig.value = undefined
+}
+
+function onConfigSaved(saved: CrawlConfigResponse) {
+  const idx = configs.value.findIndex((c) => c.id === saved.id)
+  if (idx >= 0) {
+    configs.value.splice(idx, 1, saved)
+    notify('Configuration updated.')
+  } else {
+    configs.value.unshift(saved)
+    notify('Configuration created.')
+  }
+  closeForm()
+}
+
+async function confirmDelete() {
+  const config = deletingConfig.value
+  deletingConfig.value = null
+  if (!config?.id) return
+
+  try {
+    const { response } = await createAdminClient().DELETE('/admin/crawl-configurations/{configId}', {
+      params: { path: { configId: config.id } },
+    })
+    if (response.status === 404) {
+      notify('Configuration not found.', 'error')
+      configs.value = configs.value.filter((c) => c.id !== config.id)
+      return
+    }
+    if (response.status === 403) {
+      notify('You do not have permission to delete this configuration.', 'error')
+      return
+    }
+    if (!response.ok) {
+      notify('Failed to delete configuration.', 'error')
+      return
+    }
+    configs.value = configs.value.filter((c) => c.id !== config.id)
+    notify('Configuration deleted.')
+  } catch {
+    notify('Connection error. Please try again.', 'error')
+  }
+}
+</script>
+
+<style scoped>
+/* Header left group: title + count chip + subtitle */
+.crawl-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.crawl-subtitle {
+  width: 100%;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+  margin-top: 0.15rem;
+}
+
+.bold-cell {
+  font-weight: 600;
+}
+
+.muted-cell {
+  color: var(--color-text-muted);
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.interval-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.actions-cell {
+  width: 52px;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.action-btn:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--color-danger);
+}
+
+/* States */
+.loading-state, .error-state, .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 2rem;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.state-orb {
+  width: 50px;
+  height: 50px;
+}
+
+.error-icon {
+  font-size: 3rem;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  opacity: 0.4;
+}
+
+.empty-state h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.empty-state p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+</style>

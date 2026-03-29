@@ -17,6 +17,11 @@ export default defineConfig({
       '/reviews': { target: 'http://localhost:8080', changeOrigin: true },
       '/identities': { target: 'http://localhost:8080', changeOrigin: true },
       '/healthz': { target: 'http://localhost:8080', changeOrigin: true },
+      '/jobs': { target: 'http://localhost:8080', changeOrigin: true },
+      '/pats': { target: 'http://localhost:8080', changeOrigin: true },
+      '/auth': { target: 'http://localhost:8080', changeOrigin: true },
+      '/admin/crawl-configurations': { target: 'http://localhost:8080', changeOrigin: true },
+      '/admin/users': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
   build: {

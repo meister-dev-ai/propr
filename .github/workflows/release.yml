@@ -132,7 +132,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.backend }}
           labels: |
-            org.opencontainers.image.title=MeisterProPR
+            org.opencontainers.image.title=Meister DEV ProPR
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -157,7 +157,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.frontend }}
           labels: |
-            org.opencontainers.image.title=MeisterProPR Admin UI
+            org.opencontainers.image.title=Meister DEV ProPR Management Interface
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

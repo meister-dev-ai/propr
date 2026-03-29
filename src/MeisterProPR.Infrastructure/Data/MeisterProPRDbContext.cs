@@ -52,6 +52,18 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Server-persisted refresh tokens.</summary>
     public DbSet<RefreshTokenRecord> RefreshTokens => this.Set<RefreshTokenRecord>();
 
+    /// <summary>Per-client AI connection configurations.</summary>
+    public DbSet<AiConnectionRecord> AiConnections => this.Set<AiConnectionRecord>();
+
+    /// <summary>Repository-scope filters for crawl configurations.</summary>
+    public DbSet<CrawlRepoFilterRecord> CrawlRepoFilters => this.Set<CrawlRepoFilterRecord>();
+
+    /// <summary>Per-client AI reviewer finding dismissals.</summary>
+    public DbSet<FindingDismissalRecord> FindingDismissals => this.Set<FindingDismissalRecord>();
+
+    /// <summary>Per-client and per-crawl-config AI prompt overrides.</summary>
+    public DbSet<PromptOverrideRecord> PromptOverrides => this.Set<PromptOverrideRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

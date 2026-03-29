@@ -1,52 +1,64 @@
 <template>
-  <div class="pats-view">
-    <div class="pats-toolbar">
-      <h2>Personal Access Tokens</h2>
+  <div class="page-view">
+    <div class="pats-page-header">
+      <h2 class="view-title">Personal Access Tokens</h2>
+      <p class="pats-description">PATs let you authenticate API calls and ADO extension webhooks without your password. Treat them like passwords — they inherit your account permissions.</p>
     </div>
-    <p class="pats-description">PATs let you authenticate API calls and ADO extension webhooks without your password. Treat them like passwords — they inherit your account permissions.</p>
 
-    <section>
-      <h2>Create new token</h2>
-      <form @submit.prevent="handleCreate">
-        <div v-if="createError" class="error">{{ createError }}</div>
-        <div class="form-field">
-          <label for="pat-label">Label</label>
-          <input
-            id="pat-label"
-            v-model="newLabel"
-            type="text"
-            placeholder="e.g. CI pipeline"
-          />
-        </div>
-        <div class="form-field">
-          <label for="pat-expires">Expires (optional)</label>
-          <input
-            id="pat-expires"
-            v-model="newExpires"
-            type="datetime-local"
-          />
-        </div>
-        <div class="form-actions" style="margin-top: 1rem;">
-          <button class="btn-primary" type="submit" :disabled="creating">
-            {{ creating ? 'Creating…' : 'Generate token' }}
-          </button>
-        </div>
-      </form>
-
-      <div v-if="generatedToken" class="token-reveal">
-        <p><strong>Copy this token now — it will not be shown again.</strong></p>
-        <code>{{ generatedToken }}</code>
-        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-          <button class="btn-primary" @click="copyToken">Copy</button>
-          <button class="btn-secondary" @click="generatedToken = ''">Dismiss</button>
-        </div>
+    <!-- Create new token -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Create new token</h3>
       </div>
-    </section>
+      <div class="section-card-body">
+        <div v-if="createError" class="error">{{ createError }}</div>
 
-    <section>
-      <h2>Active tokens</h2>
-      <div v-if="loadError" class="error">{{ loadError }}</div>
-      <div v-if="loading">Loading…</div>
+        <div v-if="generatedToken" class="token-reveal">
+          <p><strong>Copy this token now — it will not be shown again.</strong></p>
+          <code>{{ generatedToken }}</code>
+          <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+            <button class="btn-primary" @click="copyToken">Copy</button>
+            <button class="btn-secondary" @click="generatedToken = ''">Dismiss</button>
+          </div>
+        </div>
+
+        <form v-else class="token-create-form" @submit.prevent="handleCreate">
+          <div class="token-fields-grid">
+            <div class="form-field">
+              <label for="pat-label">Label</label>
+              <input
+                id="pat-label"
+                v-model="newLabel"
+                type="text"
+                placeholder="e.g. CI pipeline"
+              />
+            </div>
+            <div class="form-field">
+              <label for="pat-expires">Expires (optional)</label>
+              <input
+                id="pat-expires"
+                v-model="newExpires"
+                type="datetime-local"
+              />
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top: 0;">
+            <button class="btn-primary" type="submit" :disabled="creating">
+              <i class="fi fi-rr-key"></i> {{ creating ? 'Creating…' : 'Generate token' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Active tokens -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <h3>Active tokens</h3>
+        <span class="chip chip-muted">{{ pats.length }} token{{ pats.length === 1 ? '' : 's' }}</span>
+      </div>
+      <div v-if="loadError" class="error" style="padding: 1rem 1.25rem;">{{ loadError }}</div>
+      <div v-else-if="loading" class="loading" style="padding: 1rem 1.25rem;">Loading…</div>
       <table v-else-if="pats.length">
         <thead>
           <tr>
@@ -71,8 +83,8 @@
           </tr>
         </tbody>
       </table>
-      <p v-else>No active tokens.</p>
-    </section>
+      <p v-else class="pats-empty">No active tokens.</p>
+    </div>
   </div>
 </template>
 
@@ -178,50 +190,48 @@ onMounted(loadPats)
 </script>
 
 <style scoped>
-
-.pats-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-}
-
-.pats-toolbar h2 {
-  margin: 0;
+.pats-page-header {
+  margin-bottom: 1.5rem;
 }
 
 .pats-description {
   color: var(--color-text-muted);
-  font-size: 0.95rem;
-  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
+/* 2-column grid for create form fields */
+.token-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .token-reveal {
   background: var(--color-bg);
   border: 1px solid var(--color-success);
   border-radius: 12px;
-  padding: 1.5rem;
-  margin-top: 1.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .token-reveal code {
   display: block;
   font-family: monospace;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   word-break: break-all;
   background: var(--color-surface);
   color: var(--color-accent);
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   border-radius: 8px;
-  margin: 1rem 0;
+  margin: 0.75rem 0;
 }
 
-section {
-  margin-bottom: 2rem;
-}
-
-section h2 {
-  font-size: 1rem;
-  margin-bottom: 1rem;
+.pats-empty {
+  padding: 2rem 1.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
 }
 </style>

@@ -38,6 +38,7 @@ public sealed partial class MentionReplyService(
                 job.RepositoryId,
                 job.PullRequestId,
                 1,
+                null,
                 job.ClientId,
                 cancellationToken);
 

@@ -3,6 +3,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AzureDevOps;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using NSubstitute;
@@ -109,18 +110,19 @@ public class AdoReviewContextToolsTests
     }
 
     [Fact]
-    public async Task GetFileContentAsync_DifferentBranches_FetchedSeparately()
+    public async Task GetFileContentAsync_DifferentAiSuppliedBranches_OneFetchBecauseStoredBranchEnforced()
     {
-        // Arrange — same path, different branches treated as different cache entries
-        var sut = new TestableAdoReviewContextTools(DefaultOptions());
+        // Arrange — AI-supplied branch is ignored; stored _sourceBranch is always used, so both calls
+        // resolve to the same cache key and only one actual fetch occurs.
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch: "feat/my-pr");
         sut.SetFile("/src/Foo.cs", "main content");
 
-        // Act
+        // Act — AI tries two different branches; stored branch is enforced for both
         await sut.GetFileContentAsync("/src/Foo.cs", "main", 1, 1, CancellationToken.None);
         await sut.GetFileContentAsync("/src/Foo.cs", "feature/x", 1, 1, CancellationToken.None);
 
-        // Assert — two fetches for two different branches
-        Assert.Equal(2, sut.FetchCallCount);
+        // Assert — only one fetch; second call is a cache hit on the stored branch
+        Assert.Equal(1, sut.FetchCallCount);
     }
 
     [Theory]
@@ -133,6 +135,61 @@ public class AdoReviewContextToolsTests
         Assert.Equal(expected, AdoReviewContextTools.MapChangeType(adoType));
     }
 
+    // T006(a) — US1: source-branch enforcement
+    [Fact]
+    public async Task GetFileContentAsync_AlwaysUsesStoredSourceBranch_IgnoresAiSuppliedBranch()
+    {
+        // Arrange
+        const string sourceBranch = "feature/my-pr";
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch);
+        sut.SetFile("/src/Foo.cs", "content");
+
+        // Act — AI supplies "main" but _sourceBranch should win
+        await sut.GetFileContentAsync("/src/Foo.cs", "main", 1, 10, CancellationToken.None);
+
+        // Assert — the branch forwarded to FetchRawFileContentAsync must be the stored source branch
+        Assert.Equal(sourceBranch, sut.LastFetchedBranch);
+    }
+
+    // T006(b) — US1: warning log when file not found
+    [Fact]
+    public async Task GetFileContentAsync_FileNotFound_EmitsWarningWithPathAndBranch()
+    {
+        // Arrange
+        const string sourceBranch = "feature/my-pr";
+        var logger = Substitute.For<ILogger<AdoReviewContextTools>>();
+        logger.IsEnabled(LogLevel.Warning).Returns(true);
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch, logger);
+        // File not registered → FetchRawFileContentAsync returns null
+
+        // Act
+        await sut.GetFileContentAsync("/src/Missing.cs", "main", 1, 10, CancellationToken.None);
+
+        // Assert — a Warning must be logged containing the path and branch
+        logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("/src/Missing.cs") && o.ToString()!.Contains(sourceBranch)),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    // T006(c) — US1: empty string returned when file not found (regression guard)
+    [Fact]
+    public async Task GetFileContentAsync_FileNotFound_ReturnsEmptyString_SourceBranchPath()
+    {
+        // Arrange
+        const string sourceBranch = "feature/my-pr";
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch);
+        // File not registered
+
+        // Act
+        var result = await sut.GetFileContentAsync("/src/Missing.cs", "main", 1, 10, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(string.Empty, result);
+    }
+
     /// <summary>
     ///     Testable subclass of <see cref="AdoReviewContextTools" /> that replaces
     ///     <see cref="AdoReviewContextTools.FetchRawFileContentAsync" /> with a controlled
@@ -142,7 +199,10 @@ public class AdoReviewContextToolsTests
     {
         private readonly Dictionary<string, string?> _files = new(StringComparer.Ordinal);
 
-        public TestableAdoReviewContextTools(IOptions<AiReviewOptions> options)
+        public TestableAdoReviewContextTools(
+            IOptions<AiReviewOptions> options,
+            string sourceBranch = "feature/test",
+            ILogger<AdoReviewContextTools>? logger = null)
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
                 Substitute.For<IClientAdoCredentialRepository>(),
@@ -150,14 +210,19 @@ public class AdoReviewContextToolsTests
                 "https://dev.azure.com/org",
                 "proj",
                 "repo",
+                sourceBranch,
                 1,
                 1,
-                null)
+                null,
+                logger)
         {
         }
 
         /// <summary>Gets the total number of calls made to the underlying fetch method.</summary>
         public int FetchCallCount { get; private set; }
+
+        /// <summary>Gets the branch name last passed to <see cref="AdoReviewContextTools.FetchRawFileContentAsync" />.</summary>
+        public string? LastFetchedBranch { get; private set; }
 
         /// <summary>Registers a file path with its content for retrieval.</summary>
         public void SetFile(string path, string? content)
@@ -169,6 +234,7 @@ public class AdoReviewContextToolsTests
         protected internal override Task<string?> FetchRawFileContentAsync(string path, string branch, CancellationToken ct)
         {
             this.FetchCallCount++;
+            this.LastFetchedBranch = branch;
             this._files.TryGetValue(path, out var content);
             return Task.FromResult(content);
         }

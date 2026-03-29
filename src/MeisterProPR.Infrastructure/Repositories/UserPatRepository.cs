@@ -60,8 +60,9 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
 
     public async Task<IReadOnlyList<UserPat>> ListForUserAsync(Guid userId, CancellationToken ct = default)
     {
+        var now = DateTimeOffset.UtcNow;
         var records = await db.UserPats
-            .Where(p => p.UserId == userId)
+            .Where(p => p.UserId == userId && !p.IsRevoked && (p.ExpiresAt == null || p.ExpiresAt > now))
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 

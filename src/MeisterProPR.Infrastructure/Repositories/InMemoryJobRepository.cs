@@ -242,4 +242,77 @@ public sealed class InMemoryJobRepository : IJobRepository
     {
         this._jobs[job.Id] = job;
     }
+
+    /// <inheritdoc />
+    public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            lock (job)
+            {
+                if (job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled))
+                {
+                    job.Status = JobStatus.Cancelled;
+                    job.CompletedAt = DateTimeOffset.UtcNow;
+                }
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
+        string organizationUrl, string projectId, CancellationToken ct = default)
+    {
+        var result = (IReadOnlyList<ReviewJob>)this._jobs.Values
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        (j.Status == JobStatus.Pending || j.Status == JobStatus.Processing))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <inheritdoc />
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        CancellationToken ct = default)
+    {
+        var job = this._jobs.Values
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        j.IterationId == iterationId &&
+                        j.Status == JobStatus.Completed)
+            .OrderByDescending(j => j.CompletedAt)
+            .FirstOrDefault();
+        return Task.FromResult(job);
+    }
+
+    /// <inheritdoc />
+    public Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            job.SetAiConfig(connectionId, model);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task UpdatePrContextAsync(Guid id, string? prTitle, string? prRepositoryName, string? prSourceBranch, string? prTargetBranch, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            job.SetPrContext(prTitle, prRepositoryName, prSourceBranch, prTargetBranch);
+        }
+
+        return Task.CompletedTask;
+    }
 }

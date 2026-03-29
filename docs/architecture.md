@@ -8,6 +8,7 @@
 - [Job State Machine](#job-state-machine)
 - [Credential Resolution](#credential-resolution)
 - [PR Crawler Flow](#pr-crawler-flow)
+- [Token Optimization Pipeline](#token-optimization-pipeline)
 - [Data Model](#data-model)
 
 ---
@@ -22,6 +23,7 @@ flowchart TD
     AOAI["Azure OpenAI / AI Foundry"]
     EXT["External Caller (ADO Extension / CI)"]
     PG[("PostgreSQL")]
+    ADMINUI["Admin UI (Vue 3 SPA)"]
 
     subgraph backend["Meister DEV's ProPR Backend"]
         API["ASP.NET Core API"]
@@ -30,14 +32,19 @@ flowchart TD
     end
 
     EXT -- "POST /reviews X-Client-Key + X-Ado-Token" --> API
+    ADMINUI -- "Admin API / JWT" --> API
     API -- "persist job" --> PG
     WORKER -- "poll every 2 s" --> PG
     WORKER -- "fetch PR diff" --> ADO
-    WORKER -- "AI review (Responses API)" --> AOAI
+    WORKER -- "AI review (Chat API)" --> AOAI
     WORKER -- "post comment threads" --> ADO
     CRAWLER -- "poll open PRs" --> ADO
     CRAWLER -- "enqueue jobs" --> PG
 ```
+
+> **Authentication note:** Review-trigger authentication (`X-Client-Key` + `X-Ado-Token`) is
+> separate from admin/user authentication (JWT via `POST /auth/login` or PAT via `X-User-Pat`).
+> See the [Authentication Flow](#authentication-flow) section for the admin credential sequence.
 
 ---
 
@@ -211,6 +218,57 @@ sequenceDiagram
 
 ---
 
+## Token Optimization Pipeline
+
+Several techniques work together to minimise AI token consumption per review.
+
+### 1 — File exclusion
+
+Before any AI calls are made, `FileByFileReviewOrchestrator` applies `ReviewExclusionRules`
+to every changed file:
+
+```mermaid
+flowchart TD
+    START([Changed files in PR]) --> RULES
+
+    RULES{"File matches\nexclusion pattern?"}
+    RULES -- "yes" --> EXCL["MarkExcluded(pattern)\nProtocol: status=Excluded, 0 tokens"]
+    RULES -- "no" --> REVIEW["Dispatch to IAiReviewCore"]
+
+    EXCL --> SYNTH
+    REVIEW --> SYNTH
+
+    SYNTH([Synthesis — non-excluded files only])
+```
+
+Exclusion patterns are read from `.meister-propr/exclude` on the target branch. If the file
+is absent, the built-in defaults apply (`**/Migrations/*.Designer.cs`,
+`**/Migrations/*ModelSnapshot.cs`). An empty file disables all exclusions.
+
+### 2 — Diff-only review messages
+
+The per-file review input contains only the unified diff for that file. Full file content is
+omitted; the AI is instructed to call the existing `get_file_content` tool if it needs more
+context. This is the single biggest token saving for large files.
+
+### 3 — System prompt pruning in review loops
+
+`ToolAwareAiReviewCore` structures each file's multi-step review as:
+
+- **Step 1**: Global system prompt (S1) + per-file context prompt (S2) + user message
+- **Step 2+**: Per-file context prompt (S2) only + accumulated conversation
+
+S1 (reviewer persona, tool guidance) is a fixed prefix — sending it only once lets the AI
+infrastructure cache it across parallel file slots for the same PR.
+
+### 4 — Tool result excerpt cap
+
+When a review loop exceeds 3 steps, tool result text stored in the protocol is truncated to
+1 000 characters and marked `[TRUNCATED]`. This prevents very deep loops from accumulating
+unbounded amounts of raw file content in the conversation history.
+
+---
+
 ## Data Model
 
 PostgreSQL entities and their relationships.
@@ -280,6 +338,8 @@ erDiagram
         string FilePath
         bool IsComplete
         bool IsFailed
+        bool IsExcluded "true when skipped by exclusion rules"
+        string ExclusionReason "pattern that matched, e.g. **/Migrations/*.Designer.cs"
     }
 
     AppUser {
@@ -319,14 +379,66 @@ erDiagram
         datetime RevokedAt
     }
 
+    AiConnection {
+        uuid Id PK
+        uuid ClientId FK
+        string DisplayName
+        string EndpointUrl
+        jsonb Models "array of model names"
+        bool IsActive
+        string ActiveModel
+        string ApiKey "encrypted; null when using DefaultAzureCredential"
+        datetime CreatedAt
+        string ModelCategory "Standard / Reasoning"
+    }
+
+    PromptOverride {
+        uuid Id PK
+        uuid ClientId FK
+        uuid CrawlConfigId FK "null for client-scope overrides"
+        string Scope "ClientScope / CrawlConfigScope"
+        string PromptKey "SystemPrompt | AgenticLoopGuidance | SynthesisSystemPrompt | QualityFilterSystemPrompt | PerFileContextPrompt"
+        string OverrideText
+        datetime CreatedAt
+    }
+
+    FindingDismissal {
+        uuid Id PK
+        uuid ClientId FK
+        string PatternText "normalised, lowercase, max 200 chars"
+        string Label "optional admin-provided note"
+        string OriginalMessage "original AI finding message"
+        datetime CreatedAt
+    }
+
+    ReviewPrScan {
+        uuid Id PK
+        uuid ClientId FK
+        string RepositoryId
+        int PullRequestId
+        string LastProcessedCommitId
+    }
+
+    ReviewPrScanThread {
+        uuid ReviewPrScanId FK
+        int ThreadId
+        int LastSeenReplyCount
+    }
+
     Client ||--o| ClientAdoCredential : "has (optional)"
     Client ||--o{ CrawlConfiguration : "has"
     Client ||--o{ ReviewJob : "owns"
     Client ||--o{ UserClientRole : "scoped to"
+    Client ||--o{ AiConnection : "has"
+    Client ||--o{ PromptOverride : "has"
+    Client ||--o{ FindingDismissal : "has"
+    Client ||--o{ ReviewPrScan : "has"
     ReviewJob ||--o{ ReviewJobProtocol : "has passes"
     ReviewJob ||--o{ ReviewFileResult : "has file results"
     ReviewJobProtocol }o--|| ReviewFileResult : "linked to"
     AppUser ||--o{ UserClientRole : "has"
     AppUser ||--o{ UserPat : "has"
     AppUser ||--o{ RefreshToken : "has"
+    ReviewPrScan ||--o{ ReviewPrScanThread : "has"
+    CrawlConfiguration ||--o{ PromptOverride : "can have (crawl-config scope)"
 ```

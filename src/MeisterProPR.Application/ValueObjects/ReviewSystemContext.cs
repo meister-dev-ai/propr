@@ -1,5 +1,6 @@
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.Extensions.AI;
 
 namespace MeisterProPR.Application.ValueObjects;
 
@@ -67,4 +68,34 @@ public sealed class ReviewSystemContext
     ///     <see langword="null" /> when <see cref="ActiveProtocolId" /> is <see langword="null" />.
     /// </summary>
     public IProtocolRecorder? ProtocolRecorder { get; set; }
+
+    /// <summary>
+    ///     File exclusion rules for this repository. Files matching these rules are skipped before
+    ///     dispatching to the AI review loop. Defaults to <see cref="ReviewExclusionRules.Empty" />.
+    /// </summary>
+    public ReviewExclusionRules ExclusionRules { get; init; } = ReviewExclusionRules.Empty;
+
+    /// <summary>
+    ///     Normalized pattern texts of findings that have been dismissed by the client admin.
+    ///     Injected into the AI system prompt as exclusion rules so the AI does not re-report them.
+    ///     Defaults to an empty list when no dismissals are configured or when dismissal loading fails.
+    /// </summary>
+    public IReadOnlyList<string> DismissedPatterns { get; init; } = [];
+
+    /// <summary>
+    ///     Per-prompt-key override texts loaded from the client's (and crawl-config's) persisted overrides.
+    ///     Keys are the named prompt segment identifiers (e.g. <c>"AgenticLoopGuidance"</c>,
+    ///     <c>"SynthesisSystemPrompt"</c>). Prompt builders consult this dictionary before returning the
+    ///     global hardcoded constant, substituting the override text when present.
+    ///     Defaults to an empty dictionary when no overrides are configured or when loading fails.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> PromptOverrides { get; init; } =
+        new Dictionary<string, string>();
+
+    /// <summary>
+    ///     When non-null, <c>ToolAwareAiReviewCore</c> uses this client instead of its injected default.
+    ///     Set by <c>FileByFileReviewOrchestrator</c> when a tier-specific AI connection is configured
+    ///     for the file's <see cref="PerFileReviewHint.ComplexityTier" />.
+    /// </summary>
+    public IChatClient? TierChatClient { get; set; }
 }

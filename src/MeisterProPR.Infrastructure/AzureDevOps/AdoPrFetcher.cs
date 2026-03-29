@@ -19,6 +19,7 @@ public sealed partial class AdoPrFetcher(
         string repositoryId,
         int pullRequestId,
         int iterationId,
+        int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default)
     {
@@ -49,16 +50,19 @@ public sealed partial class AdoPrFetcher(
         var baseCommit = iteration.CommonRefCommit?.CommitId
                          ?? pr.LastMergeTargetCommit?.CommitId ?? "";
 
-        // Get changed files
-        var changes = await gitClient.GetPullRequestIterationChangesAsync(
+        // On a re-review pass, fetch only the delta (files changed since the last reviewed
+        // iteration) with full content.  Also fetch the full cumulative manifest (no content)
+        // so the AI still has the complete PR scope for context.
+        var deltaChanges = await gitClient.GetPullRequestIterationChangesAsync(
             projectId,
             repositoryId,
             pullRequestId,
             iterationId,
+            compareTo: compareToIterationId,
             cancellationToken: cancellationToken);
 
         var changedFiles = new List<ChangedFile>();
-        foreach (var change in changes.ChangeEntries ?? [])
+        foreach (var change in deltaChanges.ChangeEntries ?? [])
         {
             var changedFile = await this.CreateChangedFileFromChangeAsync(gitClient, projectId, repositoryId, sourceCommit, baseCommit, change, cancellationToken);
 
@@ -68,12 +72,33 @@ public sealed partial class AdoPrFetcher(
             }
         }
 
+        // Build the full PR manifest (paths + change types only, no content download) when
+        // we're doing a delta review.  On a first-pass fetch compareTo is null and the two
+        // lists are identical, so we skip the extra API call.
+        IReadOnlyList<ChangedFileSummary>? allChangedFileSummaries = null;
+        if (compareToIterationId.HasValue)
+        {
+            var allChanges = await gitClient.GetPullRequestIterationChangesAsync(
+                projectId,
+                repositoryId,
+                pullRequestId,
+                iterationId,
+                cancellationToken: cancellationToken);
+
+            allChangedFileSummaries = (allChanges.ChangeEntries ?? [])
+                .Select(CreateSummaryFromChange)
+                .OfType<ChangedFileSummary>()
+                .ToList()
+                .AsReadOnly();
+        }
+
         var existingThreads = await this.FetchExistingThreadsAsync(gitClient, projectId, repositoryId, pullRequestId, cancellationToken);
 
         return new PullRequest(
             organizationUrl,
             projectId,
             repositoryId,
+            pr.Repository?.Name ?? repositoryId,
             pullRequestId,
             iterationId,
             pr.Title ?? "",
@@ -81,7 +106,26 @@ public sealed partial class AdoPrFetcher(
             pr.SourceRefName ?? "",
             pr.TargetRefName ?? "",
             changedFiles.AsReadOnly(),
-            ExistingThreads: existingThreads);
+            ExistingThreads: existingThreads,
+            AllChangedFileSummaries: allChangedFileSummaries);
+    }
+
+    private static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
+    {
+        if (change.Item?.IsFolder == true || string.IsNullOrEmpty(change.Item?.Path))
+        {
+            return null;
+        }
+
+        var changeType = change.ChangeType switch
+        {
+            VersionControlChangeType.Add => ChangeType.Add,
+            VersionControlChangeType.Delete => ChangeType.Delete,
+            _ when change.ChangeType.HasFlag(VersionControlChangeType.Rename) => ChangeType.Rename,
+            _ => ChangeType.Edit,
+        };
+
+        return new ChangedFileSummary(change.Item.Path, changeType);
     }
 
     /// <summary>

@@ -40,6 +40,17 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/crawl-configs',
+      name: 'crawl-configs',
+      component: () => import('@/views/CrawlConfigsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/403',
+      name: 'access-denied',
+      component: () => import('@/views/AccessDeniedView.vue'),
+    },
+    {
       path: '/:id',
       name: 'client-detail',
       component: () => import('@/views/ClientDetailView.vue'),
@@ -54,7 +65,7 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
   if (to.meta.requiresAdmin && !isAdmin.value) {
-    return { name: 'clients' }
+    return { name: 'access-denied' }
   }
   if (to.name === 'login' && isAuthenticated.value) {
     return { name: 'clients' }

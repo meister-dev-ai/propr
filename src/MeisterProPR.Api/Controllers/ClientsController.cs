@@ -14,6 +14,7 @@ public sealed partial class ClientsController(
     IClientRegistry clientRegistry,
     ICrawlConfigurationRepository crawlConfigs,
     IClientAdoCredentialRepository adoCredentialRepository,
+    IUserRepository userRepository,
     ILogger<ClientsController> logger) : ControllerBase
 {
     [LoggerMessage(
@@ -121,7 +122,10 @@ public sealed partial class ClientsController(
                 config.ProjectId,
                 config.CrawlIntervalSeconds,
                 config.IsActive,
-                config.CreatedAt));
+                config.CreatedAt,
+                config.RepoFilters
+                    .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
+                    .ToList()));
     }
 
     /// <summary>
@@ -269,35 +273,75 @@ public sealed partial class ClientsController(
     [HttpGet("clients/{clientId:guid}")]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetClient(Guid clientId)
+    public async Task<IActionResult> GetClient(Guid clientId, CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var isAdmin = this.HttpContext.Items["IsAdmin"] is true;
+        var userId = this.HttpContext.Items["UserId"] is string s && Guid.TryParse(s, out var id) ? id : (Guid?)null;
+
+        if (!isAdmin && userId is null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return this.Unauthorized(new { error = "Valid credentials required." });
         }
 
-        var client = await clientAdminService.GetByIdAsync(clientId);
-        return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
+        var client = await clientAdminService.GetByIdAsync(clientId, ct);
+        if (client is null)
+        {
+            return this.NotFound();
+        }
+
+        // Non-admin users can only see clients they're assigned to
+        if (!isAdmin && userId is not null)
+        {
+            var user = await userRepository.GetByIdWithAssignmentsAsync(userId.Value, ct);
+            var hasAccess = user?.ClientAssignments.Any(a => a.ClientId == clientId) ?? false;
+            if (!hasAccess)
+            {
+                return this.StatusCode(403, new { error = "Access denied." });
+            }
+        }
+
+        return this.Ok(ToClientResponse(client));
     }
 
     /// <summary>
-    ///     Lists all registered clients. Requires <c>X-Admin-Key</c>. Client keys are never returned.
+    ///     Lists registered clients.
+    ///     Admins receive all clients.
+    ///     Non-Admin users receive only clients for their assigned roles.
+    ///     Requires either a valid <c>X-Admin-Key</c> / JWT Bearer token.
     /// </summary>
     /// <response code="200">List of clients.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">No valid credentials provided.</response>
     [HttpGet("clients")]
     [ProducesResponseType(typeof(IReadOnlyList<ClientResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetClients()
+    public async Task<IActionResult> GetClients(CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var isAdmin = this.HttpContext.Items["IsAdmin"] is true;
+        var userId = this.HttpContext.Items["UserId"] is string s && Guid.TryParse(s, out var id) ? id : (Guid?)null;
+
+        if (!isAdmin && userId is null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return this.Unauthorized(new { error = "Valid credentials required." });
         }
 
-        var clients = await clientAdminService.GetAllAsync();
-        return this.Ok(clients.Select(ToClientResponse).ToList());
+        if (isAdmin)
+        {
+            var all = await clientAdminService.GetAllAsync(ct);
+            return this.Ok(all.Select(ToClientResponse).ToList());
+        }
+
+        // Non-admin: return scoped clients
+        var user = await userRepository.GetByIdWithAssignmentsAsync(userId!.Value, ct);
+        var clientIds = user?.ClientAssignments.Select(a => a.ClientId).ToList() ?? [];
+        if (clientIds.Count == 0)
+        {
+            return this.Ok(Array.Empty<ClientResponse>());
+        }
+
+        var scoped = await clientAdminService.GetByIdsAsync(clientIds, ct);
+        return this.Ok(scoped.Select(ToClientResponse).ToList());
     }
 
     /// <summary>
@@ -335,7 +379,10 @@ public sealed partial class ClientsController(
                     c.ProjectId,
                     c.CrawlIntervalSeconds,
                     c.IsActive,
-                    c.CreatedAt))
+                    c.CreatedAt,
+                    c.RepoFilters
+                        .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
+                        .ToList()))
                 .ToList());
     }
 
@@ -434,7 +481,10 @@ public sealed partial class ClientsController(
                 config.ProjectId,
                 config.CrawlIntervalSeconds,
                 config.IsActive,
-                config.CreatedAt));
+                config.CreatedAt,
+                config.RepoFilters
+                    .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
+                    .ToList()));
     }
 
     /// <summary>
@@ -705,7 +755,14 @@ public sealed record CrawlConfigResponse(
     string ProjectId,
     int CrawlIntervalSeconds,
     bool IsActive,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<CrawlRepoFilterResponse>? RepoFilters = null);
+
+/// <summary>A single repo filter entry in a crawl config response.</summary>
+public sealed record CrawlRepoFilterResponse(
+    Guid Id,
+    string RepositoryName,
+    IReadOnlyList<string> TargetBranchPatterns);
 
 /// <summary>Request body for creating a client.</summary>
 public sealed record CreateClientRequest(string Key, string DisplayName);

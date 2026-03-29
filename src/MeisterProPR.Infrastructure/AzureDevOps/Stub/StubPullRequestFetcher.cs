@@ -19,6 +19,7 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
         string repositoryId,
         int pullRequestId,
         int iterationId,
+        int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default)
     {
@@ -88,6 +89,7 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
             organizationUrl,
             projectId,
             repositoryId,
+            "stub-repository",
             pullRequestId,
             iterationId,
             "[STUB] Add greeting and helper utilities",

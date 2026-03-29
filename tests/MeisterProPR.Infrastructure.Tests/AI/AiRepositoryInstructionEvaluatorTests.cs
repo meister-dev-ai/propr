@@ -1,8 +1,10 @@
 using System.Text.Json;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -34,6 +36,7 @@ public class AiRepositoryInstructionEvaluatorTests
         var mockClient = Substitute.For<IChatClient>();
         var sut = new AiRepositoryInstructionEvaluator(
             mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiEvaluatorOptions { Endpoint = "https://test.openai.azure.com", Deployment = "test-model" }),
             Substitute.For<ILogger<AiRepositoryInstructionEvaluator>>());
 
         // Act
@@ -64,6 +67,7 @@ public class AiRepositoryInstructionEvaluatorTests
 
         var sut = new AiRepositoryInstructionEvaluator(
             mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiEvaluatorOptions { Endpoint = "https://test.openai.azure.com", Deployment = "test-model" }),
             Substitute.For<ILogger<AiRepositoryInstructionEvaluator>>());
 
         // Act
@@ -90,6 +94,7 @@ public class AiRepositoryInstructionEvaluatorTests
 
         var sut = new AiRepositoryInstructionEvaluator(
             mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiEvaluatorOptions { Endpoint = "https://test.openai.azure.com", Deployment = "test-model" }),
             Substitute.For<ILogger<AiRepositoryInstructionEvaluator>>());
 
         // Act
@@ -118,6 +123,7 @@ public class AiRepositoryInstructionEvaluatorTests
 
         var sut = new AiRepositoryInstructionEvaluator(
             mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiEvaluatorOptions { Endpoint = "https://test.openai.azure.com", Deployment = "test-model" }),
             Substitute.For<ILogger<AiRepositoryInstructionEvaluator>>());
 
         // Act
@@ -146,6 +152,7 @@ public class AiRepositoryInstructionEvaluatorTests
 
         var sut = new AiRepositoryInstructionEvaluator(
             mockClient,
+            Microsoft.Extensions.Options.Options.Create(new AiEvaluatorOptions { Endpoint = "https://test.openai.azure.com", Deployment = "test-model" }),
             Substitute.For<ILogger<AiRepositoryInstructionEvaluator>>());
 
         // Act & Assert — now always returns empty list (fail-safe)

@@ -16,6 +16,7 @@ public class ReviewPromptsExistingThreadsTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             1,
             1,
             "Test PR",

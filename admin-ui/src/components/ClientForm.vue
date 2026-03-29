@@ -27,10 +27,10 @@
     </div>
 
     <div class="form-actions">
-      <button type="submit" :disabled="loading">
+      <button type="submit" class="btn-primary" :disabled="loading">
         {{ loading ? 'Creating…' : 'Create Client' }}
       </button>
-      <button type="button" @click="$emit('cancel')">Cancel</button>
+      <button type="button" class="btn-secondary" @click="$emit('cancel')">Cancel</button>
     </div>
   </form>
 </template>

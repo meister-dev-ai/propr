@@ -25,15 +25,45 @@ public class ReviewFileResult
     public string FilePath { get; private set; } = null!;
     public bool IsComplete { get; private set; }
     public bool IsFailed { get; private set; }
+    public bool IsExcluded { get; private set; }
+
+    /// <summary>
+    ///     True when this result was inherited from a prior iteration's completed job
+    ///     rather than freshly computed in the current review pass.
+    /// </summary>
+    public bool IsCarriedForward { get; private set; }
+
+    public string? ExclusionReason { get; private set; }
     public string? ErrorMessage { get; private set; }
     public string? PerFileSummary { get; private set; }
     public IReadOnlyList<ReviewComment>? Comments { get; private set; }
+
+    /// <summary>
+    ///     Creates a <see cref="ReviewFileResult" /> that carries forward the result from a prior
+    ///     iteration without dispatching a new AI review for the file.
+    /// </summary>
+    /// <param name="jobId">The ID of the new review job that owns this carried-forward result.</param>
+    /// <param name="prior">The completed result from the prior iteration to copy from.</param>
+    public static ReviewFileResult CreateCarriedForward(Guid jobId, ReviewFileResult prior)
+    {
+        var result = new ReviewFileResult(jobId, prior.FilePath);
+        result.IsComplete = true;
+        result.IsCarriedForward = true;
+        result.PerFileSummary = prior.PerFileSummary;
+        result.Comments = prior.Comments;
+        return result;
+    }
 
     public void MarkCompleted(string summary, IReadOnlyList<ReviewComment> comments)
     {
         if (this.IsFailed)
         {
             throw new InvalidOperationException("Cannot complete a failed result");
+        }
+
+        if (this.IsComplete)
+        {
+            throw new InvalidOperationException("Cannot complete an already-complete result");
         }
 
         this.IsComplete = true;
@@ -53,8 +83,37 @@ public class ReviewFileResult
     }
 
     /// <summary>
-    ///     Resets an interrupted (not complete, not failed) result so it can be re-attempted.
-    ///     Called when a previous processing run was killed mid-flight.
+    ///     Marks this file result as excluded — no AI review was performed.
+    ///     Sets <see cref="IsComplete" /> to <see langword="true" /> so the file is treated as
+    ///     a terminal state and is not retried.
+    /// </summary>
+    /// <param name="exclusionReason">The glob pattern that matched this file, for display purposes.</param>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown when the result is already in a terminal state (<see cref="IsFailed" /> or
+    ///     <see cref="IsComplete" />). Call <see cref="ResetForRetry" /> first if the row was
+    ///     previously failed and needs to be re-classified as excluded.
+    /// </exception>
+    public void MarkExcluded(string exclusionReason)
+    {
+        if (this.IsFailed)
+        {
+            throw new InvalidOperationException("Cannot exclude a failed result; call ResetForRetry() first.");
+        }
+
+        if (this.IsComplete)
+        {
+            throw new InvalidOperationException("Cannot exclude an already-completed result.");
+        }
+
+        this.IsExcluded = true;
+        this.IsComplete = true;
+        this.ExclusionReason = exclusionReason;
+    }
+
+    /// <summary>
+    ///     Resets a non-terminal result (interrupted mid-flight or previously failed) so it can be
+    ///     re-attempted.  Safe to call on any row that has <see cref="IsComplete" /> equal to
+    ///     <see langword="false" />, which covers both killed-in-progress and failed rows.
     /// </summary>
     public void ResetForRetry()
     {

@@ -1,9 +1,11 @@
 using System.Text.Json;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -21,11 +23,15 @@ public class AgentAiReviewCoreTests
         return new ReviewSystemContext(null, Array.Empty<RepositoryInstruction>(), null);
     }
 
+    private static AgentAiReviewCore CreateCore(IChatClient chatClient)
+        => new(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+
     private static PullRequest CreatePullRequest(IReadOnlyList<ChangedFile>? files = null)
     {
         return new PullRequest(
             "https://dev.azure.com/org",
             "proj",
+            "repo",
             "repo",
             1,
             1,
@@ -57,7 +63,7 @@ public class AgentAiReviewCoreTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
@@ -84,7 +90,7 @@ public class AgentAiReviewCoreTests
                 Arg.Do<CancellationToken>(ct => capturedToken = ct))
             .Returns(CreateChatResponse("""{"summary":"ok","comments":[]}"""));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         await core.ReviewAsync(CreatePullRequest(), EmptyContext(), cts.Token);
@@ -104,7 +110,7 @@ public class AgentAiReviewCoreTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
@@ -123,7 +129,7 @@ public class AgentAiReviewCoreTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse("this is not valid json {{ }}"));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act & Assert
         await Assert.ThrowsAsync<JsonException>(() => core.ReviewAsync(CreatePullRequest(), EmptyContext()));
@@ -142,7 +148,7 @@ public class AgentAiReviewCoreTests
                 Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse("""{"summary":"ok","comments":[]}"""));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         await core.ReviewAsync(CreatePullRequest(), EmptyContext());
@@ -172,7 +178,7 @@ public class AgentAiReviewCoreTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());
@@ -200,7 +206,7 @@ public class AgentAiReviewCoreTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
-        var core = new AgentAiReviewCore(mockClient);
+        var core = CreateCore(mockClient);
 
         // Act
         var result = await core.ReviewAsync(CreatePullRequest(), EmptyContext());

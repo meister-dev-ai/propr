@@ -83,7 +83,8 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             Guid.NewGuid(),
             60,
             true,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            []);
         crawlConfigRepo
             .GetAllActiveAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>(new[] { config }));
@@ -133,6 +134,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
                 crawlConfigRepo,
                 prFetcher,
                 jobs,
+                Substitute.For<IPrStatusFetcher>(),
                 Substitute.For<ILogger<PrCrawlService>>());
             await crawlService.CrawlAsync();
         }

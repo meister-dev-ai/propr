@@ -40,4 +40,13 @@ public sealed partial class ReviewOrchestrationService
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Review failed for job {JobId}")]
     private static partial void LogReviewFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "PR #{PrId} was abandoned — cancelling review job {JobId} instead of failing it")]
+    private static partial void LogPrAbandonedCancellingJob(ILogger logger, int prId, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} was cancelled externally before file review — exiting without AI calls")]
+    private static partial void LogJobCancelledBeforeFileReview(ILogger logger, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} was cancelled externally after file review — discarding result; no comment posted")]
+    private static partial void LogJobCancelledAfterFileReview(ILogger logger, Guid jobId);
 }

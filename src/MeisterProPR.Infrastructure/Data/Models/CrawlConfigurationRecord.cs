@@ -11,4 +11,7 @@ public sealed class CrawlConfigurationRecord
     public int CrawlIntervalSeconds { get; set; }
     public string OrganizationUrl { get; set; } = string.Empty;
     public string ProjectId { get; set; } = string.Empty;
+
+    /// <summary>Optional repository-scope filters for this crawl configuration.</summary>
+    public ICollection<CrawlRepoFilterRecord> RepoFilters { get; set; } = [];
 }

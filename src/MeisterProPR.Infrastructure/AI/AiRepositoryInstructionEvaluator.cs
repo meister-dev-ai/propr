@@ -3,9 +3,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -16,6 +18,7 @@ namespace MeisterProPR.Infrastructure.AI;
 /// </summary>
 public sealed partial class AiRepositoryInstructionEvaluator(
     [FromKeyedServices("evaluator")] IChatClient chatClient,
+    IOptions<AiEvaluatorOptions> evaluatorOptions,
     ILogger<AiRepositoryInstructionEvaluator> logger) : IRepositoryInstructionEvaluator
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -46,7 +49,7 @@ public sealed partial class AiRepositoryInstructionEvaluator(
             new(ChatRole.User, prompt),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, null, cancellationToken);
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = evaluatorOptions.Value.Deployment }, cancellationToken);
         var responseText = response.Text ?? "";
 
         var relevant = ParseRelevantInstructions(responseText, instructions, logger);

@@ -14,7 +14,7 @@ public sealed class EnvVarClientRegistry : IClientRegistry
 {
     private readonly Dictionary<string, Guid> _keys;
 
-    /// <summary>Initialises the registry by parsing <c>MEISTER_CLIENT_KEYS</c> from configuration.</summary>
+    /// <summary>Initializes the registry by parsing <c>MEISTER_CLIENT_KEYS</c> from configuration.</summary>
     /// <param name="configuration">The application configuration.</param>
     // Use IConfiguration so values come from env vars, user-secrets, appsettings, etc.
     public EnvVarClientRegistry(IConfiguration configuration)

@@ -24,7 +24,8 @@ public sealed class AdoAssignedPrFetcherTests
         Guid.NewGuid(),
         60,
         true,
-        DateTimeOffset.UtcNow);
+        DateTimeOffset.UtcNow,
+        []);
 
     private static AdoAssignedPrFetcher BuildSut(GitHttpClient gitClient)
     {
@@ -136,7 +137,8 @@ public sealed class AdoAssignedPrFetcherTests
             null, // ReviewerId = null → should skip
             60,
             true,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            []);
 
         var gitClient = Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
@@ -345,5 +347,116 @@ public sealed class AdoAssignedPrFetcherTests
         // Credential lookup for the config's ClientId must have been called
         await credentialRepository.Received(1)
             .GetByClientIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>());
+    }
+
+    // T037 — repo filter tests
+
+    private static GitPullRequest MakePrFull(int prId, string repoName, string targetRefName = "refs/heads/main")
+    {
+        return new GitPullRequest
+        {
+            PullRequestId = prId,
+            Repository = new GitRepository { Id = Guid.NewGuid(), Name = repoName },
+            TargetRefName = targetRefName,
+        };
+    }
+
+    private static GitHttpClient BuildGitClientWithPrs(IReadOnlyList<GitPullRequest> prs)
+    {
+        var gitClient = Substitute.For<GitHttpClient>(
+            new Uri("https://dev.azure.com/testorg"),
+            new VssCredentials());
+        gitClient.GetPullRequestsByProjectAsync(
+                Arg.Any<string>(),
+                Arg.Any<GitPullRequestSearchCriteria>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(prs.ToList()));
+        gitClient.GetPullRequestIterationsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<GitPullRequestIteration> { new() { Id = 1 } }));
+        return gitClient;
+    }
+
+    [Fact]
+    public async Task GetAssignedOpenPullRequestsAsync_EmptyFilterList_ReturnsAllPrs()
+    {
+        // T037: empty filter = backward compat, all PRs returned
+        var config = DefaultConfig with { RepoFilters = [] };
+        var prs = new[]
+        {
+            MakePrFull(1, "repo-a"),
+            MakePrFull(2, "repo-b"),
+        };
+        var sut = BuildSut(BuildGitClientWithPrs(prs));
+
+        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public async Task GetAssignedOpenPullRequestsAsync_RepoFilterExcludesNonMatchingRepo()
+    {
+        // T037: filter for "repo-a" only — "repo-b" should be excluded
+        var filter = new CrawlRepoFilterDto(Guid.NewGuid(), "repo-a", []);
+        var config = DefaultConfig with { RepoFilters = [filter] };
+        var prs = new[]
+        {
+            MakePrFull(1, "repo-a"),
+            MakePrFull(2, "repo-b"),
+        };
+        var sut = BuildSut(BuildGitClientWithPrs(prs));
+
+        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+
+        Assert.Single(result);
+        Assert.Equal(1, result[0].PullRequestId);
+    }
+
+    [Fact]
+    public async Task GetAssignedOpenPullRequestsAsync_BranchPatternFilterExcludesNonMatchingBranch()
+    {
+        // T037: filter for "repo-a" with target branch "main" only
+        var filter = new CrawlRepoFilterDto(Guid.NewGuid(), "repo-a", ["main"]);
+        var config = DefaultConfig with { RepoFilters = [filter] };
+        var prs = new[]
+        {
+            MakePrFull(1, "repo-a", "refs/heads/main"),     // matches
+            MakePrFull(2, "repo-a", "refs/heads/develop"),  // excluded by branch filter
+        };
+        var sut = BuildSut(BuildGitClientWithPrs(prs));
+
+        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+
+        Assert.Single(result);
+        Assert.Equal(1, result[0].PullRequestId);
+    }
+
+    [Fact]
+    public async Task GetAssignedOpenPullRequestsAsync_GlobBranchPattern_MatchesReleaseBranches()
+    {
+        // T037: glob "release/*" matches "release/2.1"
+        var filter = new CrawlRepoFilterDto(Guid.NewGuid(), "repo-a", ["release/*"]);
+        var config = DefaultConfig with { RepoFilters = [filter] };
+        var prs = new[]
+        {
+            MakePrFull(1, "repo-a", "refs/heads/release/2.1"),  // matches glob
+            MakePrFull(2, "repo-a", "refs/heads/main"),          // does not match
+        };
+        var sut = BuildSut(BuildGitClientWithPrs(prs));
+
+        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+
+        Assert.Single(result);
+        Assert.Equal(1, result[0].PullRequestId);
     }
 }

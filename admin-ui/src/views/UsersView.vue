@@ -1,137 +1,155 @@
 <template>
-  <div class="users-view">
-    <div class="users-toolbar">
-      <h2>Users</h2>
-      <button class="btn-primary" @click="showCreate = !showCreate">
-        {{ showCreate ? 'Cancel' : 'New User' }}
-      </button>
-    </div>
+  <div class="page-view">
+    <h2 class="view-title">Users</h2>
 
     <!-- Create user form -->
-    <section v-if="showCreate" class="card">
-      <h3>Create user</h3>
-      <div v-if="createError" class="error">{{ createError }}</div>
-      <div class="form-field">
-        <label for="new-username">Username</label>
-        <input id="new-username" v-model="newUsername" type="text" placeholder="Username" />
+    <div v-if="showCreate" class="section-card">
+      <div class="section-card-header">
+        <h3>Create user</h3>
       </div>
-      <div class="form-field">
-        <label for="new-password">Password</label>
-        <input id="new-password" v-model="newPassword" type="password" placeholder="Min 8 characters" />
+      <div class="section-card-body">
+        <div v-if="createError" class="error">{{ createError }}</div>
+        <div class="user-create-grid">
+          <div class="form-field">
+            <label for="new-username">Username</label>
+            <input id="new-username" v-model="newUsername" type="text" placeholder="Username" />
+          </div>
+          <div class="form-field">
+            <label for="new-password">Password</label>
+            <input id="new-password" v-model="newPassword" type="password" placeholder="Min 8 characters" />
+          </div>
+          <div class="form-field">
+            <label for="new-role">Role</label>
+            <select id="new-role" v-model="newRole">
+              <option value="User">User</option>
+              <option value="Admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top: 0;">
+          <button class="btn-primary" :disabled="creating" @click="handleCreate">
+            <i class="fi fi-rr-check"></i> {{ creating ? 'Creating…' : 'Create' }}
+          </button>
+          <button class="btn-secondary" @click="showCreate = false">Cancel</button>
+        </div>
       </div>
-      <div class="form-field">
-        <label for="new-role">Role</label>
-        <select id="new-role" v-model="newRole">
-          <option value="User">User</option>
-          <option value="Admin">Admin</option>
-        </select>
-      </div>
-      <div class="form-actions">
-        <button :disabled="creating" @click="handleCreate">{{ creating ? 'Creating…' : 'Create' }}</button>
-        <button class="btn-secondary" @click="showCreate = false">Cancel</button>
-      </div>
-    </section>
+    </div>
 
     <!-- Users table -->
-    <div v-if="loadError" class="error">{{ loadError }}</div>
-    <div v-if="loading" class="loading">Loading…</div>
+    <div class="section-card">
+      <div class="section-card-header">
+        <div class="section-card-header-left">
+          <h3>All Users</h3>
+          <span class="chip chip-muted">{{ users.length }} user{{ users.length === 1 ? '' : 's' }}</span>
+        </div>
+        <div class="section-card-header-actions">
+          <button class="btn-primary" @click="showCreate = !showCreate">
+            <i :class="showCreate ? 'fi fi-rr-cross-small' : 'fi fi-rr-add'"></i>
+            {{ showCreate ? 'Cancel' : 'New User' }}
+          </button>
+        </div>
+      </div>
+      <div v-if="loadError" class="error" style="padding: 1rem 1.25rem;">{{ loadError }}</div>
+      <div v-else-if="loading" class="loading" style="padding: 1rem 1.25rem;">Loading…</div>
 
-    <table v-else-if="users.length">
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Role</th>
-          <th>Status</th>
-          <th>Created</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <template v-for="user in users" :key="user.id">
-          <tr :class="{ 'row-inactive': !user.isActive }">
-            <td>{{ user.username }}</td>
-            <td>{{ user.globalRole }}</td>
-            <td>
-              <span :class="user.isActive ? 'badge-active' : 'badge-inactive'">
-                {{ user.isActive ? 'Active' : 'Disabled' }}
-              </span>
-            </td>
-            <td>{{ formatDate(user.createdAt) }}</td>
-            <td class="actions-cell">
-              <button
-                v-if="user.isActive"
-                class="btn-danger"
-                :disabled="disabling === user.id"
-                @click="handleDisable(user.id)"
-              >
-                {{ disabling === user.id ? '…' : 'Disable' }}
-              </button>
-              <button
-                class="btn-secondary"
-                @click="toggleAssignments(user.id)"
-              >
-                {{ expandedUser === user.id ? 'Close' : 'Assignments' }}
-              </button>
-            </td>
+      <table v-else-if="users.length">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
           </tr>
-          <!-- Inline assignments panel -->
-          <tr v-if="expandedUser === user.id" class="assignments-row">
-            <td colspan="5">
-              <div class="assignments-panel">
-                <div v-if="assignmentsLoading" class="loading">Loading assignments…</div>
-                <div v-else>
-                  <table v-if="currentAssignments.length" class="assignments-table">
-                    <thead>
-                      <tr>
-                        <th>Client ID</th>
-                        <th>Role</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="a in currentAssignments" :key="a.assignmentId">
-                        <td class="mono">{{ a.clientId }}</td>
-                        <td>{{ a.role }}</td>
-                        <td>
-                          <button
-                            class="btn-danger btn-sm"
-                            :disabled="removingAssignment === a.assignmentId"
-                            @click="handleRemoveAssignment(user.id, a.clientId, a.assignmentId)"
-                          >
-                            {{ removingAssignment === a.assignmentId ? '…' : 'Remove' }}
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p v-else class="muted">No client assignments.</p>
+        </thead>
+        <tbody>
+          <template v-for="user in users" :key="user.id">
+            <tr :class="{ 'row-inactive': !user.isActive }">
+              <td>{{ user.username }}</td>
+              <td>{{ user.globalRole }}</td>
+              <td>
+                <span :class="user.isActive ? 'chip chip-success' : 'chip chip-muted'">
+                  <i :class="user.isActive ? 'fi fi-rr-check-circle' : 'fi fi-rr-ban'"></i>
+                  {{ user.isActive ? 'Active' : 'Disabled' }}
+                </span>
+              </td>
+              <td>{{ formatDate(user.createdAt) }}</td>
+              <td class="actions-cell">
+                <button
+                  v-if="user.isActive"
+                  class="btn-danger"
+                  :disabled="disabling === user.id"
+                  @click="handleDisable(user.id)"
+                >
+                  {{ disabling === user.id ? '…' : 'Disable' }}
+                </button>
+                <button
+                  class="btn-secondary"
+                  @click="toggleAssignments(user.id)"
+                >
+                  {{ expandedUser === user.id ? 'Close' : 'Assignments' }}
+                </button>
+              </td>
+            </tr>
+            <!-- Inline assignments panel -->
+            <tr v-if="expandedUser === user.id" class="assignments-row">
+              <td colspan="5">
+                <div class="assignments-panel">
+                  <div v-if="assignmentsLoading" class="loading">Loading assignments…</div>
+                  <div v-else>
+                    <table v-if="currentAssignments.length" class="assignments-table">
+                      <thead>
+                        <tr>
+                          <th>Client Name</th>
+                          <th>Role</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="a in currentAssignments" :key="a.assignmentId">
+                          <td>{{ getClientName(a.clientId) }}</td>
+                          <td>{{ a.role }}</td>
+                          <td>
+                            <button
+                              class="btn-danger btn-sm"
+                              :disabled="removingAssignment === a.assignmentId"
+                              @click="handleRemoveAssignment(user.id, a.clientId, a.assignmentId)"
+                            >
+                              {{ removingAssignment === a.assignmentId ? '…' : 'Remove' }}
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p v-else class="muted">No client assignments.</p>
 
-                  <!-- Add assignment -->
-                  <div class="add-assignment">
-                    <h4>Add assignment</h4>
-                    <div v-if="assignError" class="error">{{ assignError }}</div>
-                    <div class="add-assignment-form">
-                      <select v-model="assignClientId" class="assign-select">
-                        <option value="" disabled>Select client…</option>
-                        <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
-                      </select>
-                      <select v-model="assignRole" class="assign-select">
-                        <option value="ClientAdministrator">ClientAdministrator</option>
-                        <option value="ClientUser">ClientUser</option>
-                      </select>
-                      <button :disabled="assigning || !assignClientId" @click="handleAddAssignment(user.id)">
-                        {{ assigning ? '…' : 'Assign' }}
-                      </button>
+                    <!-- Add assignment -->
+                    <div class="add-assignment">
+                      <h4>Add assignment</h4>
+                      <div v-if="assignError" class="error">{{ assignError }}</div>
+                      <div class="add-assignment-form">
+                        <select v-model="assignClientId" class="assign-select">
+                          <option value="" disabled>Select client…</option>
+                          <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+                        </select>
+                        <select v-model="assignRole" class="assign-select">
+                          <option value="ClientAdministrator">ClientAdministrator</option>
+                          <option value="ClientUser">ClientUser</option>
+                        </select>
+                        <button :disabled="assigning || !assignClientId" @click="handleAddAssignment(user.id)">
+                          {{ assigning ? '…' : 'Assign' }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-    <p v-else class="muted">No users found.</p>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p v-else class="users-empty">No users found.</p>
+    </div>
   </div>
 </template>
 
@@ -214,6 +232,11 @@ async function loadClients() {
   } catch {
     // non-critical; assignment form will show empty dropdown
   }
+}
+
+function getClientName(clientId: string): string {
+  const client = clients.value.find(c => c.id === clientId)
+  return client ? client.displayName : clientId
 }
 
 async function handleCreate() {
@@ -329,28 +352,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.users-toolbar {
-  display: flex;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.users-toolbar h2 {
-  margin: 0;
-  flex: 1;
-}
-
-.card {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1.5rem 2rem;
-  margin-bottom: 1.5rem;
-}
-
-.card h3 {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+.user-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 select {
@@ -364,22 +370,6 @@ select {
   color: var(--color-text);
 }
 select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
-
-.btn-secondary {
-  background: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  padding: 0.625rem 1.25rem;
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-}
-.btn-secondary:hover {
-  background: var(--color-border);
-  color: var(--color-text);
-}
 
 .btn-sm {
   padding: 0.375rem 0.875rem;
@@ -405,6 +395,7 @@ select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0
 .assignments-table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 1.5rem;
 }
 
 .assignments-table th, .assignments-table td {
@@ -421,18 +412,14 @@ select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0
 
 .assignments-panel {
   background: var(--color-bg);
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: 12px;
-  margin: 1rem 1.5rem 2rem 1.5rem;
+  margin: 1rem 1.5rem 1.5rem 1.5rem;
   border: 1px solid var(--color-border);
 }
 
 .assignments-row:hover td {
   background: transparent !important;
-}
-
-.assignments-table {
-  margin-bottom: 1.5rem;
 }
 
 .add-assignment h4 {
@@ -451,14 +438,15 @@ select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0
   min-width: 14rem;
 }
 
-.mono {
-  font-family: monospace;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
 .muted {
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+.users-empty {
+  padding: 2rem 1.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
 }
 </style>

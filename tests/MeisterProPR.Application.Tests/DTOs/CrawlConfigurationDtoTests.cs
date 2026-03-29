@@ -17,7 +17,8 @@ public sealed class CrawlConfigurationDtoTests
             reviewerId,
             60,
             true,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            []);
 
         Assert.Equal(reviewerId, dto.ReviewerId);
     }
@@ -33,7 +34,8 @@ public sealed class CrawlConfigurationDtoTests
             null, // ReviewerId is Guid? — must accept null
             60,
             true,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            []);
 
         Assert.Null(dto.ReviewerId);
     }

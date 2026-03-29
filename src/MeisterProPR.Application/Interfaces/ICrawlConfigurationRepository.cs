@@ -27,4 +27,31 @@ public interface ICrawlConfigurationRepository
 
     /// <summary>Enables or disables a crawl configuration. Returns false if not found or not owned by clientId.</summary>
     Task<bool> SetActiveAsync(Guid configId, Guid clientId, bool isActive, CancellationToken ct = default);
+
+    /// <summary>Returns crawl configurations for all specified clients.</summary>
+    Task<IReadOnlyList<CrawlConfigurationDto>> GetByClientIdsAsync(
+        IEnumerable<Guid> clientIds, CancellationToken ct = default);
+
+    /// <summary>Returns a single crawl configuration by its own primary-key ID, or <see langword="null" /> if not found.</summary>
+    Task<CrawlConfigurationDto?> GetByIdAsync(Guid configId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Applies partial updates to a crawl configuration.
+    ///     Returns <see langword="false" /> if not found or <paramref name="ownerClientId" /> does not own it.
+    /// </summary>
+    Task<bool> UpdateAsync(
+        Guid configId,
+        int? crawlIntervalSeconds,
+        bool? isActive,
+        Guid? ownerClientId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Replaces all repo filters for the given crawl configuration (full-replacement semantics).
+    ///     Pass an empty list to clear all filters. Returns <see langword="false" /> if config not found.
+    /// </summary>
+    Task<bool> UpdateRepoFiltersAsync(
+        Guid configId,
+        IReadOnlyList<CrawlRepoFilterDto> filters,
+        CancellationToken ct = default);
 }

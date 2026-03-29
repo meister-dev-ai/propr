@@ -80,6 +80,35 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("total_output_tokens_aggregated")
             .IsRequired(false);
 
+        builder.Property(j => j.AiConnectionId)
+            .HasColumnName("ai_connection_id")
+            .IsRequired(false);
+
+        builder.Property(j => j.AiModel)
+            .HasColumnName("ai_model")
+            .HasMaxLength(200)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrTitle)
+            .HasColumnName("pr_title")
+            .HasMaxLength(500)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrSourceBranch)
+            .HasColumnName("pr_source_branch")
+            .HasMaxLength(200)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrTargetBranch)
+            .HasColumnName("pr_target_branch")
+            .HasMaxLength(200)
+            .IsRequired(false);
+
+        builder.Property(j => j.PrRepositoryName)
+            .HasColumnName("pr_repository_name")
+            .HasMaxLength(200)
+            .IsRequired(false);
+
         builder.HasMany(j => j.Protocols)
             .WithOne()
             .HasForeignKey(p => p.JobId)

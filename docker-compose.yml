@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   loki:
     image: grafana/loki:3.4.1
@@ -97,6 +96,14 @@ services:
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - AI_MAX_ITERATIONS_LOW=${AI_MAX_ITERATIONS_LOW:-}
+      - AI_MAX_ITERATIONS_MEDIUM=${AI_MAX_ITERATIONS_MEDIUM:-}
+      - AI_MAX_ITERATIONS_HIGH=${AI_MAX_ITERATIONS_HIGH:-}
+      # IMP-05: confidence-floor severity downgrade thresholds (defaults: 80 / 60)
+      - AI_CONFIDENCE_FLOOR_ERROR=${AI_CONFIDENCE_FLOOR_ERROR:-}
+      - AI_CONFIDENCE_FLOOR_WARNING=${AI_CONFIDENCE_FLOOR_WARNING:-}
+      # IMP-08: minimum comment count that triggers the cross-file quality-filter AI pass (default: 20)
+      - AI_QUALITY_FILTER_THRESHOLD=${AI_QUALITY_FILTER_THRESHOLD:-}
       - LOKI_URL=http://loki:3100
       - ASPNETCORE_ENVIRONMENT=Production
     healthcheck:

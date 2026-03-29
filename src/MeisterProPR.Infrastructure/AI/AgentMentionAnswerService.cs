@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -14,6 +16,7 @@ namespace MeisterProPR.Infrastructure.AI;
 /// </summary>
 internal sealed partial class AgentMentionAnswerService(
     IChatClient chatClient,
+    IOptions<AiReviewOptions> options,
     ILogger<AgentMentionAnswerService> logger) : IMentionAnswerService
 {
     private const string SystemPrompt =
@@ -53,7 +56,7 @@ internal sealed partial class AgentMentionAnswerService(
 
         LogGeneratingAnswer(logger, pullRequest.PullRequestId, cleanQuestion.Length);
 
-        var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
         return response.Text ?? "";
     }
 

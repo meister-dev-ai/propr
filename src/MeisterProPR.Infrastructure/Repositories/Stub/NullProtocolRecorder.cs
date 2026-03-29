@@ -28,7 +28,7 @@ public sealed class NullProtocolRecorder : IProtocolRecorder
     }
 
     /// <inheritdoc />
-    public Task RecordToolCallAsync(Guid protocolId, string toolName, string arguments, string result, CancellationToken ct = default)
+    public Task RecordToolCallAsync(Guid protocolId, string toolName, string arguments, string result, int iteration, CancellationToken ct = default)
     {
         return Task.CompletedTask;
     }

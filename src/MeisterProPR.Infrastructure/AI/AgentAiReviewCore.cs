@@ -1,14 +1,16 @@
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
 /// <summary>AI review implementation backed by an <see cref="IChatClient" />.</summary>
-public sealed class AgentAiReviewCore(IChatClient chatClient) : IAiReviewCore
+public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewOptions> options) : IAiReviewCore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -27,8 +29,8 @@ public sealed class AgentAiReviewCore(IChatClient chatClient) : IAiReviewCore
             new(ChatRole.User, ReviewPrompts.BuildUserMessage(pullRequest)),
         };
 
-        var options = new ChatOptions { MaxOutputTokens = 8192 };
-        var response = await chatClient.GetResponseAsync(messages, options, cancellationToken);
+        var chatOptions = new ChatOptions { MaxOutputTokens = 8192, ModelId = options.Value.ModelId };
+        var response = await chatClient.GetResponseAsync(messages, chatOptions, cancellationToken);
         var json = response.Text ?? "";
 
         return ParseReviewResult(json);

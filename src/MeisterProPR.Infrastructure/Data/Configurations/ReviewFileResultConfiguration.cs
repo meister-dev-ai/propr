@@ -31,6 +31,20 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
             .HasColumnName("is_failed")
             .IsRequired();
 
+        builder.Property(r => r.IsExcluded)
+            .HasColumnName("is_excluded")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(r => r.IsCarriedForward)
+            .HasColumnName("is_carried_forward")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(r => r.ExclusionReason)
+            .HasColumnName("exclusion_reason")
+            .IsRequired(false);
+
         builder.Property(r => r.ErrorMessage)
             .HasColumnName("error_message")
             .IsRequired(false);

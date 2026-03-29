@@ -5,4 +5,11 @@ internal static class ProtocolLimits
 {
     /// <summary>Maximum number of characters stored for input text samples and output summaries.</summary>
     public const int TextSampleMaxLength = 50_000;
+
+    /// <summary>
+    ///     Maximum number of characters stored for tool result excerpts when the review loop is on
+    ///     iteration 4 or later (depth &gt; 3). Caps expensive deep-loop protocol storage to
+    ///     reduce both DB footprint and retransmission overhead.
+    /// </summary>
+    public const int ToolResultExcerptMaxLength = 1_000;
 }

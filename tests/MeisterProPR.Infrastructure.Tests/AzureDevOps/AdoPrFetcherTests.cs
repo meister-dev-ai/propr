@@ -55,6 +55,7 @@ public class AdoPrFetcherTests
             "https://dev.azure.com/myorg",
             "my-project",
             "my-repo",
+            "my-repo",
             100,
             2,
             "Feature: Add new thing",
@@ -81,6 +82,7 @@ public class AdoPrFetcherTests
             "https://dev.azure.com/org",
             "proj",
             "repo",
+            "repo",
             42,
             1,
             "My PR",
@@ -106,6 +108,7 @@ public class AdoPrFetcherTests
         var pr = new PullRequest(
             "https://dev.azure.com/org",
             "proj",
+            "repo",
             "repo",
             1,
             1,

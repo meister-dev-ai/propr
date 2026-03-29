@@ -72,7 +72,7 @@ try
             .ReadFrom.Configuration(context.Configuration)
             .ReadFrom.Services(services)
             .Enrich.FromLogContext()
-            .Enrich.WithProperty("Application", "MeisterProPR")
+            .Enrich.WithProperty("Application", "Meister DEV ProPR")
             // Scrub secrets from log output: X-Client-Key, X-Ado-Token, AZURE_CLIENT_SECRET, AdoClientSecret
             .Destructure.ByTransforming<HttpRequest>(r => new
             {
@@ -90,7 +90,7 @@ try
         {
             configuration.WriteTo.GrafanaLoki(
                 lokiUrl,
-                labels: [new LokiLabel { Key = "app", Value = "meisterpropr" }]);
+                labels: [new LokiLabel { Key = "app", Value = "meister-dev-propr" }]);
         }
     });
 
@@ -108,6 +108,8 @@ try
     builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
+    builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
+    builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
 
     // Only registered in DB mode — PrCrawlService depends on ICrawlConfigurationRepository
     // which is only available when DB_CONNECTION_STRING is configured.
@@ -209,6 +211,7 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {
+        options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Meister DEV ProPR API", Version = "v1" });
         foreach (var xmlFile in Directory.GetFiles(AppContext.BaseDirectory, "MeisterProPR.*.xml"))
         {
             options.IncludeXmlComments(xmlFile);

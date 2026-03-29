@@ -4,6 +4,7 @@ using Azure.Core;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Auth;
@@ -26,6 +27,7 @@ using NoOpAdoCommentPoster = MeisterProPR.Infrastructure.AzureDevOps.Stub.NoOpAd
 using StubActivePrFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubActivePrFetcher;
 using StubAdoThreadClient = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadClient;
 using StubAdoThreadReplier = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadReplier;
+using StubPrStatusFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubPrStatusFetcher;
 using StubPullRequestFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubPullRequestFetcher;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
@@ -73,6 +75,16 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
 
+            // AI connection repository (DB mode only)
+            services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
+
+            // Finding dismissal repository (DB mode only)
+            services.AddScoped<IFindingDismissalRepository, FindingDismissalRepository>();
+
+            // Prompt override repository and service (DB mode only)
+            services.AddScoped<IPromptOverrideRepository, PromptOverrideRepository>();
+            services.AddScoped<IPromptOverrideService, PromptOverrideService>();
+
             // Auth services
             services.AddSingleton<IPasswordHashService, PasswordHashService>();
             services.AddSingleton<IJwtTokenService, JwtTokenService>();
@@ -115,6 +127,7 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IPullRequestFetcher, StubPullRequestFetcher>();
             services.AddScoped<IAdoCommentPoster, NoOpAdoCommentPoster>();
             services.AddScoped<IAssignedPrFetcher, StubAssignedPrFetcher>();
+            services.AddScoped<IPrStatusFetcher, StubPrStatusFetcher>();
             services.AddScoped<IIdentityResolver, StubIdentityResolver>();
             services.AddSingleton<IAdoReviewerManager, StubAdoReviewerManager>();
             services.AddSingleton<IActivePrFetcher, StubActivePrFetcher>();
@@ -128,6 +141,7 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IPullRequestFetcher, AdoPrFetcher>();
             services.AddScoped<IAdoCommentPoster, AdoCommentPoster>();
             services.AddScoped<IAssignedPrFetcher, AdoAssignedPrFetcher>();
+            services.AddScoped<IPrStatusFetcher, AdoPrStatusFetcher>();
             services.AddHttpClient("AdoIdentity");
             services.AddScoped<IIdentityResolver>(sp =>
                 new AdoIdentityResolver(
@@ -148,7 +162,6 @@ public static class InfrastructureServiceExtensions
 
         services.AddKeyedSingleton<IChatClient>("base", (_, _) => CreateChatClient(
             aiEndpoint,
-            aiDeployment,
             configuration["AI_API_KEY"]));
 
         services.AddSingleton<IChatClient>(sp => new ResilientChatClientDecorator(
@@ -160,6 +173,8 @@ public static class InfrastructureServiceExtensions
         services.AddOptions<AiReviewOptions>()
             .Configure(opts =>
             {
+                opts.ModelId = aiDeployment;
+
                 if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
                 {
                     opts.MaxIterations = maxIter;
@@ -199,6 +214,36 @@ public static class InfrastructureServiceExtensions
                 {
                     opts.MaxBackoffSeconds = backoff;
                 }
+
+                if (int.TryParse(configuration["AI_MAX_ITERATIONS_LOW"], out var maxIterLow))
+                {
+                    opts.MaxIterationsLow = maxIterLow;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_ITERATIONS_MEDIUM"], out var maxIterMedium))
+                {
+                    opts.MaxIterationsMedium = maxIterMedium;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_ITERATIONS_HIGH"], out var maxIterHigh))
+                {
+                    opts.MaxIterationsHigh = maxIterHigh;
+                }
+
+                if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_ERROR"], out var confidenceFloorError))
+                {
+                    opts.ConfidenceFloorError = confidenceFloorError;
+                }
+
+                if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_WARNING"], out var confidenceFloorWarning))
+                {
+                    opts.ConfidenceFloorWarning = confidenceFloorWarning;
+                }
+
+                if (int.TryParse(configuration["AI_QUALITY_FILTER_THRESHOLD"], out var qualityFilterThreshold))
+                {
+                    opts.QualityFilterThreshold = qualityFilterThreshold;
+                }
             })
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -233,18 +278,27 @@ public static class InfrastructureServiceExtensions
             services.AddKeyedSingleton<IChatClient>(
                 "evaluator",
                 (_, _) =>
-                    CreateChatClient(evaluatorEndpoint, evaluatorDeployment, configuration["AI_API_KEY"]));
+                    CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"]));
         }
 
         services.AddSingleton<ApplicationIAiReviewCore, ToolAwareAiReviewCore>();
-        services.AddSingleton<IFileByFileReviewOrchestrator, FileByFileReviewOrchestrator>();
+        services.AddScoped<IFileByFileReviewOrchestrator, FileByFileReviewOrchestrator>();
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
         services.AddSingleton<IMentionAnswerService, AgentMentionAnswerService>();
+
+        // Per-client AI connection factory (singleton — stateless, creates new clients on demand)
+        services.AddHttpClient("AiProbe")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // Probe requests are outbound only — standard TLS validation applies.
+            });
+        services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 
         if (configuration.GetValue<bool>("ADO_STUB_PR"))
         {
             services.AddSingleton<IReviewContextToolsFactory, StubReviewContextToolsFactory>();
             services.AddSingleton<IRepositoryInstructionFetcher, NullRepositoryInstructionFetcher>();
+            services.AddSingleton<IRepositoryExclusionFetcher, NullRepositoryExclusionFetcher>();
         }
         else
         {
@@ -252,8 +306,10 @@ public static class InfrastructureServiceExtensions
                 new AdoReviewContextToolsFactory(
                     sp.GetRequiredService<VssConnectionFactory>(),
                     sp.GetRequiredService<IClientAdoCredentialRepository>(),
-                    sp.GetRequiredService<IOptions<AiReviewOptions>>()));
+                    sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+                    sp.GetRequiredService<ILoggerFactory>()));
             services.AddSingleton<IRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>();
+            services.AddSingleton<IRepositoryExclusionFetcher, AdoRepositoryExclusionFetcher>();
         }
 
         // Register instruction evaluator: use AI evaluator when endpoint is configured, otherwise pass-through
@@ -277,7 +333,7 @@ public static class InfrastructureServiceExtensions
     ///     project path is stripped — <see cref="AzureOpenAIClient" /> constructs the correct
     ///     <c>/openai/responses</c> sub-path from the resource root automatically.
     /// </summary>
-    private static IChatClient CreateChatClient(string endpoint, string deployment, string? apiKey)
+    private static IChatClient CreateChatClient(string endpoint, string? apiKey)
     {
         var uri = new Uri(endpoint);
 
@@ -301,7 +357,7 @@ public static class InfrastructureServiceExtensions
 
         // GetResponsesClient targets the Responses API endpoint instead of the
         // legacy Chat Completions endpoint, enabling reasoning and tool use.
-        return azureClient.GetResponsesClient(deployment).AsIChatClient();
+        return azureClient.GetResponsesClient().AsIChatClient();
     }
 
     /// <summary>

@@ -5,6 +5,667 @@
     "version": "1.0"
   },
   "paths": {
+    "/admin/crawl-configurations": {
+      "get": {
+        "tags": [
+          "AdminCrawlConfigs"
+        ],
+        "summary": "Lists all accessible crawl configurations.\r\nAdmins receive all configs; non-Admin users receive only configs for their assigned clients.",
+        "responses": {
+          "200": {
+            "description": "List of crawl configurations.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlConfigResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlConfigResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CrawlConfigResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminCrawlConfigs"
+        ],
+        "summary": "Creates a new crawl configuration.\r\nAdmins may create for any client; non-Admin users may only create for their assigned clients.",
+        "requestBody": {
+          "description": "Crawl configuration details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminCrawlConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminCrawlConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminCrawlConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Configuration created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Non-Admin caller does not own the specified client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Config for this org/project already exists for the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/crawl-configurations/{configId}": {
+      "patch": {
+        "tags": [
+          "AdminCrawlConfigs"
+        ],
+        "summary": "Applies partial updates to a crawl configuration.\r\nAdmins may update any config; non-Admin users may only update configs for their clients.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "Configuration identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Fields to update; omit a field to leave it unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminCrawlConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminCrawlConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminCrawlConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Non-Admin caller does not own this config's client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminCrawlConfigs"
+        ],
+        "summary": "Deletes a crawl configuration.\r\nAdmins may delete any config; non-Admin users may only delete configs for their clients.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "Configuration identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Configuration deleted."
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Non-Admin caller does not own this config's client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Returns all users.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Creates a new application user.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}": {
+      "delete": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Disables a user and revokes all their tokens and PATs.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Returns a single user with their client role assignments.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/clients": {
+      "post": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Assigns a client role to a user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignClientRoleRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignClientRoleRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignClientRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/clients/{clientId}": {
+      "delete": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Removes a client role assignment from a user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Authenticate with username and password; returns a JWT access token and refresh token.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Exchange a valid refresh token for a new JWT access token.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/clients/{clientId}/crawl-configurations": {
       "post": {
         "tags": [
@@ -369,7 +1030,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Lists all registered clients. Requires `X-Admin-Key`. Client keys are never returned.",
+        "summary": "Lists registered clients.\r\nAdmins receive all clients.\r\nNon-Admin users receive only clients for their assigned roles.\r\nRequires either a valid `X-Admin-Key` / JWT Bearer token.",
         "responses": {
           "200": {
             "description": "List of clients.",
@@ -401,7 +1062,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid `X-Admin-Key`.",
+            "description": "No valid credentials provided.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -420,6 +1081,244 @@
               }
             }
           }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/discover-models": {
+      "post": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Probes the given endpoint URL and returns available model deployment names.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DiscoverModelsRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of model deployment names (may be empty).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DiscoverModelsResponse" }
+              }
+            }
+          },
+          "400": { "description": "Validation failure." },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections": {
+      "get": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Lists all AI connections for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of AI connections (API keys are never returned).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AiConnectionDto" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." }
+        }
+      },
+      "post": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Creates a new AI connection for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAiConnectionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "AI connection created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AiConnectionDto" }
+              }
+            }
+          },
+          "400": { "description": "Validation failure." },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/{connectionId}": {
+      "patch": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Updates non-null fields of an AI connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateAiConnectionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "AI connection updated.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AiConnectionDto" }
+              }
+            }
+          },
+          "400": { "description": "Validation failure." },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." },
+          "404": { "description": "AI connection not found." }
+        }
+      },
+      "delete": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Deletes an AI connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "204": { "description": "AI connection deleted." },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." },
+          "404": { "description": "AI connection not found." }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/{connectionId}/activate": {
+      "post": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Activates the specified AI connection with the given model deployment.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ActivateAiConnectionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "AI connection activated.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AiConnectionDto" }
+              }
+            }
+          },
+          "400": { "description": "Model not in the connection's model list." },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." },
+          "404": { "description": "AI connection not found." }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/{connectionId}/deactivate": {
+      "post": {
+        "tags": ["ClientAiConnections"],
+        "summary": "Deactivates the specified AI connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AI connection deactivated.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AiConnectionDto" }
+              }
+            }
+          },
+          "401": { "description": "Missing or invalid credentials." },
+          "403": { "description": "Caller does not own this client." },
+          "404": { "description": "AI connection not found." }
         }
       }
     },
@@ -695,6 +1594,26 @@
           },
           "401": {
             "description": "Missing or invalid `X-Admin-Key`.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1398,6 +2317,71 @@
         }
       }
     },
+    "/admin/clients/{clientId}/rotate-key": {
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Rotates the client key: generates a new random key, BCrypt-hashes it, and retains the old\r\nhash with a 7-day grace period. The new plaintext key is returned once. Requires `X-Admin-Key`.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New key info returned."
+          },
+          "401": {
+            "description": "Missing or invalid admin credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/identities/resolve": {
       "get": {
         "tags": [
@@ -1500,7 +2484,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns all review jobs across all clients, newest first. Requires `X-Admin-Key`.",
+        "summary": "Returns all review jobs across all clients, newest first. Requires `X-Admin-Key` or JWT Bearer token.",
         "parameters": [
           {
             "name": "limit",
@@ -1562,7 +2546,89 @@
             }
           },
           "401": {
-            "description": "Missing or invalid `X-Admin-Key` header.",
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{id}/result": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the review result (summary and comments) for a completed job. Requires `X-Admin-Key` or JWT Bearer token.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Review result returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found or result not yet available.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1589,7 +2655,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the protocol (agentic trace) for a single review job. Requires `X-Admin-Key`.",
+        "summary": "Returns the protocol (agentic trace) for a single review job. Requires `X-Admin-Key` or JWT Bearer token.",
         "parameters": [
           {
             "name": "id",
@@ -1609,25 +2675,31 @@
               "text/plain": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                  }
                 }
               },
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                  }
                 }
               },
               "text/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/ReviewJobProtocolDto" }
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid `X-Admin-Key` header.",
+            "description": "Missing or invalid credentials.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1647,7 +2719,7 @@
             }
           },
           "404": {
-            "description": "Job or protocol not found.",
+            "description": "Job not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1941,10 +3013,735 @@
           }
         }
       }
+    },
+    "/users/me/pats": {
+      "post": {
+        "tags": [
+          "UserPats"
+        ],
+        "summary": "Generates a new PAT for the current user. Returns the plaintext token once.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePatRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePatRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "UserPats"
+        ],
+        "summary": "Lists PATs for the current user (hashes are never returned).",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/users/me/pats/{id}": {
+      "delete": {
+        "tags": [
+          "UserPats"
+        ],
+        "summary": "Revokes a PAT by id.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/finding-dismissals": {
+      "get": {
+        "tags": [
+          "FindingDismissals"
+        ],
+        "summary": "Lists all finding dismissals for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of dismissals.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FindingDismissalDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FindingDismissalDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FindingDismissalDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid admin key.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "FindingDismissals"
+        ],
+        "summary": "Creates a new finding dismissal for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Dismissal details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFindingDismissalRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFindingDismissalRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFindingDismissalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dismissal created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid admin key.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/finding-dismissals/{id}": {
+      "patch": {
+        "tags": [
+          "FindingDismissals"
+        ],
+        "summary": "Updates the label of an existing finding dismissal.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dismissal identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Label update.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFindingDismissalRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFindingDismissalRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFindingDismissalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dismissal updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingDismissalDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid admin key.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dismissal not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "FindingDismissals"
+        ],
+        "summary": "Deletes a finding dismissal.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Dismissal identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Dismissal deleted."
+          },
+          "401": {
+            "description": "Missing or invalid admin key.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dismissal not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/prompt-overrides": {
+      "get": {
+        "tags": [
+          "PromptOverrides"
+        ],
+        "summary": "Lists all prompt overrides for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of prompt overrides.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromptOverrideDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "PromptOverrides"
+        ],
+        "summary": "Creates a new prompt override for the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Prompt override details.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromptOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Prompt override created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOverrideDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Override already exists for this scope/key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/prompt-overrides/{id}": {
+      "put": {
+        "tags": [
+          "PromptOverrides"
+        ],
+        "summary": "Replaces the override text of an existing prompt override.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Prompt override identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromptOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prompt override updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOverrideDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Prompt override not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "PromptOverrides"
+        ],
+        "summary": "Deletes a prompt override.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Prompt override identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Prompt override deleted."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Prompt override not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AiConnectionModelCategory": {
+        "enum": [
+          "lowEffort",
+          "mediumEffort",
+          "highEffort"
+        ],
+        "type": "string",
+        "description": "Model category tag for tier-based routing. lowEffort for small diffs, mediumEffort for mid-size diffs, highEffort for large diffs."
+      },
+      "AppUserRole": {
+        "enum": [
+          "user",
+          "admin"
+        ],
+        "type": "string",
+        "description": "Global role assigned directly to an application user."
+      },
+      "AssignClientRoleRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ClientRole"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Assign-client-role request."
+      },
       "ClientProfileResponse": {
         "type": "object",
         "properties": {
@@ -2009,6 +3806,14 @@
         "additionalProperties": false,
         "description": "Client response — key, ADO secret, and credential metadata are never included."
       },
+      "ClientRole": {
+        "enum": [
+          "clientUser",
+          "clientAdministrator"
+        ],
+        "type": "string",
+        "description": "Role a user holds within a specific client."
+      },
       "CommentResolutionBehavior": {
         "enum": [
           "disabled",
@@ -2057,10 +3862,40 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CrawlRepoFilterResponse"
+            },
+            "description": "Repo and branch filters. Empty array means all repos are crawled."
           }
         },
         "additionalProperties": false,
         "description": "Crawl configuration response."
+      },
+      "CreateAdminCrawlConfigRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectId": {
+            "type": "string",
+            "nullable": true
+          },
+          "crawlIntervalSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating an admin-managed crawl configuration."
       },
       "CreateClientRequest": {
         "type": "object",
@@ -2095,6 +3930,40 @@
         },
         "additionalProperties": false,
         "description": "Request body for creating a crawl configuration."
+      },
+      "CreatePatRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Create-PAT request."
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "globalRole": {
+            "$ref": "#/components/schemas/AppUserRole"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Create-user request."
       },
       "IdentityResponse": {
         "type": "object",
@@ -2179,6 +4048,26 @@
             "type": "integer",
             "format": "int64",
             "nullable": true
+          },
+          "prTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pull request title. Null for legacy jobs or when ADO context fetch failed."
+          },
+          "prSourceBranch": {
+            "type": "string",
+            "nullable": true,
+            "description": "Source branch in display form (refs/heads/ stripped). Null for legacy jobs."
+          },
+          "prTargetBranch": {
+            "type": "string",
+            "nullable": true,
+            "description": "Target branch in display form. Null for legacy jobs."
+          },
+          "prRepositoryName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Repository display name from ADO. Null for legacy jobs."
           }
         },
         "additionalProperties": false,
@@ -2207,10 +4096,227 @@
           "pending",
           "processing",
           "completed",
-          "failed"
+          "failed",
+          "cancelled"
         ],
         "type": "string",
         "description": "Status of a review job."
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Login request payload."
+      },
+      "PatchAdminCrawlConfigRequest": {
+        "type": "object",
+        "properties": {
+          "crawlIntervalSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CrawlRepoFilterRequest"
+            },
+            "nullable": true,
+            "description": "Full replacement of the repo filter list. Omit to leave unchanged; send [] to clear all filters."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for patching an admin-managed crawl configuration.\r\nOmit a field to leave it unchanged."
+      },
+      "CrawlRepoFilterResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns for target branch names. Empty array means all branches accepted."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Repo filter entry in a crawl configuration response."
+      },
+      "CrawlRepoFilterRequest": {
+        "type": "object",
+        "properties": {
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns for target branch names. Empty array means all branches accepted."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Repo filter entry in a PATCH crawl configuration request."
+      },
+      "AiConnectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "endpointUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "activeModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modelCategory": {
+            "$ref": "#/components/schemas/AiConnectionModelCategory",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Data transfer object for an AI connection. API key is never returned."
+      },
+      "CreateAiConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable name. Required, 1-200 chars."
+          },
+          "endpointUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Azure OpenAI or AI Foundry endpoint URL. Required, immutable after creation."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "description": "Available model deployment names. Required, non-empty."
+          },
+          "apiKey": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional API key. Omit to use DefaultAzureCredential."
+          },
+          "modelCategory": {
+            "$ref": "#/components/schemas/AiConnectionModelCategory",
+            "nullable": true,
+            "description": "Optional model category for tier-based routing. Null means default connection."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating a new AI connection."
+      },
+      "UpdateAiConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true,
+            "description": "New display name. Omit to leave unchanged."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "description": "New model list. Omit to leave unchanged."
+          },
+          "apiKey": {
+            "type": "string",
+            "nullable": true,
+            "description": "New API key. Null clears the stored key (reverts to DefaultAzureCredential). Omit to leave unchanged."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for updating an AI connection. All fields are optional."
+      },
+      "ActivateAiConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "description": "Model deployment name to activate. Must be in the connection's models list."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for activating an AI connection."
+      },
+      "DiscoverModelsRequest": {
+        "type": "object",
+        "properties": {
+          "endpointUrl": { "type": "string" },
+          "apiKey": { "type": "string" }
+        },
+        "additionalProperties": false,
+        "description": "Request body for probing an AI endpoint to discover available model deployments."
+      },
+      "DiscoverModelsResponse": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response from the discover-models probe."
       },
       "PatchClientRequest": {
         "type": "object",
@@ -2330,6 +4436,17 @@
         ],
         "type": "string",
         "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Refresh token request payload."
       },
       "ReviewCommentDto": {
         "type": "object",
@@ -2451,6 +4568,32 @@
         },
         "additionalProperties": false,
         "description": "Response returned when a review job is accepted."
+      },
+      "ReviewJobResultDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/ReviewResultDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response for the job result endpoint, combining status metadata with the review result."
       },
       "ReviewListItem": {
         "type": "object",
@@ -2619,12 +4762,180 @@
         },
         "additionalProperties": false,
         "description": "Request body for setting the ADO reviewer identity on a client."
+      },
+      "FindingDismissalDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "patternText": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "originalMessage": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "DTO for a finding dismissal."
+      },
+      "CreateFindingDismissalRequest": {
+        "type": "object",
+        "properties": {
+          "originalMessage": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request to create a finding dismissal."
+      },
+      "UpdateFindingDismissalRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request to update a finding dismissal's label."
+      },
+      "PromptOverrideScopeDto": {
+        "enum": [
+          "clientScope",
+          "crawlConfigScope"
+        ],
+        "type": "string",
+        "description": "Scope of the prompt override. clientScope applies to all jobs for the client; crawlConfigScope applies only to jobs from the specified crawl configuration."
+      },
+      "PromptOverrideDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "crawlConfigId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "scope": {
+            "$ref": "#/components/schemas/PromptOverrideScopeDto"
+          },
+          "promptKey": {
+            "type": "string",
+            "description": "Named prompt segment: SystemPrompt, AgenticLoopGuidance, SynthesisSystemPrompt, QualityFilterSystemPrompt, PerFileContextPrompt"
+          },
+          "overrideText": {
+            "type": "string",
+            "description": "Full replacement text for the prompt segment."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "scope",
+          "promptKey",
+          "overrideText",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "description": "A named prompt segment override for a client or crawl configuration."
+      },
+      "CreatePromptOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/PromptOverrideScopeDto"
+          },
+          "crawlConfigId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Required when scope is crawlConfigScope."
+          },
+          "promptKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "overrideText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "scope",
+          "promptKey",
+          "overrideText"
+        ],
+        "additionalProperties": false,
+        "description": "Request body for creating a prompt override."
+      },
+      "UpdatePromptOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "overrideText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "overrideText"
+        ],
+        "additionalProperties": false,
+        "description": "Request body for replacing the override text of an existing prompt override."
       }
     }
   },
   "tags": [
     {
+      "name": "AdminCrawlConfigs"
+    },
+    {
+      "name": "AdminUsers"
+    },
+    {
+      "name": "Auth"
+    },
+    {
       "name": "Clients"
+    },
+    {
+      "name": "FindingDismissals"
     },
     {
       "name": "Identities"
@@ -2633,7 +4944,13 @@
       "name": "Jobs"
     },
     {
+      "name": "PromptOverrides"
+    },
+    {
       "name": "Reviews"
+    },
+    {
+      "name": "UserPats"
     }
   ]
 }

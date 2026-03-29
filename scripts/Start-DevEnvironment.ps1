@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Starts the MeisterProPR dev environment (backend, admin-ui, nginx) without Docker.
+    Starts the ProPR dev environment (backend, admin-ui, nginx) without Docker.
 
 .DESCRIPTION
     Builds the admin-ui, then runs nginx as a Podman container that proxies requests

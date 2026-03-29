@@ -57,4 +57,56 @@ public sealed class AiReviewOptions
     /// </summary>
     [Range(5, 120, ErrorMessage = "MaxBackoffSeconds must be between 5 and 120.")]
     public int MaxBackoffSeconds { get; set; } = 30;
+
+    /// <summary>
+    ///     Model deployment name passed as <see cref="Microsoft.Extensions.AI.ChatOptions.ModelId" />
+    ///     on every AI call. Bound to <c>AI_DEPLOYMENT</c>.
+    /// </summary>
+    [Required(ErrorMessage = "AI_DEPLOYMENT is required.")]
+    public string ModelId { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Maximum agentic loop iterations for <see cref="MeisterProPR.Domain.Enums.FileComplexityTier.Low" /> files.
+    ///     Bound to <c>AI_MAX_ITERATIONS_LOW</c>.
+    /// </summary>
+    [Range(1, 100, ErrorMessage = "MaxIterationsLow must be between 1 and 100.")]
+    public int MaxIterationsLow { get; set; } = 5;
+
+    /// <summary>
+    ///     Maximum agentic loop iterations for <see cref="MeisterProPR.Domain.Enums.FileComplexityTier.Medium" /> files.
+    ///     Bound to <c>AI_MAX_ITERATIONS_MEDIUM</c>.
+    /// </summary>
+    [Range(1, 100, ErrorMessage = "MaxIterationsMedium must be between 1 and 100.")]
+    public int MaxIterationsMedium { get; set; } = 10;
+
+    /// <summary>
+    ///     Maximum agentic loop iterations for <see cref="MeisterProPR.Domain.Enums.FileComplexityTier.High" /> files.
+    ///     Bound to <c>AI_MAX_ITERATIONS_HIGH</c>.
+    /// </summary>
+    [Range(1, 100, ErrorMessage = "MaxIterationsHigh must be between 1 and 100.")]
+    public int MaxIterationsHigh { get; set; } = 20;
+
+    /// <summary>
+    ///     Minimum confidence score (0–100) required to post a comment at ERROR severity.
+    ///     Comments below this threshold are automatically downgraded to WARNING before posting.
+    ///     Bound to <c>AI_CONFIDENCE_FLOOR_ERROR</c>.
+    /// </summary>
+    [Range(0, 100, ErrorMessage = "ConfidenceFloorError must be between 0 and 100.")]
+    public int ConfidenceFloorError { get; set; } = 80;
+
+    /// <summary>
+    ///     Minimum confidence score (0–100) required to post a comment at WARNING severity.
+    ///     Comments below this threshold are automatically downgraded to SUGGESTION before posting.
+    ///     Bound to <c>AI_CONFIDENCE_FLOOR_WARNING</c>.
+    /// </summary>
+    [Range(0, 100, ErrorMessage = "ConfidenceFloorWarning must be between 0 and 100.")]
+    public int ConfidenceFloorWarning { get; set; } = 60;
+
+    /// <summary>
+    ///     Minimum total comment count across all files before the cross-file quality filter AI pass
+    ///     is invoked. Below this threshold, comments are posted as-is after per-file filtering.
+    ///     Bound to <c>AI_QUALITY_FILTER_THRESHOLD</c>.
+    /// </summary>
+    [Range(1, 500, ErrorMessage = "QualityFilterThreshold must be between 1 and 500.")]
+    public int QualityFilterThreshold { get; set; } = 20;
 }

@@ -22,4 +22,10 @@ public sealed partial class PrCrawlService
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Discovered {Count} assigned PRs in {OrgUrl}/{ProjectId}")]
     private static partial void LogPrsDiscovered(ILogger logger, int count, string orgUrl, string projectId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Abandonment check: active job {JobId} for PR #{PrId} is not in discovered list — fetching live status")]
+    private static partial void LogAbandonmentCheckStarted(ILogger logger, Guid jobId, int prId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "PR #{PrId} is abandoned — cancelling review job {JobId}")]
+    private static partial void LogJobCancelledForAbandonedPr(ILogger logger, int prId, Guid jobId);
 }

@@ -112,6 +112,7 @@ public sealed partial class MentionScanService(
                 repositoryId,
                 pullRequestId,
                 1,
+                null,
                 config.ClientId,
                 ct);
         }

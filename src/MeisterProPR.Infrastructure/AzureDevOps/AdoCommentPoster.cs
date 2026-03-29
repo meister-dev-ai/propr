@@ -1,3 +1,4 @@
+using System.Text;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -54,7 +55,7 @@ public sealed class AdoCommentPoster(
                 projectId,
                 repositoryId,
                 pullRequestId,
-                $"**AI Review Summary**\n\n{result.Summary}",
+                BuildSummaryText(result),
                 null,
                 null,
                 cancellationToken);
@@ -71,14 +72,16 @@ public sealed class AdoCommentPoster(
             {
                 // ADO requires paths with a leading '/'; normalize in case the AI omits it.
                 normalizedFilePath = NormalizePath(comment.FilePath);
+                // ADO requires Line >= 1; treat 0 (invalid) the same as null (no line anchor).
+                var hasValidLine = comment.LineNumber.HasValue && comment.LineNumber.Value > 0;
                 threadContext = new CommentThreadContext
                 {
                     FilePath = normalizedFilePath,
-                    RightFileStart = comment.LineNumber.HasValue
-                        ? new CommentPosition { Line = comment.LineNumber.Value, Offset = 1 }
+                    RightFileStart = hasValidLine
+                        ? new CommentPosition { Line = comment.LineNumber!.Value, Offset = 1 }
                         : null,
-                    RightFileEnd = comment.LineNumber.HasValue
-                        ? new CommentPosition { Line = comment.LineNumber.Value, Offset = 1 }
+                    RightFileEnd = hasValidLine
+                        ? new CommentPosition { Line = comment.LineNumber!.Value, Offset = 1 }
                         : null,
                 };
 
@@ -120,6 +123,28 @@ public sealed class AdoCommentPoster(
                 prThreadContext,
                 cancellationToken);
         }
+    }
+
+    /// <summary>
+    ///     Builds the summary comment text from a <see cref="ReviewResult" />.
+    ///     When the result includes carried-forward file paths, a section listing those files
+    ///     is appended to the summary.
+    /// </summary>
+    internal static string BuildSummaryText(ReviewResult result)
+    {
+        var sb = new StringBuilder("**AI Review Summary**\n\n");
+        sb.Append(result.Summary);
+
+        if (result.CarriedForwardFilePaths.Count > 0)
+        {
+            sb.Append($"\n\n**Carried forward unchanged files** ({result.CarriedForwardFilePaths.Count} files — results from prior review retained)\n\n");
+            foreach (var path in result.CarriedForwardFilePaths)
+            {
+                sb.Append($"- {path}\n");
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>

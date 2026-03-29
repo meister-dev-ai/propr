@@ -1,5 +1,6 @@
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps;
@@ -10,13 +11,15 @@ namespace MeisterProPR.Infrastructure.AzureDevOps;
 public sealed class AdoReviewContextToolsFactory(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository,
-    IOptions<AiReviewOptions> options) : IReviewContextToolsFactory
+    IOptions<AiReviewOptions> options,
+    ILoggerFactory loggerFactory) : IReviewContextToolsFactory
 {
     /// <inheritdoc />
     public IReviewContextTools Create(
         string organizationUrl,
         string projectId,
         string repositoryId,
+        string sourceBranch,
         int pullRequestId,
         int iterationId,
         Guid? clientId)
@@ -28,8 +31,10 @@ public sealed class AdoReviewContextToolsFactory(
             organizationUrl,
             projectId,
             repositoryId,
+            sourceBranch,
             pullRequestId,
             iterationId,
-            clientId);
+            clientId,
+            loggerFactory.CreateLogger<AdoReviewContextTools>());
     }
 }

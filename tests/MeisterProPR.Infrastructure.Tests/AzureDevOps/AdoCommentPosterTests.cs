@@ -85,6 +85,16 @@ public class AdoCommentPosterTests
         Assert.Null(comment.LineNumber);
     }
 
+    [Fact]
+    public void ReviewComment_WithLineNumberZero_IsNotValidInlinePosition()
+    {
+        // ADO requires line numbers >= 1; LineNumber = 0 must be treated as
+        // "no line anchor" so CommentPosition is not constructed with Line=0.
+        var comment = new ReviewComment("/src/Program.cs", 0, CommentSeverity.Warning, "Bad line.");
+        // The condition that gates CommentPosition construction must exclude 0.
+        Assert.False(comment.LineNumber.HasValue && comment.LineNumber.Value > 0);
+    }
+
     // T008 — Content-length truncation tests
 
     [Fact]

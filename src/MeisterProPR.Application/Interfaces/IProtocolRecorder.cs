@@ -47,13 +47,15 @@ public interface IProtocolRecorder
     /// <param name="protocolId">The protocol this event belongs to.</param>
     /// <param name="toolName">Name of the tool that was invoked.</param>
     /// <param name="arguments">Serialised arguments passed to the tool (truncated to 4,000 characters).</param>
-    /// <param name="result">Serialised result returned by the tool (truncated to 1,000 characters).</param>
+    /// <param name="result">Serialised result returned by the tool.</param>
+    /// <param name="iteration">Current loop iteration number (1-based); used to apply depth-conditioned excerpt truncation.</param>
     /// <param name="ct">Cancellation token.</param>
     Task RecordToolCallAsync(
         Guid protocolId,
         string toolName,
         string arguments,
         string result,
+        int iteration,
         CancellationToken ct = default);
 
     /// <summary>

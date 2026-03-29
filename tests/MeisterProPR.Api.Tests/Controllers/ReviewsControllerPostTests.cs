@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -138,6 +139,71 @@ public class ReviewsControllerPostTests(ReviewsControllerPostTests.ReviewsApiFac
         Assert.NotEqual(Guid.Empty, jobId);
     }
 
+    // T050 — PR context is populated when IPullRequestFetcher succeeds
+
+    [Fact]
+    public async Task PostReviews_PrFetcherReturnsData_JobReceivesPrContextViaInMemoryRepo()
+    {
+        // This test uses a factory where IPullRequestFetcher is replaced with a stub that
+        // returns a PullRequest with known context fields. We verify that the job stored in
+        // the InMemory IJobRepository has those fields set after the POST.
+        await using var factory = new ReviewsApiPrContextFactory();
+        var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/reviews");
+        request.Headers.Add("X-Client-Key", "test-key-123");
+        request.Headers.Add("X-Ado-Token", "valid-ado-token");
+        request.Content = JsonContent.Create(new
+        {
+            organizationUrl = "https://dev.azure.com/myorg",
+            projectId = "my-project",
+            repositoryId = "my-repo",
+            pullRequestId = 77,
+            iterationId = 1,
+        });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var jobId = body.RootElement.GetProperty("jobId").GetGuid();
+
+        // Retrieve the job from the in-memory repository and verify PR context was set.
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = jobRepo.GetById(jobId);
+        Assert.NotNull(job);
+        Assert.Equal("Add feature X", job.PrTitle);
+        Assert.Equal("main", job.PrTargetBranch);
+    }
+
+    [Fact]
+    public async Task PostReviews_PrFetcherThrows_JobStillCreatedWith202()
+    {
+        // T050 — PR fetch failure is non-blocking: 202 is returned even if IPullRequestFetcher throws.
+        await using var factory = new ReviewsApiPrFetcherThrowsFactory();
+        var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/reviews");
+        request.Headers.Add("X-Client-Key", "test-key-123");
+        request.Headers.Add("X-Ado-Token", "valid-ado-token");
+        request.Content = JsonContent.Create(new
+        {
+            organizationUrl = "https://dev.azure.com/myorg",
+            projectId = "proj-throws",
+            repositoryId = "repo-throws",
+            pullRequestId = 88,
+            iterationId = 1,
+        });
+
+        var response = await client.SendAsync(request);
+
+        // Job must be created regardless of the fetcher failure.
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.TryGetProperty("jobId", out _));
+    }
+
     public sealed class ReviewsApiFactory : WebApplicationFactory<Program>
     {
         public ReviewsApiFactory()
@@ -175,6 +241,115 @@ public class ReviewsControllerPostTests(ReviewsControllerPostTests.ReviewsApiFac
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
             });
+        }
+    }
+}
+
+/// <summary>
+///     T050: factory where <see cref="IPullRequestFetcher" /> returns known PR context fields.
+/// </summary>
+internal sealed class ReviewsApiPrContextFactory : WebApplicationFactory<Program>
+{
+    public ReviewsApiPrContextFactory()
+    {
+        Environment.SetEnvironmentVariable("MEISTER_CLIENT_KEYS", "test-key-123");
+        Environment.SetEnvironmentVariable("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
+        Environment.SetEnvironmentVariable("AI_DEPLOYMENT", "gpt-4o");
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+        builder.ConfigureServices(services =>
+        {
+            // ADO validator: "valid-ado-token" is accepted.
+            var adoValidator = Substitute.For<IAdoTokenValidator>();
+            adoValidator.IsValidAsync("valid-ado-token", Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(true);
+            adoValidator.IsValidAsync(Arg.Is<string>(s => s != "valid-ado-token"), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(false);
+
+            // PR fetcher that returns PR context for any call.
+            var prFetcher = Substitute.For<IPullRequestFetcher>();
+            prFetcher.FetchAsync(
+                    Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+                    Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult(new PullRequest(
+                    "https://dev.azure.com/myorg",
+                    "my-project",
+                    "my-repo",
+                    "my-repo",
+                    77,
+                    1,
+                    "Add feature X",
+                    null,
+                    "feature/add-x",
+                    "main",
+                    [])));
+
+            Remove<IAdoTokenValidator>(services);
+            Remove<IPullRequestFetcher>(services);
+            Remove<IAdoCommentPoster>(services);
+            services.AddSingleton(adoValidator);
+            services.AddSingleton(prFetcher);
+            services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+        });
+    }
+
+    private static void Remove<T>(IServiceCollection services)
+    {
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
+        if (descriptor is not null)
+        {
+            services.Remove(descriptor);
+        }
+    }
+}
+
+/// <summary>
+///     T050: factory where <see cref="IPullRequestFetcher" /> always throws to verify job creation is non-blocking.
+/// </summary>
+internal sealed class ReviewsApiPrFetcherThrowsFactory : WebApplicationFactory<Program>
+{
+    public ReviewsApiPrFetcherThrowsFactory()
+    {
+        Environment.SetEnvironmentVariable("MEISTER_CLIENT_KEYS", "test-key-123");
+        Environment.SetEnvironmentVariable("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
+        Environment.SetEnvironmentVariable("AI_DEPLOYMENT", "gpt-4o");
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+        builder.ConfigureServices(services =>
+        {
+            var adoValidator = Substitute.For<IAdoTokenValidator>();
+            adoValidator.IsValidAsync("valid-ado-token", Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(true);
+            adoValidator.IsValidAsync(Arg.Is<string>(s => s != "valid-ado-token"), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                .Returns(false);
+
+            var prFetcher = Substitute.For<IPullRequestFetcher>();
+            prFetcher.FetchAsync(
+                    Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+                    Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                .Returns<Task<PullRequest>>(_ => throw new InvalidOperationException("ADO unavailable"));
+
+            Remove<IAdoTokenValidator>(services);
+            Remove<IPullRequestFetcher>(services);
+            Remove<IAdoCommentPoster>(services);
+            services.AddSingleton(adoValidator);
+            services.AddSingleton(prFetcher);
+            services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+        });
+    }
+
+    private static void Remove<T>(IServiceCollection services)
+    {
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
+        if (descriptor is not null)
+        {
+            services.Remove(descriptor);
         }
     }
 }
