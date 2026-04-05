@@ -391,9 +391,9 @@ describe('ClientProCursorTab', () => {
     )
     expect(getProCursorRecentEventsMock).toHaveBeenCalledWith('client-1', 'source-1', 10)
     expect(wrapper.text()).toContain('Source Usage')
+    expect(wrapper.text()).toContain('Recent Safe Events')
     expect(wrapper.text()).toContain('72,500')
     expect(wrapper.text()).toContain('text-embedding-3-small')
-    expect(wrapper.text()).toContain('/docs/intro.md')
     expect(wrapper.text()).toContain('events in this source window used estimated token counts')
   })
 
