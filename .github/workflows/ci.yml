@@ -66,6 +66,32 @@ jobs:
       - name: Run tests
         run: dotnet test --no-restore --configuration Release --verbosity normal
 
+  admin-ui-tests:
+    name: Admin UI tests
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install admin-ui dependencies
+        run: npm ci
+        working-directory: admin-ui
+
+      - name: Type check admin-ui
+        run: npm run type-check
+        working-directory: admin-ui
+
+      - name: Run admin-ui unit tests
+        run: npm test
+        working-directory: admin-ui
+
   build-backend-image:
     name: Build backend image
     runs-on: ubuntu-latest
@@ -91,7 +117,7 @@ jobs:
   build-frontend-image:
     name: Build frontend image
     runs-on: ubuntu-latest
-    needs: test
+    needs: [ test, admin-ui-tests ]
     permissions:
       contents: read
     steps:

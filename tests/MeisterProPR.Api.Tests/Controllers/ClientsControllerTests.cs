@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
@@ -5,6 +8,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -31,7 +35,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     : IClassFixture<ClientsControllerTests.ClientsApiFactory>
 {
     private const string ValidAdminKey = "admin-key-min-16-chars-ok";
-    private const string ValidClientKey = "client-key-min-16-chars-ok";
 
 
     [Fact]
@@ -40,7 +43,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{clientId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -52,7 +55,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var unknownId = Guid.NewGuid();
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Delete, $"/clients/{unknownId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -76,7 +79,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -92,7 +95,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -107,7 +110,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -122,41 +125,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Headers.Add("X-Client-Key", ValidClientKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("\"key\"", body, StringComparison.OrdinalIgnoreCase);
-    }
-
-
-    [Fact]
-    public async Task GetCrawlConfigs_WithOwnerKey_Returns200()
-    {
-        var clientId = factory.ClientId;
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}/crawl-configurations");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetCrawlConfigs_WithWrongClient_Returns403()
-    {
-        var wrongClientId = Guid.NewGuid();
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{wrongClientId}/crawl-configurations");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
 
@@ -168,7 +143,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = "patch-target-key-1234",
             DisplayName = "Patch Me",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -178,8 +152,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Headers.Add("X-Client-Key", ValidClientKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { isActive = false });
 
         var response = await client.SendAsync(request);
@@ -190,16 +163,16 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
-    public async Task PostClients_DuplicateKey_Returns409()
+    public async Task PostClients_DuplicateDisplayName_Returns201()
     {
-        // Seed the DB with the key first
+        // Seed the DB with a client first
+        var existingClientId = Guid.NewGuid();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
         db.Clients.Add(
             new ClientRecord
             {
-                Id = Guid.NewGuid(),
-                Key = "duplicate-key-for-test",
+                Id = existingClientId,
                 DisplayName = "Existing",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -208,25 +181,14 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { key = "duplicate-key-for-test", displayName = "Dup" });
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Existing" });
 
         var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-    }
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-    [Fact]
-    public async Task PostClients_ShortKey_Returns400()
-    {
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { key = "short", displayName = "Bad" });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.NotEqual(existingClientId.ToString(), body.RootElement.GetProperty("id").GetString());
     }
 
     [Fact]
@@ -234,8 +196,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { key = "some-key-here-1234", displayName = "Unauthorized" });
+        request.Content = JsonContent.Create(new { displayName = "Unauthorized" });
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -247,9 +208,8 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { key = "new-client-key-min-16", displayName = "Test Client" });
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Test Client" });
 
         var response = await client.SendAsync(request);
 
@@ -263,55 +223,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
 
     [Fact]
-    public async Task PostCrawlConfig_WithOwnerKey_Returns201()
-    {
-        // Seed a client that maps to ValidClientKey
-        var clientId = factory.ClientId;
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{clientId}/crawl-configurations");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(
-            new
-            {
-                organizationUrl = "https://dev.azure.com/myorg",
-                projectId = "MyProject",
-                reviewerDisplayName = "Test Reviewer",
-                crawlIntervalSeconds = 60,
-            });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task PostCrawlConfig_WithWrongClient_Returns403()
-    {
-        var wrongClientId = Guid.NewGuid(); // not the caller's client
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{wrongClientId}/crawl-configurations");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(
-            new
-            {
-                organizationUrl = "https://dev.azure.com/org",
-                projectId = "proj",
-                reviewerDisplayName = "Test Reviewer",
-                crawlIntervalSeconds = 60,
-            });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
     public async Task PutAdoCredentials_MissingField_Returns400()
     {
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         // Missing secret
         request.Content = JsonContent.Create(new { tenantId = "t", clientId = "c", secret = "" });
 
@@ -325,7 +242,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var unknownId = Guid.NewGuid();
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{unknownId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { tenantId = "t", clientId = "c", secret = "s" });
 
         var response = await client.SendAsync(request);
@@ -351,7 +268,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(
             new
             {
@@ -362,6 +279,42 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = await db.Clients.FirstAsync(c => c.Id == clientId);
+        Assert.NotEqual("super-secret-value", record.AdoClientSecret);
+    }
+
+    [Fact]
+    public async Task PutAdoCredentials_FollowedByGetClient_DoesNotExposeSecret()
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+
+        using (var putRequest = new HttpRequestMessage(HttpMethod.Put, $"/clients/{clientId}/ado-credentials"))
+        {
+            putRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+            putRequest.Content = JsonContent.Create(new
+            {
+                tenantId = "tenant-id-abc",
+                clientId = "client-id-abc",
+                secret = "super-secret-value",
+            });
+
+            var putResponse = await client.SendAsync(putRequest);
+            Assert.Equal(HttpStatusCode.NoContent, putResponse.StatusCode);
+        }
+
+        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        getRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var getResponse = await client.SendAsync(getRequest);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var body = await getResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("super-secret-value", body, StringComparison.Ordinal);
+        Assert.True(JsonDocument.Parse(body).RootElement.GetProperty("hasAdoCredentials").GetBoolean());
     }
 
     // T036 — PATCH /clients/{id} customSystemMessage (admin)
@@ -374,7 +327,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = "patch-csm-key-12345",
             DisplayName = "CSM Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -384,7 +336,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { customSystemMessage = "Focus on security." });
 
         var response = await client.SendAsync(request);
@@ -400,7 +352,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var clientId = factory.ClientId;
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { customSystemMessage = new string('x', 20_001) });
 
         var response = await client.SendAsync(request);
@@ -415,7 +367,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = "patch-csm-null-key-1",
             DisplayName = "CSM Null Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -426,7 +377,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { isActive = true }); // no customSystemMessage field
 
         var response = await client.SendAsync(request);
@@ -444,7 +395,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = "patch-csm-clear-key1",
             DisplayName = "CSM Clear Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -455,7 +405,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { customSystemMessage = "" });
 
         var response = await client.SendAsync(request);
@@ -467,71 +417,52 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             "customSystemMessage should be null after clearing with empty string");
     }
 
-    // T037 — PATCH /client/me customSystemMessage (client self-service)
-
-    [Fact]
-    public async Task PatchClientMe_CustomSystemMessage_PersistedAndReturned()
-    {
-        var clientId = factory.ClientId;
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { customSystemMessage = "Self-service guidance." });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("Self-service guidance.", body.RootElement.GetProperty("customSystemMessage").GetString());
-    }
-
-    [Fact]
-    public async Task PatchClientMe_CustomSystemMessageTooLong_Returns400()
-    {
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { customSystemMessage = new string('y', 20_001) });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task PatchClientMe_WithoutClientKey_Returns401()
-    {
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/client/me");
-        request.Content = JsonContent.Create(new { customSystemMessage = "Test" });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
 
     public sealed class ClientsApiFactory : WebApplicationFactory<Program>
     {
+        private const string TestJwtSecret = "test-clients-jwt-secret-32chars!";
         private readonly string _dbName = $"TestDb_Clients_{Guid.NewGuid()}";
 
         // Explicit root ensures all DbContext instances within this factory share the same in-memory store.
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
-        /// <summary>The UUID of the seeded client that maps to <c>ValidClientKey</c>.</summary>
+        /// <summary>The UUID of the seeded client.</summary>
         public Guid ClientId { get; } = Guid.NewGuid();
+
+        public string GenerateAdminToken()
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity([
+                    new Claim("sub", Guid.NewGuid().ToString()),
+                    new Claim("global_role", "Admin"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
-            builder.UseSetting("MEISTER_CLIENT_KEYS", ValidClientKey);
             builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
             // No DB_CONNECTION_STRING → InMemory mode for IJobRepository/IClientRegistry
 
             var dbName = this._dbName; // capture before lambda
             var dbRoot = this._dbRoot; // capture before lambda
             builder.ConfigureServices(services =>
             {
+                // Register IJwtTokenService for JWT Bearer token validation
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
                 // Replace external stubs
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
@@ -543,65 +474,20 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
                 // IUserRepository stub (GetClients now injects it for non-admin JWT users)
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<Domain.Entities.AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
-                // Provide a stub ICrawlConfigurationRepository for crawl config endpoints
-                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
-                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                crawlRepo.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                crawlRepo.AddAsync(
-                        Arg.Any<Guid>(),
-                        Arg.Any<string>(),
-                        Arg.Any<string>(),
-                        Arg.Any<int>(),
-                        Arg.Any<CancellationToken>())
-                    .Returns(ci => Task.FromResult(
-                        new CrawlConfigurationDto(
-                            Guid.NewGuid(),
-                            ci.ArgAt<Guid>(0),
-                            ci.ArgAt<string>(1),
-                            ci.ArgAt<string>(2),
-                            null,
-                            ci.ArgAt<int>(3),
-                            true,
-                            DateTimeOffset.UtcNow,
-                            [])));
-                crawlRepo.SetActiveAsync(
-                        Arg.Any<Guid>(),
-                        Arg.Any<Guid>(),
-                        Arg.Any<bool>(),
-                        Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(true));
-                services.AddSingleton(crawlRepo);
+                services.AddSingleton(Substitute.For<IClientRegistry>());
 
-                // Provide a stub IClientRegistry that returns this factory's ClientId for ValidClientKey
-                var clientId = this.ClientId;
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(ValidClientKey).Returns(true);
-                clientRegistry.GetClientIdByKeyAsync(ValidClientKey, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(clientId));
-                clientRegistry.GetClientIdByKeyAsync(
-                        Arg.Is<string>(k => k != ValidClientKey),
-                        Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(null));
-                services.AddSingleton(clientRegistry);
-
-                // Provide an in-memory IClientAdoCredentialRepository
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                adoCredRepo.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                adoCredRepo.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                services.AddSingleton(adoCredRepo);
+                services.AddScoped<IClientAdoCredentialRepository, ClientAdoCredentialRepository>();
+                services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
 
@@ -609,14 +495,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         {
             var host = base.CreateHost(builder);
 
-            // Seed the client record that maps to ValidClientKey so crawl-config endpoints work
+            // Seed the client record so crawl-config endpoints work
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             db.Clients.Add(
                 new ClientRecord
                 {
                     Id = this.ClientId,
-                    Key = ValidClientKey,
                     DisplayName = "Test Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -624,6 +509,279 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             db.SaveChanges();
 
             return host;
+        }
+    }
+}
+
+public sealed class ClientsControllerAdoOrganizationScopesTests(
+    ClientsControllerAdoOrganizationScopesTests.OrganizationScopesApiFactory factory)
+    : IClassFixture<ClientsControllerAdoOrganizationScopesTests.OrganizationScopesApiFactory>
+{
+    [Fact]
+    public async Task GetAdoOrganizationScopes_ClientUserForAssignedClient_Returns200WithScopes()
+    {
+        var created = await factory.CreateOrganizationScopeAsync();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/clients/{factory.ClientId}/ado-organization-scopes");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Array, body.ValueKind);
+        Assert.Single(body.EnumerateArray());
+
+        var scope = body[0];
+        Assert.Equal(created.Id, scope.GetProperty("id").GetGuid());
+        Assert.Equal(factory.ClientId, scope.GetProperty("clientId").GetGuid());
+        Assert.Equal(created.OrganizationUrl, scope.GetProperty("organizationUrl").GetString());
+        Assert.Equal(created.DisplayName, scope.GetProperty("displayName").GetString());
+        Assert.True(scope.GetProperty("isEnabled").GetBoolean());
+        Assert.Equal(JsonValueKind.String, scope.GetProperty("verificationStatus").ValueKind);
+    }
+
+    [Fact]
+    public async Task PostAdoOrganizationScope_ClientAdministrator_Returns201AndPersists()
+    {
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/ado-organization-scopes");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(new
+        {
+            organizationUrl = "https://dev.azure.com/new-org/",
+            displayName = "New Org",
+        });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var scopeId = body.GetProperty("id").GetGuid();
+        Assert.Equal(factory.ClientId, body.GetProperty("clientId").GetGuid());
+        Assert.Equal("https://dev.azure.com/new-org", body.GetProperty("organizationUrl").GetString());
+        Assert.Equal("New Org", body.GetProperty("displayName").GetString());
+        Assert.True(body.GetProperty("isEnabled").GetBoolean());
+
+        using var scope = factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IClientAdoOrganizationScopeRepository>();
+        var persisted = await repository.GetByIdAsync(factory.ClientId, scopeId, CancellationToken.None);
+        Assert.NotNull(persisted);
+    }
+
+    [Fact]
+    public async Task PostAdoOrganizationScope_ClientUser_Returns403()
+    {
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/ado-organization-scopes");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+        request.Content = JsonContent.Create(new
+        {
+            organizationUrl = "https://dev.azure.com/forbidden-org",
+            displayName = "Forbidden Org",
+        });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchAdoOrganizationScope_ClientAdministrator_UpdatesScope()
+    {
+        var created = await factory.CreateOrganizationScopeAsync();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/ado-organization-scopes/{created.Id}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(new
+        {
+            displayName = "Renamed Scope",
+            isEnabled = false,
+        });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(created.Id, body.GetProperty("id").GetGuid());
+        Assert.Equal("Renamed Scope", body.GetProperty("displayName").GetString());
+        Assert.False(body.GetProperty("isEnabled").GetBoolean());
+        Assert.Equal(created.OrganizationUrl, body.GetProperty("organizationUrl").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteAdoOrganizationScope_Admin_Returns204AndRemovesScope()
+    {
+        var created = await factory.CreateOrganizationScopeAsync();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/clients/{factory.ClientId}/ado-organization-scopes/{created.Id}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateAdminToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IClientAdoOrganizationScopeRepository>();
+        var persisted = await repository.GetByIdAsync(factory.ClientId, created.Id, CancellationToken.None);
+        Assert.Null(persisted);
+    }
+
+    public sealed class OrganizationScopesApiFactory : WebApplicationFactory<Program>
+    {
+        private const string TestJwtSecret = "test-ado-scopes-jwt-secret-32chars!";
+
+        private readonly string _dbName = $"TestDb_AdoScopes_{Guid.NewGuid()}";
+        private readonly InMemoryDatabaseRoot _dbRoot = new();
+
+        public Guid ClientId { get; } = Guid.NewGuid();
+        public Guid OtherClientId { get; } = Guid.NewGuid();
+        public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
+        public Guid ClientUserId { get; } = Guid.NewGuid();
+
+        public string GenerateAdminToken() => this.GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+
+        public string GenerateClientAdministratorToken() => this.GenerateToken(this.ClientAdministratorUserId, AppUserRole.User);
+
+        public string GenerateClientUserToken() => this.GenerateToken(this.ClientUserId, AppUserRole.User);
+
+        public async Task<ClientAdoOrganizationScopeDto> CreateOrganizationScopeAsync(
+            string? organizationUrl = null,
+            string? displayName = "Test Org")
+        {
+            using var scope = this.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IClientAdoOrganizationScopeRepository>();
+            var resolvedOrganizationUrl = organizationUrl ?? $"https://dev.azure.com/test-org-{Guid.NewGuid():N}/";
+            return (await repository.AddAsync(this.ClientId, resolvedOrganizationUrl, displayName, CancellationToken.None))!;
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+
+            var dbName = this._dbName;
+            var dbRoot = this._dbRoot;
+            var clientId = this.ClientId;
+            var clientAdministratorUserId = this.ClientAdministratorUserId;
+            var clientUserId = this.ClientUserId;
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+                services.AddDbContext<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<IClientAdminService, ClientAdminService>();
+                services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
+
+                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
+                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IClientRegistry>());
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
+                    {
+                        { clientId, ClientRole.ClientAdministrator },
+                    }));
+                userRepo.GetUserClientRolesAsync(clientUserId, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
+                    {
+                        { clientId, ClientRole.ClientUser },
+                    }));
+                userRepo.GetUserClientRolesAsync(
+                        Arg.Is<Guid>(id => id != clientAdministratorUserId && id != clientUserId),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
+                services.AddSingleton(userRepo);
+
+                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
+                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
+                services.AddSingleton(crawlRepo);
+
+                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
+                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
+                adoCredentialRepository.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.CompletedTask);
+                adoCredentialRepository.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.CompletedTask);
+                services.AddSingleton(adoCredentialRepository);
+                services.AddSingleton(Substitute.For<IJobRepository>());
+            });
+        }
+
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            var host = base.CreateHost(builder);
+
+            using var scope = host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.AddRange(
+                new ClientRecord
+                {
+                    Id = this.ClientId,
+                    DisplayName = "ADO Scope Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+                new ClientRecord
+                {
+                    Id = this.OtherClientId,
+                    DisplayName = "Other Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            db.SaveChanges();
+
+            return host;
+        }
+
+        private string GenerateToken(Guid userId, AppUserRole role)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var token = new JwtSecurityToken(
+                issuer: "meisterpropr",
+                audience: "meisterpropr",
+                claims:
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", role.ToString()),
+                ],
+                expires: DateTime.UtcNow.AddHours(1),
+                signingCredentials: credentials);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
 }
@@ -700,11 +858,30 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    /// <summary>
+    ///     T020 [US2]: A JWT-authenticated ClientUser (non-admin) must not be able to create clients.
+    ///     Fails until T024 changes CreateClient from 401 → 403 for authenticated non-admin users.
+    /// </summary>
+    [Fact]
+    public async Task ClientUser_CannotAccess_ClientManagement_Returns403()
+    {
+        var http = factory.CreateClient();
+        var token = factory.GenerateToken(factory.TestUserId, AppUserRole.User);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Content = System.Net.Http.Json.JsonContent.Create(
+            new { displayName = "Should Fail" });
+
+        var response = await http.SendAsync(request);
+
+        // Authenticated users without admin role should get 403, not 401
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     public sealed class ClientsJwtApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test_jwt_secret_that_is_32_chars!";
         private const string ValidAdminKey = "admin-key-min-16-chars-ok";
-        private const string ValidClientKey = "jwt-test-client-key-min-16-chars";
 
         private readonly string _dbName = $"TestDb_ClientsJwt_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
@@ -746,7 +923,6 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
             builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
-            builder.UseSetting("MEISTER_CLIENT_KEYS", ValidClientKey);
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
@@ -762,6 +938,7 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
                 // IJwtTokenService must be explicit for in-memory (non-DB) mode
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
@@ -799,27 +976,17 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
                         Arg.Is<Guid>(id => id != testUserId && id != unassignedUserId),
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
-                // Stub ICrawlConfigurationRepository (not used by GetClients but needed for DI resolution)
-                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
-                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                crawlRepo.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                services.AddSingleton(crawlRepo);
-
-                // Stub IClientRegistry
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(ValidClientKey).Returns(true);
-                clientRegistry.GetClientIdByKeyAsync(ValidClientKey, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(this.ClientAId));
-                services.AddSingleton(clientRegistry);
+                services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
                 adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<ClientAdoCredentials?>(null));
                 services.AddSingleton(adoCredRepo);
+                services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
 
@@ -831,9 +998,9 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             db.Clients.AddRange(
-                new ClientRecord { Id = this.ClientAId, Key = "client-a-key-min-16", DisplayName = "Client A", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
-                new ClientRecord { Id = this.ClientBId, Key = "client-b-key-min-16", DisplayName = "Client B", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
-                new ClientRecord { Id = this.ClientCId, Key = "client-c-key-min-16", DisplayName = "Client C", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+                new ClientRecord { Id = this.ClientAId, DisplayName = "Client A", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new ClientRecord { Id = this.ClientBId, DisplayName = "Client B", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+                new ClientRecord { Id = this.ClientCId, DisplayName = "Client C", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
             db.SaveChanges();
 
             return host;

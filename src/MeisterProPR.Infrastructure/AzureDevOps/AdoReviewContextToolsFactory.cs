@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using Microsoft.Extensions.Logging;
@@ -11,6 +14,7 @@ namespace MeisterProPR.Infrastructure.AzureDevOps;
 public sealed class AdoReviewContextToolsFactory(
     VssConnectionFactory connectionFactory,
     IClientAdoCredentialRepository credentialRepository,
+    IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     ILoggerFactory loggerFactory) : IReviewContextToolsFactory
 {
@@ -22,11 +26,13 @@ public sealed class AdoReviewContextToolsFactory(
         string sourceBranch,
         int pullRequestId,
         int iterationId,
-        Guid? clientId)
+        Guid? clientId,
+        IReadOnlyList<Guid>? knowledgeSourceIds = null)
     {
         return new AdoReviewContextTools(
             connectionFactory,
             credentialRepository,
+            proCursorGateway,
             options,
             organizationUrl,
             projectId,
@@ -35,6 +41,7 @@ public sealed class AdoReviewContextToolsFactory(
             pullRequestId,
             iterationId,
             clientId,
+            knowledgeSourceIds,
             loggerFactory.CreateLogger<AdoReviewContextTools>());
     }
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AzureDevOps;
 
@@ -168,6 +171,148 @@ public class AdoCommentPosterDeduplicationTests
         };
 
         Assert.False(AdoCommentPoster.HasBotThreadAt(threads, "/src/Foo.cs", 42, BotId));
+    }
+
+    [Fact]
+    public void HasBotThreadAt_PathWithoutLeadingSlash_MatchesNormalizedThreadPath()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                1,
+                "/src/Foo.cs",
+                42,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "ERROR: Null ref.", BotId),
+                }.AsReadOnly()),
+        };
+
+        Assert.True(AdoCommentPoster.HasBotThreadAt(threads, "src/Foo.cs", 42, BotId));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(null)]
+    public void HasBotThreadAt_ZeroAndNullAnchors_AreEquivalent(int? candidateLine)
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                1,
+                "/src/Foo.cs",
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: File-level concern.", BotId),
+                }.AsReadOnly()),
+        };
+
+        Assert.True(AdoCommentPoster.HasBotThreadAt(threads, "/src/Foo.cs", candidateLine, BotId));
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_ResolvedThreadAtSameAnchor_UsesResolvedReason()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                15,
+                "/src/Foo.cs",
+                42,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "ERROR: Null ref.", BotId),
+                }.AsReadOnly(),
+                "Fixed"),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "/src/Foo.cs",
+            42,
+            "Null ref.",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("resolved_thread_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_NormalizedTextMatch_IgnoresSeverityPrefixAndWhitespace()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                27,
+                "/src/Foo.cs",
+                43,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "ERROR: Add a null check before dereferencing the service.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "src/Foo.cs",
+            42,
+            "Add a null check before dereferencing the service",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_text_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindFallbackDuplicateMatch_RewordedConcernAboveThreshold_ReturnsFallbackReason()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                33,
+                "/src/Foo.cs",
+                42,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: Validate the configuration value before using it as a connection string.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindFallbackDuplicateMatch(
+            threads,
+            "/src/Foo.cs",
+            42,
+            "Validate the config value before using it as the connection string.",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("fallback_duplicate_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindFallbackDuplicateMatch_DifferentConcern_DoesNotSuppress()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                34,
+                "/src/Foo.cs",
+                42,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: Validate the configuration value before using it as a connection string.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindFallbackDuplicateMatch(
+            threads,
+            "/src/Foo.cs",
+            42,
+            "Dispose the HttpClient created in this helper to avoid socket exhaustion.",
+            BotId);
+
+        Assert.Null(match);
     }
 
 

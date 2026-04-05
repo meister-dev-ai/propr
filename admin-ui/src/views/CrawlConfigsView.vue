@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
   <div class="page-view crawl-configs-view">
     <h2 class="view-title">Crawl Configurations</h2>
@@ -45,6 +48,7 @@
             <th style="width: 120px">Status</th>
             <th>Project</th>
             <th>Azure Organization</th>
+            <th>Filters</th>
             <th>Interval</th>
             <th></th>
           </tr>
@@ -58,6 +62,18 @@
             </td>
             <td class="bold-cell">{{ config.projectId }}</td>
             <td class="muted-cell">{{ config.organizationUrl }}</td>
+            <td>
+              <div class="scope-stack">
+                <div class="scope-pill">
+                  <i class="fi fi-rr-folder"></i>
+                  {{ describeFilters(config.repoFilters) }}
+                </div>
+                <div class="scope-pill" :class="{ 'scope-pill-warning': hasInvalidSourceScope(config) }">
+                  <i class="fi fi-rr-books"></i>
+                  {{ describeSourceScope(config) }}
+                </div>
+              </div>
+            </td>
             <td>
               <div class="interval-pill">
                 <i class="fi fi-rr-clock"></i> {{ formatInterval(config.crawlIntervalSeconds ?? 0) }}
@@ -102,6 +118,7 @@ import { useNotification } from '@/composables/useNotification'
 import type { components } from '@/services/generated/openapi'
 
 type CrawlConfigResponse = components['schemas']['CrawlConfigResponse']
+type CrawlRepoFilterResponse = components['schemas']['CrawlRepoFilterResponse']
 
 const configs = ref<CrawlConfigResponse[]>([])
 const loading = ref(false)
@@ -137,13 +154,44 @@ function formatInterval(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h`
 }
 
+function describeFilters(filters: CrawlRepoFilterResponse[] | undefined): string {
+  if (!filters?.length) {
+    return 'All repositories'
+  }
+
+  if (filters.length === 1) {
+    return filters[0].displayName || filters[0].repositoryName || '1 filter'
+  }
+
+  const firstFilterLabel = filters[0].displayName || filters[0].repositoryName || `${filters.length} filters`
+  return `${firstFilterLabel} +${filters.length - 1}`
+}
+
+function hasInvalidSourceScope(config: CrawlConfigResponse): boolean {
+  return (config.invalidProCursorSourceIds?.length ?? 0) > 0
+}
+
+function describeSourceScope(config: CrawlConfigResponse): string {
+  const invalidCount = config.invalidProCursorSourceIds?.length ?? 0
+  if (invalidCount > 0) {
+    return `${invalidCount} invalid source${invalidCount === 1 ? '' : 's'} need repair`
+  }
+
+  if (config.proCursorSourceScopeMode === 'selectedSources') {
+    const selectedCount = config.proCursorSourceIds?.length ?? 0
+    return `${selectedCount} selected source${selectedCount === 1 ? '' : 's'}`
+  }
+
+  return 'All client sources'
+}
+
 function openCreateForm() {
   editingConfig.value = undefined
   showForm.value = true
 }
 
 function openEditForm(config: CrawlConfigResponse) {
-  editingConfig.value = config
+  editingConfig.value = JSON.parse(JSON.stringify(config)) as CrawlConfigResponse
   showForm.value = true
 }
 
@@ -230,6 +278,30 @@ async function confirmDelete() {
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 500;
+}
+
+.scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.scope-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.scope-pill-warning {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fde68a;
 }
 
 .actions-cell {

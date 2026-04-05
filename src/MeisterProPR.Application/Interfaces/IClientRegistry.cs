@@ -1,15 +1,16 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>
-///     Registry of known clients and their keys.
+///     Provides persisted per-client review settings.
+///     This no longer participates in legacy client-key lookup or rotation.
 /// </summary>
 public interface IClientRegistry
 {
-    /// <summary>Returns the client's unique ID for a valid active key, or null if not found/inactive.</summary>
-    Task<Guid?> GetClientIdByKeyAsync(string key, CancellationToken ct = default);
-
     /// <summary>
     ///     Returns the configured ADO reviewer identity GUID for the given client,
     ///     or null if not configured or client not found.
@@ -30,7 +31,4 @@ public interface IClientRegistry
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default);
-
-    /// <summary>Returns true if the provided client key is registered and valid.</summary>
-    bool IsValidKey(string clientKey);
 }

@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -7,11 +11,9 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Manages AI pull request review jobs.</summary>
 [ApiController]
-[Route("[controller]")]
 public sealed partial class ReviewsController(
     IJobRepository jobRepository,
     IAdoTokenValidator adoTokenValidator,
-    IClientRegistry clientRegistry,
     ILogger<ReviewsController> logger,
     IPullRequestFetcher? prFetcher = null) : ControllerBase
 {
@@ -58,12 +60,12 @@ public sealed partial class ReviewsController(
     ///     ADO organisation URL (e.g. https://dev.azure.com/myorg). Required when using browser-extension
     ///     session tokens; omit for PATs.
     /// </param>
-    /// <param name="jobId">The job identifier returned from POST /reviews.</param>
+    /// <param name="jobId">The job identifier returned from POST /clients/{clientId}/reviews.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Job status and, once completed, its result.</response>
-    /// <response code="401">Invalid or missing client key, or invalid ADO token.</response>
+    /// <response code="401">Invalid or missing ADO token.</response>
     /// <response code="404">Job not found.</response>
-    [HttpGet("{jobId:guid}")]
+    [HttpGet("reviews/{jobId:guid}")]
     [ProducesResponseType(typeof(ReviewStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -87,72 +89,61 @@ public sealed partial class ReviewsController(
         return this.Ok(MapToStatusResponse(job));
     }
 
-    /// <summary>List all review jobs for the current client.</summary>
-    /// <param name="adoToken">
-    ///     ADO personal access token used solely to verify the requesting user is an authenticated ADO
-    ///     organisation member.
-    /// </param>
-    /// <param name="adoOrgUrl">
-    ///     ADO organisation URL (e.g. https://dev.azure.com/myorg). Required when using browser-extension
-    ///     session tokens; omit for PATs.
-    /// </param>
+    /// <summary>List all review jobs for the specified client.</summary>
+    /// <param name="clientId">ID of the client whose review jobs are listed.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">List of review jobs, newest first.</response>
-    /// <response code="401">Invalid or missing client key, or invalid ADO token.</response>
-    [HttpGet]
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks the required role for this client.</response>
+    [HttpGet("clients/{clientId:guid}/reviews")]
     [ProducesResponseType(typeof(ReviewListItem[]), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ListReviews(
-        [FromHeader(Name = "X-Ado-Token")] string? adoToken,
-        [FromHeader(Name = "X-Ado-Org-Url")] string? adoOrgUrl,
-        CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public IActionResult ListReviews(Guid clientId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(adoToken) || !await adoTokenValidator.IsValidAsync(adoToken, adoOrgUrl, ct))
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
         {
-            this.LogAdoTokenRejected(this.Request.Method, this.Request.Path);
-            return this.Unauthorized();
+            return roleCheck;
         }
 
-        var clientKey = this.HttpContext.Items["ClientKey"] as string ?? "";
-        var clientId = await clientRegistry.GetClientIdByKeyAsync(clientKey, ct);
-        if (clientId is null)
-        {
-            return this.Unauthorized();
-        }
-
-        var jobs = jobRepository.GetAllForClient(clientId.Value);
+        var jobs = jobRepository.GetAllForClient(clientId);
         return this.Ok(jobs.Select(MapToListItem).ToArray());
     }
 
     /// <summary>Submit a pull request for AI review.</summary>
+    /// <param name="clientId">ID of the client on whose behalf the review is triggered.</param>
     /// <param name="adoToken">
-    ///     ADO personal access token used solely to verify the requesting user is an authenticated ADO
-    ///     organisation member.
+    ///     Azure DevOps personal access token for ADO API operations. Must never be logged or persisted.
     /// </param>
     /// <param name="request">The PR details to review.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="202">Review job accepted. Poll the returned jobId for status.</response>
-    /// <response code="401">Invalid or missing client key, or invalid ADO token.</response>
-    /// <response code="422">Request validation failed.</response>
-    [HttpPost]
-    [ProducesResponseType(typeof(ReviewJobResponse), StatusCodes.Status202Accepted)]
+    /// <response code="202">Review job accepted and queued. Returns jobId and status.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks <c>ClientAdministrator</c> role for the specified client.</response>
+    /// <response code="404">Client not found.</response>
+    /// <response code="409">Active review job already exists for this PR iteration.</response>
+    [HttpPost("clients/{clientId:guid}/reviews")]
+    [ProducesResponseType(typeof(ReviewJobAcceptedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SubmitReview(
+        Guid clientId,
         [FromHeader(Name = "X-Ado-Token")] string? adoToken,
         [FromBody] ReviewRequest request,
         CancellationToken ct)
     {
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
         if (string.IsNullOrWhiteSpace(adoToken) || !await adoTokenValidator.IsValidAsync(adoToken, request.OrganizationUrl, ct))
         {
             this.LogAdoTokenRejected(this.Request.Method, this.Request.Path);
-            return this.Unauthorized();
-        }
-
-        var clientKey = this.HttpContext.Items["ClientKey"] as string ?? "";
-        var clientId = await clientRegistry.GetClientIdByKeyAsync(clientKey, ct);
-        if (clientId is null)
-        {
             return this.Unauthorized();
         }
 
@@ -165,12 +156,12 @@ public sealed partial class ReviewsController(
 
         if (existing is not null)
         {
-            return this.Accepted(new ReviewJobResponse(existing.Id));
+            return this.Conflict(new ReviewJobAcceptedResponse(existing.Id, existing.Status.ToString().ToLowerInvariant()));
         }
 
         var job = new ReviewJob(
             Guid.NewGuid(),
-            clientId.Value,
+            clientId,
             request.OrganizationUrl,
             request.ProjectId,
             request.RepositoryId,
@@ -190,7 +181,7 @@ public sealed partial class ReviewsController(
                     request.RepositoryId,
                     request.PullRequestId,
                     request.IterationId,
-                    clientId: clientId.Value,
+                    clientId: clientId,
                     cancellationToken: ct);
                 job.SetPrContext(prData.Title, prData.RepositoryName, prData.SourceBranch, prData.TargetBranch);
                 await jobRepository.UpdatePrContextAsync(
@@ -203,7 +194,7 @@ public sealed partial class ReviewsController(
         }
 
         this.LogReviewJobCreated(job.Id, job.PullRequestId);
-        return this.Accepted(new ReviewJobResponse(job.Id));
+        return this.Accepted(new ReviewJobAcceptedResponse(job.Id, JobStatus.Pending.ToString().ToLowerInvariant()));
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ADO token validation failed for {Method} {Path}.")]
@@ -224,8 +215,8 @@ public sealed record ReviewRequest(
     int PullRequestId,
     int IterationId);
 
-/// <summary>Response returned when a review job is accepted.</summary>
-public sealed record ReviewJobResponse(Guid JobId);
+/// <summary>Response returned when a review job is accepted or a duplicate is found.</summary>
+public sealed record ReviewJobAcceptedResponse(Guid JobId, string Status);
 
 /// <summary>List item for a review job.</summary>
 public sealed record ReviewListItem(

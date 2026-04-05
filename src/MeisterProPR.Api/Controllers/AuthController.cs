@@ -1,7 +1,12 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Security.Cryptography;
 using System.Text;
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -90,6 +95,29 @@ public sealed class AuthController(
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    /// <summary>Returns the current user's global role and per-client roles. Requires authentication.</summary>
+    [HttpGet("/auth/me")]
+    public IActionResult GetMe()
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
+        var clientRoles = AuthHelpers.GetClientRoles(this.HttpContext);
+        var globalRole = isAdmin ? "Admin" : "User";
+
+        return this.Ok(new
+        {
+            globalRole,
+            clientRoles = clientRoles.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => (int)kvp.Value),
+        });
     }
 }
 

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -18,13 +21,15 @@ public class ToolAwareAiReviewCoreTests
 {
     private static IOptions<AiReviewOptions> DefaultOptions(
         int maxIterations = 5,
-        int confidenceThreshold = 70)
+        int confidenceThreshold = 70,
+        string modelId = "")
     {
         return Microsoft.Extensions.Options.Options.Create(
             new AiReviewOptions
             {
                 MaxIterations = maxIterations,
                 ConfidenceThreshold = confidenceThreshold,
+                ModelId = modelId,
             });
     }
 
@@ -97,6 +102,35 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
         Assert.Equal("Looks good.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ContextModelId_OverridesGlobalFallbackModelId()
+    {
+        // Arrange
+        string? observedModelId = null;
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                observedModelId = callInfo.Arg<ChatOptions?>()?.ModelId;
+                return CreateFinalReviewResponse("Looks good.");
+            });
+
+        var context = CreateContext();
+        context.ModelId = "client-configured-deployment";
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(modelId: "global-fallback-model"),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        // Act
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        // Assert
+        Assert.Equal("client-configured-deployment", observedModelId);
     }
 
     [Fact]

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>Used solely for identity verification (FR-015). Never for ADO API operations.</summary>

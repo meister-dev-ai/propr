@@ -17,6 +17,17 @@ ProPR follows a clean layered architecture. Each layer has a defined role — do
 
 **Api** (`MeisterProPR.Api`): ASP.NET Core controllers and middleware. Thin layer — controllers delegate to application services and repositories via DI.
 
+## Sensitive Data Encryption Policy
+
+All sensitive data (AI API keys, ADO PATs, client secrets, and other credentials) must be protected at rest using the project's protection codec (ASP.NET Core Data Protection). Use the infrastructure protection codec with these purpose strings:
+
+- `AiConnectionApiKey` — AI connection API keys
+- `ClientAdoCredentials` — client ADO credentials (PATs)
+
+The project includes a `SecretBackfillService` that runs after EF Core migrations at startup and will idempotently migrate plaintext secret rows to protected values. Ensure the Data Protection key ring is persisted by setting `MEISTER_DATA_PROTECTION_KEYS_PATH` and mounting a durable storage location (suggested Docker volume: `meisterpropr_data_protection_keys`). Losing the key ring makes previously protected values unrecoverable; include key-ring backup and rotation in operational runbooks.
+
+Repositories should Protect on write and Unprotect on read where appropriate; DTOs must not expose plaintext secrets (secrets are write-only). Logging pipelines must redact sensitive fields like `apiKey`, `secret`, and `token`.
+
 ## Key Intentional Patterns
 
 **Optional dependencies via nullable constructor parameters**: Several services accept optional dependencies as `SomeType? dep = null` in their primary constructor. This is the project's pattern for optional features — not a missing DI registration. Guard with `if (dep is not null)` is the correct usage.

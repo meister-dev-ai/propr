@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
@@ -85,7 +88,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
 
         // Act
@@ -140,7 +143,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<InvalidOperationException>();
 
         // Act
@@ -175,7 +178,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
         this._threadReplier.ReplyAsync(
                 Arg.Any<string>(),

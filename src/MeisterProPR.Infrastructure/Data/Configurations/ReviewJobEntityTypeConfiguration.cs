@@ -1,8 +1,14 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text.Json;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace MeisterProPR.Infrastructure.Data.Configurations;
 
@@ -25,6 +31,12 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
 
         builder.Property(j => j.ProjectId)
             .HasColumnName("project_id")
+            .IsRequired();
+
+        builder.Property(j => j.ProCursorSourceScopeMode)
+            .HasColumnName("procursor_source_scope_mode")
+            .HasConversion<int>()
+            .HasDefaultValue(ProCursorSourceScopeMode.AllClientSources)
             .IsRequired();
 
         builder.Property(j => j.RepositoryId)
@@ -123,5 +135,40 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(j => j.ClientId).HasDatabaseName("ix_review_jobs_client_id");
         builder.HasIndex(j => new { j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId, j.IterationId })
             .HasDatabaseName("ix_review_jobs_pr_identity");
+        builder.HasIndex(j => new { j.ClientId, j.PullRequestId })
+            .HasDatabaseName("ix_review_jobs_client_pr");
+
+        builder.Ignore(j => j.ProCursorSourceIds);
+
+        var tokenBreakdownConverter = new ValueConverter<List<TokenBreakdownEntry>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => DeserializeTokenBreakdown(v));
+
+        // ValueComparer required so EF can detect in-place list mutations (add/remove items)
+        // without it EF uses reference equality and misses changes → TokenBreakdown never saved
+        var tokenBreakdownComparer = new ValueComparer<List<TokenBreakdownEntry>>(
+            (l1, l2) => l1 != null && l2 != null && l1.SequenceEqual(l2),
+            l => l.Aggregate(0, (h, e) => HashCode.Combine(h, e.GetHashCode())),
+            l => l.ToList());
+
+        builder.Property(j => j.TokenBreakdown)
+            .HasColumnName("token_breakdown")
+            .HasColumnType("jsonb")
+            .IsRequired()
+            .HasDefaultValueSql("'[]'")
+            .HasConversion(tokenBreakdownConverter, tokenBreakdownComparer);
+    }
+
+    private static List<TokenBreakdownEntry> DeserializeTokenBreakdown(string v)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<TokenBreakdownEntry>>(v, (JsonSerializerOptions?)null)
+                   ?? new List<TokenBreakdownEntry>();
+        }
+        catch (JsonException)
+        {
+            return new List<TokenBreakdownEntry>();
+        }
     }
 }

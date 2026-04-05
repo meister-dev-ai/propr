@@ -1,7 +1,10 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // We test the middleware behaviour by inspecting what fetch receives
-const SESSION_KEY = 'meisterpropr_admin_key'
+const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
 
 function mockFetch(status: number, body: unknown = {}) {
   const response = new Response(JSON.stringify(body), {
@@ -13,54 +16,52 @@ function mockFetch(status: number, body: unknown = {}) {
 
 describe('createAdminClient', () => {
   let createAdminClient: typeof import('@/services/api').createAdminClient
+  let getApiErrorMessage: typeof import('@/services/api').getApiErrorMessage
   // Must be re-imported after vi.resetModules() so instanceof uses the same class
   let UnauthorizedError: typeof import('@/services/api').UnauthorizedError
-  let clearAdminKey: () => void
 
   beforeEach(async () => {
     vi.resetModules()
     const api = await import('@/services/api')
-    const session = await import('@/composables/useSession')
     createAdminClient = api.createAdminClient
+    getApiErrorMessage = api.getApiErrorMessage
     UnauthorizedError = api.UnauthorizedError
-    clearAdminKey = session.useSession().clearAdminKey
   })
 
-  it('injects X-Admin-Key from sessionStorage in requests', async () => {
-    sessionStorage.setItem(SESSION_KEY, 'stored-key')
+  it('injects Authorization header from sessionStorage in requests', async () => {
+    const session = await import('@/composables/useSession')
+    session.useSession().setAccessToken('stored-token')
     mockFetch(200, [])
     const client = createAdminClient()
     await client.GET('/clients', {})
     // openapi-fetch calls fetch(request) — headers are on the Request object (first arg)
     const [requestArg] = vi.mocked(global.fetch).mock.calls[0]
     const headers = (requestArg as Request).headers
-    expect(headers.get('x-admin-key')).toBe('stored-key')
+    expect(headers.get('authorization')).toBe('Bearer stored-token')
   })
 
-  it('overrideKey takes precedence over sessionStorage key', async () => {
-    sessionStorage.setItem(SESSION_KEY, 'stored-key')
+  it('omits Authorization header when no token is present', async () => {
     mockFetch(200, [])
-    const client = createAdminClient({ overrideKey: 'candidate-key' })
+    const client = createAdminClient()
     await client.GET('/clients', {})
     const [requestArg] = vi.mocked(global.fetch).mock.calls[0]
     const headers = (requestArg as Request).headers
-    expect(headers.get('x-admin-key')).toBe('candidate-key')
-  })
-
-  it('overrideKey works when sessionStorage is empty', async () => {
-    mockFetch(200, [])
-    const client = createAdminClient({ overrideKey: 'candidate-key' })
-    await client.GET('/clients', {})
-    const [requestArg] = vi.mocked(global.fetch).mock.calls[0]
-    const headers = (requestArg as Request).headers
-    expect(headers.get('x-admin-key')).toBe('candidate-key')
+    expect(headers.get('authorization')).toBeNull()
   })
 
   it('throws UnauthorizedError and clears session on 401', async () => {
-    sessionStorage.setItem(SESSION_KEY, 'stored-key')
+    const session = await import('@/composables/useSession')
+    session.useSession().setAccessToken('stored-token')
     mockFetch(401)
     const client = createAdminClient()
     await expect(client.GET('/clients', {})).rejects.toBeInstanceOf(UnauthorizedError)
-    expect(sessionStorage.removeItem).toHaveBeenCalledWith(SESSION_KEY)
+    expect(sessionStorage.removeItem).toHaveBeenCalledWith(ACCESS_TOKEN_KEY)
+  })
+
+  it('extracts API validation messages from problem payloads', () => {
+    expect(getApiErrorMessage({ error: 'Selected repository is stale.' }, 'fallback')).toBe('Selected repository is stale.')
+    expect(getApiErrorMessage({ detail: 'Scope is disabled.' }, 'fallback')).toBe('Scope is disabled.')
+    expect(getApiErrorMessage({ errors: { repoFilters: ['Repository is required.'] } }, 'fallback')).toBe('Repository is required.')
+    expect(getApiErrorMessage(undefined, 'fallback')).toBe('fallback')
   })
 })

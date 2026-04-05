@@ -1,4 +1,8 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text;
+using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
@@ -23,10 +27,12 @@ public partial class AdoReviewContextTools : IReviewContextTools
     private readonly IClientAdoCredentialRepository _credentialRepository;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
     private readonly int _iterationId;
+    private readonly IReadOnlyList<Guid>? _knowledgeSourceIds;
     private readonly ILogger<AdoReviewContextTools> _logger;
     private readonly AiReviewOptions _options;
     private readonly string _organizationUrl;
     private readonly string _projectId;
+    private readonly IProCursorGateway _proCursorGateway;
     private readonly int _pullRequestId;
     private readonly string _repositoryId;
     private readonly string _sourceBranch;
@@ -43,11 +49,13 @@ public partial class AdoReviewContextTools : IReviewContextTools
     /// <param name="pullRequestId">Pull request numeric identifier.</param>
     /// <param name="iterationId">Pull request iteration identifier.</param>
     /// <param name="clientId">Optional client identifier for credential lookup.</param>
+    /// <param name="knowledgeSourceIds">Optional persisted ProCursor source scope captured for the queued review job.</param>
     /// <param name="sourceBranch">PR source branch enforced for all file-fetch operations.</param>
     /// <param name="logger">Logger for diagnostic messages.</param>
     public AdoReviewContextTools(
         VssConnectionFactory connectionFactory,
         IClientAdoCredentialRepository credentialRepository,
+        IProCursorGateway proCursorGateway,
         IOptions<AiReviewOptions> options,
         string organizationUrl,
         string projectId,
@@ -56,10 +64,12 @@ public partial class AdoReviewContextTools : IReviewContextTools
         int pullRequestId,
         int iterationId,
         Guid? clientId,
+        IReadOnlyList<Guid>? knowledgeSourceIds = null,
         ILogger<AdoReviewContextTools>? logger = null)
     {
         this._connectionFactory = connectionFactory;
         this._credentialRepository = credentialRepository;
+        this._proCursorGateway = proCursorGateway;
         this._options = options.Value;
         this._organizationUrl = organizationUrl;
         this._projectId = projectId;
@@ -68,6 +78,7 @@ public partial class AdoReviewContextTools : IReviewContextTools
         this._pullRequestId = pullRequestId;
         this._iterationId = iterationId;
         this._clientId = clientId;
+        this._knowledgeSourceIds = knowledgeSourceIds?.Count > 0 ? knowledgeSourceIds.ToList().AsReadOnly() : null;
         this._logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AdoReviewContextTools>.Instance;
     }
 
@@ -186,6 +197,64 @@ public partial class AdoReviewContextTools : IReviewContextTools
         var clampedEnd = Math.Min(lines.Length, endLine);
 
         return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+    }
+
+    /// <inheritdoc />
+    public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+    {
+        if (this._clientId is null)
+        {
+            return Task.FromResult(new ProCursorKnowledgeAnswerDto(
+                "unavailable",
+                [],
+                "The current review context does not include a client identifier for ProCursor."));
+        }
+
+        return this._proCursorGateway.AskKnowledgeAsync(
+            new ProCursorKnowledgeQueryRequest(
+                this._clientId.Value,
+                question,
+                KnowledgeSourceIds: this._knowledgeSourceIds,
+                RepositoryContext: new ProCursorRepositoryContextDto(
+                    this._organizationUrl,
+                    this._projectId,
+                    this._repositoryId,
+                    NormalizeBranchName(this._sourceBranch))),
+            ct);
+    }
+
+    /// <inheritdoc />
+    public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+        string symbol,
+        string? queryMode,
+        int? maxRelations,
+        CancellationToken ct)
+    {
+        if (this._clientId is null)
+        {
+            return Task.FromResult(new ProCursorSymbolInsightDto(
+                "unavailable",
+                null,
+                false,
+                false,
+                null,
+                [],
+                null));
+        }
+
+        return this._proCursorGateway.GetSymbolInsightAsync(
+            new ProCursorSymbolQueryRequest(
+                this._clientId.Value,
+                symbol,
+                string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                StateMode: "reviewTarget",
+                ReviewContext: new ProCursorReviewContextDto(
+                    this._repositoryId,
+                    NormalizeBranchName(this._sourceBranch),
+                    this._pullRequestId,
+                    this._iterationId),
+                MaxRelations: maxRelations),
+            ct);
     }
 
     /// <summary>

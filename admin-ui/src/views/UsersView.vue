@@ -1,6 +1,23 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
-  <div class="page-view">
-    <h2 class="view-title">Users</h2>
+  <div class="page-with-sidebar">
+    <!-- Sidebar Filters -->
+    <aside class="page-sidebar">
+      <div class="sidebar-nav">
+        <div class="sidebar-nav-group">
+          <h4>Users</h4>
+          <button class="sidebar-nav-link active">
+            <i class="fi fi-rr-users-alt"></i> All Users
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="page-main-content">
+      <h2 class="view-title">Users</h2>
 
     <!-- Create user form -->
     <div v-if="showCreate" class="section-card">
@@ -150,12 +167,14 @@
       </table>
       <p v-else class="users-empty">No users found.</p>
     </div>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSession } from '@/composables/useSession'
+import { API_BASE_URL } from '@/services/apiBase'
 
 interface UserItem {
   id: string
@@ -179,7 +198,7 @@ interface ClientItem {
 }
 
 const { getAccessToken } = useSession()
-const base = import.meta.env.VITE_API_BASE_URL ?? ''
+const base = API_BASE_URL
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken()

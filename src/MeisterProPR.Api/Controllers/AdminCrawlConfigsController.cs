@@ -1,7 +1,13 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using FluentValidation;
 using FluentValidation.Results;
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -12,27 +18,33 @@ public sealed partial class AdminCrawlConfigsController(
     ICrawlConfigurationRepository crawlConfigRepo,
     IUserRepository userRepository,
     IClientAdminService clientAdminService,
+    IClientAdoOrganizationScopeRepository organizationScopeRepository,
+    IAdoDiscoveryService adoDiscoveryService,
+    IProCursorKnowledgeSourceRepository proCursorKnowledgeSourceRepository,
     ILogger<AdminCrawlConfigsController> logger) : ControllerBase
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Crawl config {ConfigId} created for client {ClientId} by admin")]
-    private static partial void LogCrawlConfigCreated(ILogger logger, Guid configId, Guid clientId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Crawl config {ConfigId} deleted by admin")]
-    private static partial void LogCrawlConfigDeleted(ILogger logger, Guid configId);
-
     private static CrawlConfigResponse ToCrawlConfigResponse(CrawlConfigurationDto c) =>
         new(
             c.Id,
             c.ClientId,
+            c.OrganizationScopeId,
             c.OrganizationUrl,
             c.ProjectId,
             c.CrawlIntervalSeconds,
             c.IsActive,
             c.CreatedAt,
             c.RepoFilters
-                .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
+                .Select(f => new CrawlRepoFilterResponse(
+                    f.Id,
+                    f.RepositoryName,
+                    f.TargetBranchPatterns,
+                    f.CanonicalSourceRef,
+                    f.DisplayName))
                 .ToList()
-                .AsReadOnly());
+                .AsReadOnly(),
+            c.ProCursorSourceScopeMode,
+            c.ProCursorSourceIds,
+            c.InvalidProCursorSourceIds);
 
     private IActionResult? Validate(ValidationResult result)
     {
@@ -50,14 +62,160 @@ public sealed partial class AdminCrawlConfigsController(
 
     private IActionResult? RequireAuth(out bool isAdmin, out Guid? userId)
     {
-        isAdmin = this.HttpContext.Items["IsAdmin"] is true;
-        userId = this.HttpContext.Items["UserId"] is string s && Guid.TryParse(s, out var id) ? id : null;
+        isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
+        userId = AuthHelpers.GetUserId(this.HttpContext);
+        return AuthHelpers.RequireAuthenticated(this.HttpContext);
+    }
 
-        if (!isAdmin && userId is null)
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static IReadOnlyList<string> NormalizeBranchPatterns(IReadOnlyList<string>? targetBranchPatterns)
+    {
+        return (targetBranchPatterns ?? [])
+            .Select(pattern => pattern.Trim())
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private static string ResolveRepositoryName(CrawlRepoFilterRequest filter)
+    {
+        var repositoryName = NormalizeOptional(filter.RepositoryName)
+            ?? NormalizeOptional(filter.DisplayName)
+            ?? NormalizeOptional(filter.CanonicalSourceRef?.Value);
+
+        return repositoryName
+            ?? throw new InvalidOperationException("Each repository filter must include a repository name, display name, or canonical source reference.");
+    }
+
+    private async Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
+        Guid clientId,
+        Guid? organizationScopeId,
+        string? organizationUrl,
+        CancellationToken ct)
+    {
+        if (organizationScopeId.HasValue)
         {
-            return this.Unauthorized(new { error = "Authentication required." });
+            var scope = await organizationScopeRepository.GetByIdAsync(clientId, organizationScopeId.Value, ct)
+                ?? throw new InvalidOperationException("The selected Azure DevOps organization is no longer available for this client.");
+
+            if (!scope.IsEnabled)
+            {
+                throw new InvalidOperationException("The selected Azure DevOps organization is disabled.");
+            }
+
+            return (scope.Id, scope.OrganizationUrl);
         }
-        return null;
+
+        var normalizedOrganizationUrl = NormalizeOptional(organizationUrl)
+            ?? throw new InvalidOperationException("OrganizationUrl is required when organizationScopeId is not provided.");
+
+        return (null, normalizedOrganizationUrl);
+    }
+
+    private async Task<IReadOnlyList<CrawlRepoFilterDto>> ResolveRepoFiltersAsync(
+        Guid clientId,
+        Guid? organizationScopeId,
+        string projectId,
+        IReadOnlyList<CrawlRepoFilterRequest>? repoFilters,
+        CancellationToken ct)
+    {
+        if (repoFilters is null)
+        {
+            return [];
+        }
+
+        var filterDtos = new List<CrawlRepoFilterDto>(repoFilters.Count);
+        IReadOnlyList<AdoCrawlFilterOptionDto> availableFilters = [];
+
+        if (organizationScopeId.HasValue)
+        {
+            availableFilters = await adoDiscoveryService.ListCrawlFiltersAsync(
+                clientId,
+                organizationScopeId.Value,
+                projectId,
+                ct);
+        }
+
+        foreach (var filter in repoFilters)
+        {
+            var canonicalSourceRef = filter.CanonicalSourceRef;
+            var normalizedProvider = NormalizeOptional(canonicalSourceRef?.Provider);
+            var normalizedValue = NormalizeOptional(canonicalSourceRef?.Value);
+            var normalizedDisplayName = NormalizeOptional(filter.DisplayName);
+            var repositoryName = ResolveRepositoryName(filter);
+            var targetBranchPatterns = NormalizeBranchPatterns(filter.TargetBranchPatterns);
+
+            if (organizationScopeId.HasValue && normalizedProvider is not null && normalizedValue is not null)
+            {
+                var matchedFilter = availableFilters.FirstOrDefault(option =>
+                    string.Equals(option.CanonicalSourceRef.Provider, normalizedProvider, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(option.CanonicalSourceRef.Value, normalizedValue, StringComparison.OrdinalIgnoreCase));
+
+                if (matchedFilter is null)
+                {
+                    throw new InvalidOperationException(
+                        $"The selected crawl filter '{normalizedDisplayName ?? repositoryName}' is no longer available in Azure DevOps.");
+                }
+
+                filterDtos.Add(new CrawlRepoFilterDto(
+                    Guid.Empty,
+                    repositoryName,
+                    targetBranchPatterns,
+                    new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue),
+                    normalizedDisplayName ?? matchedFilter.DisplayName));
+                continue;
+            }
+
+            filterDtos.Add(new CrawlRepoFilterDto(
+                Guid.Empty,
+                repositoryName,
+                targetBranchPatterns,
+                normalizedProvider is not null && normalizedValue is not null
+                    ? new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue)
+                    : null,
+                normalizedDisplayName));
+        }
+
+        return filterDtos.AsReadOnly();
+    }
+
+    private async Task<IReadOnlyList<Guid>> ValidateSelectedProCursorSourcesAsync(
+        Guid clientId,
+        ProCursorSourceScopeMode sourceScopeMode,
+        IReadOnlyList<Guid>? proCursorSourceIds,
+        CancellationToken ct)
+    {
+        if (sourceScopeMode == ProCursorSourceScopeMode.AllClientSources)
+        {
+            return [];
+        }
+
+        var selectedSourceIds = (proCursorSourceIds ?? [])
+            .Where(sourceId => sourceId != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (selectedSourceIds.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "At least one ProCursor source must be selected when the crawl configuration uses selected sources.");
+        }
+
+        var availableSources = await proCursorKnowledgeSourceRepository.ListByClientAsync(clientId, ct);
+        var invalidSourceIds = selectedSourceIds
+            .Where(selectedSourceId => !availableSources.Any(source => source.Id == selectedSourceId && source.IsEnabled))
+            .ToList();
+
+        if (invalidSourceIds.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "One or more selected ProCursor sources are no longer eligible for this client.");
+        }
+
+        return selectedSourceIds.AsReadOnly();
     }
 
     /// <summary>
@@ -134,12 +292,11 @@ public sealed partial class AdminCrawlConfigsController(
 
         if (!isAdmin)
         {
-            // Non-Admin: verify caller owns the specified client
-            var user = await userRepository.GetByIdWithAssignmentsAsync(userId!.Value, ct);
-            var ownedIds = user?.ClientAssignments.Select(a => a.ClientId).ToHashSet() ?? [];
-            if (!ownedIds.Contains(request.ClientId))
+            // Non-Admin: require ClientAdministrator role for the target client
+            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, request.ClientId, ClientRole.ClientAdministrator);
+            if (roleCheck is not null)
             {
-                return this.StatusCode(StatusCodes.Status403Forbidden);
+                return roleCheck;
             }
         }
         else
@@ -151,20 +308,75 @@ public sealed partial class AdminCrawlConfigsController(
             }
         }
 
-        if (await crawlConfigRepo.ExistsAsync(request.ClientId, request.OrganizationUrl, request.ProjectId, ct))
+        try
         {
-            return this.Conflict(new { error = "A crawl configuration for this organisation and project already exists." });
+            var resolvedOrganization = await this.ResolveOrganizationSelectionAsync(
+                request.ClientId,
+                request.OrganizationScopeId,
+                request.OrganizationUrl,
+                ct);
+            var repoFilters = await this.ResolveRepoFiltersAsync(
+                request.ClientId,
+                resolvedOrganization.OrganizationScopeId,
+                request.ProjectId.Trim(),
+                request.RepoFilters,
+                ct);
+            var selectedProCursorSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
+                request.ClientId,
+                request.ProCursorSourceScopeMode,
+                request.ProCursorSourceIds,
+                ct);
+
+            if (await crawlConfigRepo.ExistsAsync(request.ClientId, resolvedOrganization.OrganizationUrl, request.ProjectId.Trim(), null, null, ct))
+            {
+                return this.Conflict(new { error = "A crawl configuration for this organisation and project already exists." });
+            }
+
+            var config = await crawlConfigRepo.AddAsync(
+                request.ClientId,
+                resolvedOrganization.OrganizationUrl,
+                request.ProjectId.Trim(),
+                request.CrawlIntervalSeconds,
+                resolvedOrganization.OrganizationScopeId,
+                ct);
+
+            if (repoFilters.Count > 0)
+            {
+                await crawlConfigRepo.UpdateRepoFiltersAsync(config.Id, repoFilters, ct);
+            }
+
+            if (request.ProCursorSourceScopeMode != ProCursorSourceScopeMode.AllClientSources || selectedProCursorSourceIds.Count > 0)
+            {
+                await crawlConfigRepo.UpdateSourceScopeAsync(
+                    config.Id,
+                    request.ProCursorSourceScopeMode,
+                    selectedProCursorSourceIds,
+                    ct);
+            }
+
+            var refreshed = await crawlConfigRepo.GetByIdAsync(config.Id, ct);
+            if (refreshed is null)
+            {
+                return this.NotFound();
+            }
+
+            LogCrawlConfigCreated(logger, refreshed.Id, refreshed.ClientId);
+
+            return this.CreatedAtAction(
+                nameof(this.GetCrawlConfigurations),
+                null,
+                ToCrawlConfigResponse(refreshed));
         }
-
-        var config = await crawlConfigRepo.AddAsync(
-            request.ClientId, request.OrganizationUrl, request.ProjectId, request.CrawlIntervalSeconds, ct);
-
-        LogCrawlConfigCreated(logger, config.Id, config.ClientId);
-
-        return this.CreatedAtAction(
-            nameof(this.GetCrawlConfigurations),
-            null,
-            ToCrawlConfigResponse(config));
+        catch (InvalidOperationException ex)
+        {
+            LogGuidedCrawlConfigCreateValidationFailed(
+                logger,
+                request.ClientId,
+                request.ProjectId.Trim(),
+                request.OrganizationScopeId,
+                ex.Message);
+            return this.Conflict(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -212,39 +424,73 @@ public sealed partial class AdminCrawlConfigsController(
 
         if (!isAdmin)
         {
-            var user = await userRepository.GetByIdWithAssignmentsAsync(userId!.Value, ct);
-            var ownedIds = user?.ClientAssignments.Select(a => a.ClientId).ToHashSet() ?? [];
-            if (!ownedIds.Contains(existing.ClientId))
+            // Non-Admin: require ClientAdministrator role for the config's client
+            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, existing.ClientId, ClientRole.ClientAdministrator);
+            if (roleCheck is not null)
             {
-                return this.StatusCode(StatusCodes.Status403Forbidden);
+                return roleCheck;
             }
         }
 
-        Guid? ownerScope = isAdmin ? null : existing.ClientId;
-        var updated = await crawlConfigRepo.UpdateAsync(
-            configId, request.CrawlIntervalSeconds, request.IsActive, ownerScope, ct);
-
-        if (!updated)
+        try
         {
-            return this.NotFound();
-        }
+            Guid? ownerScope = isAdmin ? null : existing.ClientId;
+            var updated = await crawlConfigRepo.UpdateAsync(
+                configId,
+                request.CrawlIntervalSeconds,
+                request.IsActive,
+                ownerScope,
+                ct);
 
-        // Update repo filters when explicitly provided (omitting the field = leave unchanged).
-        if (request.RepoFilters is not null)
+            if (!updated)
+            {
+                return this.NotFound();
+            }
+
+            // Update repo filters when explicitly provided (omitting the field = leave unchanged).
+            if (request.RepoFilters is not null)
+            {
+                var filterDtos = await this.ResolveRepoFiltersAsync(
+                    existing.ClientId,
+                    existing.OrganizationScopeId,
+                    existing.ProjectId,
+                    request.RepoFilters,
+                    ct);
+                await crawlConfigRepo.UpdateRepoFiltersAsync(configId, filterDtos, ct);
+            }
+
+            if (request.ProCursorSourceScopeMode.HasValue || request.ProCursorSourceIds is not null)
+            {
+                var effectiveScopeMode = request.ProCursorSourceScopeMode
+                    ?? (request.ProCursorSourceIds is not null
+                        ? ProCursorSourceScopeMode.SelectedSources
+                        : existing.ProCursorSourceScopeMode);
+                var validatedSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
+                    existing.ClientId,
+                    effectiveScopeMode,
+                    request.ProCursorSourceIds ?? existing.ProCursorSourceIds,
+                    ct);
+
+                await crawlConfigRepo.UpdateSourceScopeAsync(
+                    configId,
+                    effectiveScopeMode,
+                    validatedSourceIds,
+                    ct);
+            }
+
+            var refreshed = await crawlConfigRepo.GetByIdAsync(configId, ct);
+            if (refreshed is null)
+            {
+                return this.NotFound();
+            }
+
+            return this.Ok(ToCrawlConfigResponse(refreshed));
+        }
+        catch (InvalidOperationException ex)
         {
-            var filterDtos = request.RepoFilters
-                .Select(f => new CrawlRepoFilterDto(Guid.Empty, f.RepositoryName, f.TargetBranchPatterns))
-                .ToList();
-            await crawlConfigRepo.UpdateRepoFiltersAsync(configId, filterDtos, ct);
+            LogGuidedCrawlConfigPatchValidationFailed(logger, configId, ex.Message);
+            return this.Conflict(new { error = ex.Message });
         }
-
-        var refreshed = await crawlConfigRepo.GetByIdAsync(configId, ct);
-        if (refreshed is null)
-        {
-            return this.NotFound();
-        }
-
-        return this.Ok(ToCrawlConfigResponse(refreshed));
     }
 
     /// <summary>
@@ -278,11 +524,11 @@ public sealed partial class AdminCrawlConfigsController(
 
         if (!isAdmin)
         {
-            var user = await userRepository.GetByIdWithAssignmentsAsync(userId!.Value, ct);
-            var ownedIds = user?.ClientAssignments.Select(a => a.ClientId).ToHashSet() ?? [];
-            if (!ownedIds.Contains(existing.ClientId))
+            // Non-Admin: require ClientAdministrator role for the config's client
+            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, existing.ClientId, ClientRole.ClientAdministrator);
+            if (roleCheck is not null)
             {
-                return this.StatusCode(StatusCodes.Status403Forbidden);
+                return roleCheck;
             }
         }
 
@@ -295,9 +541,13 @@ public sealed partial class AdminCrawlConfigsController(
 /// <summary>Request body for creating an admin-managed crawl configuration.</summary>
 public sealed record CreateAdminCrawlConfigRequest(
     Guid ClientId,
-    string OrganizationUrl,
+    Guid? OrganizationScopeId,
+    string? OrganizationUrl,
     string ProjectId,
-    int CrawlIntervalSeconds = 60);
+    int CrawlIntervalSeconds = 60,
+    IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
+    ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+    IReadOnlyList<Guid>? ProCursorSourceIds = null);
 
 /// <summary>
 ///     Request body for patching an admin-managed crawl configuration.
@@ -306,9 +556,13 @@ public sealed record CreateAdminCrawlConfigRequest(
 public sealed record PatchAdminCrawlConfigRequest(
     int? CrawlIntervalSeconds = null,
     bool? IsActive = null,
-    IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null);
+    IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
+    ProCursorSourceScopeMode? ProCursorSourceScopeMode = null,
+    IReadOnlyList<Guid>? ProCursorSourceIds = null);
 
 /// <summary>A single repo filter entry in a PATCH request.</summary>
 public sealed record CrawlRepoFilterRequest(
-    string RepositoryName,
-    IReadOnlyList<string> TargetBranchPatterns);
+    string? RepositoryName,
+    IReadOnlyList<string> TargetBranchPatterns,
+    CanonicalSourceReferenceDto? CanonicalSourceRef = null,
+    string? DisplayName = null);

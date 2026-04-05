@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
@@ -93,7 +96,7 @@ public class FileByFileReviewOrchestratorTests
     private static IProtocolRecorder CreateProtocolRecorder()
     {
         var recorder = Substitute.For<IProtocolRecorder>();
-        recorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        recorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Guid.NewGuid()));
         recorder.SetCompletedAsync(
                 Arg.Any<Guid>(),
@@ -284,6 +287,53 @@ public class FileByFileReviewOrchestratorTests
         Assert.Contains(result.Comments, c => c.Message == "issue in B");
     }
 
+    [Fact]
+    public async Task ReviewAsync_CarriedForwardResults_DoNotContributePostingCandidates()
+    {
+        var carriedForwardComment = new ReviewComment("legacy.cs", 10, CommentSeverity.Warning, "legacy issue");
+        var freshComment = new ReviewComment("fresh.cs", 20, CommentSeverity.Warning, "fresh issue");
+
+        var priorResult = new ReviewFileResult(Guid.NewGuid(), "legacy.cs");
+        priorResult.MarkCompleted("legacy summary", [carriedForwardComment]);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("fresh summary", [freshComment]));
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("fresh.cs"));
+
+        var storedResults = new List<ReviewFileResult>
+        {
+            ReviewFileResult.CreateCarriedForward(job.Id, priorResult),
+        };
+
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        Assert.Single(result.Comments);
+        Assert.Equal("fresh issue", result.Comments[0].Message);
+        Assert.DoesNotContain(result.Comments, comment => comment.Message == "legacy issue");
+        Assert.Equal(1, result.CarriedForwardCandidatesSkipped);
+    }
+
     // T034 — Synthesis fallback triggers when IChatClient throws
     [Fact]
     public async Task ReviewAsync_SynthesisFails_FallsBackToConcatenatedSummaries()
@@ -464,7 +514,7 @@ public class FileByFileReviewOrchestratorTests
         var aiClientFactory = Substitute.For<IAiChatClientFactory>();
         aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
 
-        var tierDto = new AiConnectionDto(Guid.NewGuid(), job.ClientId, "Tier High", "https://high.openai.azure.com/", ["gpt-4o"], false, null, DateTimeOffset.UtcNow, AiConnectionModelCategory.HighEffort);
+        var tierDto = new AiConnectionDto(Guid.NewGuid(), job.ClientId, "Tier High", "https://high.openai.azure.com/", ["gpt-4o-high"], true, "gpt-4o-high", DateTimeOffset.UtcNow, AiConnectionModelCategory.HighEffort);
         var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepo.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
@@ -477,13 +527,13 @@ public class FileByFileReviewOrchestratorTests
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
-        // Assert: GetForTierAsync was called for the High tier
-        await aiConnectionRepo.Received(1).GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
+        // Assert: GetForTierAsync was called for the High tier (once per-file and once for synthesis)
+        await aiConnectionRepo.Received(2).GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
 
         // Assert: aiCore.ReviewAsync received a context with TierChatClient set to the tier client
         await aiCore.Received(1).ReviewAsync(
             Arg.Any<PullRequest>(),
-            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == tierClient),
+            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == tierClient && ctx.ModelId == "gpt-4o-high"),
             Arg.Any<CancellationToken>());
     }
 
@@ -514,10 +564,10 @@ public class FileByFileReviewOrchestratorTests
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
-        // Assert: context has no TierChatClient (null → fallback to injected default)
+        // Assert: context TierChatClient is set to the injected default (no tier → falls back to effectiveClient)
         await aiCore.Received(1).ReviewAsync(
             Arg.Any<PullRequest>(),
-            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == null),
+            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == defaultChatClient),
             Arg.Any<CancellationToken>());
     }
 
@@ -580,5 +630,49 @@ public class FileByFileReviewOrchestratorTests
 
         var prLevelComments = result.Comments?.Where(c => c.FilePath is null).ToList();
         Assert.True(prLevelComments is null || prLevelComments.Count == 0);
+        Assert.Equal("Overall good PR.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_SynthesisMalformedJson_RepairsResponseAndUsesParsedSummary()
+    {
+        const string malformedJson =
+            """{"summary":"This mentions v-for="tag in post.tags" without escaping.","cross_cutting_concerns":[]}""";
+        const string repairedJson =
+            """{"summary":"This mentions v-for=\"tag in post.tags\" without escaping.","cross_cutting_concerns":[]}""";
+
+        var comment = new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, "Potential issue");
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("file summary", new List<ReviewComment> { comment }.AsReadOnly()));
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, malformedJson)),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, repairedJson)));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        Assert.Equal("This mentions v-for=\"tag in post.tags\" without escaping.", result.Summary);
+        await chatClient.Received(2).GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
     }
 }

@@ -1,7 +1,11 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { http, HttpResponse, delay } from 'msw'
 import protocolMockData from '../../mock/data/protocol_response_1.json'
+import { API_BASE_URL } from '@/services/apiBase'
 
-const base = import.meta.env.VITE_API_BASE_URL ?? ''
+const base = API_BASE_URL
 
 let jobTick = 0
 
@@ -9,24 +13,305 @@ let crawlConfigs = [
   {
     id: 'config-1',
     clientId: '1',
+    organizationScopeId: 'scope-1',
     organizationUrl: 'https://dev.azure.com/meister-propr',
     projectId: 'Meister-ProPR',
     crawlIntervalSeconds: 60,
     isActive: true,
+    repoFilters: [
+      {
+        id: 'filter-1',
+        repositoryName: 'meister-propr',
+        displayName: 'meister-propr',
+        canonicalSourceRef: {
+          provider: 'azureDevOps',
+          value: 'repo-1',
+        },
+        targetBranchPatterns: ['main'],
+      },
+      {
+        id: 'filter-2',
+        repositoryName: 'propr-admin-ui',
+        displayName: 'propr-admin-ui',
+        canonicalSourceRef: {
+          provider: 'azureDevOps',
+          value: 'repo-2',
+        },
+        targetBranchPatterns: ['main', 'develop'],
+      },
+    ],
+    proCursorSourceScopeMode: 'selectedSources',
+    proCursorSourceIds: ['src-1', 'src-2'],
+    invalidProCursorSourceIds: [],
     createdAt: '2024-03-27T10:00:00Z',
     updatedAt: '2024-03-27T10:00:00Z'
   },
   {
     id: 'config-2',
     clientId: '2',
+    organizationScopeId: 'scope-3',
     organizationUrl: 'https://dev.azure.com/cloud-native',
     projectId: 'Infrastructure',
     crawlIntervalSeconds: 300,
     isActive: false,
+    repoFilters: [],
+    proCursorSourceScopeMode: 'allClientSources',
+    proCursorSourceIds: [],
+    invalidProCursorSourceIds: [],
     createdAt: '2024-03-27T11:00:00Z',
     updatedAt: '2024-03-27T11:30:00Z'
+  },
+  {
+    id: 'config-3',
+    clientId: '1',
+    organizationScopeId: 'scope-1',
+    organizationUrl: 'https://dev.azure.com/meister-propr',
+    projectId: 'Sandbox',
+    crawlIntervalSeconds: 120,
+    isActive: true,
+    repoFilters: [
+      {
+        id: 'filter-legacy-1',
+        repositoryName: 'ai-dev-days-local-test',
+        displayName: 'ai-dev-days-local-test',
+        canonicalSourceRef: null,
+        targetBranchPatterns: ['main'],
+      },
+      {
+        id: 'filter-legacy-2',
+        repositoryName: 'meister-propr',
+        displayName: 'meister-propr',
+        canonicalSourceRef: null,
+        targetBranchPatterns: [],
+      },
+    ],
+    proCursorSourceScopeMode: 'allClientSources',
+    proCursorSourceIds: [],
+    invalidProCursorSourceIds: ['src-stale-1'],
+    createdAt: '2024-01-10T09:00:00Z',
+    updatedAt: '2024-01-15T14:00:00Z'
   }
 ]
+
+const adoOrganizationScopesByClient: Record<string, any[]> = {
+  '1': [
+    {
+      id: 'scope-1',
+      clientId: '1',
+      organizationUrl: 'https://dev.azure.com/meister-propr',
+      displayName: 'Meister Org',
+      isEnabled: true,
+      verificationStatus: 'verified',
+      createdAt: '2024-03-20T10:00:00Z',
+      updatedAt: '2024-03-27T10:00:00Z',
+    },
+    {
+      id: 'scope-2',
+      clientId: '1',
+      organizationUrl: 'https://dev.azure.com/meister-propr-legacy',
+      displayName: 'Legacy Sandbox',
+      isEnabled: false,
+      verificationStatus: 'stale',
+      createdAt: '2024-03-19T10:00:00Z',
+      updatedAt: '2024-03-25T10:00:00Z',
+    },
+  ],
+  '2': [
+    {
+      id: 'scope-3',
+      clientId: '2',
+      organizationUrl: 'https://dev.azure.com/cloud-native',
+      displayName: 'Cloud Native',
+      isEnabled: true,
+      verificationStatus: 'verified',
+      createdAt: '2024-03-20T10:00:00Z',
+      updatedAt: '2024-03-27T10:00:00Z',
+    },
+  ],
+}
+
+const adoProjectsByScope: Record<string, any[]> = {
+  'scope-1': [
+    { organizationScopeId: 'scope-1', projectId: 'Meister-ProPR', projectName: 'Meister-ProPR' },
+    { organizationScopeId: 'scope-1', projectId: 'Sandbox', projectName: 'Sandbox' },
+  ],
+  'scope-3': [
+    { organizationScopeId: 'scope-3', projectId: 'Infrastructure', projectName: 'Infrastructure' },
+  ],
+}
+
+const adoCrawlFiltersByProject: Record<string, any[]> = {
+  'scope-1::Meister-ProPR': [
+    {
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' },
+      displayName: 'meister-propr',
+      branchSuggestions: [
+        { branchName: 'main', isDefault: true },
+        { branchName: 'release/*', isDefault: false },
+      ],
+    },
+    {
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-2' },
+      displayName: 'propr-admin-ui',
+      branchSuggestions: [
+        { branchName: 'main', isDefault: true },
+        { branchName: 'develop', isDefault: false },
+      ],
+    },
+  ],
+  'scope-1::Sandbox': [
+    {
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-3' },
+      displayName: 'sandbox-service',
+      branchSuggestions: [
+        { branchName: 'main', isDefault: true },
+      ],
+    },
+  ],
+  'scope-3::Infrastructure': [
+    {
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-4' },
+      displayName: 'terraform-live',
+      branchSuggestions: [
+        { branchName: 'main', isDefault: true },
+      ],
+    },
+  ],
+}
+
+const adoSourcesByProject: Record<string, any[]> = {
+  'scope-1::Meister-ProPR::repository': [
+    { canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' }, displayName: 'meister-propr' },
+    { canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-2' }, displayName: 'propr-admin-ui' },
+  ],
+  'scope-1::Meister-ProPR::adoWiki': [
+    { canonicalSourceRef: { provider: 'azureDevOps', value: 'wiki-1' }, displayName: 'Meister-ProPR.wiki' },
+  ],
+  'scope-1::Sandbox::repository': [
+    { canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-3' }, displayName: 'sandbox-service' },
+  ],
+  'scope-1::Sandbox::adoWiki': [],
+  'scope-3::Infrastructure::repository': [
+    { canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-4' }, displayName: 'terraform-live' },
+  ],
+  'scope-3::Infrastructure::adoWiki': [],
+}
+
+const adoBranchesBySource: Record<string, any[]> = {
+  'repo-1': [
+    { branchName: 'main', isDefault: true },
+    { branchName: 'release/v2', isDefault: false },
+    { branchName: 'develop', isDefault: false },
+  ],
+  'repo-2': [
+    { branchName: 'main', isDefault: true },
+    { branchName: 'develop', isDefault: false },
+  ],
+  'repo-3': [
+    { branchName: 'main', isDefault: true },
+  ],
+  'repo-4': [
+    { branchName: 'main', isDefault: true },
+    { branchName: 'staging', isDefault: false },
+  ],
+  'wiki-1': [
+    { branchName: 'wikiMaster', isDefault: true },
+  ],
+}
+
+let proCursorSourcesByClient: Record<string, any[]> = {
+  '1': [
+    {
+      sourceId: 'src-1',
+      clientId: '1',
+      organizationScopeId: 'scope-1',
+      organizationUrl: 'https://dev.azure.com/meister-propr',
+      projectId: 'Meister-ProPR',
+      repositoryId: 'repo-1',
+      sourceDisplayName: 'meister-propr',
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' },
+      displayName: 'Meister ProPR Docs',
+      sourceKind: 'repository',
+      defaultBranch: 'main',
+      rootPath: '/docs',
+      symbolMode: 'auto',
+      isEnabled: true,
+      status: 'ready',
+      latestSnapshot: {
+        branch: 'main',
+        commitSha: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+        freshnessStatus: 'fresh',
+        supportsSymbolQueries: true,
+        completedAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+      },
+      createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+      updatedAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+    },
+    {
+      sourceId: 'src-2',
+      clientId: '1',
+      organizationScopeId: 'scope-1',
+      organizationUrl: 'https://dev.azure.com/meister-propr',
+      projectId: 'Meister-ProPR',
+      repositoryId: 'wiki-1',
+      sourceDisplayName: 'Meister-ProPR.wiki',
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'wiki-1' },
+      displayName: 'Architecture Wiki',
+      sourceKind: 'adoWiki',
+      defaultBranch: 'wikiMaster',
+      rootPath: null,
+      symbolMode: 'text_only',
+      isEnabled: true,
+      status: 'ready',
+      latestSnapshot: {
+        branch: 'wikiMaster',
+        commitSha: 'b2c3d4e5f6b2c3d4e5f6b2c3d4e5f6b2c3d4e5f6',
+        freshnessStatus: 'stale',
+        supportsSymbolQueries: false,
+        completedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      },
+      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+    },
+    {
+      sourceId: 'src-3',
+      clientId: '1',
+      organizationScopeId: 'scope-1',
+      organizationUrl: 'https://dev.azure.com/meister-propr',
+      projectId: 'Sandbox',
+      repositoryId: 'repo-3',
+      sourceDisplayName: 'sandbox-service',
+      canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-3' },
+      displayName: 'Sandbox Service',
+      sourceKind: 'repository',
+      defaultBranch: 'main',
+      rootPath: null,
+      symbolMode: 'auto',
+      isEnabled: false,
+      status: 'disabled',
+      latestSnapshot: null,
+      createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+    },
+  ],
+  '2': [],
+}
+
+function getScope(clientId: string, scopeId: string | null | undefined) {
+  if (!scopeId) {
+    return null
+  }
+
+  return (adoOrganizationScopesByClient[clientId] ?? []).find((scope) => scope.id === scopeId) ?? null
+}
+
+function getCrawlFilters(scopeId: string | null | undefined, projectId: string | null | undefined) {
+  if (!scopeId || !projectId) {
+    return []
+  }
+
+  return adoCrawlFiltersByProject[`${scopeId}::${projectId}`] ?? []
+}
 
 let dismissedFindings = [
   {
@@ -66,27 +351,142 @@ let promptOverrides = [
   }
 ]
 
+let aiConnectionsByClient: Record<string, any[]> = {
+  '1': [
+    {
+      id: 'ai-1',
+      clientId: '1',
+      displayName: 'Azure OpenAI Prod',
+      endpointUrl: 'https://acme-prod.openai.azure.com/',
+      models: ['gpt-4o', 'gpt-4o-mini'],
+      isActive: true,
+      activeModel: 'gpt-4o',
+      modelCategory: null,
+      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      updatedAt: new Date(Date.now() - 3600000).toISOString(),
+    },
+    {
+      id: 'ai-2',
+      clientId: '1',
+      displayName: 'Embedding Pool',
+      endpointUrl: 'https://acme-embeddings.openai.azure.com/',
+      models: ['text-embedding-3-large'],
+      isActive: false,
+      activeModel: null,
+      modelCategory: 'embedding',
+      modelCapabilities: [
+        {
+          modelName: 'text-embedding-3-large',
+          tokenizerName: 'cl100k_base',
+          maxInputTokens: 8192,
+          embeddingDimensions: 3072,
+        },
+      ],
+      createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+  ],
+}
+
+let threadMemoryRecords = [
+  {
+    id: 'tm-1',
+    clientId: '1',
+    threadId: 1024,
+    repositoryId: 'meister-propr',
+    pullRequestId: 450,
+    filePath: 'src/MeisterProPR.Api/Controllers/JobsController.cs',
+    resolutionSummary: 'The user requested to add a new endpoint for fetching job protocols. The developer implemented it by adding the `GetProtocol` method to the `JobsController`.',
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000 * 5).toISOString()
+  },
+  {
+    id: 'tm-2',
+    clientId: '1',
+    threadId: 1025,
+    repositoryId: 'meister-propr',
+    pullRequestId: 450,
+    filePath: 'src/MeisterProPR.Core/Services/JobService.cs',
+    resolutionSummary: 'Fixed a race condition in the job status update logic by implementing a distributed lock using Redis.',
+    createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000 * 4).toISOString()
+  },
+  {
+    id: 'tm-3',
+    clientId: '2',
+    threadId: 501,
+    repositoryId: 'infrastructure',
+    pullRequestId: 12,
+    filePath: 'terraform/main.tf',
+    resolutionSummary: 'Updated the CIDR block for the production VNET to avoid overlap with the management network.',
+    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000 * 10).toISOString()
+  }
+]
+
+let memoryActivityLog = [
+  {
+    id: 'log-1',
+    clientId: '1',
+    threadId: 1024,
+    repositoryId: 'meister-propr',
+    pullRequestId: 450,
+    action: 0,
+    previousStatus: null,
+    currentStatus: 'resolved',
+    reason: 'Thread resolution summary generated and stored.',
+    occurredAt: new Date(Date.now() - 86400000 * 5).toISOString()
+  },
+  {
+    id: 'log-2',
+    clientId: '1',
+    threadId: 1025,
+    repositoryId: 'meister-propr',
+    pullRequestId: 450,
+    action: 0,
+    previousStatus: 'active',
+    currentStatus: 'resolved',
+    reason: 'Thread resolved by developer, summary updated.',
+    occurredAt: new Date(Date.now() - 86400000 * 4).toISOString()
+  },
+  {
+    id: 'log-3',
+    clientId: '1',
+    threadId: 1026,
+    repositoryId: 'meister-propr',
+    pullRequestId: 451,
+    action: 2,
+    previousStatus: 'active',
+    currentStatus: 'active',
+    reason: 'Thread still active, no summary generated.',
+    occurredAt: new Date(Date.now() - 86400000 * 2).toISOString()
+  }
+]
+
 export const handlers = [
   http.post(`${base}/auth/login`, async () => {
     await delay(500)
-    // The dummy token contains a base64 payload: {"global_role":"Admin"}
-    // This allows useSession to resolve isAdmin === true.
+    // The dummy token contains a base64 payload with both role and username claims.
     return HttpResponse.json({ 
-      accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIn0=.dummySignature',
+      accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIiwidW5pcXVlX25hbWUiOiJtb2NrLmFkbWluIn0=.dummySignature',
       refreshToken: 'mock-refresh'
     })
   }),
 
   http.post(`${base}/auth/refresh`, async () => {
-    return HttpResponse.json({ accessToken: 'mock-access' })
+    return HttpResponse.json({ accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIiwidW5pcXVlX25hbWUiOiJtb2NrLmFkbWluIn0=.dummySignature' })
+  }),
+
+  http.get(`${base}/auth/me`, async () => {
+    return HttpResponse.json({ globalRole: 'Admin', clientRoles: { '1': 1, '2': 1 } })
   }),
 
   http.get(`${base}/clients`, async () => {
     await delay(300)
     return HttpResponse.json([
-      { id: '1', displayName: 'Acme Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString() },
-      { id: '2', displayName: 'Globex Inc', isActive: false, hasAdoCredentials: false, createdAt: new Date().toISOString() },
-      { id: '3', displayName: 'Umbrella Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString() }
+      { id: '1', displayName: 'Acme Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520 },
+      { id: '2', displayName: 'Globex Inc', isActive: false, hasAdoCredentials: false, createdAt: new Date().toISOString(), recentUsageTokens: 0 },
+      { id: '3', displayName: 'Umbrella Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 89300 }
     ])
   }),
 
@@ -98,6 +498,7 @@ export const handlers = [
         isActive: true, 
         hasAdoCredentials: true, 
         createdAt: new Date().toISOString(), 
+        recentUsageTokens: 14520,
         reviewerId: '0000-1111-2222-3333'
     })
   }),
@@ -106,8 +507,329 @@ export const handlers = [
     await delay(300)
     const body = await request.json() as any
     return HttpResponse.json({
-        id: '1', displayName: body.displayName ?? 'Mocked Client', isActive: body.isActive ?? true, hasAdoCredentials: true, createdAt: new Date().toISOString()
+        id: '1', displayName: body.displayName ?? 'Mocked Client', isActive: body.isActive ?? true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520
     })
+  }),
+
+  http.get(`${base}/clients/:clientId/ado-organization-scopes`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    return HttpResponse.json(adoOrganizationScopesByClient[clientId] ?? [])
+  }),
+
+  http.post(`${base}/clients/:clientId/ado-organization-scopes`, async ({ params, request }) => {
+    await delay(400)
+    const clientId = String(params.clientId)
+    const body = await request.json() as any
+    const newScope = {
+      id: `scope-${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      organizationUrl: body.organizationUrl ?? '',
+      displayName: body.displayName ?? null,
+      isEnabled: body.isEnabled ?? true,
+      verificationStatus: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    adoOrganizationScopesByClient[clientId] = [...(adoOrganizationScopesByClient[clientId] ?? []), newScope]
+    return HttpResponse.json(newScope, { status: 201 })
+  }),
+
+  http.patch(`${base}/clients/:clientId/ado-organization-scopes/:scopeId`, async ({ params, request }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    const scopeId = String(params.scopeId)
+    const body = await request.json() as any
+    const scopes = adoOrganizationScopesByClient[clientId] ?? []
+    const idx = scopes.findIndex(s => s.id === scopeId)
+    if (idx === -1) return new HttpResponse(null, { status: 404 })
+    scopes[idx] = { ...scopes[idx], ...body, updatedAt: new Date().toISOString() }
+    return HttpResponse.json(scopes[idx])
+  }),
+
+  http.delete(`${base}/clients/:clientId/ado-organization-scopes/:scopeId`, async ({ params }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    const scopeId = String(params.scopeId)
+    adoOrganizationScopesByClient[clientId] = (adoOrganizationScopesByClient[clientId] ?? []).filter(s => s.id !== scopeId)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/ado/discovery/projects`, async ({ params, request }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const url = new URL(request.url)
+    const organizationScopeId = url.searchParams.get('organizationScopeId')
+    const scope = getScope(clientId, organizationScopeId)
+
+    if (!scope || scope.isEnabled === false) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    return HttpResponse.json(adoProjectsByScope[scope.id] ?? [])
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/ado/discovery/crawl-filters`, async ({ params, request }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const url = new URL(request.url)
+    const organizationScopeId = url.searchParams.get('organizationScopeId')
+    const projectId = url.searchParams.get('projectId')
+    const scope = getScope(clientId, organizationScopeId)
+
+    if (!scope || scope.isEnabled === false) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    return HttpResponse.json(getCrawlFilters(scope.id, projectId))
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/ado/discovery/sources`, async ({ params, request }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const url = new URL(request.url)
+    const organizationScopeId = url.searchParams.get('organizationScopeId')
+    const projectId = url.searchParams.get('projectId')
+    const sourceKind = url.searchParams.get('sourceKind') ?? 'repository'
+    const scope = getScope(clientId, organizationScopeId)
+
+    if (!scope || scope.isEnabled === false) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    const key = `${scope.id}::${projectId}::${sourceKind}`
+    return HttpResponse.json(adoSourcesByProject[key] ?? [])
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/ado/discovery/branches`, async ({ params, request }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const url = new URL(request.url)
+    const organizationScopeId = url.searchParams.get('organizationScopeId')
+    const canonicalSourceValue = url.searchParams.get('canonicalSourceValue')
+    const scope = getScope(clientId, organizationScopeId)
+
+    if (!scope || scope.isEnabled === false) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    return HttpResponse.json(adoBranchesBySource[canonicalSourceValue ?? ''] ?? [])
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/sources`, async ({ params }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    return HttpResponse.json(proCursorSourcesByClient[clientId] ?? [])
+  }),
+
+  http.post(`${base}/admin/clients/:clientId/procursor/sources`, async ({ params, request }) => {
+    await delay(500)
+    const clientId = String(params.clientId)
+    const body = await request.json() as any
+    const scope = getScope(clientId, body.organizationScopeId)
+
+    if (body.organizationScopeId && (!scope || scope.isEnabled === false)) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    const newSource = {
+      sourceId: `src-${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      organizationScopeId: body.organizationScopeId ?? null,
+      organizationUrl: scope?.organizationUrl ?? null,
+      projectId: body.projectId ?? null,
+      repositoryId: body.canonicalSourceRef?.value ?? null,
+      sourceDisplayName: body.sourceDisplayName ?? null,
+      canonicalSourceRef: body.canonicalSourceRef ?? null,
+      displayName: body.displayName ?? 'New Source',
+      sourceKind: body.sourceKind ?? 'repository',
+      defaultBranch: body.defaultBranch ?? 'main',
+      rootPath: body.rootPath ?? null,
+      symbolMode: body.symbolMode ?? 'auto',
+      isEnabled: true,
+      status: 'pending',
+      latestSnapshot: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    proCursorSourcesByClient[clientId] = [newSource, ...(proCursorSourcesByClient[clientId] ?? [])]
+    return HttpResponse.json(newSource, { status: 201 })
+  }),
+
+  http.post(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/refresh`, async ({ params }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    const sourceId = String(params.sourceId)
+    const sources = proCursorSourcesByClient[clientId] ?? []
+    const source = sources.find(s => s.sourceId === sourceId)
+
+    if (!source) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    return HttpResponse.json({ sourceId, status: 'queued', queuedAt: new Date().toISOString() })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/branches`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const sourceId = String(params.sourceId)
+    const sources = proCursorSourcesByClient[clientId] ?? []
+    const source = sources.find(s => s.sourceId === sourceId)
+
+    if (!source) return new HttpResponse(null, { status: 404 })
+
+    const branches = adoBranchesBySource[source.repositoryId] ?? []
+    return HttpResponse.json(
+      branches.map((b: any, i: number) => ({
+        branchId: `branch-${sourceId}-${i}`,
+        sourceId,
+        branchName: b.branchName,
+        isDefault: b.isDefault ?? false,
+        autoRefreshEnabled: b.isDefault ?? false,
+        createdAt: new Date(Date.now() - 86400000 * (i + 1)).toISOString(),
+        updatedAt: new Date(Date.now() - 86400000 * (i + 1)).toISOString(),
+      }))
+    )
+  }),
+
+  http.post(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/branches`, async ({ params, request }) => {
+    await delay(300)
+    const body = await request.json() as any
+    const sourceId = String(params.sourceId)
+    const newBranch = {
+      branchId: `branch-${Math.random().toString(36).slice(2, 10)}`,
+      sourceId,
+      branchName: body.branchName ?? 'main',
+      isDefault: body.isDefault ?? false,
+      autoRefreshEnabled: body.autoRefreshEnabled ?? false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    return HttpResponse.json(newBranch, { status: 201 })
+  }),
+
+  http.patch(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/branches/:branchId`, async ({ params, request }) => {
+    await delay(250)
+    const body = await request.json() as any
+    return HttpResponse.json({
+      branchId: String(params.branchId),
+      sourceId: String(params.sourceId),
+      branchName: body.branchName ?? 'main',
+      isDefault: body.isDefault ?? false,
+      autoRefreshEnabled: body.autoRefreshEnabled ?? false,
+      updatedAt: new Date().toISOString(),
+    })
+  }),
+
+  http.delete(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/branches/:branchId`, async () => {
+    await delay(250)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/clients/:clientId/ai-connections`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    return HttpResponse.json(aiConnectionsByClient[clientId] ?? [])
+  }),
+
+  http.post(`${base}/clients/:clientId/ai-connections`, async ({ params, request }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    const body = await request.json() as any
+    const newConnection = {
+      id: `ai-${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      displayName: body.displayName ?? 'New connection',
+      endpointUrl: body.endpointUrl ?? '',
+      models: body.models ?? [],
+      isActive: false,
+      activeModel: null,
+      modelCategory: body.modelCategory ?? null,
+      modelCapabilities: body.modelCapabilities ?? [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    aiConnectionsByClient[clientId] = [newConnection, ...(aiConnectionsByClient[clientId] ?? [])]
+    return HttpResponse.json(newConnection, { status: 201 })
+  }),
+
+  http.patch(`${base}/clients/:clientId/ai-connections/:connectionId`, async ({ params, request }) => {
+    await delay(300)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const body = await request.json() as any
+    const connections = aiConnectionsByClient[clientId] ?? []
+    const idx = connections.findIndex((connection) => connection.id === connectionId)
+
+    if (idx === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    connections[idx] = {
+      ...connections[idx],
+      displayName: body.displayName ?? connections[idx].displayName,
+      endpointUrl: body.endpointUrl ?? connections[idx].endpointUrl,
+      models: body.models ?? connections[idx].models,
+      modelCapabilities: body.modelCapabilities ?? connections[idx].modelCapabilities,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(connections[idx])
+  }),
+
+  http.post(`${base}/clients/:clientId/ai-connections/:connectionId/activate`, async ({ params, request }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const body = await request.json() as any
+    const connections = aiConnectionsByClient[clientId] ?? []
+    const idx = connections.findIndex((connection) => connection.id === connectionId)
+
+    if (idx === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    connections[idx] = {
+      ...connections[idx],
+      isActive: connections[idx].modelCategory ? connections[idx].isActive : true,
+      activeModel: body.model,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(connections[idx])
+  }),
+
+  http.post(`${base}/clients/:clientId/ai-connections/:connectionId/deactivate`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const connections = aiConnectionsByClient[clientId] ?? []
+    const idx = connections.findIndex((connection) => connection.id === connectionId)
+
+    if (idx === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    connections[idx] = {
+      ...connections[idx],
+      isActive: false,
+      activeModel: null,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(connections[idx])
+  }),
+
+  http.delete(`${base}/clients/:clientId/ai-connections/:connectionId`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const connections = aiConnectionsByClient[clientId] ?? []
+    aiConnectionsByClient[clientId] = connections.filter((connection) => connection.id !== connectionId)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.get(`${base}/admin/users`, async () => {
@@ -140,6 +862,11 @@ export const handlers = [
     return HttpResponse.json({ token: 'mock-pat-' + Math.random().toString(36).substring(7) })
   }),
 
+  http.post(`${base}/users/me/password`, async () => {
+    await delay(250)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.get(`${base}/jobs`, async () => {
     await delay(400)
     jobTick++
@@ -166,7 +893,8 @@ export const handlers = [
           prRepositoryName: 'backend-service',
           prSourceBranch: 'feature/auth-middleware',
           prTargetBranch: 'main',
-          aiModel: 'claude-opus-4-5'
+          aiModel: 'claude-opus-4-5',
+          clientId: '1'
         },
         {
           id: 'job-124',
@@ -188,7 +916,8 @@ export const handlers = [
           prRepositoryName: 'frontend-app',
           prSourceBranch: 'refactor/composition-api',
           prTargetBranch: 'develop',
-          aiModel: 'gpt-4o'
+          aiModel: 'gpt-4o',
+          clientId: '1'
         },
         {
           id: 'job-125',
@@ -206,7 +935,8 @@ export const handlers = [
           prRepositoryName: 'infrastructure',
           prSourceBranch: 'chore/terraform-update',
           prTargetBranch: 'main',
-          aiModel: 'gemini-2.5-pro'
+          aiModel: 'gemini-2.5-pro',
+          clientId: '1'
         }
       ]
     })
@@ -388,10 +1118,40 @@ export const handlers = [
   http.post(`${base}/admin/crawl-configurations`, async ({ request }) => {
     await delay(600)
     const body = await request.json() as any
+    const scope = getScope(String(body.clientId), body.organizationScopeId)
+
+    if (body.organizationScopeId && (!scope || scope.isEnabled === false)) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    const availableFilters = getCrawlFilters(body.organizationScopeId, body.projectId)
+    const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
+      if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
+        return false
+      }
+
+      return !availableFilters.some((option: any) =>
+        option.canonicalSourceRef?.provider === filter.canonicalSourceRef.provider &&
+        option.canonicalSourceRef?.value === filter.canonicalSourceRef.value,
+      )
+    })
+
+    if (staleFilter) {
+      return HttpResponse.json({ error: 'The selected crawl filter is no longer available in Azure DevOps.' }, { status: 409 })
+    }
+
     const newConfig = {
       id: `config-${Math.random().toString(36).substr(2, 9)}`,
-      ...body,
+      clientId: body.clientId,
+      organizationScopeId: body.organizationScopeId ?? null,
+      organizationUrl: scope?.organizationUrl ?? body.organizationUrl,
+      projectId: body.projectId,
+      crawlIntervalSeconds: body.crawlIntervalSeconds ?? 60,
       isActive: true,
+      repoFilters: body.repoFilters ?? [],
+      proCursorSourceScopeMode: body.proCursorSourceScopeMode ?? 'allClientSources',
+      proCursorSourceIds: body.proCursorSourceIds ?? [],
+      invalidProCursorSourceIds: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -405,10 +1165,30 @@ export const handlers = [
     const body = await request.json() as any
     const idx = crawlConfigs.findIndex(c => c.id === configId)
     if (idx === -1) return new HttpResponse(null, { status: 404 })
+
+    const existingConfig = crawlConfigs[idx]
+    const availableFilters = getCrawlFilters(existingConfig.organizationScopeId, existingConfig.projectId)
+    const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
+      if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
+        return false
+      }
+
+      return !availableFilters.some((option: any) =>
+        option.canonicalSourceRef?.provider === filter.canonicalSourceRef.provider &&
+        option.canonicalSourceRef?.value === filter.canonicalSourceRef.value,
+      )
+    })
+
+    if (staleFilter) {
+      return HttpResponse.json({ error: 'The selected crawl filter is no longer available in Azure DevOps.' }, { status: 409 })
+    }
     
     crawlConfigs[idx] = { 
-      ...crawlConfigs[idx], 
+      ...existingConfig, 
       ...body, 
+      repoFilters: body.repoFilters ?? existingConfig.repoFilters,
+      proCursorSourceScopeMode: body.proCursorSourceScopeMode ?? existingConfig.proCursorSourceScopeMode,
+      proCursorSourceIds: body.proCursorSourceIds ?? existingConfig.proCursorSourceIds,
       updatedAt: new Date().toISOString() 
     }
     return HttpResponse.json(crawlConfigs[idx])
@@ -479,5 +1259,139 @@ export const handlers = [
     const { id } = params
     promptOverrides = promptOverrides.filter(o => o.id !== id)
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  // Thread Memory
+  http.get(`${base}/admin/thread-memory`, async ({ request }) => {
+    await delay(400)
+    const url = new URL(request.url)
+    const clientId = url.searchParams.get('clientId')
+    const search = url.searchParams.get('search')?.toLowerCase()
+    const page = Number(url.searchParams.get('page') || '1')
+    const pageSize = Number(url.searchParams.get('pageSize') || '50')
+
+    let items = threadMemoryRecords.filter(r => r.clientId === clientId)
+    if (search) {
+      items = items.filter(r => 
+        r.repositoryId.toLowerCase().includes(search) || 
+        r.filePath?.toLowerCase().includes(search) || 
+        r.resolutionSummary.toLowerCase().includes(search)
+      )
+    }
+
+    const totalCount = items.length
+    const paginatedItems = items.slice((page - 1) * pageSize, page * pageSize)
+
+    return HttpResponse.json({
+      items: paginatedItems,
+      totalCount,
+      page,
+      pageSize
+    })
+  }),
+
+  http.delete(`${base}/admin/thread-memory/:id`, async ({ params }) => {
+    await delay(300)
+    const { id } = params
+    threadMemoryRecords = threadMemoryRecords.filter(r => r.id !== id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/admin/thread-memory/activity-log`, async ({ request }) => {
+    await delay(500)
+    const url = new URL(request.url)
+    const clientId = url.searchParams.get('clientId')
+    const action = url.searchParams.get('action')
+    const page = Number(url.searchParams.get('page') || '1')
+    const pageSize = Number(url.searchParams.get('pageSize') || '50')
+
+    let items = memoryActivityLog.filter(l => l.clientId === clientId)
+    if (action != null && action !== '') {
+      items = items.filter(l => l.action === Number(action))
+    }
+
+    const totalCount = items.length
+    const paginatedItems = items.slice((page - 1) * pageSize, page * pageSize)
+
+    return HttpResponse.json({
+      items: paginatedItems,
+      totalCount,
+      page,
+      pageSize
+    })
+  }),
+
+  // Client Token Usage
+  http.get(`${base}/admin/clients/:clientId/token-usage`, async ({ params }) => {
+    const clientId = params.clientId as string
+    const today = new Date()
+    const samples = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(today)
+      d.setDate(d.getDate() - (13 - i))
+      const date = d.toISOString().slice(0, 10)
+      return [
+        { connectionCategory: 1, modelId: 'gpt-5.4-mini', date, inputTokens: 1200 + i * 80, outputTokens: 300 + i * 20 },
+        { connectionCategory: 5, modelId: 'gpt-5.4-nano', date, inputTokens: 600 + i * 40, outputTokens: 150 + i * 10 },
+      ]
+    }).flat()
+    const totalInputTokens = samples.reduce((sum, s) => sum + s.inputTokens, 0)
+    const totalOutputTokens = samples.reduce((sum, s) => sum + s.outputTokens, 0)
+    return HttpResponse.json({
+      clientId,
+      from: samples[0].date,
+      to: samples[samples.length - 1].date,
+      totalInputTokens,
+      totalOutputTokens,
+      samples,
+    })
+  }),
+
+  // PR Review View Aggregated Data
+  http.get(`${base}/clients/:clientId/pr-view`, async ({ request, params }) => {
+    await delay(500)
+    const url = new URL(request.url)
+    const orgUrl = url.searchParams.get('orgUrl')
+    const project = url.searchParams.get('project')
+    const repositoryId = url.searchParams.get('repositoryId')
+    const pullRequestId = Number(url.searchParams.get('pullRequestId'))
+    const clientId = params.clientId as string
+
+    // Mock data for PR #81 (as seen in user screenshot) or default
+    const isSpecialPR = pullRequestId === 81 || pullRequestId === 42
+
+    return HttpResponse.json({
+        clientId,
+        organizationUrl: orgUrl || 'https://dev.azure.com/meister-propr',
+        projectId: project || 'Meister-ProPR',
+        repositoryId: repositoryId || 'ai-dev-days-local-test',
+        pullRequestId: pullRequestId || 81,
+        totalJobs: isSpecialPR ? 1 : 0,
+        totalInputTokens: isSpecialPR ? 51355 : 0,
+        totalOutputTokens: isSpecialPR ? 4658 : 0,
+        originatedMemoryCount: isSpecialPR ? 0 : 0,
+        contributedMemoryCount: isSpecialPR ? 2 : 0,
+        breakdownConsistent: true,
+        aggregatedTokenBreakdown: isSpecialPR ? [
+          { connectionCategory: 1, modelId: 'gpt-5.4-mini', totalInputTokens: 28775, totalOutputTokens: 1616 },
+          { connectionCategory: 5, modelId: 'gpt-5.4-nano', totalInputTokens: 21317, totalOutputTokens: 2373 },
+          { connectionCategory: 4, modelId: 'gpt-5.4-nano', totalInputTokens: 1263, totalOutputTokens: 669 },
+          { connectionCategory: 2, modelId: 'gpt-5.3-codex', totalInputTokens: 0, totalOutputTokens: 0 }
+        ] : [],
+        jobs: isSpecialPR ? [
+            {
+                jobId: pullRequestId === 42 ? 'job-123' : '72bc4447-4fa5-4dc2-b869-bb80e4e980a7',
+                status: 'completed',
+                submittedAt: new Date(Date.now() - 3600000).toISOString(),
+            totalInputTokens: 51355,
+            totalOutputTokens: 4658,
+                tokenBreakdown: [
+              { connectionCategory: 1, modelId: 'gpt-5.4-mini', totalInputTokens: 28775, totalOutputTokens: 1616 },
+              { connectionCategory: 5, modelId: 'gpt-5.4-nano', totalInputTokens: 21317, totalOutputTokens: 2373 },
+              { connectionCategory: 4, modelId: 'gpt-5.4-nano', totalInputTokens: 1263, totalOutputTokens: 669 },
+              { connectionCategory: 2, modelId: 'gpt-5.3-codex', totalInputTokens: 0, totalOutputTokens: 0 }
+                ]
+            }
+        ] : []
+    })
   })
 ]

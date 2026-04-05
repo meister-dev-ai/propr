@@ -1,3 +1,8 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.Text.Json;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -46,7 +51,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IJobRepository>(),
             Substitute.For<IPullRequestFetcher>(),
             Substitute.For<IFileByFileReviewOrchestrator>(),
-            Substitute.For<IAdoCommentPoster>(),
+            CreateCommentPoster(),
             Substitute.For<IAdoReviewerManager>(),
             clientRegistry,
             prScanRepository,
@@ -55,12 +60,34 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<ILogger<ReviewOrchestrationService>>());
     }
 
+    private static IAdoCommentPoster CreateCommentPoster()
+    {
+        var commentPoster = Substitute.For<IAdoCommentPoster>();
+        commentPoster.PostAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var result = callInfo.Arg<ReviewResult>();
+                return Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty(
+                    result.Comments.Count + result.CarriedForwardCandidatesSkipped,
+                    result.CarriedForwardCandidatesSkipped) with
+                {
+                    PostedCount = result.Comments.Count,
+                });
+            });
+
+        return commentPoster;
+    }
+
     private static ReviewJob CreateJob()
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
     }
 
-    private static PullRequest CreatePullRequest(IReadOnlyList<PrCommentThread>? threads = null)
+    private static PullRequest CreatePullRequest(IReadOnlyList<PrCommentThread>? threads = null, Guid? authorizedIdentityId = null)
     {
         return new PullRequest(
             "https://dev.azure.com/org",
@@ -75,7 +102,8 @@ public class ReviewOrchestrationServiceTests
             "main",
             new List<ChangedFile>().AsReadOnly(),
             PrStatus.Active,
-            threads);
+            threads,
+            AuthorizedIdentityId: authorizedIdentityId);
     }
 
     private static ReviewResult CreateReviewResult()
@@ -94,7 +122,10 @@ public class ReviewOrchestrationServiceTests
         ILogger<ReviewOrchestrationService> logger,
         IRepositoryInstructionFetcher? instructionFetcher = null,
         IRepositoryInstructionEvaluator? instructionEvaluator = null,
-        IRepositoryExclusionFetcher? exclusionFetcher = null)
+        IRepositoryExclusionFetcher? exclusionFetcher = null,
+        IAiConnectionRepository? aiRepo = null,
+        IAiChatClientFactory? chatFactory = null,
+        IProtocolRecorder? protocolRecorder = null)
     {
         var threadClient = Substitute.For<IAdoThreadClient>();
         var threadReplier = Substitute.For<IAdoThreadReplier>();
@@ -108,6 +139,9 @@ public class ReviewOrchestrationServiceTests
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
         var exclusionFetcherResolved = exclusionFetcher ?? CreateDefaultExclusionFetcher();
 
+        var aiDependencies = aiRepo is not null && chatFactory is not null
+            ? (aiRepo, chatFactory)
+            : CreateAiSubstitutes();
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -119,13 +153,15 @@ public class ReviewOrchestrationServiceTests
             threadClient,
             threadReplier,
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            protocolRecorder ?? Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             fetcher,
             exclusionFetcherResolved,
             evaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+                aiDependencies.aiRepo,
+                aiDependencies.chatFactory);
     }
 
     private static IRepositoryInstructionFetcher CreateDefaultInstructionFetcher()
@@ -162,6 +198,70 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<Guid?>(reviewerId));
     }
 
+    private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
+    {
+        var aiRepo = Substitute.For<IAiConnectionRepository>();
+        var connDto = new AiConnectionDto(Guid.NewGuid(), Guid.NewGuid(), "Test Connection", "https://api.test.com/", ["gpt-4o"], IsActive: true, ActiveModel: "gpt-4o", CreatedAt: DateTimeOffset.UtcNow);
+        aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(connDto));
+
+        var chatFactory = Substitute.For<IAiChatClientFactory>();
+        chatFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(Substitute.For<Microsoft.Extensions.AI.IChatClient>());
+
+        return (aiRepo, chatFactory);
+    }
+
+    private static bool HasReviewPostingFailureDiagnostics(string? details, ReviewJob job)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return false;
+        }
+
+        using var document = JsonDocument.Parse(details);
+        var root = document.RootElement;
+
+        return root.GetProperty("operation").GetString() == "publish_review_result" &&
+               root.GetProperty("jobId").GetGuid() == job.Id &&
+               root.GetProperty("pullRequestId").GetInt32() == job.PullRequestId &&
+               root.GetProperty("iterationId").GetInt32() == job.IterationId &&
+               root.GetProperty("repositoryId").GetString() == job.RepositoryId &&
+               root.GetProperty("clientId").GetGuid() == job.ClientId;
+    }
+
+    private static bool HasDedupSummaryDiagnostics(string? details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return false;
+        }
+
+        using var document = JsonDocument.Parse(details);
+        var root = document.RootElement;
+
+        return root.GetProperty("candidateCount").GetInt32() == 2 &&
+               root.GetProperty("carriedForwardCandidatesSkipped").GetInt32() == 1 &&
+               root.GetProperty("usedFallbackChecks").GetBoolean();
+    }
+
+    private static bool HasDedupDegradedDiagnostics(string? details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return false;
+        }
+
+        using var document = JsonDocument.Parse(details);
+        var root = document.RootElement;
+
+        return root.GetProperty("cause").GetString() == "Historical duplicate protection ran without thread-memory embeddings." &&
+               root.GetProperty("degradedComponents").EnumerateArray().Any(item => item.GetString() == "thread_memory_embedding") &&
+               root.GetProperty("fallbackChecks").EnumerateArray().Any(item => item.GetString() == "deterministic_text_similarity") &&
+               root.GetProperty("affectedCandidateCount").GetInt32() == 1 &&
+               root.GetProperty("reviewContinued").GetBoolean();
+    }
+
     [Fact]
     public async Task ProcessAsync_AiException_TransitionsJobToFailed()
     {
@@ -183,7 +283,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Throws(new Exception("AI error"));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -194,6 +294,129 @@ public class ReviewOrchestrationServiceTests
         // Assert
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("AI error")));
         await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ActiveConnectionWithoutSelectedModel_UsesFirstAvailableModel()
+    {
+        // Arrange
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var aiRepo = Substitute.For<IAiConnectionRepository>();
+        var activeConnection = new AiConnectionDto(
+            Guid.NewGuid(),
+            job.ClientId,
+            "Client Connection",
+            "https://api.test.com/",
+            ["gpt-4.1"],
+            IsActive: true,
+            ActiveModel: null,
+            CreatedAt: DateTimeOffset.UtcNow);
+        aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(activeConnection));
+
+        var chatClient = Substitute.For<Microsoft.Extensions.AI.IChatClient>();
+        var chatFactory = Substitute.For<IAiChatClientFactory>();
+        chatFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey).Returns(chatClient);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRepo: aiRepo,
+            chatFactory: chatFactory);
+
+        // Act
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Assert
+        await jobs.Received(1).UpdateAiConfigAsync(job.Id, activeConnection.Id, "gpt-4.1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ActiveConnectionWithoutAnyAvailableModel_FailsJobBeforeReviewDispatch()
+    {
+        // Arrange
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var aiRepo = Substitute.For<IAiConnectionRepository>();
+        aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(
+                new AiConnectionDto(
+                    Guid.NewGuid(),
+                    job.ClientId,
+                    "Broken Connection",
+                    "https://api.test.com/",
+                    [],
+                    IsActive: true,
+                    ActiveModel: null,
+                    CreatedAt: DateTimeOffset.UtcNow)));
+
+        var chatFactory = Substitute.For<IAiChatClientFactory>();
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRepo: aiRepo,
+            chatFactory: chatFactory);
+
+        // Act
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Assert
+        await jobs.Received(1).SetFailedAsync(
+            job.Id,
+            Arg.Is<string>(message => message.Contains("has no model deployment selected", StringComparison.OrdinalIgnoreCase)),
+            Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(),
+            Arg.Any<PullRequest>(),
+            Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
     }
 
     // T025 — AddOptionalReviewerAsync is called with client's ReviewerId before PostAsync
@@ -234,7 +457,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
@@ -246,6 +469,7 @@ public class ReviewOrchestrationServiceTests
         var threadReplier = Substitute.For<IAdoThreadReplier>();
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
 
+        var (aiRepo, chatFactory) = CreateAiSubstitutes();
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -263,7 +487,9 @@ public class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             instructionEvaluator,
             Substitute.For<Microsoft.Extensions.Options.IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+            aiRepo,
+            chatFactory);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
@@ -301,7 +527,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var callOrder = new List<string>();
@@ -326,7 +552,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<IReadOnlyList<PrCommentThread>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask)
+            .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty(result.Comments.Count)))
             .AndDoes(_ => callOrder.Add("post"));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -341,6 +567,10 @@ public class ReviewOrchestrationServiceTests
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var protocolId = Guid.NewGuid();
+        protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(protocolId);
 
         var job = CreateJob();
         var pr = CreatePullRequest();
@@ -357,7 +587,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
         commentPoster.PostAsync(
                 Arg.Any<string>(),
@@ -371,13 +601,29 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>())
             .Throws(new Exception("Comment post error"));
 
-        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            protocolRecorder: protocolRecorder);
 
         // Act
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Assert
         await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("Comment post error")));
+        await protocolRecorder.Received(1).RecordMemoryEventAsync(
+            protocolId,
+            "memory_operation_failed",
+            Arg.Is<string?>(details => HasReviewPostingFailureDiagnostics(details, job)),
+            Arg.Is<string?>(error => error != null && error.Contains("Failed while posting the review result", StringComparison.OrdinalIgnoreCase)),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received(1).SetCompletedAsync(protocolId, "Failed", 0, 0, 0, 0, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -468,7 +714,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -488,6 +734,134 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 threads,
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PassesResolvedThreadHistoryToCommentPoster()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var resolvedThreads = new List<PrCommentThread>
+        {
+            new(
+                8,
+                "/src/Foo.cs",
+                14,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: Previous concern.", Guid.NewGuid()),
+                }.AsReadOnly(),
+                "Fixed"),
+        }.AsReadOnly();
+
+        var pr = CreatePullRequest(resolvedThreads);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await commentPoster.Received(1).PostAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(),
+            Arg.Is<IReadOnlyList<PrCommentThread>?>(threads =>
+                threads != null &&
+                threads.Count == 1 &&
+                threads[0].ThreadId == 8 &&
+                threads[0].Status == "Fixed" &&
+                threads[0].Comments.Count == 1 &&
+                threads[0].Comments[0].Content == "WARNING: Previous concern."),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PostingDiagnostics_RecordDedupSummaryAndDegradedMode()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var pr = CreatePullRequest();
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+            .Returns(new ReviewResult("Summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Issue")])
+            {
+                CarriedForwardCandidatesSkipped = 1,
+            });
+
+        commentPoster.PostAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ReviewCommentPostingDiagnosticsDto
+            {
+                CandidateCount = 2,
+                PostedCount = 1,
+                SuppressedCount = 1,
+                CarriedForwardCandidatesSkipped = 1,
+                SuppressionReasons = new Dictionary<string, int>
+                {
+                    ["carried_forward_source"] = 1,
+                },
+                ConsideredOpenThreads = true,
+                ConsideredResolvedThreads = true,
+                FallbackChecks = ["deterministic_text_similarity"],
+                DegradedComponents = ["thread_memory_embedding"],
+                DegradedCause = "Historical duplicate protection ran without thread-memory embeddings.",
+                AffectedCandidateCount = 1,
+            }));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await protocolRecorder.Received(1).RecordDedupEventAsync(
+            Arg.Any<Guid>(),
+            "dedup_summary",
+            Arg.Is<string?>(details => HasDedupSummaryDiagnostics(details)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+
+        await protocolRecorder.Received(1).RecordDedupEventAsync(
+            Arg.Any<Guid>(),
+            "dedup_degraded_mode",
+            Arg.Is<string?>(details => HasDedupDegradedDiagnostics(details)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
     }
 
 
@@ -586,7 +960,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -630,7 +1004,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -718,7 +1092,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(emptyResult);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -743,7 +1117,7 @@ public class ReviewOrchestrationServiceTests
         var reviewerId = Guid.NewGuid();
         var job = CreateJob(); // IterationId = 1
         var result = CreateReviewResult();
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
 
         // Thread authored by reviewerId with 2 comments currently
         var thread = new PrCommentThread(
@@ -784,7 +1158,7 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateConversationalReplyAsync(Arg.Any<PrCommentThread>(), Arg.Any<CancellationToken>())
+        resolutionCore.EvaluateConversationalReplyAsync(Arg.Any<PrCommentThread>(), Arg.Any<Microsoft.Extensions.AI.IChatClient>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ThreadResolutionResult(false, null));
 
         // Build service with custom resolutionCore
@@ -792,6 +1166,7 @@ public class ReviewOrchestrationServiceTests
         stubToolsFactory
             .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
+        var (aiRepo, chatFactory) = CreateAiSubstitutes();
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -809,7 +1184,9 @@ public class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+            aiRepo,
+            chatFactory);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -817,15 +1194,109 @@ public class ReviewOrchestrationServiceTests
         await resolutionCore.Received(1)
             .EvaluateConversationalReplyAsync(
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 42),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, Arg.Any<CancellationToken>());
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, Arg.Any<CancellationToken>());
 
         // File-by-file review must NOT run — no new commit was pushed
         await orchestrator.DidNotReceiveWithAnyArgs()
             .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>(), null);
 
         // Job must be cleaned up after conversational reply
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SameIterationButNewRepliesOnAuthorizedIdentityThread_RunsConversationalPath()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var reviewerId = Guid.NewGuid();
+        var servicePrincipalId = Guid.NewGuid();
+        var job = CreateJob(); // IterationId = 1
+        var result = CreateReviewResult();
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
+
+        var thread = new PrCommentThread(
+            84,
+            "/src/Foo.cs",
+            10,
+            new List<PrThreadComment>
+            {
+                new("Bot", "Please fix this.", servicePrincipalId),
+                new("Dev", "I think it's fine."),
+            }.AsReadOnly());
+
+        var pr = CreatePullRequest(new List<PrCommentThread> { thread }.AsReadOnly(), servicePrincipalId);
+
+        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        existingScan.Threads.Add(
+            new ReviewPrScanThread
+            {
+                ReviewPrScanId = existingScan.Id,
+                ThreadId = 84,
+                LastSeenReplyCount = 0,
+            });
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
+
+        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
+        resolutionCore.EvaluateConversationalReplyAsync(Arg.Any<PrCommentThread>(), Arg.Any<Microsoft.Extensions.AI.IChatClient>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionResult(false, null));
+
+        var stubToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        stubToolsFactory
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Returns(Substitute.For<IReviewContextTools>());
+        var (aiRepo, chatFactory) = CreateAiSubstitutes();
+        var service = new ReviewOrchestrationService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            Substitute.For<IAdoThreadClient>(),
+            Substitute.For<IAdoThreadReplier>(),
+            resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
+            stubToolsFactory,
+            CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
+            CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
+            logger,
+            aiRepo,
+            chatFactory);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await resolutionCore.Received(1)
+            .EvaluateConversationalReplyAsync(
+                Arg.Is<PrCommentThread>(t => t.ThreadId == 84),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+        await resolutionCore.DidNotReceiveWithAnyArgs()
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceiveWithAnyArgs()
+            .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>(), null);
         await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
     }
 
@@ -839,7 +1310,7 @@ public class ReviewOrchestrationServiceTests
         var otherId = Guid.NewGuid();
         var job = CreateJob(); // IterationId = 1
         var result = CreateReviewResult();
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
 
         // Two threads: one by reviewer, one by someone else
         var reviewerThread = new PrCommentThread(
@@ -879,13 +1350,14 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<ReviewPrScan?>(null));
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateCodeChangeAsync(Arg.Any<PrCommentThread>(), Arg.Any<PullRequest>(), Arg.Any<CancellationToken>())
+        resolutionCore.EvaluateCodeChangeAsync(Arg.Any<PrCommentThread>(), Arg.Any<PullRequest>(), Arg.Any<Microsoft.Extensions.AI.IChatClient>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ThreadResolutionResult(false, null));
 
         var stubToolsFactory2 = Substitute.For<IReviewContextToolsFactory>();
         stubToolsFactory2
             .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
+        var (aiRepo2, chatFactory2) = CreateAiSubstitutes();
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -903,7 +1375,9 @@ public class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+            aiRepo2,
+            chatFactory2);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -912,6 +1386,8 @@ public class ReviewOrchestrationServiceTests
             .EvaluateCodeChangeAsync(
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 10),
                 Arg.Any<PullRequest>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
 
         // The other author's thread must NOT be evaluated
@@ -919,6 +1395,105 @@ public class ReviewOrchestrationServiceTests
             .EvaluateCodeChangeAsync(
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 20),
                 Arg.Any<PullRequest>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NewIteration_EvaluatesThreadsOwnedByAuthorizedIdentity()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var reviewerId = Guid.NewGuid();
+        var servicePrincipalId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var job = CreateJob(); // IterationId = 1
+        var result = CreateReviewResult();
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
+
+        var servicePrincipalThread = new PrCommentThread(
+            30,
+            "/src/A.cs",
+            1,
+            new List<PrThreadComment>
+            {
+                new("Bot", "Reviewer comment", servicePrincipalId),
+            }.AsReadOnly());
+
+        var otherThread = new PrCommentThread(
+            40,
+            "/src/B.cs",
+            2,
+            new List<PrThreadComment>
+            {
+                new("Human", "Human comment", otherId),
+            }.AsReadOnly());
+
+        var pr = CreatePullRequest(new List<PrCommentThread> { servicePrincipalThread, otherThread }.AsReadOnly(), servicePrincipalId);
+
+        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(null));
+
+        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
+        resolutionCore.EvaluateCodeChangeAsync(Arg.Any<PrCommentThread>(), Arg.Any<PullRequest>(), Arg.Any<Microsoft.Extensions.AI.IChatClient>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionResult(false, null));
+
+        var stubToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        stubToolsFactory
+            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Returns(Substitute.For<IReviewContextTools>());
+        var (aiRepo, chatFactory) = CreateAiSubstitutes();
+        var service = new ReviewOrchestrationService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            Substitute.For<IAdoThreadClient>(),
+            Substitute.For<IAdoThreadReplier>(),
+            resolutionCore,
+            Substitute.For<IProtocolRecorder>(),
+            stubToolsFactory,
+            CreateDefaultInstructionFetcher(),
+            CreateDefaultExclusionFetcher(),
+            CreateDefaultInstructionEvaluator(),
+            Substitute.For<IOptions<AiReviewOptions>>(),
+            logger,
+            aiRepo,
+            chatFactory);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await resolutionCore.Received(1)
+            .EvaluateCodeChangeAsync(
+                Arg.Is<PrCommentThread>(t => t.ThreadId == 30),
+                Arg.Any<PullRequest>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+
+        await resolutionCore.DidNotReceive()
+            .EvaluateCodeChangeAsync(
+                Arg.Is<PrCommentThread>(t => t.ThreadId == 40),
+                Arg.Any<PullRequest>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
     }
 
@@ -943,7 +1518,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -983,12 +1558,12 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         ReviewSystemContext? capturedContext = null;
         orchestrator
-            .When(x => x.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()))
+            .When(x => x.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()))
             .Do(ci => capturedContext = ci.ArgAt<ReviewSystemContext>(2));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -1034,7 +1609,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger, instructionFetcher);
@@ -1085,7 +1660,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -1137,7 +1712,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(
@@ -1202,7 +1777,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(result);
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
@@ -1216,7 +1791,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
                 Arg.Is<ReviewSystemContext>(ctx => ctx.ClientSystemMessage == expectedMessage),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
     }
 
     // O1/O6 — threads with a resolved ADO status are skipped; resolution AI is never called for them
@@ -1230,7 +1806,7 @@ public class ReviewOrchestrationServiceTests
         var reviewerId = Guid.NewGuid();
         var job = CreateJob();
         var result = CreateReviewResult();
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
 
         // Reviewer-authored thread that ADO already set to "Fixed"
         var fixedThread = new PrCommentThread(
@@ -1260,6 +1836,7 @@ public class ReviewOrchestrationServiceTests
             .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
 
+        var (aiRepoF, chatFactoryF) = CreateAiSubstitutes();
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -1277,15 +1854,17 @@ public class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+            aiRepoF,
+            chatFactoryF);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
         // Resolution AI must not be called at all — the thread is already fixed
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!);
+            .EvaluateConversationalReplyAsync(null!, null!, null!);
     }
 
     [Theory]
@@ -1301,7 +1880,7 @@ public class ReviewOrchestrationServiceTests
         var reviewerId = Guid.NewGuid();
         var job = CreateJob();
         var result = CreateReviewResult();
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>()).Returns(result);
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>()).Returns(result);
 
         var resolvedThread = new PrCommentThread(
             100,
@@ -1330,6 +1909,7 @@ public class ReviewOrchestrationServiceTests
             .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
             .Returns(Substitute.For<IReviewContextTools>());
 
+        var (aiRepoR, chatFactoryR) = CreateAiSubstitutes();
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -1347,14 +1927,16 @@ public class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             CreateDefaultInstructionEvaluator(),
             Substitute.For<IOptions<AiReviewOptions>>(),
-            logger);
+            logger,
+            aiRepoR,
+            chatFactoryR);
 
         await service.ProcessAsync(job, CancellationToken.None);
 
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!);
+            .EvaluateConversationalReplyAsync(null!, null!, null!);
     }
 
     // --- T012: US1 PR Abandonment tests (failing until T019 is implemented) ---
@@ -1439,7 +2021,7 @@ public class ReviewOrchestrationServiceTests
             .Returns(pr);
 
         var reviewResult = new ReviewResult("A thorough review summary.", new List<ReviewComment>().AsReadOnly());
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(Task.FromResult(reviewResult));
 
         // Pre-review checkpoint: GetById returns non-Cancelled (let pre-check pass)
@@ -1530,7 +2112,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(CreateReviewResult());
 
         // Scan shows prior iteration was 1
@@ -1562,7 +2144,7 @@ public class ReviewOrchestrationServiceTests
 
         // Assert 3: AI orchestrator was still called (for the delta file Changed.cs)
         await orchestrator.Received(1).ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
     }
 
     [Fact]
@@ -1585,7 +2167,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(CreateReviewResult());
 
         // Scan shows prior iteration 1 (so compareToIterationId will be 1)
@@ -1611,7 +2193,7 @@ public class ReviewOrchestrationServiceTests
 
         // Assert: AI orchestrator was called normally
         await orchestrator.Received(1).ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
     }
 
     [Fact]
@@ -1682,7 +2264,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(pr);
-        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+        orchestrator.ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(CreateReviewResult());
 
         var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
@@ -1712,5 +2294,183 @@ public class ReviewOrchestrationServiceTests
             job.Id,
             Arg.Is<ReviewResult>(r => !r.CarriedForwardFilePaths.Contains("src/Changed.cs")),
             Arg.Any<CancellationToken>());
+    }
+
+    // ─── T068: Characterization tests act as a safety net for Phase 8 refactoring ───
+
+    /// <summary>
+    ///     T068 (a): When the PR is no longer active (completed state), ProcessAsync sets the job to
+    ///     Failed without dispatching a file review or posting a comment.
+    /// </summary>
+    [Fact]
+    public async Task T068_CharacterizationA_InactivePr_JobSetFailed_NoReviewDispatched()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) = CreateDeps();
+        var job = CreateJob();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var completedPr = new PullRequest(
+            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 1,
+            "Completed PR", null, "feature/x", "main",
+            new List<ChangedFile>().AsReadOnly(),
+            PrStatus.Completed, null);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(completedPr);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received().SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
+        await commentPoster.DidNotReceive().PostAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     T068 (b): When the PR's iteration has already been reviewed (no new commit, no new replies),
+    ///     ProcessAsync deletes the job without dispatching a file review.
+    /// </summary>
+    [Fact]
+    public async Task T068_CharacterizationB_NoNewIteration_NoNewReplies_JobDeletedWithoutReview()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) = CreateDeps();
+        var job = CreateJob();
+        var reviewerId = Guid.NewGuid();
+
+        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
+
+        // Existing scan with same iteration key → no new iteration
+        var existingScan = new ReviewPrScan(
+            Guid.NewGuid(),
+            job.ClientId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId.ToString());
+
+        prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
+
+        // PR thread authored by reviewer with no user replies → no new replies
+        var reviewerThread = new PrCommentThread(
+            1001,
+            null,
+            null,
+            new List<PrThreadComment>
+            {
+                new("Bot", "LGTM.", reviewerId),
+            }.AsReadOnly());
+
+        var activePr = new PullRequest(
+            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 1,
+            "Test PR", null, "feature/x", "main",
+            new List<ChangedFile>().AsReadOnly(),
+            PrStatus.Active,
+            [reviewerThread]);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(activePr);
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
+        await jobs.Received().DeleteAsync(job.Id, Arg.Any<CancellationToken>());
+        await commentPoster.DidNotReceive().PostAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     T068 (c): Full review path — new scan, active PR, non-empty review result →
+    ///     ProcessAsync dispatches file review, posts comment, sets job result, and saves scan.
+    /// </summary>
+    [Fact]
+    public async Task T068_CharacterizationC_FullReviewPath_ReviewDispatchedAndResultPersisted()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) = CreateDeps();
+        var job = CreateJob();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        // No existing scan → new iteration
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(null));
+
+        var changedFile = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff");
+        var activePr = new PullRequest(
+            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 1,
+            "Test PR", null, "feature/x", "main",
+            [changedFile],
+            PrStatus.Active, null);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(activePr);
+
+        var reviewResult = new ReviewResult("Summary of review.", new List<ReviewComment>().AsReadOnly());
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+            .Returns(Task.FromResult(reviewResult));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.Received(1).ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
+        await commentPoster.Received(1).PostAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ReviewResult>(),
+            Arg.Any<Guid?>(), Arg.Any<IReadOnlyList<PrCommentThread>?>(), Arg.Any<CancellationToken>());
+        await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     T068 (d): When reviewer identity is not configured for the client,
+    ///     ProcessAsync immediately sets the job to Failed without fetching the PR.
+    /// </summary>
+    [Fact]
+    public async Task T068_CharacterizationD_NoReviewerIdentity_JobSetFailedNoPrFetch()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) = CreateDeps();
+        var job = CreateJob();
+
+        // Reviewer identity NOT configured
+        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Guid?>(null));
+
+        var sut = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await prFetcher.DidNotReceive().FetchAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+            Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        await orchestrator.DidNotReceive().ReviewAsync(
+            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>());
     }
 }

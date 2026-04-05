@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -20,7 +23,7 @@ public sealed class EfProtocolRecorder(
     ILogger<EfProtocolRecorder> logger) : IProtocolRecorder
 {
     /// <inheritdoc />
-    public async Task<Guid> BeginAsync(Guid jobId, int attemptNumber, string? label = null, Guid? fileResultId = null, CancellationToken ct = default)
+    public async Task<Guid> BeginAsync(Guid jobId, int attemptNumber, string? label = null, Guid? fileResultId = null, AiConnectionModelCategory? connectionCategory = null, string? modelId = null, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var protocol = new ReviewJobProtocol
@@ -31,6 +34,8 @@ public sealed class EfProtocolRecorder(
             Label = label,
             FileResultId = fileResultId,
             StartedAt = DateTimeOffset.UtcNow,
+            AiConnectionCategory = connectionCategory,
+            ModelId = modelId,
         };
         db.ReviewJobProtocols.Add(protocol);
         await db.SaveChangesAsync(ct);
@@ -45,7 +50,8 @@ public sealed class EfProtocolRecorder(
         long? outputTokens,
         string? inputTextSample,
         string? outputTextSample,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? name = null)
     {
         try
         {
@@ -55,7 +61,7 @@ public sealed class EfProtocolRecorder(
                 Id = Guid.NewGuid(),
                 ProtocolId = protocolId,
                 Kind = ProtocolEventKind.AiCall,
-                Name = $"ai_call_iter_{iteration}",
+                Name = name ?? $"ai_call_iter_{iteration}",
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
@@ -138,13 +144,121 @@ public sealed class EfProtocolRecorder(
             var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
             if (job is not null)
             {
-                job.AccumulateTokens(totalInputTokens, totalOutputTokens);
+                // Always accumulate into breakdown, using Default category if none specified
+                var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
+                var modelId = protocol.ModelId ?? "(default)";
+                job.AccumulateTierTokens(category, modelId, totalInputTokens, totalOutputTokens);
+
                 await db.SaveChangesAsync(ct);
+
+                // Upsert daily token usage aggregate for the client owning this job.
+                if (totalInputTokens > 0 || totalOutputTokens > 0)
+                {
+                    var usageRepo = new ClientTokenUsageRepository(db);
+                    await usageRepo.UpsertAsync(
+                        job.ClientId,
+                        modelId,
+                        DateOnly.FromDateTime(DateTime.UtcNow),
+                        totalInputTokens,
+                        totalOutputTokens,
+                        ct);
+                }
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to set completed state for protocol {ProtocolId}", protocolId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task AddTokensAsync(
+        Guid protocolId,
+        long inputTokens,
+        long outputTokens,
+        AiConnectionModelCategory? connectionCategory = null,
+        string? modelId = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            var protocol = await db.ReviewJobProtocols.FindAsync([protocolId], ct);
+            if (protocol is null)
+            {
+                return;
+            }
+
+            protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + inputTokens;
+            protocol.TotalOutputTokens = (protocol.TotalOutputTokens ?? 0) + outputTokens;
+            await db.SaveChangesAsync(ct);
+
+            var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
+            if (job is not null)
+            {
+                // Always accumulate into breakdown, using provided category or Default if none
+                var category = connectionCategory ?? AiConnectionModelCategory.Default;
+                var effectiveModelId = modelId ?? "(default)";
+                job.AccumulateTierTokens(category, effectiveModelId, inputTokens, outputTokens);
+
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to add tokens for protocol {ProtocolId}", protocolId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RecordMemoryEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, error, ct, "memory");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordDedupEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, error, ct, "duplicate-suppression");
+    }
+
+    private async Task RecordOperationalEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? error,
+        CancellationToken ct,
+        string eventCategory)
+    {
+        try
+        {
+            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            var ev = new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocolId,
+                Kind = ProtocolEventKind.MemoryOperation,
+                Name = eventName,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = Sanitize(details),
+                Error = Sanitize(error),
+            };
+            db.ProtocolEvents.Add(ev);
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to record {EventCategory} event {EventName} for protocol {ProtocolId}", eventCategory, eventName, protocolId);
         }
     }
 

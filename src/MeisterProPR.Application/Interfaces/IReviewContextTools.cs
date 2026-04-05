@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -27,4 +31,24 @@ public interface IReviewContextTools
     /// <param name="endLine">One-based line number to stop reading at (inclusive).</param>
     /// <param name="ct">Cancellation token.</param>
     Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct);
+
+    /// <summary>
+    ///     Asks ProCursor a reviewer-facing knowledge question using the current review repository context.
+    /// </summary>
+    /// <param name="question">Natural-language question to ask against configured knowledge sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct);
+
+    /// <summary>
+    ///     Requests symbol-aware ProCursor insight using the current review repository context.
+    /// </summary>
+    /// <param name="symbol">Requested symbol name, qualified name, or stable symbol key.</param>
+    /// <param name="queryMode">Optional symbol lookup mode.</param>
+    /// <param name="maxRelations">Optional maximum number of related edges to return.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+        string symbol,
+        string? queryMode,
+        int? maxRelations,
+        CancellationToken ct);
 }

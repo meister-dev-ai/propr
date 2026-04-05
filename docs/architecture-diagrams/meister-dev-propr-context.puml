@@ -1,0 +1,111 @@
+@startuml MeisterProPR-Context
+!include <C4/C4_Context>
+
+LAYOUT_LEFT_RIGHT()
+LAYOUT_WITH_LEGEND()
+
+!define ICONURL https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/v2.4.0
+!includeurl ICONURL/common.puml
+!includeurl ICONURL/devicons2/vscode.puml
+!includeurl ICONURL/devicons2/github_original.puml
+!includeurl ICONURL/devicons2/ssh_original.puml
+!includeurl ICONURL/devicons2/googlecloud.puml
+!includeurl ICONURL/devicons2/amazonwebservices_original.puml
+!includeurl ICONURL/devicons2/git.puml
+
+'' ═══════════════════════════════════════════════════════════════════
+'' Unified GitHub-dark palette
+''   Canvas  #0d1117   Panel   #161b22   Border  #30363d
+''   FontHi  #e6edf3   FontMid #c9d1d9  FontLo  #8b949e
+''   Accent  #388bfd   Focus   #1b3a6b
+'' ═══════════════════════════════════════════════════════════════════
+
+' Canvas
+skinparam backgroundColor #0d1117
+skinparam shadowing false
+
+' Typography
+skinparam defaultFontColor #c9d1d9
+skinparam defaultFontSize 11
+skinparam ArrowFontSize 10
+skinparam ArrowFontColor #8b949e
+skinparam titleFontColor #e6edf3
+skinparam titleFontSize 14
+
+' Arrows
+skinparam ArrowColor #388bfd
+
+' All rectangles — base (devicons boxes, System_Ext, and fallback)
+skinparam rectangle {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+  RoundCorner 6
+}
+
+' C4 System in focus (MeisterProPR)
+skinparam rectangle<<System>> BackgroundColor #1b3a6b
+skinparam rectangle<<System>> BorderColor #388bfd
+skinparam rectangle<<System>> FontColor #e6edf3
+skinparam rectangle<<system>> BackgroundColor #1b3a6b
+skinparam rectangle<<system>> BorderColor #388bfd
+skinparam rectangle<<system>> FontColor #e6edf3
+
+' C4 System_Ext — same panel style, slightly brighter border
+skinparam rectangle<<System_Ext>> BackgroundColor #161b22
+skinparam rectangle<<System_Ext>> BorderColor #444d56
+skinparam rectangle<<System_Ext>> FontColor #c9d1d9
+skinparam rectangle<<system_ext>> BackgroundColor #161b22
+skinparam rectangle<<system_ext>> BorderColor #444d56
+skinparam rectangle<<system_ext>> FontColor #c9d1d9
+
+' Boundary packages
+skinparam package {
+  BackgroundColor #0d1117
+  BorderColor #30363d
+  FontColor #8b949e
+}
+
+' Legend
+skinparam LegendBackgroundColor #161b22
+skinparam LegendBorderColor #30363d
+
+title MeisterProPR - System Context
+
+' ── Person / Actor ───────────────────────────────────────────────────────────
+DEV2_VSCODE(user, "Developer / DevOps\nCreates PRs; configures\nreview policies via Admin UI", rectangle, #58a6ff)
+
+' ── System in focus ──────────────────────────────────────────────────────────
+System(propr, "MeisterProPR", "AI-powered PR reviewer.\nConnects ADO to AI providers;\nposts review comments.")
+
+' ── AI providers ─────────────────────────────────────────────────────────────
+System_Boundary(aib, "AI Providers") {
+    DEV2_GOOGLECLOUD(aoai,    "Azure OpenAI\nGPT-4o / o-series models",              rectangle, #58a6ff)
+    DEV2_AMAZONWEBSERVICES_ORIGINAL(otherai, "Other AI Providers\nOpenAI · Anthropic · Cohere", rectangle, #58a6ff)
+}
+
+' ── Identity ─────────────────────────────────────────────────────────────────
+System_Boundary(idb, "Identity") {
+    DEV2_SSH_ORIGINAL(svc,    "Service Principal / MI\nRuntime Entra ID identity\nfor ADO & AI API calls",    rectangle, #58a6ff)
+    DEV2_GITHUB_ORIGINAL(rev, "Reviewer Identity\nADO account used to\npost review comments",                rectangle, #58a6ff)
+}
+
+' ── Azure DevOps ───────────────────────────────────────────────────────────
+System_Boundary(azb, "Azure") {
+  DEV2_GIT(ado, "Azure DevOps", rectangle, #58a6ff)
+}
+
+' ── Relationships ─────────────────────────────────────────────────────────────
+Rel(user,  propr, "Configures rules & policies", "Admin UI")
+Rel(user,  ado,   "Opens PRs")
+
+Rel_D(propr, ado, "Reads diffs; posts reviews")
+Rel(propr, aoai,    "AI analysis", "OpenAI API")
+Rel(propr, otherai, "AI analysis", "AI API")
+Rel(propr, svc,  "Authenticates as", "Entra ID / MI")
+Rel(rev,   propr, "Triggers review")
+
+Rel(ado, user, "Shows reviews")
+
+@enduml
+

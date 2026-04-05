@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.ClientModel;
 using System.Net.Http.Json;
 using Azure.AI.OpenAI;
@@ -13,7 +16,7 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     Supports both <c>*.openai.azure.com</c> and <c>*.services.ai.azure.com</c> (Azure AI Foundry)
 ///     endpoints with optional API key or <see cref="DefaultAzureCredential"/> auth.
 /// </summary>
-public sealed partial class AiChatClientFactory(IHttpClientFactory httpClientFactory, ILogger<AiChatClientFactory> logger) : IAiChatClientFactory
+public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> logger) : IAiChatClientFactory
 {
     /// <inheritdoc />
     public IChatClient CreateClient(string endpointUrl, string? apiKey)

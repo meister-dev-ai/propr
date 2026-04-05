@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
@@ -149,8 +152,6 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
             builder.UseEnvironment("Testing");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
-            builder.UseSetting("MEISTER_CLIENT_KEYS", "test-client-key-1234567890");
-            builder.UseSetting("MEISTER_ADMIN_KEY", "admin-key-min-16-chars-ok");
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
@@ -178,12 +179,7 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
-
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(Arg.Any<string>()).Returns(false);
-                clientRegistry.GetClientIdByKeyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(null));
-                services.AddSingleton(clientRegistry);
+                services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
     }

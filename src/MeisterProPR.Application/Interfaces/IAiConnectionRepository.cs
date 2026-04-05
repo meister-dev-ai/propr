@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.Enums;
 
@@ -22,6 +25,7 @@ public interface IAiConnectionRepository
         string endpointUrl,
         IReadOnlyList<string> models,
         string? apiKey,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities = null,
         AiConnectionModelCategory? modelCategory = null,
         CancellationToken ct = default);
 
@@ -32,6 +36,7 @@ public interface IAiConnectionRepository
         string? endpointUrl,
         IReadOnlyList<string>? models,
         string? apiKey,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities,
         CancellationToken ct = default);
 
     /// <summary>Deletes the given connection. Returns false if not found.</summary>

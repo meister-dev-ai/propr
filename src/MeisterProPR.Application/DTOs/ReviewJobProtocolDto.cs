@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.DTOs;
@@ -18,6 +21,8 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="IterationCount">Number of loop iterations completed.</param>
 /// <param name="ToolCallCount">Total tool calls made during the loop.</param>
 /// <param name="FinalConfidence">Final aggregated confidence score (0–100), or null if unavailable.</param>
+/// <param name="AiConnectionCategory">The effort tier used for this protocol pass. Null for legacy records.</param>
+/// <param name="ModelId">The AI model deployment name used for this protocol pass. Null for legacy records.</param>
 /// <param name="Events">Ordered list of events captured during the loop.</param>
 public sealed record ReviewJobProtocolDto(
     Guid Id,
@@ -33,6 +38,8 @@ public sealed record ReviewJobProtocolDto(
     int? IterationCount,
     int? ToolCallCount,
     int? FinalConfidence,
+    AiConnectionModelCategory? AiConnectionCategory,
+    string? ModelId,
     IReadOnlyList<ProtocolEventDto> Events);
 
 /// <summary>

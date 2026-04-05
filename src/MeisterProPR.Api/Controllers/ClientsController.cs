@@ -1,27 +1,26 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using FluentValidation;
 using FluentValidation.Results;
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
-/// <summary>Manages clients (admin) and crawl configurations (client-scoped).</summary>
+/// <summary>Manages clients (admin), ADO credentials, and reviewer identity.</summary>
 [ApiController]
 public sealed partial class ClientsController(
     IClientAdminService clientAdminService,
-    IClientRegistry clientRegistry,
-    ICrawlConfigurationRepository crawlConfigs,
     IClientAdoCredentialRepository adoCredentialRepository,
+    IClientAdoOrganizationScopeRepository organizationScopeRepository,
     IUserRepository userRepository,
     ILogger<ClientsController> logger) : ControllerBase
 {
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Reviewer identity updated for client {ClientId} by {ActorType}")]
-    private static partial void LogReviewerIdentityUpdated(ILogger logger, Guid clientId, string actorType);
-
     private static ClientResponse ToClientResponse(ClientDto client)
     {
         return new ClientResponse(
@@ -51,106 +50,44 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Adds a crawl configuration for the specified client. Requires <c>X-Client-Key</c> that owns the client.
+    ///     Returns null if the caller is a global admin.
+    ///     Returns 403 Forbidden if the caller is authenticated but not admin.
+    ///     Returns 401 Unauthorized if the caller is unauthenticated.
     /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Crawl configuration details.</param>
-    /// <param name="validator">Validator for the request body.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="201">Configuration created.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">Client not found.</response>
-    /// <response code="409">A crawl configuration for this organisation and project already exists.</response>
-    [HttpPost("clients/{clientId:guid}/crawl-configurations")]
-    [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> AddCrawlConfiguration(
-        Guid clientId,
-        [FromBody] CreateCrawlConfigRequest request,
-        [FromServices] IValidator<CreateCrawlConfigRequest> validator,
-        CancellationToken ct = default)
+    private IActionResult? RequireAdmin()
     {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
-        {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
-        }
+        return AuthHelpers.RequireAdmin(this.HttpContext);
+    }
 
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
-        {
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-        }
-
-        var clientExists = await clientAdminService.ExistsAsync(clientId, ct);
-        if (!clientExists)
-        {
-            return this.NotFound();
-        }
-
-        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        if (await crawlConfigs.ExistsAsync(clientId, request.OrganizationUrl, request.ProjectId, ct))
-        {
-            return this.Conflict(new { error = "A crawl configuration for this organisation and project already exists." });
-        }
-
-        var config = await crawlConfigs.AddAsync(
-            clientId,
-            request.OrganizationUrl,
-            request.ProjectId,
-            request.CrawlIntervalSeconds,
-            ct);
-
-        return this.CreatedAtAction(
-            nameof(this.GetCrawlConfigurations),
-            new { clientId },
-            new CrawlConfigResponse(
-                config.Id,
-                config.ClientId,
-                config.OrganizationUrl,
-                config.ProjectId,
-                config.CrawlIntervalSeconds,
-                config.IsActive,
-                config.CreatedAt,
-                config.RepoFilters
-                    .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
-                    .ToList()));
+    private IActionResult? RequireClientAccess(Guid clientId, ClientRole minimumRole)
+    {
+        return AuthHelpers.RequireClientRole(this.HttpContext, clientId, minimumRole);
     }
 
     /// <summary>
-    ///     Registers a new client. Requires <c>X-Admin-Key</c>.
+    ///     Registers a new client. Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="request">Client registration details.</param>
     /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="201">Client registered.</response>
     /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
-    /// <response code="409">A client with that key already exists.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller is not a global admin.</response>
     [HttpPost("clients")]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateClient(
         [FromBody] CreateClientRequest request,
         [FromServices] IValidator<CreateClientRequest> validator,
         CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireAdmin();
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return auth;
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -159,11 +96,7 @@ public sealed partial class ClientsController(
             return validation;
         }
 
-        var client = await clientAdminService.CreateAsync(request.Key, request.DisplayName, ct);
-        if (client is null)
-        {
-            return this.Conflict(new { error = "A client with that key already exists." });
-        }
+        var client = await clientAdminService.CreateAsync(request.DisplayName, ct);
 
         return this.CreatedAtAction(
             nameof(this.GetClient),
@@ -172,13 +105,13 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Removes ADO service principal credentials from a client. Requires <c>X-Admin-Key</c>.
-    ///     The client falls back to the global backend identity on subsequent ADO operations.
+    ///     Removes ADO service principal credentials from a client.
+    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Credentials removed (or client had no credentials — idempotent).</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">Missing or invalid admin credentials.</response>
     /// <response code="404">Client not found.</response>
     [HttpDelete("clients/{clientId:guid}/ado-credentials")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -186,9 +119,10 @@ public sealed partial class ClientsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteAdoCredentials(Guid clientId, CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireAdmin();
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return auth;
         }
 
         if (!await clientAdminService.ExistsAsync(clientId, ct))
@@ -201,11 +135,12 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Deletes a client and all its crawl configurations. Requires <c>X-Admin-Key</c>.
+    ///     Deletes a client and all its crawl configurations.
+    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <response code="204">Client deleted.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">Missing or invalid admin credentials.</response>
     /// <response code="404">Client not found.</response>
     [HttpDelete("clients/{clientId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -213,9 +148,10 @@ public sealed partial class ClientsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteClient(Guid clientId)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireAdmin();
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return auth;
         }
 
         var deleted = await clientAdminService.DeleteAsync(clientId);
@@ -223,52 +159,13 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Deletes a crawl configuration. Requires <c>X-Client-Key</c> that owns the client.
+    ///     Gets a single client by ID.
+    ///     Requires valid user authentication and access to the requested client.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
-    /// <param name="configId">Configuration identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Configuration deleted.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">Configuration not found.</response>
-    [HttpDelete("clients/{clientId:guid}/crawl-configurations/{configId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteCrawlConfiguration(
-        Guid clientId,
-        Guid configId,
-        CancellationToken ct = default)
-    {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
-        {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
-        }
-
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
-        {
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-        }
-
-        var deleted = await crawlConfigs.DeleteAsync(configId, clientId, ct);
-        if (!deleted)
-        {
-            return this.NotFound();
-        }
-
-        return this.NoContent();
-    }
-
-    /// <summary>
-    ///     Gets a single client by ID. Requires <c>X-Admin-Key</c>.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
     /// <response code="200">Client found.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Client not found.</response>
     [HttpGet("clients/{clientId:guid}")]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
@@ -277,13 +174,14 @@ public sealed partial class ClientsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetClient(Guid clientId, CancellationToken ct = default)
     {
-        var isAdmin = this.HttpContext.Items["IsAdmin"] is true;
-        var userId = this.HttpContext.Items["UserId"] is string s && Guid.TryParse(s, out var id) ? id : (Guid?)null;
-
-        if (!isAdmin && userId is null)
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid credentials required." });
+            return auth;
         }
+
+        var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
+        var userId = AuthHelpers.GetUserId(this.HttpContext);
 
         var client = await clientAdminService.GetByIdAsync(clientId, ct);
         if (client is null)
@@ -308,8 +206,8 @@ public sealed partial class ClientsController(
     /// <summary>
     ///     Lists registered clients.
     ///     Admins receive all clients.
-    ///     Non-Admin users receive only clients for their assigned roles.
-    ///     Requires either a valid <c>X-Admin-Key</c> / JWT Bearer token.
+    ///     Non-admin users receive only clients for their assigned roles.
+    ///     Requires a valid JWT bearer token or <c>X-User-Pat</c>.
     /// </summary>
     /// <response code="200">List of clients.</response>
     /// <response code="401">No valid credentials provided.</response>
@@ -318,13 +216,14 @@ public sealed partial class ClientsController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetClients(CancellationToken ct = default)
     {
-        var isAdmin = this.HttpContext.Items["IsAdmin"] is true;
-        var userId = this.HttpContext.Items["UserId"] is string s && Guid.TryParse(s, out var id) ? id : (Guid?)null;
-
-        if (!isAdmin && userId is null)
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid credentials required." });
+            return auth;
         }
+
+        var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
+        var userId = AuthHelpers.GetUserId(this.HttpContext);
 
         if (isAdmin)
         {
@@ -345,50 +244,8 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Lists crawl configurations for the specified client. Requires <c>X-Client-Key</c> that owns the client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">List of crawl configurations.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    [HttpGet("clients/{clientId:guid}/crawl-configurations")]
-    [ProducesResponseType(typeof(IReadOnlyList<CrawlConfigResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetCrawlConfigurations(Guid clientId, CancellationToken ct = default)
-    {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
-        {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
-        }
-
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
-        {
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-        }
-
-        var configs = await crawlConfigs.GetByClientAsync(clientId, ct);
-        return this.Ok(
-            configs.Select(c => new CrawlConfigResponse(
-                    c.Id,
-                    c.ClientId,
-                    c.OrganizationUrl,
-                    c.ProjectId,
-                    c.CrawlIntervalSeconds,
-                    c.IsActive,
-                    c.CreatedAt,
-                    c.RepoFilters
-                        .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
-                        .ToList()))
-                .ToList());
-    }
-
-    /// <summary>
     ///     Updates one or more fields of a client (display name, active status, custom system message).
-    ///     Requires <c>X-Admin-Key</c>.
+    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
@@ -396,7 +253,7 @@ public sealed partial class ClientsController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Client updated.</response>
     /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">Missing or invalid admin credentials.</response>
     /// <response code="404">Client not found.</response>
     [HttpPatch("clients/{clientId:guid}")]
     [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
@@ -409,9 +266,10 @@ public sealed partial class ClientsController(
         [FromServices] IValidator<PatchClientRequest> validator,
         CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireAdmin();
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return auth;
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -431,64 +289,8 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Enables or disables a crawl configuration. Requires <c>X-Client-Key</c> that owns the client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="configId">Configuration identifier.</param>
-    /// <param name="request">Update request.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Configuration updated.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">Configuration not found.</response>
-    [HttpPatch("clients/{clientId:guid}/crawl-configurations/{configId:guid}")]
-    [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> PatchCrawlConfiguration(
-        Guid clientId,
-        Guid configId,
-        [FromBody] PatchCrawlConfigRequest request,
-        CancellationToken ct = default)
-    {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
-        {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
-        }
-
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
-        {
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-        }
-
-        var updated = await crawlConfigs.SetActiveAsync(configId, clientId, request.IsActive, ct);
-        if (!updated)
-        {
-            return this.NotFound();
-        }
-
-        var configs = await crawlConfigs.GetByClientAsync(clientId, ct);
-        var config = configs.First(c => c.Id == configId);
-
-        return this.Ok(
-            new CrawlConfigResponse(
-                config.Id,
-                config.ClientId,
-                config.OrganizationUrl,
-                config.ProjectId,
-                config.CrawlIntervalSeconds,
-                config.IsActive,
-                config.CreatedAt,
-                config.RepoFilters
-                    .Select(f => new CrawlRepoFilterResponse(f.Id, f.RepositoryName, f.TargetBranchPatterns))
-                    .ToList()));
-    }
-
-    /// <summary>
-    ///     Sets or replaces ADO service principal credentials for a client. Requires <c>X-Admin-Key</c>.
+    ///     Sets or replaces ADO service principal credentials for a client.
+    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="request">ADO credential details — all three fields required.</param>
@@ -496,7 +298,7 @@ public sealed partial class ClientsController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Credentials stored.</response>
     /// <response code="400">One or more fields are missing or blank.</response>
-    /// <response code="401">Missing or invalid <c>X-Admin-Key</c>.</response>
+    /// <response code="401">Missing or invalid admin credentials.</response>
     /// <response code="404">Client not found.</response>
     [HttpPut("clients/{clientId:guid}/ado-credentials")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -509,9 +311,10 @@ public sealed partial class ClientsController(
         [FromServices] IValidator<SetAdoCredentialsRequest> validator,
         CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireAdmin();
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Admin-Key required." });
+            return auth;
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -535,7 +338,7 @@ public sealed partial class ClientsController(
 
     /// <summary>
     ///     Sets or replaces the ADO reviewer identity GUID for a client.
-    ///     Accepts either <c>X-Admin-Key</c> (any client) or <c>X-Client-Key</c> (own client only).
+    ///     Requires global admin or <c>ClientAdministrator</c> role for the specified client.
     ///     Until this is set, review jobs for the client will be rejected.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
@@ -544,8 +347,8 @@ public sealed partial class ClientsController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Reviewer identity stored.</response>
     /// <response code="400"><paramref name="request" /> contains an empty GUID.</response>
-    /// <response code="401">Missing or invalid authentication header.</response>
-    /// <response code="403">Caller does not own this client.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required role for this client.</response>
     /// <response code="404">Client not found.</response>
     [HttpPut("clients/{clientId:guid}/reviewer-identity")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -561,25 +364,19 @@ public sealed partial class ClientsController(
     {
         string actorType;
 
-        if (this.HttpContext.Items["IsAdmin"] is true)
+        if (AuthHelpers.IsAdmin(this.HttpContext))
         {
             actorType = "Admin";
         }
         else
         {
-            var callerKey = this.HttpContext.Items["ClientKey"] as string;
-            if (string.IsNullOrWhiteSpace(callerKey))
+            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+            if (roleCheck is not null)
             {
-                return this.Unauthorized(new { error = "Valid X-Admin-Key or X-Client-Key required." });
+                return roleCheck;
             }
 
-            var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-            if (callerId is null || callerId != clientId)
-            {
-                return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
-            }
-
-            actorType = "Client";
+            actorType = "User";
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -599,35 +396,101 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Updates the custom AI system message for the authenticated client (self-service).
-    ///     Requires <c>X-Client-Key</c>. The client ID is resolved from the key.
-    ///     Send an empty string as <c>customSystemMessage</c> to clear an existing value.
+    ///     Lists Azure DevOps organization scopes configured for a client.
+    ///     Requires global admin or <c>ClientUser</c> access for the specified client.
     /// </summary>
-    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
-    /// <param name="validator">Validator for the request body.</param>
+    /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Client updated.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    [HttpPatch("client/me")]
-    [ProducesResponseType(typeof(ClientResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    /// <response code="200">Organization scopes found.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpGet("clients/{clientId:guid}/ado-organization-scopes")]
+    [ProducesResponseType(typeof(IReadOnlyList<ClientAdoOrganizationScopeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> PatchClientMe(
-        [FromBody] PatchClientRequest request,
-        [FromServices] IValidator<PatchClientRequest> validator,
-        CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAdoOrganizationScopes(Guid clientId, CancellationToken ct = default)
     {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+            return auth;
         }
 
-        var clientId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (clientId is null)
+        if (!await clientAdminService.ExistsAsync(clientId, ct))
         {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+            return this.NotFound();
+        }
+
+        var scopes = await organizationScopeRepository.GetByClientIdAsync(clientId, ct);
+        return this.Ok(scopes);
+    }
+
+    /// <summary>
+    ///     Gets one Azure DevOps organization scope configured for a client.
+    ///     Requires global admin or <c>ClientUser</c> access for the specified client.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="scopeId">Organization-scope identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Organization scope found.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client or organization scope not found.</response>
+    [HttpGet("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
+    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAdoOrganizationScope(Guid clientId, Guid scopeId, CancellationToken ct = default)
+    {
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        if (!await clientAdminService.ExistsAsync(clientId, ct))
+        {
+            return this.NotFound();
+        }
+
+        var scope = await organizationScopeRepository.GetByIdAsync(clientId, scopeId, ct);
+        return scope is null ? this.NotFound() : this.Ok(scope);
+    }
+
+    /// <summary>
+    ///     Creates an Azure DevOps organization scope for a client.
+    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="request">Organization-scope details.</param>
+    /// <param name="validator">Validator for the request body.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="201">Organization scope created.</response>
+    /// <response code="400">Validation failure.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client not found.</response>
+    /// <response code="409">An organization scope for the URL already exists.</response>
+    [HttpPost("clients/{clientId:guid}/ado-organization-scopes")]
+    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateAdoOrganizationScope(
+        Guid clientId,
+        [FromBody] CreateClientAdoOrganizationScopeRequest request,
+        [FromServices] IValidator<CreateClientAdoOrganizationScopeRequest> validator,
+        CancellationToken ct = default)
+    {
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
+        if (auth is not null)
+        {
+            return auth;
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -636,104 +499,141 @@ public sealed partial class ClientsController(
             return validation;
         }
 
-        var client = await clientAdminService.PatchAsync(
-            clientId.Value,
-            isActive: null,
-            displayName: null,
-            commentResolutionBehavior: null,
-            request.CustomSystemMessage,
-            ct);
+        if (!await clientAdminService.ExistsAsync(clientId, ct))
+        {
+            return this.NotFound();
+        }
 
-        // PatchAsync returns null only when the client doesn't exist;
-        // since we resolved the ID from a valid key, this is unexpected.
-        return client is null
-            ? this.Unauthorized(new { error = "Valid X-Client-Key required." })
-            : this.Ok(ToClientResponse(client));
+        try
+        {
+            var created = await organizationScopeRepository.AddAsync(clientId, request.OrganizationUrl, request.DisplayName, ct);
+            if (created is null)
+            {
+                return this.NotFound();
+            }
+
+            LogAdoOrganizationScopeCreated(logger, clientId, created.Id, created.VerificationStatus, created.IsEnabled);
+
+            return this.CreatedAtAction(
+                nameof(this.GetAdoOrganizationScope),
+                new { clientId, scopeId = created.Id },
+                created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return this.Conflict(new { error = ex.Message });
+        }
     }
 
     /// <summary>
-    ///     Returns the profile of the specified client. Requires <c>X-Client-Key</c> that owns the client.
-    ///     Exposes a subset of client data safe for client-level callers; does not include admin-only fields.
+    ///     Applies partial updates to an Azure DevOps organization scope.
+    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
+    /// <param name="scopeId">Organization-scope identifier.</param>
+    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
+    /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Client profile.</response>
-    /// <response code="401">Missing or invalid <c>X-Client-Key</c>.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpGet("clients/{clientId:guid}/profile")]
-    [ProducesResponseType(typeof(ClientProfileResponse), StatusCodes.Status200OK)]
+    /// <response code="200">Organization scope updated.</response>
+    /// <response code="400">Validation failure.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client or organization scope not found.</response>
+    /// <response code="409">An organization scope for the URL already exists.</response>
+    [HttpPatch("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
+    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetClientProfile(Guid clientId, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> PatchAdoOrganizationScope(
+        Guid clientId,
+        Guid scopeId,
+        [FromBody] PatchClientAdoOrganizationScopeRequest request,
+        [FromServices] IValidator<PatchClientAdoOrganizationScopeRequest> validator,
+        CancellationToken ct = default)
     {
-        var callerKey = this.HttpContext.Items["ClientKey"] as string;
-        if (string.IsNullOrWhiteSpace(callerKey))
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Valid X-Client-Key required." });
+            return auth;
         }
 
-        var callerId = await clientRegistry.GetClientIdByKeyAsync(callerKey, ct);
-        if (callerId is null || callerId != clientId)
+        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
+        if (validation is not null)
         {
-            return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Caller does not own this client." });
+            return validation;
         }
 
-        var client = await clientAdminService.GetByIdAsync(clientId, ct);
-        if (client is null)
+        var existing = await organizationScopeRepository.GetByIdAsync(clientId, scopeId, ct);
+        if (existing is null)
         {
             return this.NotFound();
         }
 
-        return this.Ok(
-            new ClientProfileResponse(
-                client.Id,
-                client.DisplayName,
-                client.IsActive,
-                client.CreatedAt,
-                client.ReviewerId));
+        var organizationUrl = request.OrganizationUrl ?? existing.OrganizationUrl;
+        var displayName = request.DisplayName ?? existing.DisplayName;
+        var isEnabled = request.IsEnabled ?? existing.IsEnabled;
+
+        try
+        {
+            var updated = await organizationScopeRepository.UpdateAsync(
+                clientId,
+                scopeId,
+                organizationUrl,
+                displayName,
+                isEnabled,
+                ct);
+
+            if (updated is null)
+            {
+                return this.NotFound();
+            }
+
+            LogAdoOrganizationScopeUpdated(logger, clientId, scopeId, updated.VerificationStatus, updated.IsEnabled);
+            return this.Ok(updated);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return this.Conflict(new { error = ex.Message });
+        }
     }
 
     /// <summary>
-    ///     Rotates the client key: generates a new random key, BCrypt-hashes it, and retains the old
-    ///     hash with a 7-day grace period. The new plaintext key is returned once. Requires <c>X-Admin-Key</c>.
+    ///     Deletes an Azure DevOps organization scope from a client.
+    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
+    /// <param name="scopeId">Organization-scope identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">New key info returned.</response>
-    /// <response code="401">Missing or invalid admin credentials.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpPost("admin/clients/{clientId:guid}/rotate-key")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    /// <response code="204">Organization scope deleted.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks required client access.</response>
+    /// <response code="404">Client or organization scope not found.</response>
+    [HttpDelete("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RotateKey(Guid clientId, CancellationToken ct = default)
+    public async Task<IActionResult> DeleteAdoOrganizationScope(Guid clientId, Guid scopeId, CancellationToken ct = default)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
+        if (auth is not null)
         {
-            return this.Unauthorized(new { error = "Admin credentials required." });
+            return auth;
         }
 
-        var registry = clientRegistry as MeisterProPR.Infrastructure.Repositories.DbClientRegistry;
-        if (registry is null)
+        var deleted = await organizationScopeRepository.DeleteAsync(clientId, scopeId, ct);
+        if (deleted)
         {
-            return this.StatusCode(StatusCodes.Status501NotImplemented, new { error = "Key rotation is only available in database mode." });
+            LogAdoOrganizationScopeDeleted(logger, clientId, scopeId);
         }
 
-        var gracePeriod = TimeSpan.FromDays(7);
-        var newKey = await registry.RotateKeyAsync(clientId, gracePeriod, ct);
-        if (newKey is null)
-        {
-            return this.NotFound();
-        }
-
-        return this.Ok(new
-        {
-            newKey,
-            oldKeyExpiresAt = DateTimeOffset.UtcNow.Add(gracePeriod),
-        });
+        return deleted ? this.NoContent() : this.NotFound();
     }
+
+
 }
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
@@ -751,27 +651,27 @@ public sealed record ClientResponse(
 public sealed record CrawlConfigResponse(
     Guid Id,
     Guid ClientId,
+    Guid? OrganizationScopeId,
     string OrganizationUrl,
     string ProjectId,
     int CrawlIntervalSeconds,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<CrawlRepoFilterResponse>? RepoFilters = null);
+    IReadOnlyList<CrawlRepoFilterResponse>? RepoFilters = null,
+    ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+    IReadOnlyList<Guid>? ProCursorSourceIds = null,
+    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null);
 
 /// <summary>A single repo filter entry in a crawl config response.</summary>
 public sealed record CrawlRepoFilterResponse(
     Guid Id,
     string RepositoryName,
-    IReadOnlyList<string> TargetBranchPatterns);
+    IReadOnlyList<string> TargetBranchPatterns,
+    CanonicalSourceReferenceDto? CanonicalSourceRef = null,
+    string? DisplayName = null);
 
 /// <summary>Request body for creating a client.</summary>
-public sealed record CreateClientRequest(string Key, string DisplayName);
-
-/// <summary>Request body for creating a crawl configuration.</summary>
-public sealed record CreateCrawlConfigRequest(
-    string OrganizationUrl,
-    string ProjectId,
-    int CrawlIntervalSeconds = 60);
+public sealed record CreateClientRequest(string DisplayName);
 
 /// <summary>
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
@@ -783,22 +683,21 @@ public sealed record PatchClientRequest(
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null);
 
-/// <summary>Request body for patching a crawl configuration's active status.</summary>
-public sealed record PatchCrawlConfigRequest(bool IsActive);
-
 /// <summary>Request body for setting ADO service principal credentials.</summary>
 public sealed record SetAdoCredentialsRequest(string TenantId, string ClientId, string Secret);
+
+/// <summary>Request body for creating a client-scoped Azure DevOps organization scope.</summary>
+public sealed record CreateClientAdoOrganizationScopeRequest(string OrganizationUrl, string? DisplayName);
+
+/// <summary>
+///     Request body for patching a client-scoped Azure DevOps organization scope.
+///     Omit a field to leave it unchanged.
+/// </summary>
+public sealed record PatchClientAdoOrganizationScopeRequest(
+    string? OrganizationUrl = null,
+    string? DisplayName = null,
+    bool? IsEnabled = null);
 
 /// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
 public sealed record SetReviewerIdentityRequest(Guid ReviewerId);
 
-/// <summary>
-///     Client profile response — exposes only fields safe for client-level callers.
-///     Admin-only fields such as <c>HasAdoCredentials</c> are intentionally omitted.
-/// </summary>
-public sealed record ClientProfileResponse(
-    Guid Id,
-    string DisplayName,
-    bool IsActive,
-    DateTimeOffset CreatedAt,
-    Guid? ReviewerId);

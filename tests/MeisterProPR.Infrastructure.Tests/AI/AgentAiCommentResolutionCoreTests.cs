@@ -1,8 +1,10 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -13,6 +15,8 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 /// </summary>
 public sealed class AgentAiCommentResolutionCoreTests
 {
+    private const string ModelId = "gpt-4o";
+
     private static PrCommentThread BuildThread(int threadId, params (string author, string content, Guid? authorId)[] comments)
     {
         var prComments = comments
@@ -54,11 +58,11 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateCodeChangeAsync_WhenAiReturnsResolved_ReturnsIsResolvedTrue()
     {
         var chatClient = BuildChatClient("""{"resolved": true, "replyText": "Fixed in latest commit."}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(1, ("Bot", "Null reference on line 10.", null));
         var pr = BuildPr();
 
-        var result = await sut.EvaluateCodeChangeAsync(thread, pr);
+        var result = await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         Assert.True(result.IsResolved);
         Assert.Equal("Fixed in latest commit.", result.ReplyText);
@@ -68,11 +72,11 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateCodeChangeAsync_WhenAiReturnsUnresolved_ReturnsIsResolvedFalse()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(1, ("Bot", "Potential race condition.", null));
         var pr = BuildPr();
 
-        var result = await sut.EvaluateCodeChangeAsync(thread, pr);
+        var result = await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         Assert.False(result.IsResolved);
         Assert.Null(result.ReplyText);
@@ -83,11 +87,11 @@ public sealed class AgentAiCommentResolutionCoreTests
     {
         // T022: AI must return unresolved when unsure rather than guessing resolved
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": "I'm not sure if this was fully addressed."}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(1, ("Bot", "Consider edge case.", null));
         var pr = BuildPr();
 
-        var result = await sut.EvaluateCodeChangeAsync(thread, pr);
+        var result = await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         Assert.False(result.IsResolved);
     }
@@ -96,13 +100,13 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateConversationalReplyAsync_ReturnsReplyText()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": "Great question! This is intentional because..."}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(
             1,
             ("Bot", "Consider using async here.", null),
             ("Dev", "Why async specifically?", null));
 
-        var result = await sut.EvaluateConversationalReplyAsync(thread);
+        var result = await sut.EvaluateConversationalReplyAsync(thread, chatClient, ModelId);
 
         Assert.False(result.IsResolved);
         Assert.NotNull(result.ReplyText);
@@ -114,13 +118,13 @@ public sealed class AgentAiCommentResolutionCoreTests
     {
         // Resolved always carries reasoning explaining why the thread is being closed.
         var chatClient = BuildChatClient("""{"resolved": true, "replyText": "Closing — the null-guard on line 12 addresses my concern."}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(
             1,
             ("Bot", "Missing null check.", null),
             ("Dev", "Added the null check in latest commit.", null));
 
-        var result = await sut.EvaluateConversationalReplyAsync(thread);
+        var result = await sut.EvaluateConversationalReplyAsync(thread, chatClient, ModelId);
 
         Assert.True(result.IsResolved);
         Assert.NotNull(result.ReplyText);
@@ -132,13 +136,13 @@ public sealed class AgentAiCommentResolutionCoreTests
     {
         // Not resolved + nothing important to say → replyText is null, no unnecessary noise.
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(
             1,
             ("Bot", "Please refactor this method.", null),
             ("Dev", "Will do in next commit.", null));
 
-        var result = await sut.EvaluateConversationalReplyAsync(thread);
+        var result = await sut.EvaluateConversationalReplyAsync(thread, chatClient, ModelId);
 
         Assert.False(result.IsResolved);
         Assert.Null(result.ReplyText);
@@ -148,11 +152,11 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateCodeChangeAsync_SendsThreadAndDiffContext_ToChatClient()
     {
         var chatClient = BuildChatClient("""{"resolved": true, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(1, ("Bot", "Missing null check on line 10.", null));
         var pr = BuildPr();
 
-        await sut.EvaluateCodeChangeAsync(thread, pr);
+        await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         await chatClient.Received(1)
             .GetResponseAsync(
@@ -165,13 +169,13 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateConversationalReplyAsync_SendsThreadHistory_ToChatClient()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": "Because of X."}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
         var thread = BuildThread(
             1,
             ("Bot", "Use StringBuilder here.", null),
             ("Dev", "Why StringBuilder?", null));
 
-        await sut.EvaluateConversationalReplyAsync(thread);
+        await sut.EvaluateConversationalReplyAsync(thread, chatClient, ModelId);
 
         await chatClient.Received(1)
             .GetResponseAsync(
@@ -185,7 +189,7 @@ public sealed class AgentAiCommentResolutionCoreTests
     {
         // Arrange: PR with two changed files; thread anchored to only one of them.
         var chatClient = BuildChatClient("""{"resolved": true, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
 
         var comments = new List<PrThreadComment> { new("Bot", "Null check missing.", null) }.AsReadOnly();
         var thread = new PrCommentThread(1, "/src/Target.cs", 5, comments);
@@ -197,7 +201,7 @@ public sealed class AgentAiCommentResolutionCoreTests
             "Fix", null, "feature/fix", "main",
             new List<ChangedFile> { targetFile, otherFile }.AsReadOnly());
 
-        await sut.EvaluateCodeChangeAsync(thread, pr);
+        await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         await chatClient.Received(1).GetResponseAsync(
             Arg.Is<IList<ChatMessage>>(msgs =>
@@ -211,7 +215,7 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateCodeChangeAsync_WhenFileNotInChangedFiles_SendsNotChangedMessage()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
 
         var comments = new List<PrThreadComment> { new("Bot", "Issue here.", null) }.AsReadOnly();
         var thread = new PrCommentThread(1, "/src/Missing.cs", 1, comments);
@@ -222,7 +226,7 @@ public sealed class AgentAiCommentResolutionCoreTests
             "Fix", null, "feature/fix", "main",
             new List<ChangedFile> { otherFile }.AsReadOnly());
 
-        await sut.EvaluateCodeChangeAsync(thread, pr);
+        await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         await chatClient.Received(1).GetResponseAsync(
             Arg.Is<IList<ChatMessage>>(msgs =>
@@ -236,7 +240,7 @@ public sealed class AgentAiCommentResolutionCoreTests
     public async Task EvaluateCodeChangeAsync_PrLevelThread_SendsFileListWithoutDiffs()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
-        var sut = new AgentAiCommentResolutionCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+        var sut = new AgentAiCommentResolutionCore();
 
         // PR-level thread: FilePath is null
         var comments = new List<PrThreadComment> { new("Bot", "Overall design concern.", null) }.AsReadOnly();
@@ -249,7 +253,7 @@ public sealed class AgentAiCommentResolutionCoreTests
             "Fix", null, "feature/fix", "main",
             new List<ChangedFile> { fileA, fileB }.AsReadOnly());
 
-        await sut.EvaluateCodeChangeAsync(thread, pr);
+        await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
         await chatClient.Received(1).GetResponseAsync(
             Arg.Is<IList<ChatMessage>>(msgs =>

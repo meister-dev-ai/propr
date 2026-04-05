@@ -28,7 +28,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_PASSWORD: devpass
       POSTGRES_DB: meisterpropr
@@ -83,29 +83,28 @@ services:
       loki:
         condition: service_healthy
     environment:
-      - MEISTER_CLIENT_KEYS=${MEISTER_CLIENT_KEYS:-}
-      - MEISTER_ADMIN_KEY=${MEISTER_ADMIN_KEY:-}
       - MEISTER_JWT_SECRET=${MEISTER_JWT_SECRET}
       - MEISTER_BOOTSTRAP_ADMIN_USER=${MEISTER_BOOTSTRAP_ADMIN_USER}
       - MEISTER_BOOTSTRAP_ADMIN_PASSWORD=${MEISTER_BOOTSTRAP_ADMIN_PASSWORD}
+      - MEISTER_DATA_PROTECTION_KEYS_PATH=/app/.data-protection-keys
       - DB_CONNECTION_STRING=${DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=meisterpropr;Username=postgres;Password=devpass}
-      - AI_ENDPOINT=${AI_ENDPOINT}
-      - AI_DEPLOYMENT=${AI_DEPLOYMENT}
-      - AI_API_KEY=${AI_API_KEY:-}
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
-      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
-      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - AI_MAX_ITERATIONS_LOW=${AI_MAX_ITERATIONS_LOW:-}
       - AI_MAX_ITERATIONS_MEDIUM=${AI_MAX_ITERATIONS_MEDIUM:-}
       - AI_MAX_ITERATIONS_HIGH=${AI_MAX_ITERATIONS_HIGH:-}
-      # IMP-05: confidence-floor severity downgrade thresholds (defaults: 80 / 60)
+      # Confidence-floor severity downgrade thresholds (defaults: 80 / 60)
       - AI_CONFIDENCE_FLOOR_ERROR=${AI_CONFIDENCE_FLOOR_ERROR:-}
       - AI_CONFIDENCE_FLOOR_WARNING=${AI_CONFIDENCE_FLOOR_WARNING:-}
-      # IMP-08: minimum comment count that triggers the cross-file quality-filter AI pass (default: 20)
+      # Minimum comment count that triggers the cross-file quality-filter AI pass (default: 20)
       - AI_QUALITY_FILTER_THRESHOLD=${AI_QUALITY_FILTER_THRESHOLD:-}
+      # Thread memory tuning options (optional — per-client embedding connections are configured via admin UI, not env vars)
+      - AI_MEMORY_TOP_N=${AI_MEMORY_TOP_N:-}
+      - AI_MEMORY_MIN_SIMILARITY=${AI_MEMORY_MIN_SIMILARITY:-}
+      - AI_MEMORY_EMBEDDING_DIMENSIONS=${AI_MEMORY_EMBEDDING_DIMENSIONS:-}
       - LOKI_URL=http://loki:3100
       - ASPNETCORE_ENVIRONMENT=Production
+    volumes:
+      - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/healthz" ]
       interval: 30s
@@ -118,3 +117,4 @@ volumes:
   nginx_certs:
   loki_data:
   grafana_data:
+  meisterpropr_data_protection_keys:

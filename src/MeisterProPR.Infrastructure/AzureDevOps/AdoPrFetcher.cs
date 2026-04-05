@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text;
 using DiffPlex.DiffBuilder;
 using MeisterProPR.Application.Interfaces;
@@ -27,6 +30,8 @@ public sealed partial class AdoPrFetcher(
             ? await credentialRepository.GetByClientIdAsync(clientId.Value, cancellationToken)
             : null;
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
+        await connection.ConnectAsync(cancellationToken: cancellationToken);
+        var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
         var gitClient = connection.GetClient<GitHttpClient>();
 
         // Get PR metadata
@@ -107,7 +112,8 @@ public sealed partial class AdoPrFetcher(
             pr.TargetRefName ?? "",
             changedFiles.AsReadOnly(),
             ExistingThreads: existingThreads,
-            AllChangedFileSummaries: allChangedFileSummaries);
+                AllChangedFileSummaries: allChangedFileSummaries,
+                AuthorizedIdentityId: authorizedIdentityId);
     }
 
     private static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)

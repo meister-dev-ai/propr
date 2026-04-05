@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
@@ -6,9 +9,13 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>EF Core implementation that reads/writes the three nullable ADO credential columns on <c>clients</c>.</summary>
-public sealed class ClientAdoCredentialRepository(MeisterProPRDbContext dbContext)
+public sealed class ClientAdoCredentialRepository(
+    MeisterProPRDbContext dbContext,
+    ISecretProtectionCodec secretProtectionCodec)
     : IClientAdoCredentialRepository
 {
+    private const string SecretPurpose = "ClientAdoCredentials";
+
     /// <inheritdoc />
     public async Task<ClientAdoCredentials?> GetByClientIdAsync(Guid clientId, CancellationToken ct)
     {
@@ -24,7 +31,10 @@ public sealed class ClientAdoCredentialRepository(MeisterProPRDbContext dbContex
             return null;
         }
 
-        return new ClientAdoCredentials(record.AdoTenantId, record.AdoClientId, record.AdoClientSecret);
+        return new ClientAdoCredentials(
+            record.AdoTenantId,
+            record.AdoClientId,
+            secretProtectionCodec.Unprotect(record.AdoClientSecret, SecretPurpose));
     }
 
     /// <inheritdoc />
@@ -38,7 +48,7 @@ public sealed class ClientAdoCredentialRepository(MeisterProPRDbContext dbContex
 
         record.AdoTenantId = credentials.TenantId;
         record.AdoClientId = credentials.ClientId;
-        record.AdoClientSecret = credentials.Secret;
+        record.AdoClientSecret = secretProtectionCodec.Protect(credentials.Secret, SecretPurpose);
         await dbContext.SaveChangesAsync(ct);
     }
 

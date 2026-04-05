@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Infrastructure.Data.Models;
@@ -9,7 +12,6 @@ public sealed class ClientRecord
     public DateTimeOffset CreatedAt { get; set; }
     public Guid Id { get; set; }
     public string DisplayName { get; set; } = string.Empty;
-    public string Key { get; set; } = string.Empty;
     public string? AdoTenantId { get; set; }
     public string? AdoClientId { get; set; }
     public string? AdoClientSecret { get; set; }
@@ -24,23 +26,7 @@ public sealed class ClientRecord
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
 
-    // --- Key hardening fields (T046 / US6) ---
+    public ICollection<ClientAdoOrganizationScopeRecord> AdoOrganizationScopes { get; set; } = [];
 
-    /// <summary>BCrypt hash of the current active key. When set, used instead of legacy plaintext <see cref="Key"/>.</summary>
-    public string? KeyHash { get; set; }
-
-    /// <summary>When the current key expires (null = never).</summary>
-    public DateTimeOffset? KeyExpiresAt { get; set; }
-
-    /// <summary>BCrypt hash of the previous key, valid during the grace period after rotation.</summary>
-    public string? PreviousKeyHash { get; set; }
-
-    /// <summary>When the previous key's grace period ends.</summary>
-    public DateTimeOffset? PreviousKeyExpiresAt { get; set; }
-
-    /// <summary>When the key was last rotated.</summary>
-    public DateTimeOffset? KeyRotatedAt { get; set; }
-
-    /// <summary>Bitmask of allowed API scopes for keys belonging to this client. Defaults to All.</summary>
-    public int AllowedScopes { get; set; } = (int)ClientKeyScope.All;
+    public ICollection<CrawlConfigurationRecord> CrawlConfigurations { get; set; } = [];
 }

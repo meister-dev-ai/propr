@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 namespace MeisterProPR.Domain.Entities;
 
 /// <summary>A server-persisted refresh token used to obtain new JWT access tokens.</summary>

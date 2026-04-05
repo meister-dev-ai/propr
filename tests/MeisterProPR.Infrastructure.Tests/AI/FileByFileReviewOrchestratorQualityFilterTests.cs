@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Net.Http;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -177,5 +180,36 @@ public class FileByFileReviewOrchestratorQualityFilterTests
         Assert.Equal(2, result.Count);
         Assert.Equal("Some warning", result[0].Message);
         Assert.Equal("Some error", result[1].Message);
+    }
+
+    [Fact]
+    public async Task RunQualityFilterAsync_UsesContextModelId_WhenProvided()
+    {
+        string? observedModelId = null;
+        var client = Substitute.For<IChatClient>();
+        client
+          .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+          .Returns(callInfo =>
+          {
+              observedModelId = callInfo.Arg<ChatOptions?>()?.ModelId;
+              return new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"comments\":[]}"));
+          });
+
+        var sut = BuildOrchestrator(client);
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ModelId = "quality-filter-deployment",
+        };
+
+        var result = await sut.RunQualityFilterAsync(
+          Guid.NewGuid(),
+          [new ReviewComment("src/A.cs", 1, CommentSeverity.Warning, "Some warning")],
+          context,
+          client,
+          CancellationToken.None);
+
+        Assert.Equal("quality-filter-deployment", observedModelId);
+        Assert.Single(result);
+        Assert.Equal("Some warning", result[0].Message);
     }
 }

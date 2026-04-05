@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -22,5 +25,10 @@ internal sealed class ReviewPrScanThreadConfiguration : IEntityTypeConfiguration
         builder.Property(t => t.LastSeenReplyCount)
             .HasColumnName("last_seen_reply_count")
             .HasDefaultValue(0);
+
+        builder.Property(t => t.LastSeenStatus)
+            .HasColumnName("last_seen_status")
+            .HasMaxLength(64)
+            .IsRequired(false);
     }
 }

@@ -1,9 +1,13 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using FactAttribute = Xunit.SkippableFactAttribute;
+using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -18,17 +22,22 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
 
     public async Task InitializeAsync()
     {
+        fixture.SkipIfUnavailable();
+
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         await this._dbContext.Clients.ExecuteDeleteAsync();
-        this._registry = new DbClientRegistry(this._dbContext, NullLogger<DbClientRegistry>.Instance);
+        this._registry = new DbClientRegistry(this._dbContext);
     }
 
     public async Task DisposeAsync()
     {
-        await this._dbContext.DisposeAsync();
+        if (this._dbContext is not null)
+        {
+            await this._dbContext.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -57,12 +66,11 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Null(result);
     }
 
-    private async Task<ClientRecord> SeedClientAsync(Guid? reviewerId = null, string key = "test-key-abc123")
+    private async Task<ClientRecord> SeedClientAsync(Guid? reviewerId = null)
     {
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = key,
             DisplayName = "Test Client",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

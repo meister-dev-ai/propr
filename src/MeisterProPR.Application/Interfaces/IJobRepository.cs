@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -10,13 +13,21 @@ public interface IJobRepository
     /// <summary>Persists a new review job.</summary>
     Task AddAsync(ReviewJob job, CancellationToken ct = default);
 
-    /// <summary>Returns the first non-Failed job for the given PR iteration, or null.</summary>
+    /// <summary>Returns the first Pending or Processing job for the given PR iteration, or null.</summary>
     /// <param name="organizationUrl">Base URL of the Azure DevOps organization.</param>
     /// <param name="projectId">ID of the Azure DevOps project.</param>
     /// <param name="repositoryId">ID of the repository containing the pull request.</param>
     /// <param name="pullRequestId">Numeric ID of the pull request.</param>
     /// <param name="iterationId">ID of the pull request iteration.</param>
     ReviewJob? FindActiveJob(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId);
+
+    /// <summary>Returns the most-recent Completed job for the given PR iteration, or null.</summary>
+    ReviewJob? FindCompletedJob(
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -33,6 +44,7 @@ public interface IJobRepository
         int offset,
         JobStatus? status,
         Guid? clientId = null,
+        int? pullRequestId = null,
         CancellationToken ct = default);
 
     /// <summary>Gets a job by id, or null if not found.</summary>
@@ -97,6 +109,20 @@ public interface IJobRepository
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl, string projectId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns jobs for a specific pull request, newest first, with pagination.
+    ///     Includes <c>Protocols</c> and <c>Protocols.Events</c> eagerly loaded.
+    /// </summary>
+    Task<IReadOnlyList<ReviewJob>> GetByPrAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Returns the most-recent Completed job for the given PR iteration with

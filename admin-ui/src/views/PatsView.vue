@@ -1,5 +1,8 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
-  <div class="page-view">
+  <div class="pats-view">
     <div class="pats-page-header">
       <h2 class="view-title">Personal Access Tokens</h2>
       <p class="pats-description">PATs let you authenticate API calls and ADO extension webhooks without your password. Treat them like passwords — they inherit your account permissions.</p>
@@ -92,6 +95,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useSession } from '@/composables/useSession'
+import { API_BASE_URL } from '@/services/apiBase'
 
 interface PatItem {
   id: string
@@ -114,7 +118,7 @@ const newLabel = ref('')
 const newExpires = ref('')
 const revoking = ref<string | null>(null)
 
-const base = import.meta.env.VITE_API_BASE_URL ?? ''
+const base = API_BASE_URL
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken()

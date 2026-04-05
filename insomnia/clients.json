@@ -18,7 +18,7 @@
       "name": "Local Dev",
       "data": {
         "base_url": "https://localhost:5443",
-        "admin_key": "your-admin-key-here",
+        "admin_token": "your-admin-token-here",
         "client_key": "your-client-key-here",
         "client_id": "00000000-0000-0000-0000-000000000000",
         "config_id": "00000000-0000-0000-0000-000000000000",
@@ -46,7 +46,7 @@
       "url": "{{ base_url }}/clients",
       "headers": [
         { "name": "Content-Type", "value": "application/json" },
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_token }}" }
       ],
       "body": {
         "mimeType": "application/json",
@@ -61,7 +61,7 @@
       "method": "GET",
       "url": "{{ base_url }}/clients",
       "headers": [
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_token }}" }
       ],
       "body": {}
     },
@@ -73,7 +73,7 @@
       "method": "GET",
       "url": "{{ base_url }}/clients/{{ client_id }}",
       "headers": [
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_key }}" }
       ],
       "body": {}
     },
@@ -86,7 +86,7 @@
       "url": "{{ base_url }}/clients/{{ client_id }}",
       "headers": [
         { "name": "Content-Type", "value": "application/json" },
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_token }}" }
       ],
       "body": {
         "mimeType": "application/json",
@@ -102,7 +102,7 @@
       "url": "{{ base_url }}/clients/{{ client_id }}",
       "headers": [
         { "name": "Content-Type", "value": "application/json" },
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_token }}" }
       ],
       "body": {
         "mimeType": "application/json",
@@ -117,7 +117,7 @@
       "method": "DELETE",
       "url": "{{ base_url }}/clients/{{ client_id }}",
       "headers": [
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_token }}" }
       ],
       "body": {}
     },
@@ -130,7 +130,7 @@
       "url": "{{ base_url }}/clients/{{ client_id }}/ado-credentials",
       "headers": [
         { "name": "Content-Type", "value": "application/json" },
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_key }}" }
       ],
       "body": {
         "mimeType": "application/json",
@@ -145,7 +145,7 @@
       "method": "DELETE",
       "url": "{{ base_url }}/clients/{{ client_id }}/ado-credentials",
       "headers": [
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_key }}" }
       ],
       "body": {}
     },
@@ -158,7 +158,7 @@
       "url": "{{ base_url }}/clients/{{ client_id }}/reviewer-identity",
       "headers": [
         { "name": "Content-Type", "value": "application/json" },
-        { "name": "X-Admin-Key", "value": "{{ admin_key }}" }
+        { "name": "Authorization", "value": "Bearer {{ admin_key }}" }
       ],
       "body": {
         "mimeType": "application/json",

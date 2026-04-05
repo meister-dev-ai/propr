@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -9,7 +12,7 @@ vi.mock('@/services/api', () => ({
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ params: { jobId: 'job-abc' } }),
+  useRoute: () => ({ params: { id: 'job-abc' }, query: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 

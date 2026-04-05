@@ -1,4 +1,8 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Collections.Immutable;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -17,17 +21,19 @@ public sealed partial class FileByFileReviewOrchestrator(
     IAiReviewCore aiCore,
     IProtocolRecorder protocolRecorder,
     IJobRepository jobRepository,
-    IChatClient chatClient,
+    IChatClient? chatClient,
     IOptions<AiReviewOptions> options,
     ILogger<FileByFileReviewOrchestrator> logger,
     IAiConnectionRepository? aiConnectionRepository = null,
-    IAiChatClientFactory? aiClientFactory = null) : IFileByFileReviewOrchestrator
+    IAiChatClientFactory? aiClientFactory = null,
+    IThreadMemoryService? memoryService = null) : IFileByFileReviewOrchestrator
 {
     private readonly AiReviewOptions _opts = options.Value;
 
     public async Task<ReviewResult> ReviewAsync(ReviewJob job, PullRequest pr, ReviewSystemContext baseContext, CancellationToken ct, IChatClient? overrideClient = null)
     {
-        var effectiveClient = overrideClient ?? chatClient;
+        var effectiveClient = overrideClient ?? chatClient
+            ?? throw new InvalidOperationException("No chat client available for file review orchestration.");
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         // Build a map of ALL existing results (completed, failed, or interrupted)
@@ -81,7 +87,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 {
                     var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
                     var existingResult = existingResults.GetValueOrDefault(file.Path);
-                    await this.ReviewSingleFileAsync(job, pr, file, fileIndex, allChangedFiles.Count, baseContext, existingResult, ct);
+                    await this.ReviewSingleFileAsync(job, pr, file, fileIndex, allChangedFiles.Count, baseContext, existingResult, effectiveClient, ct);
                 }
                 catch (Exception ex)
                 {
@@ -152,7 +158,7 @@ public sealed partial class FileByFileReviewOrchestrator(
         Guid? protocolId = null;
         try
         {
-            protocolId = await protocolRecorder.BeginAsync(job.Id, job.RetryCount + 1, file.Path, fileResult.Id, ct);
+            protocolId = await protocolRecorder.BeginAsync(job.Id, job.RetryCount + 1, file.Path, fileResult.Id, ct: ct);
         }
         catch (Exception ex)
         {
@@ -173,6 +179,7 @@ public sealed partial class FileByFileReviewOrchestrator(
         int totalFiles,
         ReviewSystemContext baseContext,
         ReviewFileResult? existingResult,
+        IChatClient effectiveClient,
         CancellationToken ct)
     {
         LogFileReviewStarted(logger, file.Path, fileIndex, totalFiles, job.Id);
@@ -193,10 +200,34 @@ public sealed partial class FileByFileReviewOrchestrator(
             await jobRepository.AddFileResultAsync(fileResult, ct);
         }
 
+        // US4: Classify file complexity early so we can record tier in the protocol
+        var tier = ClassifyTier(file);
+        var tierCategory = tier switch
+        {
+            FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
+            FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
+            FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
+            _ => AiConnectionModelCategory.MediumEffort,
+        };
+
+        // US4: Resolve tier-specific IChatClient if configured
+        IChatClient? tierClient = null;
+        AiConnectionDto? tierDto = null;
+        if (aiConnectionRepository is not null && aiClientFactory is not null)
+        {
+            tierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, tierCategory, ct);
+            if (tierDto is not null)
+            {
+                tierClient = aiClientFactory.CreateClient(tierDto.EndpointUrl, tierDto.ApiKey);
+            }
+        }
+
         Guid? protocolId = null;
         try
         {
-            protocolId = await protocolRecorder.BeginAsync(job.Id, job.RetryCount + 1, file.Path, fileResult.Id, ct);
+            protocolId = await protocolRecorder.BeginAsync(
+                job.Id, job.RetryCount + 1, file.Path, fileResult.Id,
+                connectionCategory: tierCategory, modelId: tierDto?.ActiveModel, ct: ct);
         }
         catch (Exception ex)
         {
@@ -224,8 +255,6 @@ public sealed partial class FileByFileReviewOrchestrator(
                 pr.Status,
                 relevantThreads);
 
-            // US4: Classify file complexity and derive MaxIterationsOverride
-            var tier = ClassifyTier(file);
             var changedLinesCount = CountChangedLines(file.UnifiedDiff);
 
             LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
@@ -243,24 +272,6 @@ public sealed partial class FileByFileReviewOrchestrator(
                 LogMaxIterationsOverrideApplied(logger, maxIterationsOverride, file.Path, job.Id);
             }
 
-            // US4: Resolve tier-specific IChatClient if configured
-            IChatClient? tierClient = null;
-            if (aiConnectionRepository is not null && aiClientFactory is not null)
-            {
-                var tierCategory = tier switch
-                {
-                    FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
-                    FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
-                    FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
-                    _ => AiConnectionModelCategory.MediumEffort,
-                };
-                var tierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, tierCategory, ct);
-                if (tierDto is not null)
-                {
-                    tierClient = aiClientFactory.CreateClient(tierDto.EndpointUrl, null);
-                }
-            }
-
             fileContext = new ReviewSystemContext(
                 baseContext.ClientSystemMessage,
                 baseContext.RepositoryInstructions,
@@ -276,8 +287,10 @@ public sealed partial class FileByFileReviewOrchestrator(
                 },
                 ExclusionRules = baseContext.ExclusionRules,
                 DismissedPatterns = baseContext.DismissedPatterns,
-                // US4: Tier-specific AI client (null = fall back to default)
-                TierChatClient = tierClient,
+                ModelId = tierDto?.ActiveModel ?? tierDto?.Models.FirstOrDefault() ?? baseContext.ModelId,
+                // US4: Tier-specific client wins; fall back to per-client active connection so the
+                // global default chatClient is never used when a per-client connection is configured.
+                TierChatClient = tierClient ?? effectiveClient,
             };
 
             LogDismissalsInjected(logger, fileContext.DismissedPatterns?.Count ?? 0, file.Path, job.Id);
@@ -287,8 +300,13 @@ public sealed partial class FileByFileReviewOrchestrator(
 
             // US5 (feature 023): Apply confidence-gated severity floor first, so that downgraded
             // severities are visible to the SUGGESTION-specific vague-phrase filter below.
+            var commentsBeforeConfidenceFloor = result.Comments;
             result = ApplyConfidenceFloor(result, fileContext.LoopMetrics?.FinalConfidence, this._opts);
-            var confidenceDropped = result.Comments.Count < result.Comments.Count; // logged inside method
+            var confidenceDroppedCount = CountSeverityDowngrades(commentsBeforeConfidenceFloor, result.Comments);
+            if (confidenceDroppedCount > 0)
+            {
+                LogSeverityDowngraded(logger, confidenceDroppedCount, file.Path, job.Id);
+            }
 
             // US1 (feature 023): Discard speculative/hedge-phrase comments.
             var beforeHedge = result.Comments.Count;
@@ -315,6 +333,20 @@ public sealed partial class FileByFileReviewOrchestrator(
             if (vagueDropped > 0)
             {
                 LogVagueSuggestionsDropped(logger, vagueDropped, file.Path, job.Id);
+            }
+
+            // Feature 026: Memory-augmented reconsideration — query historical thread embeddings and
+            // reconsider findings in light of past resolutions. Falls through unchanged on any failure.
+            if (memoryService is not null)
+            {
+                result = await memoryService.RetrieveAndReconsiderAsync(
+                    job.ClientId,
+                    job,
+                    file.Path,
+                    file.UnifiedDiff,
+                    result,
+                    protocolId,
+                    ct);
             }
 
             fileResult.MarkCompleted(result.Summary, result.Comments);
@@ -363,24 +395,48 @@ public sealed partial class FileByFileReviewOrchestrator(
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
         var allResults = jobWithResults!.FileReviewResults;
+        var freshResults = allResults
+            .Where(r => !r.IsCarriedForward)
+            .ToList();
+        var carriedForwardCandidatesSkipped = allResults
+            .Where(r => r.IsComplete && r.IsCarriedForward && r.Comments is not null)
+            .Sum(r => r.Comments!.Count);
 
-        var perFileSummaries = allResults
+        var perFileSummaries = freshResults
             .Where(r => r.IsComplete && r.PerFileSummary != null)
             .Select(r => (r.FilePath, Summary: r.PerFileSummary!))
             .ToList();
 
-        var allComments = allResults
+        var allComments = freshResults
             .Where(r => r.IsComplete && r.Comments != null)
             .SelectMany(r => r.Comments!)
             .ToList();
 
-        // US2: Synthesis AI call
+        // US2: Synthesis AI call — resolve per-client connection the same way per-file reviews do
+        AiConnectionDto? synthTierDto = null;
+        if (aiConnectionRepository is not null && aiClientFactory is not null)
+        {
+            synthTierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, ct);
+            if (synthTierDto is not null)
+            {
+                effectiveClient = aiClientFactory.CreateClient(synthTierDto.EndpointUrl, synthTierDto.ApiKey);
+            }
+        }
+
+        baseContext.ModelId = synthTierDto?.ActiveModel
+            ?? synthTierDto?.Models.FirstOrDefault()
+            ?? baseContext.ModelId
+            ?? job.AiModel
+            ?? this._opts.ModelId;
+
         LogSynthesisStarted(logger, job.Id);
 
         Guid? protocolId = null;
         try
         {
-            protocolId = await protocolRecorder.BeginAsync(job.Id, job.RetryCount + 1, "synthesis", null, ct);
+            protocolId = await protocolRecorder.BeginAsync(
+                job.Id, job.RetryCount + 1, "synthesis", null,
+                connectionCategory: AiConnectionModelCategory.HighEffort, modelId: synthTierDto?.ActiveModel, ct: ct);
         }
         catch (Exception ex)
         {
@@ -391,34 +447,65 @@ public sealed partial class FileByFileReviewOrchestrator(
         IReadOnlyList<ReviewComment> crossCuttingComments = [];
         try
         {
-            var systemPrompt = ReviewPrompts.BuildSynthesisSystemPrompt(baseContext, jsonMode: allComments?.Count > 0);
+            var expectsJson = allComments.Count > 0;
+            var systemPrompt = ReviewPrompts.BuildSynthesisSystemPrompt(baseContext, jsonMode: expectsJson);
             var userMessage = ReviewPrompts.BuildSynthesisUserMessage(perFileSummaries, pr.Title, pr.Description, allComments);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, userMessage),
+            };
 
             var response = await effectiveClient.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, systemPrompt),
-                    new ChatMessage(ChatRole.User, userMessage),
-                ],
-                new ChatOptions { ModelId = job.AiModel ?? this._opts.ModelId },
+                messages,
+                new ChatOptions { ModelId = baseContext.ModelId },
                 ct);
 
             var responseText = response.Text ?? string.Empty;
+            var totalInputTokens = response.Usage?.InputTokenCount ?? 0;
+            var totalOutputTokens = response.Usage?.OutputTokenCount ?? 0;
 
-            // US5: Try to parse cross_cutting_concerns from JSON response
-            finalSummary = responseText;
-            crossCuttingComments = ParseCrossCuttingConcerns(responseText);
-            if (crossCuttingComments.Count > 0)
+            if (TryParseSynthesisResponse(responseText, out var parsedSummary, out var parsedCrossCuttingComments))
             {
-                // Extract just the summary text if it was returned as JSON
-                try
+                finalSummary = parsedSummary;
+                crossCuttingComments = parsedCrossCuttingComments;
+            }
+            else if (expectsJson && LooksLikeJsonObject(responseText))
+            {
+                LogSynthesisJsonRepairStarted(logger, job.Id);
+
+                var repairMessages = new List<ChatMessage>(messages)
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(responseText);
-                    if (doc.RootElement.TryGetProperty("summary", out var summaryProp))
-                    {
-                        finalSummary = summaryProp.GetString() ?? responseText;
-                    }
+                    new(ChatRole.Assistant, responseText),
+                    new(ChatRole.User, BuildSynthesisJsonRepairPrompt()),
+                };
+
+                var repairResponse = await effectiveClient.GetResponseAsync(
+                    repairMessages,
+                    new ChatOptions { ModelId = baseContext.ModelId },
+                    ct);
+
+                totalInputTokens += repairResponse.Usage?.InputTokenCount ?? 0;
+                totalOutputTokens += repairResponse.Usage?.OutputTokenCount ?? 0;
+
+                var repairedText = repairResponse.Text ?? string.Empty;
+                if (TryParseSynthesisResponse(repairedText, out parsedSummary, out parsedCrossCuttingComments))
+                {
+                    finalSummary = parsedSummary;
+                    crossCuttingComments = parsedCrossCuttingComments;
+                    LogSynthesisJsonRepairSucceeded(logger, job.Id);
                 }
-                catch (System.Text.Json.JsonException) { /* use raw text */ }
+                else
+                {
+                    finalSummary = string.Join("\n\n", perFileSummaries.Select(s => $"## {s.FilePath}\n{s.Summary}"));
+                    crossCuttingComments = [];
+                    LogSynthesisJsonRepairFailed(logger, job.Id);
+                }
+            }
+            else
+            {
+                finalSummary = responseText;
+                crossCuttingComments = [];
             }
 
             if (string.IsNullOrWhiteSpace(finalSummary))
@@ -430,8 +517,8 @@ public sealed partial class FileByFileReviewOrchestrator(
                 await protocolRecorder.RecordAiCallAsync(
                     protocolId.Value,
                     1,
-                    response.Usage?.InputTokenCount,
-                    response.Usage?.OutputTokenCount,
+                    totalInputTokens,
+                    totalOutputTokens,
                     userMessage,
                     finalSummary,
                     ct);
@@ -439,8 +526,8 @@ public sealed partial class FileByFileReviewOrchestrator(
                 await protocolRecorder.SetCompletedAsync(
                     protocolId.Value,
                     "Completed",
-                    response.Usage?.InputTokenCount ?? 0,
-                    response.Usage?.OutputTokenCount ?? 0,
+                    totalInputTokens,
+                    totalOutputTokens,
                     1,
                     0,
                     null,
@@ -475,7 +562,10 @@ public sealed partial class FileByFileReviewOrchestrator(
             : (IReadOnlyList<ReviewComment>)deduped;
 
         LogCrossCuttingConcernsFound(logger, crossCuttingComments.Count, job.Id);
-        return new ReviewResult(finalSummary, combinedComments);
+        return new ReviewResult(finalSummary, combinedComments)
+        {
+            CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
+        };
     }
 
     private static IReadOnlyList<ReviewComment> ParseCrossCuttingConcerns(string? responseText)
@@ -487,7 +577,7 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(responseText);
+            using var doc = System.Text.Json.JsonDocument.Parse(StripMarkdownCodeFences(responseText));
             if (!doc.RootElement.TryGetProperty("cross_cutting_concerns", out var concernsEl) ||
                 concernsEl.ValueKind != System.Text.Json.JsonValueKind.Array)
             {
@@ -525,6 +615,90 @@ public sealed partial class FileByFileReviewOrchestrator(
         {
             return [];
         }
+    }
+
+    internal static bool TryParseSynthesisResponse(
+        string? responseText,
+        out string summary,
+        out IReadOnlyList<ReviewComment> crossCuttingComments)
+    {
+        summary = string.Empty;
+        crossCuttingComments = [];
+
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return false;
+        }
+
+        var trimmed = StripMarkdownCodeFences(responseText);
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(trimmed);
+            if (!doc.RootElement.TryGetProperty("summary", out var summaryEl))
+            {
+                return false;
+            }
+
+            summary = summaryEl.ValueKind == System.Text.Json.JsonValueKind.String
+                ? summaryEl.GetString() ?? string.Empty
+                : summaryEl.GetRawText();
+            crossCuttingComments = ParseCrossCuttingConcerns(trimmed);
+            return true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string BuildSynthesisJsonRepairPrompt() =>
+        """
+        Your previous response was not valid JSON.
+        Reformat it now as a single raw JSON object with exactly these keys:
+        - "summary": string
+        - "cross_cutting_concerns": array of objects with keys "message" and "severity"
+
+        Escape any quotes inside string values correctly.
+        Do NOT use markdown fences.
+        Do NOT add any prose before or after the JSON.
+        The first character must be '{' and the last character must be '}'.
+        """;
+
+    private static bool LooksLikeJsonObject(string text)
+    {
+        return StripMarkdownCodeFences(text).StartsWith("{", StringComparison.Ordinal);
+    }
+
+    private static string StripMarkdownCodeFences(string text)
+    {
+        var trimmed = text.Trim();
+        if (!trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        var firstNewline = trimmed.IndexOf('\n');
+        if (firstNewline >= 0)
+        {
+            trimmed = trimmed[(firstNewline + 1)..];
+        }
+        else
+        {
+            var braceStart = trimmed.IndexOf('{');
+            if (braceStart >= 0)
+            {
+                trimmed = trimmed[braceStart..];
+            }
+        }
+
+        var closingFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+        if (closingFence >= 0)
+        {
+            trimmed = trimmed[..closingFence];
+        }
+
+        return trimmed.Trim();
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(IReadOnlyList<PrCommentThread>? allThreads, string filePath)
@@ -622,7 +796,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                     new ChatMessage(ChatRole.System, systemPrompt),
                     new ChatMessage(ChatRole.User, userMessage),
                 ],
-                new ChatOptions { ModelId = this._opts.ModelId },
+                new ChatOptions { ModelId = baseContext.ModelId ?? this._opts.ModelId },
                 ct);
 
             var parsed = ParseQualityFilterResponse(response.Text ?? string.Empty);
@@ -707,6 +881,15 @@ public sealed partial class FileByFileReviewOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis failed for job {JobId} — using fallback concatenation")]
     private static partial void LogSynthesisFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis for job {JobId} returned invalid JSON — requesting one repair pass")]
+    private static partial void LogSynthesisJsonRepairStarted(ILogger logger, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Synthesis JSON repair succeeded for job {JobId}")]
+    private static partial void LogSynthesisJsonRepairSucceeded(ILogger logger, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis JSON repair failed for job {JobId} — using fallback concatenation")]
+    private static partial void LogSynthesisJsonRepairFailed(ILogger logger, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to begin protocol recording for file {FilePath} in job {JobId}")]
     private static partial void LogProtocolBeginFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
@@ -903,5 +1086,22 @@ public sealed partial class FileByFileReviewOrchestrator(
         return adjusted.SequenceEqual(result.Comments)
             ? result
             : result with { Comments = adjusted };
+    }
+
+    private static int CountSeverityDowngrades(
+        IReadOnlyList<ReviewComment> before,
+        IReadOnlyList<ReviewComment> after)
+    {
+        var downgradedCount = 0;
+
+        for (var i = 0; i < before.Count && i < after.Count; i++)
+        {
+            if (before[i].Severity != after[i].Severity)
+            {
+                downgradedCount++;
+            }
+        }
+
+        return downgradedCount;
     }
 }

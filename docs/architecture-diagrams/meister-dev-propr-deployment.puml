@@ -1,0 +1,101 @@
+@startuml Meister DEV - ProPR Deployment
+!define ICONURL https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/v2.4.0
+!includeurl ICONURL/common.puml
+!includeurl ICONURL/devicons2/postgresql.puml
+!includeurl ICONURL/devicons2/docker.puml
+!includeurl ICONURL/devicons2/nodejs.puml
+!includeurl ICONURL/devicons2/vuejs.puml
+!includeurl ICONURL/devicons2/nginx_original.puml
+!includeurl ICONURL/devicons2/git.puml
+
+'' Use the same icon accent color as the context diagram
+!define ICON_COLOR #58a6ff
+
+skinparam linetype ortho
+skinparam nodesep 30
+skinparam ranksep 40
+skinparam backgroundColor #0d1117
+skinparam defaultFontColor #c9d1d9
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam arrowColor #388bfd
+skinparam arrowThickness 1.5
+
+skinparam titleFontColor #e6edf3
+skinparam titleFontSize 16
+skinparam titleFontStyle bold
+
+skinparam actor {
+  BackgroundColor #1e4c72
+  BorderColor #2a5f86
+  FontColor #e6edf3
+}
+
+skinparam cloud {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+}
+
+skinparam component {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+}
+
+skinparam database {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+}
+
+skinparam rectangle {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+  RoundCorner 6
+}
+
+skinparam note {
+  BackgroundColor #161b22
+  BorderColor #30363d
+  FontColor #c9d1d9
+}
+
+title Meister DEV - ProPR Deployment
+
+actor "Client / Developer" as client
+cloud "Azure DevOps" as ado
+cloud "AI Providers" as ai
+
+rectangle "Azure Resource Group" {
+
+  DEV2_DOCKER(acr, "Container Registry\n(ACR)", rectangle, ICON_COLOR)
+  component "Key Vault" as kv
+  component "Log Analytics" as law
+  component "Storage Account\n(Azure Files)" as storage
+
+  rectangle "VNet / Subnet" {
+    rectangle "Container Apps Environment" as env {
+      DEV2_NGINX_ORIGINAL(proxy, "reverse-proxy", rectangle, ICON_COLOR)
+      DEV2_VUEJS(adminui, "Admin UI", rectangle, ICON_COLOR)
+      DEV2_NODEJS(backend, "Meister DEV - ProPR (backend)", rectangle, ICON_COLOR)
+      DEV2_POSTGRESQL(db, "db\n(PostgreSQL)", rectangle, ICON_COLOR)
+    }
+  }
+}
+
+client   ->           proxy    : HTTPS (public)
+proxy    ->           adminui  : HTTP (internal)
+proxy    ->           backend  : HTTP (internal)
+backend  ->           db       : TCP 5432
+backend  ->           ai       : HTTPS
+backend  ->           ado      : HTTPS
+
+env      -[#30363d,dashed]->    acr      : pull images
+env      -[#30363d,dashed]->    law      : logs
+backend  -[#30363d,dashed]->    kv       : read secrets
+db       -[#30363d,dashed]->    kv       : read secrets
+db       -[#30363d,dashed]->    storage  : mount volume
+
+@enduml

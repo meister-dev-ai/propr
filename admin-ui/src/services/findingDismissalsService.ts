@@ -1,54 +1,42 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 /**
- * Typed wrapper functions for the finding dismissals endpoints.
- * All functions use the shared admin client from api.ts.
+ * Typed wrapper for the dismiss-finding endpoint.
+ * Dismisses a finding by storing it as an admin-dismissed memory record.
+ * The memory reconsideration pipeline will suppress similar future findings.
  */
 
 import { createAdminClient } from '@/services/api'
-import type {
-  CreateFindingDismissalRequest,
-  FindingDismissalDto,
-  UpdateFindingDismissalRequest,
-} from '@/types'
 
-/** Lists all finding dismissals for the given client. */
-export async function listDismissals(clientId: string): Promise<FindingDismissalDto[]> {
-  const { data } = await createAdminClient().GET('/clients/{clientId}/finding-dismissals', {
-    params: { path: { clientId } },
-  })
-  return (data as FindingDismissalDto[]) ?? []
+export interface DismissFindingRequest {
+  findingMessage: string
+  filePath?: string | null
+  label?: string | null
 }
 
-/** Creates a new finding dismissal for the given client. Returns the new dismissal DTO. */
+/** Dismisses a finding for the given client. Returns the created memory record. */
+export async function dismissFinding(
+  clientId: string,
+  request: DismissFindingRequest,
+): Promise<unknown> {
+  const { data } = await createAdminClient().POST('/clients/{clientId}/dismiss-finding', {
+    params: { path: { clientId } },
+    body: request as any,
+  })
+  return data
+}
+
+/**
+ * @deprecated Use dismissFinding() instead.
+ *             Kept for backward compatibility with JobProtocolView dismiss button.
+ */
 export async function createDismissal(
   clientId: string,
-  request: CreateFindingDismissalRequest,
-): Promise<FindingDismissalDto> {
-  const { data } = await createAdminClient().POST('/clients/{clientId}/finding-dismissals', {
-    params: { path: { clientId } },
-    body: request,
-  })
-  return data as FindingDismissalDto
-}
-
-/** Updates the label of an existing finding dismissal. Returns the updated dismissal DTO. */
-export async function updateDismissal(
-  clientId: string,
-  id: string,
-  request: UpdateFindingDismissalRequest,
-): Promise<FindingDismissalDto> {
-  const { data } = await createAdminClient().PATCH(
-    '/clients/{clientId}/finding-dismissals/{id}',
-    {
-      params: { path: { clientId, id } },
-      body: request,
-    },
-  )
-  return data as FindingDismissalDto
-}
-
-/** Deletes a finding dismissal. */
-export async function deleteDismissal(clientId: string, id: string): Promise<void> {
-  await createAdminClient().DELETE('/clients/{clientId}/finding-dismissals/{id}', {
-    params: { path: { clientId, id } },
+  request: { originalMessage: string; label?: string | null },
+): Promise<unknown> {
+  return dismissFinding(clientId, {
+    findingMessage: request.originalMessage,
+    label: request.label,
   })
 }

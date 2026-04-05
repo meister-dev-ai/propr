@@ -20,7 +20,7 @@ We will confirm receipt within 48 hours and aim to provide an initial assessment
 
 Areas of particular relevance:
 
-- API key management (`X-Client-Key`, `X-Admin-Key`)
+- Review-trigger and user authentication (`X-Client-Key`, `X-User-Pat`) — the shared `X-Admin-Key` path has been removed
 - ADO token validation (`X-Ado-Token`)
 - Per-client credential storage (PostgreSQL — secrets stored, never returned via API)
 - Azure Identity / credential leaks (`AZURE_CLIENT_SECRET`, `AI_API_KEY`)

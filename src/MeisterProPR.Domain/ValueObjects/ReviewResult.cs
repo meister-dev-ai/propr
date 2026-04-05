@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 namespace MeisterProPR.Domain.ValueObjects;
 
 /// <summary>
@@ -14,4 +17,10 @@ public sealed record ReviewResult(
     ///     Empty for full (non-incremental) reviews.
     /// </summary>
     public IReadOnlyList<string> CarriedForwardFilePaths { get; init; } = [];
+
+    /// <summary>
+    ///     Count of comment candidates suppressed before posting because they originated from
+    ///     carried-forward file results rather than a fresh review pass.
+    /// </summary>
+    public int CarriedForwardCandidatesSkipped { get; init; }
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.Enums;
 
@@ -15,14 +18,10 @@ public interface IClientAdminService
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> GetByIdAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>
-    ///     Creates a new active client and returns its data.
-    ///     Returns <c>null</c> when a client with <paramref name="key" /> already exists.
-    /// </summary>
-    /// <param name="key">The unique client API key.</param>
+    /// <summary>Creates a new active client and returns its data.</summary>
     /// <param name="displayName">Human-readable name for the client.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<ClientDto?> CreateAsync(string key, string displayName, CancellationToken ct = default);
+    Task<ClientDto> CreateAsync(string displayName, CancellationToken ct = default);
 
     /// <summary>
     ///     Applies partial updates to a client.

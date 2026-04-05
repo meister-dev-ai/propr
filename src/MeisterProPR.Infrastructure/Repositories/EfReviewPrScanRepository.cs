@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
@@ -62,6 +65,7 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
                         ReviewPrScanId = existing.Id,
                         ThreadId = thread.ThreadId,
                         LastSeenReplyCount = thread.LastSeenReplyCount,
+                        LastSeenStatus = thread.LastSeenStatus,
                     });
             }
         }

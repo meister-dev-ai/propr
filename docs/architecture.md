@@ -3,12 +3,18 @@
 ## Table of Contents
 
 - [System Context](#system-context)
-- [Request Flow: POST /reviews](#request-flow-post-reviews)
+- [Review Trigger Flow](#review-trigger-flow)
+- [Review Dedup Flow](#review-dedup-flow)
 - [Authentication Flow](#authentication-flow)
 - [Job State Machine](#job-state-machine)
 - [Credential Resolution](#credential-resolution)
+- [Guided ADO Configuration](#guided-ado-configuration)
 - [PR Crawler Flow](#pr-crawler-flow)
+- [Crawl Source Scope Snapshotting](#crawl-source-scope-snapshotting)
 - [Token Optimization Pipeline](#token-optimization-pipeline)
+- [ProCursor Boundary](#procursor-boundary)
+- [ProCursor Refresh Flow](#procursor-refresh-flow)
+- [ProCursor Token Reporting](#procursor-token-reporting)
 - [Data Model](#data-model)
 
 ---
@@ -29,33 +35,38 @@ flowchart TD
         API["ASP.NET Core API"]
         WORKER["ReviewJobWorker (BackgroundService)"]
         CRAWLER["PrCrawlerWorker (BackgroundService)"]
+        PROCURSOR["ProCursor Module\n(Gateway + Index Worker)"]
     end
 
-    EXT -- "POST /reviews X-Client-Key + X-Ado-Token" --> API
+    EXT -- "POST /clients/{clientId}/reviews X-User-Pat + X-Ado-Token" --> API
     ADMINUI -- "Admin API / JWT" --> API
     API -- "persist job" --> PG
     WORKER -- "poll every 2 s" --> PG
     WORKER -- "fetch PR diff" --> ADO
     WORKER -- "AI review (Chat API)" --> AOAI
+    WORKER -- "knowledge + symbol lookups" --> PROCURSOR
     WORKER -- "post comment threads" --> ADO
     CRAWLER -- "poll open PRs" --> ADO
     CRAWLER -- "enqueue jobs" --> PG
+    PROCURSOR -- "persist snapshots + jobs" --> PG
+    PROCURSOR -- "materialize tracked branches" --> ADO
+    PROCURSOR -- "embedding generation" --> AOAI
 ```
 
-> **Authentication note:** Review-trigger authentication (`X-Client-Key` + `X-Ado-Token`) is
-> separate from admin/user authentication (JWT via `POST /auth/login` or PAT via `X-User-Pat`).
-> See the [Authentication Flow](#authentication-flow) section for the admin credential sequence.
+> **Authentication note:** Review submission uses a user credential (`Authorization: Bearer ...`
+> or `X-User-Pat`) plus `X-Ado-Token`; status polling on `/reviews/{jobId}` uses `X-Ado-Token`.
+> See the [Authentication Flow](#authentication-flow) section for how JWTs and PATs are resolved.
 
 ---
 
-## Request Flow: POST /reviews
+## Review Trigger Flow
 
 The full lifecycle of a review request — from HTTP call to ADO comment.
 
 ```mermaid
 sequenceDiagram
     actor Caller
-    participant MW as ClientKeyMiddleware
+    participant MW as AuthMiddleware
     participant RC as ReviewsController
     participant JR as JobRepository
     participant WK as ReviewJobWorker
@@ -63,11 +74,12 @@ sequenceDiagram
     participant AI as AgentAiReviewCore
     participant CP as AdoCommentPoster
 
-    Caller->>MW: POST /reviews (X-Client-Key, X-Ado-Token)
-    MW->>MW: validate X-Client-Key
+    Caller->>MW: POST /clients/{clientId}/reviews (JWT or X-User-Pat, X-Ado-Token)
+    MW->>MW: resolve UserId, IsAdmin, ClientRoles
     MW->>RC: forward request
+    RC->>RC: require ClientAdministrator for {clientId}
     RC->>RC: verify X-Ado-Token (identity check)
-    RC->>JR: CreateOrGetActiveJobAsync()
+    RC->>JR: FindActiveJob()/AddAsync()
     JR-->>RC: jobId (new or existing)
     RC-->>Caller: 202 Accepted { jobId }
 
@@ -86,6 +98,25 @@ sequenceDiagram
 
 ---
 
+## Review Dedup Flow
+
+Incremental review publication uses a two-stage duplicate-suppression path before any new PR thread is created.
+
+1. `ReviewOrchestrationService.BuildReviewContextAsync(...)` carries forward completed per-file results from the previous reviewed iteration for unchanged files.
+2. `FileByFileReviewOrchestrator.SynthesizeResultsAsync(...)` excludes `IsCarriedForward` file results from synthesis summaries, cross-file deduplication, and quality-filter input, while preserving `CarriedForwardFilePaths` and a carried-forward skip count on the final `ReviewResult`.
+3. `ReviewOrchestrationService.PublishReviewResultAsync(...)` opens a dedicated `ReviewJobProtocol` pass labeled `posting`, calls `IAdoCommentPoster.PostAsync(...)`, persists the posted `ReviewResult`, and records aggregate duplicate-suppression diagnostics.
+4. `AdoCommentPoster` evaluates each candidate finding against existing bot-authored PR threads using:
+    - normalized file-path and anchor matching for equivalent locations,
+    - resolved-thread reuse for previously raised concerns,
+    - exact normalized-text matching,
+    - thread-memory similarity scoped to the current pull request,
+    - deterministic text-similarity fallback when historical memory signals are degraded.
+5. The posting protocol emits `dedup_summary` on every posting pass and `dedup_degraded_mode` only when historical duplicate protection had to fall back to reduced checks.
+
+This keeps incremental reviews additive: unchanged findings remain visible in the stored result and summary context, but only genuinely fresh findings are allowed to create new ADO threads.
+
+---
+
 ## Authentication Flow
 
 How Admin UI and API callers obtain and renew credentials.
@@ -94,7 +125,7 @@ How Admin UI and API callers obtain and renew credentials.
 sequenceDiagram
     actor User as User / Admin UI
     participant Auth as AuthController
-    participant MW as AdminKeyMiddleware
+    participant MW as AuthMiddleware
     participant JT as JwtTokenService
     participant UR as UserRepository
     participant PR as UserPatRepository
@@ -115,24 +146,20 @@ sequenceDiagram
     Auth-->>User: { accessToken (15 min) }
 ```
 
-### AdminKeyMiddleware — evaluation order
+### AuthMiddleware — evaluation order
 
 ```mermaid
 flowchart TD
     REQ([Inbound Request]) --> B1
 
-    B1{"Authorization: Bearer JWT?"}-- valid JWT --> SET_JWT["Set UserId + IsAdmin from claims"]
+    B1{"Authorization: Bearer JWT?"}-- valid JWT --> SET_JWT["Set UserId + IsAdmin from claims\nLoad ClientRoles from DB"]
     B1 -- no/invalid --> B2
 
-    B2{"X-User-Pat header?"}-- PAT found & BCrypt match --> SET_PAT["Set UserId + IsAdmin from user record"]
-    B2 -- no/invalid --> B3
-
-    B3{"X-Admin-Key header?\n(legacy — deprecated)"}-- matches MEISTER_ADMIN_KEY --> WARN["Log deprecation warning\nSet IsAdmin = true"]
-    B3 -- no --> DEFAULT["IsAdmin = false"]
+    B2{"X-User-Pat header?"}-- PAT found & BCrypt match --> SET_PAT["Set UserId + IsAdmin from user record\nLoad ClientRoles from DB"]
+    B2 -- no/invalid --> DEFAULT["Anonymous request\nIsAdmin = false"]
 
     SET_JWT --> NEXT([next()])
     SET_PAT --> NEXT
-    WARN --> NEXT
     DEFAULT --> NEXT
 ```
 
@@ -189,6 +216,47 @@ flowchart TD
 
 ---
 
+## Guided ADO Configuration
+
+Guided Azure DevOps onboarding separates credential ownership from admin selections. Client
+credentials authorize the backend to talk to Azure DevOps. Client-scoped organization-scope
+records define which Azure DevOps organizations administrators may choose in guided ProCursor and
+crawl-config flows. All downstream project, repository, wiki, branch, and crawl-filter choices are
+resolved through discovery endpoints and revalidated again at save time.
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant UI as Admin UI
+    participant CC as ClientsController
+    participant DR as AdoDiscoveryController
+    participant OS as ClientAdoOrganizationScopeRepository
+    participant DS as IAdoDiscoveryService
+    participant PC as ProCursorKnowledgeSourcesController
+    participant PG as IProCursorGateway
+    participant CFG as AdminCrawlConfigsController
+
+    Admin->>UI: Configure client ADO credentials
+    Admin->>UI: Add allowed organization
+    UI->>CC: POST /clients/{id}/ado-organization-scopes
+    CC->>OS: Store normalized org URL + verification state
+    UI->>DR: GET /admin/clients/{id}/ado/discovery/projects
+    DR->>DS: Resolve live projects for organizationScopeId
+    UI->>DR: GET discovery sources / branches / crawl-filters
+    DR->>DS: Resolve live source metadata
+    UI->>PC: POST guided ProCursor source
+    PC->>PG: CreateSourceAsync(... organizationScopeId, canonicalSourceRef ...)
+    PG->>DS: Revalidate project/source/branch
+    UI->>CFG: POST guided crawl configuration
+    CFG->>DS: Revalidate selected crawl filters
+    CFG-->>UI: 201 or actionable 4xx/409 drift error
+```
+
+Compatibility remains in place for legacy callers that still send raw `organizationUrl` and
+repository identifiers, but the guided path is now the primary architecture boundary.
+
+---
+
 ## PR Crawler Flow
 
 The background crawler finds new PRs automatically — no external trigger needed.
@@ -214,6 +282,37 @@ sequenceDiagram
             end
         end
     end
+```
+
+The crawler now operates against crawl configurations that can either reference all client
+ProCursor sources or a selected subset. That selection is durable and does not rely on reading the
+latest admin configuration during review execution.
+
+---
+
+## Crawl Source Scope Snapshotting
+
+When a crawl configuration uses `selectedSources`, `PrCrawlService` copies that source list onto
+the queued `ReviewJob`. `ReviewOrchestrationService` later consumes the saved snapshot so an admin
+change made after queue time cannot silently alter the knowledge scope of in-flight work.
+
+```mermaid
+sequenceDiagram
+    participant CW as PrCrawlerWorker
+    participant PCS as PrCrawlService
+    participant CR as CrawlConfigRepository
+    participant JR as JobRepository
+    participant SNAP as review_job_procursor_source_scopes
+    participant ROS as ReviewOrchestrationService
+    participant PG as IProCursorGateway
+
+    CW->>PCS: Queue review for matching PR
+    PCS->>CR: Load crawl config + selected ProCursor sources
+    PCS->>JR: Persist ReviewJob
+    PCS->>SNAP: Persist selected source IDs (optional)
+    ROS->>JR: Load ReviewJob
+    ROS->>SNAP: Load snapshotted source IDs
+    ROS->>PG: Query knowledge with snapshotted scope
 ```
 
 ---
@@ -269,9 +368,218 @@ unbounded amounts of raw file content in the conversation history.
 
 ---
 
+## ProCursor Boundary
+
+ProCursor runs inside the same deployment today, but it is treated as a bounded slice with its own
+facade and options surface. Review orchestration reaches it only through `IProCursorGateway` and
+`PROCURSOR_*` settings; it does not talk directly to ProCursor repositories, ADO materializers, or
+snapshot tables.
+
+For guided admin flows, the same gateway boundary also owns save-time validation of
+`organizationScopeId`, canonical source references, and default or tracked branch selections. That
+keeps Azure DevOps drift detection at the admin boundary instead of surfacing first during a later
+refresh or review run.
+
+```mermaid
+flowchart LR
+    REVIEW["Review orchestration"]
+    GATEWAY["IProCursorGateway"]
+    QUERY["ProCursorQueryService"]
+    INDEX["ProCursorIndexCoordinator + ProCursorIndexWorker"]
+    ADO["ADO materializers"]
+    PG[("PostgreSQL + pgvector")]
+    AOAI["Embedding endpoint"]
+
+    REVIEW --> GATEWAY
+    GATEWAY --> QUERY
+    GATEWAY --> INDEX
+    QUERY --> PG
+    INDEX --> PG
+    INDEX --> ADO
+    INDEX --> AOAI
+```
+
+## ProCursor Refresh Flow
+
+Tracked branches refresh independently from the pull request worker. The scheduler polls branch
+heads, queues durable jobs, and the dedicated worker drains those jobs with per-source isolation so
+one slow or failing source does not block unrelated repositories and wikis.
+
+```mermaid
+sequenceDiagram
+    participant SCH as ProCursorRefreshScheduler
+    participant ADO as Azure DevOps Git APIs
+    participant JOBS as procursor_index_jobs
+    participant WRK as ProCursorIndexWorker
+    participant IDX as ProCursorIndexCoordinator
+    participant PG as PostgreSQL + pgvector
+
+    SCH->>ADO: Resolve tracked branch head
+    ADO-->>SCH: Latest commit SHA
+    SCH->>JOBS: Queue refresh job (deduped)
+    WRK->>JOBS: Claim next pending job
+    WRK->>IDX: Execute claimed job
+    IDX->>ADO: Materialize repository/wiki state
+    IDX->>PG: Persist snapshot, chunks, symbols
+    IDX->>PG: Update freshness + latest indexed commit
+```
+
+## ProCursor Token Reporting
+
+ProCursor token reporting runs alongside the indexing flow. The capture boundary prefers provider
+usage metadata returned by the AI client, falls back to tokenizer-based estimates when needed, and
+stores one idempotent event row per physical ProCursor AI call. A dedicated rollup worker refreshes
+daily and monthly aggregates so the admin UI can read stable totals while still gap-filling the
+newest uncaptured window from raw events.
+
+```mermaid
+sequenceDiagram
+    participant IDX as ProCursorIndexCoordinator / QueryService
+    participant EMB as ProCursorEmbeddingService
+    participant REC as IProCursorTokenUsageRecorder
+    participant EVT as procursor_token_usage_events
+    participant WRK as ProCursorTokenUsageRollupWorker
+    participant AGG as IProCursorTokenUsageAggregationService
+    participant ROLL as procursor_token_usage_rollups
+    participant API as ProCursorTokenUsageController
+    participant UI as Admin UI
+
+    IDX->>EMB: GenerateEmbeddingsAsync(...)
+    EMB->>EMB: Prefer provider UsageDetails
+    EMB->>EMB: Fallback to tokenizer estimate if missing
+    EMB->>REC: RecordAsync(requestId, sourceId, model, token counts)
+    REC->>EVT: Insert idempotent event row
+
+    loop every PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS
+        WRK->>AGG: RefreshRecentAsync()
+        AGG->>EVT: Read touched event window
+        AGG->>ROLL: Replace touched daily + monthly rollups
+        WRK->>ROLL: Retention watermark (via purge service)
+    end
+
+    UI->>API: GET /admin/clients/{clientId}/procursor/...
+    API->>ROLL: Read completed rollup buckets
+    API->>EVT: Gap-fill newest uncaptured interval
+    API-->>UI: Totals, top sources, recent safe events, freshness
+```
+
+---
+
 ## Data Model
 
 PostgreSQL entities and their relationships.
+
+### Guided Configuration Slice
+
+The guided admin surface adds durable organization-scope state, canonical crawl filters, optional
+selected-source associations, and review-job snapshots beneath the existing client boundary.
+
+```mermaid
+erDiagram
+    Client ||--o{ ClientAdoOrganizationScope : "allows"
+    Client ||--o{ CrawlConfiguration : "owns"
+    Client ||--o{ ProCursorKnowledgeSource : "owns"
+    ClientAdoOrganizationScope ||--o{ CrawlConfiguration : "selected by"
+    CrawlConfiguration ||--o{ CrawlRepoFilter : "stores"
+    CrawlConfiguration ||--o{ CrawlConfigurationProCursorSource : "limits to"
+    ProCursorKnowledgeSource ||--o{ CrawlConfigurationProCursorSource : "referenced by"
+    ReviewJob ||--o{ ReviewJobProCursorSourceScope : "snapshots"
+    ProCursorKnowledgeSource ||--o{ ReviewJobProCursorSourceScope : "snapshotted"
+
+    ClientAdoOrganizationScope {
+        uuid Id PK
+        uuid ClientId FK
+        string OrganizationUrl
+        string DisplayName
+        string VerificationStatus
+        bool IsEnabled
+    }
+
+    CrawlConfiguration {
+        uuid Id PK
+        uuid ClientId FK
+        uuid OrganizationScopeId FK
+        string OrganizationUrl
+        string ProjectId
+        string ProCursorSourceScopeMode
+        int CrawlIntervalSeconds
+    }
+
+    CrawlRepoFilter {
+        uuid Id PK
+        uuid CrawlConfigurationId FK
+        string DisplayName
+        string CanonicalProvider
+        string CanonicalValue
+    }
+
+    CrawlConfigurationProCursorSource {
+        uuid CrawlConfigurationId FK
+        uuid ProCursorKnowledgeSourceId FK
+    }
+
+    ReviewJobProCursorSourceScope {
+        uuid ReviewJobId FK
+        uuid ProCursorKnowledgeSourceId FK
+    }
+```
+
+Read models surface invalid associations as `invalidProCursorSourceIds` instead of dropping them
+silently, so administrators can repair stale selections from the guided UI.
+
+### ProCursor Persistence Slice
+
+The ProCursor tables hang off the existing client boundary and add their own durable job queue,
+versioned snapshots, searchable chunks, and symbol graph rows.
+
+```mermaid
+erDiagram
+    Client ||--o{ ProCursorKnowledgeSource : "owns"
+    ProCursorKnowledgeSource ||--o{ ProCursorTrackedBranch : "tracks"
+    ProCursorKnowledgeSource ||--o{ ProCursorIndexJob : "queues"
+    ProCursorTrackedBranch ||--o{ ProCursorIndexSnapshot : "builds"
+    ProCursorIndexSnapshot ||--o{ ProCursorKnowledgeChunk : "stores"
+    ProCursorIndexSnapshot ||--o{ ProCursorSymbolRecord : "indexes"
+    ProCursorIndexSnapshot ||--o{ ProCursorSymbolEdge : "relates"
+
+    ProCursorKnowledgeSource {
+        uuid Id PK
+        uuid ClientId FK
+        string DisplayName
+        string SourceKind
+        string RepositoryId
+        string DefaultBranch
+        bool IsEnabled
+    }
+
+    ProCursorTrackedBranch {
+        uuid Id PK
+        uuid KnowledgeSourceId FK
+        string BranchName
+        string LastSeenCommitSha
+        string LastIndexedCommitSha
+        bool IsEnabled
+    }
+
+    ProCursorIndexJob {
+        uuid Id PK
+        uuid KnowledgeSourceId FK
+        uuid TrackedBranchId FK
+        string JobKind
+        string Status
+        string DedupKey
+        int AttemptCount
+    }
+
+    ProCursorIndexSnapshot {
+        uuid Id PK
+        uuid KnowledgeSourceId FK
+        uuid TrackedBranchId FK
+        string CommitSha
+        string Status
+        bool SupportsSymbolQueries
+    }
+```
 
 ```mermaid
 erDiagram

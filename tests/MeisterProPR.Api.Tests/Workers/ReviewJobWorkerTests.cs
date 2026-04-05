@@ -1,10 +1,12 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -30,7 +32,8 @@ public class ReviewJobWorkerTests
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
 
-        var effectiveRepo = repo ?? new InMemoryJobRepository();
+        var effectiveRepo = repo ?? Substitute.For<IJobRepository>();
+        effectiveRepo.GetPendingJobs().Returns(Array.Empty<ReviewJob>());
         serviceProvider.GetService(typeof(IJobRepository)).Returns(effectiveRepo);
 
         return scopeFactory;
@@ -75,9 +78,11 @@ public class ReviewJobWorkerTests
     [Fact]
     public async Task Worker_ClaimsPendingJobAndTransitionsToProcessing()
     {
-        var repo = new InMemoryJobRepository();
+        var repo = Substitute.For<IJobRepository>();
         var job = CreateJob(101);
-        repo.Add(job);
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
 
@@ -101,10 +106,8 @@ public class ReviewJobWorkerTests
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
 
-        // Job should have been picked up and either Failed (due to null service) or is no longer Pending
-        var retrieved = repo.GetById(job.Id);
-        Assert.NotNull(retrieved);
-        Assert.NotEqual(JobStatus.Pending, retrieved!.Status);
+        // Job should have been picked up — TryTransition to Processing was called
+        await repo.Received().TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -131,9 +134,11 @@ public class ReviewJobWorkerTests
     [Fact]
     public async Task Worker_UnhandledException_DoesNotCrashWorker()
     {
-        var repo = new InMemoryJobRepository();
+        var repo = Substitute.For<IJobRepository>();
         var job = CreateJob(777);
-        repo.Add(job);
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();

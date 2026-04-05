@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -10,6 +13,9 @@ public sealed partial class ReviewOrchestrationService
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reviewer identity not configured for client {ClientId} — failing job {JobId}")]
     private static partial void LogReviewerIdentityMissing(ILogger logger, Guid clientId, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "No active AI connection configured for client {ClientId} — failing job {JobId}")]
+    private static partial void LogNoAiConnectionConfigured(ILogger logger, Guid clientId, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Starting review for job {JobId} PR#{PrId}")]
     private static partial void LogReviewStarted(ILogger logger, Guid jobId, int prId);

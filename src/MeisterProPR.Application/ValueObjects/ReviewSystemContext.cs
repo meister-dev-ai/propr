@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -98,4 +101,11 @@ public sealed class ReviewSystemContext
     ///     for the file's <see cref="PerFileReviewHint.ComplexityTier" />.
     /// </summary>
     public IChatClient? TierChatClient { get; set; }
+
+    /// <summary>
+    ///     The effective model deployment name to pass into <see cref="ChatOptions.ModelId" /> for the
+    ///     current review stage. This lets client-scoped and tier-scoped AI connections override the
+    ///     global fallback configured in <c>AiReviewOptions</c>.
+    /// </summary>
+    public string? ModelId { get; set; }
 }

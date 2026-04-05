@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Core;
@@ -10,11 +13,9 @@ using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.AzureDevOps;
 using MeisterProPR.Infrastructure.AzureDevOps.Stub;
-using MeisterProPR.Infrastructure.Configuration;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Repositories;
-using MeisterProPR.Infrastructure.Repositories.Stub;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
@@ -22,6 +23,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Pgvector.EntityFrameworkCore;
 using ApplicationIAiReviewCore = MeisterProPR.Application.Interfaces.IAiReviewCore;
 using NoOpAdoCommentPoster = MeisterProPR.Infrastructure.AzureDevOps.Stub.NoOpAdoCommentPoster;
 using StubActivePrFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubActivePrFetcher;
@@ -34,8 +36,7 @@ namespace MeisterProPR.Infrastructure.DependencyInjection;
 
 /// <summary>
 ///     Extension methods for registering infrastructure services.
-///     When <c>DB_CONNECTION_STRING</c> is set, PostgreSQL-backed implementations are used.
-///     When not set, in-memory implementations are used (legacy/dev/test fallback).
+///     PostgreSQL-backed implementations are used when <c>DB_CONNECTION_STRING</c> is configured.
 /// </summary>
 public static class InfrastructureServiceExtensions
 {
@@ -47,17 +48,20 @@ public static class InfrastructureServiceExtensions
         if (isDbMode)
         {
             // PostgreSQL mode: EF Core + Npgsql
-            services.AddDbContext<MeisterProPRDbContext>(options =>
-                options
-                    .UseNpgsql(dbConnectionString)
-                    // EF tools 9.x generate snapshots that EF runtime 10.x flags as pending;
-                    // the schema is correct — suppress the spurious warning.
-                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+            services.AddDbContext<MeisterProPRDbContext>(
+                options =>
+                    options
+                        .UseNpgsql(dbConnectionString, o => o.UseVector())
+                        // EF tools 9.x generate snapshots that EF runtime 10.x flags as pending;
+                        // the schema is correct — suppress the spurious warning.
+                        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
+                contextLifetime: ServiceLifetime.Scoped,
+                optionsLifetime: ServiceLifetime.Singleton);
 
             // Protocol recorder uses a factory so it can open short-lived contexts per event write.
             services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                 options
-                    .UseNpgsql(dbConnectionString)
+                    .UseNpgsql(dbConnectionString, o => o.UseVector())
                     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
             services.AddScoped<IJobRepository, JobRepository>();
@@ -65,6 +69,8 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IClientAdminService, ClientAdminService>();
             services.AddScoped<ICrawlConfigurationRepository, CrawlConfigurationRepository>();
             services.AddScoped<IClientAdoCredentialRepository, ClientAdoCredentialRepository>();
+            services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
+            services.AddScoped<IAdoDiscoveryService, AdoDiscoveryService>();
             services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
             services.AddScoped<IReviewPrScanRepository, EfReviewPrScanRepository>();
@@ -78,27 +84,36 @@ public static class InfrastructureServiceExtensions
             // AI connection repository (DB mode only)
             services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
 
-            // Finding dismissal repository (DB mode only)
-            services.AddScoped<IFindingDismissalRepository, FindingDismissalRepository>();
-
             // Prompt override repository and service (DB mode only)
             services.AddScoped<IPromptOverrideRepository, PromptOverrideRepository>();
             services.AddScoped<IPromptOverrideService, PromptOverrideService>();
 
+            // Thread memory repository (DB mode only — requires pgvector)
+            services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
+
+            // Memory activity log (DB mode only — append-only crawl-side audit table)
+            services.AddScoped<IMemoryActivityLog, MemoryActivityLogRepository>();
+
+            // Client token usage aggregation (DB mode only)
+            services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
+
+            // ProCursor token usage capture and reporting (DB mode only)
+            services.AddSingleton<IProCursorTokenUsageRecorder, EfProCursorTokenUsageRecorder>();
+            services.AddScoped<IProCursorTokenUsageReadRepository, ProCursorTokenUsageReadRepository>();
+            services.AddScoped<IProCursorTokenUsageAggregationService, MeisterProPR.Infrastructure.Services.ProCursorTokenUsageAggregationService>();
+            services.AddScoped<IProCursorTokenUsageRebuildService, MeisterProPR.Infrastructure.Services.ProCursorTokenUsageRebuildService>();
+            services.AddScoped<IProCursorTokenUsageRetentionService, MeisterProPR.Infrastructure.Services.ProCursorTokenUsageRetentionService>();
+
             // Auth services
             services.AddSingleton<IPasswordHashService, PasswordHashService>();
             services.AddSingleton<IJwtTokenService, JwtTokenService>();
+            services.AddScoped<MeisterProPR.Infrastructure.Services.SecretBackfillService>();
             services.AddTransient<AdminBootstrapService>();
         }
-        else
-        {
-            // Legacy in-memory mode (dev / WebApplicationFactory tests without DB)
-            services.AddSingleton<IJobRepository, InMemoryJobRepository>();
-            services.AddSingleton<IClientRegistry, EnvVarClientRegistry>();
-            services.AddSingleton<IClientAdoCredentialRepository, NullClientAdoCredentialRepository>();
-            services.AddSingleton<IReviewPrScanRepository, NullReviewPrScanRepository>();
-            services.AddSingleton<IProtocolRecorder, NullProtocolRecorder>();
-        }
+
+        services.AddSingleton<ISecretProtectionCodec, MeisterProPR.Infrastructure.Services.SecretProtectionCodec>();
+
+        services.AddScoped<EmbeddingDeploymentResolver>();
 
         // ADO token validation (identity verification only).
         // Set ADO_SKIP_TOKEN_VALIDATION=true in user secrets to bypass the real
@@ -129,8 +144,8 @@ public static class InfrastructureServiceExtensions
             services.AddScoped<IAssignedPrFetcher, StubAssignedPrFetcher>();
             services.AddScoped<IPrStatusFetcher, StubPrStatusFetcher>();
             services.AddScoped<IIdentityResolver, StubIdentityResolver>();
-            services.AddSingleton<IAdoReviewerManager, StubAdoReviewerManager>();
-            services.AddSingleton<IActivePrFetcher, StubActivePrFetcher>();
+            services.AddScoped<IAdoReviewerManager, StubAdoReviewerManager>();
+            services.AddScoped<IActivePrFetcher, StubActivePrFetcher>();
             services.AddScoped<IAdoThreadReplier, StubAdoThreadReplier>();
             services.AddScoped<IAdoThreadClient, StubAdoThreadClient>();
         }
@@ -148,33 +163,17 @@ public static class InfrastructureServiceExtensions
                     credential,
                     sp.GetRequiredService<IHttpClientFactory>(),
                     sp.GetRequiredService<IClientAdoCredentialRepository>()));
-            services.AddSingleton<IAdoReviewerManager, AdoReviewerManager>();
-            services.AddSingleton<IActivePrFetcher, AdoActivePrFetcher>();
+            services.AddScoped<IAdoReviewerManager, AdoReviewerManager>();
+            services.AddScoped<IActivePrFetcher, AdoActivePrFetcher>();
             services.AddScoped<IAdoThreadReplier, AdoThreadReplier>();
             services.AddScoped<IAdoThreadClient, AdoThreadClient>();
+            services.AddScoped<IReviewerThreadStatusFetcher, AdoReviewerThreadStatusFetcher>();
         }
-
-        // AI review (provider-agnostic via IChatClient)
-        var aiEndpoint = configuration["AI_ENDPOINT"]
-                         ?? throw new InvalidOperationException("AI_ENDPOINT environment variable is not set.");
-        var aiDeployment = configuration["AI_DEPLOYMENT"]
-                           ?? throw new InvalidOperationException("AI_DEPLOYMENT environment variable is not set.");
-
-        services.AddKeyedSingleton<IChatClient>("base", (_, _) => CreateChatClient(
-            aiEndpoint,
-            configuration["AI_API_KEY"]));
-
-        services.AddSingleton<IChatClient>(sp => new ResilientChatClientDecorator(
-            sp.GetRequiredKeyedService<IChatClient>("base"),
-            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
-            sp.GetRequiredService<ILogger<ResilientChatClientDecorator>>()));
 
         // AiReviewOptions — bound from individual env vars (not a config section)
         services.AddOptions<AiReviewOptions>()
             .Configure(opts =>
             {
-                opts.ModelId = aiDeployment;
-
                 if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
                 {
                     opts.MaxIterations = maxIter;
@@ -244,9 +243,23 @@ public static class InfrastructureServiceExtensions
                 {
                     opts.QualityFilterThreshold = qualityFilterThreshold;
                 }
-            })
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
+
+                if (int.TryParse(configuration["AI_MEMORY_TOP_N"], out var memTopN))
+                {
+                    opts.MemoryTopN = memTopN;
+                }
+
+                if (float.TryParse(configuration["AI_MEMORY_MIN_SIMILARITY"], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var memMinSim))
+                {
+                    opts.MemoryMinSimilarity = memMinSim;
+                }
+
+                if (int.TryParse(configuration["AI_MEMORY_EMBEDDING_DIMENSIONS"], out var memDims))
+                {
+                    opts.MemoryEmbeddingDimensions = memDims;
+                }
+            });
 
         // WorkerOptions — bound from individual env vars
         services.AddOptions<WorkerOptions>()
@@ -280,11 +293,27 @@ public static class InfrastructureServiceExtensions
                 (_, _) =>
                     CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"]));
         }
-
-        services.AddSingleton<ApplicationIAiReviewCore, ToolAwareAiReviewCore>();
-        services.AddScoped<IFileByFileReviewOrchestrator, FileByFileReviewOrchestrator>();
+        services.AddSingleton<ApplicationIAiReviewCore>(sp => new ToolAwareAiReviewCore(
+            null,
+            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<ILogger<ToolAwareAiReviewCore>>()));
+        services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
+            sp.GetRequiredService<ApplicationIAiReviewCore>(),
+            sp.GetRequiredService<IProtocolRecorder>(),
+            sp.GetRequiredService<IJobRepository>(),
+            null,
+            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
+            sp.GetService<IAiConnectionRepository>(),
+            sp.GetService<IAiChatClientFactory>(),
+            sp.GetService<IThreadMemoryService>()));
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
-        services.AddSingleton<IMentionAnswerService, AgentMentionAnswerService>();
+        services.AddScoped<IMentionAnswerService, AgentMentionAnswerService>();
+
+        // Thread memory services — always registered; embedding connection resolved per-client via IAiConnectionRepository.
+        services.AddSingleton<IAiEmbeddingGeneratorFactory, AiEmbeddingGeneratorFactory>();
+        services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
+        services.AddScoped<IThreadMemoryService, ThreadMemoryService>();
 
         // Per-client AI connection factory (singleton — stateless, creates new clients on demand)
         services.AddHttpClient("AiProbe")
@@ -296,20 +325,21 @@ public static class InfrastructureServiceExtensions
 
         if (configuration.GetValue<bool>("ADO_STUB_PR"))
         {
-            services.AddSingleton<IReviewContextToolsFactory, StubReviewContextToolsFactory>();
-            services.AddSingleton<IRepositoryInstructionFetcher, NullRepositoryInstructionFetcher>();
-            services.AddSingleton<IRepositoryExclusionFetcher, NullRepositoryExclusionFetcher>();
+            services.AddScoped<IReviewContextToolsFactory, StubReviewContextToolsFactory>();
+            services.AddScoped<IRepositoryInstructionFetcher, NullRepositoryInstructionFetcher>();
+            services.AddScoped<IRepositoryExclusionFetcher, NullRepositoryExclusionFetcher>();
         }
         else
         {
-            services.AddSingleton<IReviewContextToolsFactory>(sp =>
+            services.AddScoped<IReviewContextToolsFactory>(sp =>
                 new AdoReviewContextToolsFactory(
                     sp.GetRequiredService<VssConnectionFactory>(),
                     sp.GetRequiredService<IClientAdoCredentialRepository>(),
+                    sp.GetRequiredService<IProCursorGateway>(),
                     sp.GetRequiredService<IOptions<AiReviewOptions>>(),
                     sp.GetRequiredService<ILoggerFactory>()));
-            services.AddSingleton<IRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>();
-            services.AddSingleton<IRepositoryExclusionFetcher, AdoRepositoryExclusionFetcher>();
+            services.AddScoped<IRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>();
+            services.AddScoped<IRepositoryExclusionFetcher, AdoRepositoryExclusionFetcher>();
         }
 
         // Register instruction evaluator: use AI evaluator when endpoint is configured, otherwise pass-through
@@ -359,6 +389,7 @@ public static class InfrastructureServiceExtensions
         // legacy Chat Completions endpoint, enabling reasoning and tool use.
         return azureClient.GetResponsesClient().AsIChatClient();
     }
+
 
     /// <summary>
     ///     Resolves an Azure credential from configuration. Uses <see cref="ClientSecretCredential" />

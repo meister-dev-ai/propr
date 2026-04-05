@@ -1,32 +1,18 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { UnauthorizedError } from '@/services/api'
+import { mount, flushPromises } from '@vue/test-utils'
 
-// Mock the api module
-vi.mock('@/services/api', () => ({
-  UnauthorizedError: class UnauthorizedError extends Error {
-    constructor() {
-      super('Unauthorized')
-      this.name = 'UnauthorizedError'
-    }
-  },
-  createAdminClient: vi.fn(),
-}))
-
-// Mock the router
 const mockRouterPush = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }))
 
-// Mock useSession
-const mockSetAdminKey = vi.fn()
-const mockIsAuthenticated = { value: false }
+const mockSetTokens = vi.fn()
+const mockLoadClientRoles = vi.fn().mockResolvedValue(undefined)
 vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({
-    setAdminKey: mockSetAdminKey,
-    isAuthenticated: mockIsAuthenticated,
-  }),
+  useSession: () => ({ setTokens: mockSetTokens, loadClientRoles: mockLoadClientRoles }),
 }))
 
 async function importLoginView() {
@@ -35,66 +21,57 @@ async function importLoginView() {
 }
 
 describe('LoginView', () => {
-  let createAdminClient: ReturnType<typeof vi.fn>
-  let mockGet: ReturnType<typeof vi.fn>
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks()
-    const api = await import('@/services/api')
-    createAdminClient = vi.mocked(api.createAdminClient)
-    mockGet = vi.fn()
-    createAdminClient.mockReturnValue({ GET: mockGet })
   })
 
-  it('renders admin key input and submit button', async () => {
+  it('renders username and password inputs and submit button', async () => {
     const LoginView = await importLoginView()
     const wrapper = mount(LoginView)
-    expect(wrapper.find('input[type="password"]').exists()).toBe(true)
+    expect(wrapper.find('input#username').exists()).toBe(true)
+    expect(wrapper.find('input#password').exists()).toBe(true)
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
   })
 
-  it('shows validation error without API call when key is empty', async () => {
+  it('shows validation error without API call when username is empty', async () => {
     const LoginView = await importLoginView()
     const wrapper = mount(LoginView)
     await wrapper.find('form').trigger('submit')
-    expect(createAdminClient).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Admin key is required')
+    expect((global.fetch as any)).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Username is required')
   })
 
-  it('calls createAdminClient with overrideKey on submit', async () => {
-    mockGet.mockResolvedValue({ data: [], response: { ok: true } })
+  it('shows validation error when password is empty', async () => {
     const LoginView = await importLoginView()
     const wrapper = mount(LoginView)
-    await wrapper.find('input[type="password"]').setValue('my-key')
+    await wrapper.find('input#username').setValue('admin')
     await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    expect(createAdminClient).toHaveBeenCalledWith({ overrideKey: 'my-key' })
-    expect(mockGet).toHaveBeenCalledWith('/clients', {})
+    expect((global.fetch as any)).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Password is required')
   })
 
-  it('stores key and navigates to / on 200 success', async () => {
-    mockGet.mockResolvedValue({ data: [], response: { ok: true } })
+  it('calls login endpoint and stores tokens and navigates on success', async () => {
+    ;(global.fetch as any).mockResolvedValue({ status: 200, ok: true, json: async () => ({ accessToken: 'tok', refreshToken: 'ref' }) })
     const LoginView = await importLoginView()
     const wrapper = mount(LoginView)
-    await wrapper.find('input[type="password"]').setValue('valid-key')
+    await wrapper.find('input#username').setValue('admin')
+    await wrapper.find('input#password').setValue('secret')
     await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-    expect(mockSetAdminKey).toHaveBeenCalledWith('valid-key')
-    expect(mockRouterPush).toHaveBeenCalledWith('/')
+    await flushPromises()
+    expect(mockSetTokens).toHaveBeenCalledWith('tok', 'ref')
+    expect(mockLoadClientRoles).toHaveBeenCalled()
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'home' })
   })
 
-  it('shows error and does not store key on UnauthorizedError', async () => {
-    const { UnauthorizedError: MockUnauthorizedError } = await import('@/services/api')
-    mockGet.mockRejectedValue(new MockUnauthorizedError())
+  it('shows error and does not store tokens on 401', async () => {
+    ;(global.fetch as any).mockResolvedValue({ status: 401, ok: false })
     const LoginView = await importLoginView()
     const wrapper = mount(LoginView)
-    await wrapper.find('input[type="password"]').setValue('bad-key')
+    await wrapper.find('input#username').setValue('admin')
+    await wrapper.find('input#password').setValue('bad')
     await wrapper.find('form').trigger('submit')
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-    expect(mockSetAdminKey).not.toHaveBeenCalled()
-    expect(mockRouterPush).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Invalid admin key')
+    await flushPromises()
+    expect(mockSetTokens).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Invalid username or password')
   })
 })

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Domain.Entities;
@@ -59,6 +62,18 @@ public sealed class ReviewJobProtocol
 
     /// <summary>Final aggregated confidence score (0–100). <see langword="null" /> when not evaluated.</summary>
     public int? FinalConfidence { get; set; }
+
+    /// <summary>
+    ///     The AI connection category (effort tier) used for this protocol pass.
+    ///     <see langword="null" /> for legacy records created before per-tier tracking was introduced.
+    /// </summary>
+    public AiConnectionModelCategory? AiConnectionCategory { get; set; }
+
+    /// <summary>
+    ///     The effective AI model deployment name used for this protocol pass (e.g. "gpt-4o").
+    ///     <see langword="null" /> for legacy records.
+    /// </summary>
+    public string? ModelId { get; set; }
 
     /// <summary>Chronological list of individual steps recorded during the review loop.</summary>
     public ICollection<ProtocolEvent> Events { get; } = [];

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Domain.Entities;
@@ -58,7 +61,7 @@ public sealed class AiConnection
     /// <summary>The selected model deployment when this connection is active.</summary>
     public string? ActiveModel { get; private set; }
 
-    /// <summary>Optional API key. When null <see cref="DefaultAzureCredential"/> is used.</summary>
+    /// <summary>Optional API key. When null, the runtime falls back to the ambient Azure credential chain.</summary>
     public string? ApiKey { get; private set; }
 
     /// <summary>When this connection was created.</summary>

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Api.Tests.Fixtures;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -16,10 +19,9 @@ using NSubstitute;
 namespace MeisterProPR.Api.Tests;
 
 /// <summary>
-///     Integration tests verifying crawl re-evaluation behaviour:
-///     a PR with an existing Completed review job must trigger a new job on the next crawl so
-///     that conversational replies and code-change re-evaluations are processed. The orchestrator's
-///     skip logic handles "nothing actually changed" cases by fast-exiting early.
+///     Integration tests verifying restart deduplication behaviour:
+///     a PR with an existing Completed review job must not be re-enqueued on restart unless
+///     the crawl can prove new same-iteration reviewer activity from persisted scan state.
 /// </summary>
 [Collection("PostgresApiIntegration")]
 public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsyncLifetime
@@ -30,9 +32,14 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
 
     public async Task InitializeAsync()
     {
+        if (!fixture.IsAvailable)
+        {
+            return;
+        }
+
         // Wipe jobs so the count assertion is not polluted by other tests.
         var opts = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         await using var db = new MeisterProPRDbContext(opts);
         await db.ReviewJobs.ExecuteDeleteAsync();
@@ -42,19 +49,21 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
     ///     Seeds a Completed job for PR #42 directly into Postgres (before the app starts),
     ///     then starts the WebApplicationFactory (simulating a service restart).
     ///     Runs <see cref="IPrCrawlService.CrawlAsync" /> in a fresh scope with a stubbed
-    ///     fetcher returning the same PR and asserts a new job IS created (total == 2) so
-    ///     that the orchestrator can evaluate new replies or code changes.
+    ///     fetcher returning the same PR and asserts no duplicate job is created when there is
+    ///     no persisted scan baseline proving new same-iteration reviewer activity.
     /// </summary>
-    [Fact]
-    public async Task CrawlAsync_CompletedJobExistsAfterRestart_CreatesNewJobForReEvaluation()
+    [SkippableFact]
+    public async Task CrawlAsync_CompletedJobExistsAfterRestart_DoesNotCreateDuplicateJob()
     {
+        fixture.SkipIfUnavailable();
+
         var connectionString = fixture.ConnectionString;
 
         // Step 1 — run migrations and seed the Completed job BEFORE the factory starts.
         // This prevents a race between the AdoPrCrawlerWorker's immediate startup crawl
         // and the test's own seeding step.
         var dbOptions = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, o => o.UseVector())
             .Options;
 
         await using (var db = new MeisterProPRDbContext(dbOptions))
@@ -139,13 +148,12 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             await crawlService.CrawlAsync();
         }
 
-        // Step 6 — assert a new job was created (total == 2); the orchestrator's skip
-        // logic will fast-exit if there are no new commits or replies.
+        // Step 6 — assert no duplicate job was created.
         using (var scope = factory.Services.CreateScope())
         {
             var jobs = scope.ServiceProvider.GetRequiredService<IJobRepository>();
             var (total, _) = await jobs.GetAllJobsAsync(100, 0, null);
-            Assert.Equal(2, total);
+            Assert.Equal(1, total);
         }
     }
 }

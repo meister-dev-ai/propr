@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -11,13 +14,14 @@ public interface ICrawlConfigurationRepository
         string organizationUrl,
         string projectId,
         int crawlIntervalSeconds,
+        Guid? organizationScopeId = null,
         CancellationToken ct = default);
 
     /// <summary>Deletes a crawl configuration. Returns false if not found or not owned by clientId.</summary>
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Returns true if a configuration with the same org/project already exists for the client.</summary>
-    Task<bool> ExistsAsync(Guid clientId, string organizationUrl, string projectId, CancellationToken ct = default);
+    /// <summary>Returns true if a configuration with the same org/project/repo/branch already exists for the client.</summary>
+    Task<bool> ExistsAsync(Guid clientId, string organizationUrl, string projectId, string? repositoryId, string? branchFilter, CancellationToken ct = default);
 
     /// <summary>Returns all active crawl configurations across all clients.</summary>
     Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default);
@@ -53,5 +57,15 @@ public interface ICrawlConfigurationRepository
     Task<bool> UpdateRepoFiltersAsync(
         Guid configId,
         IReadOnlyList<CrawlRepoFilterDto> filters,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Replaces the explicit ProCursor source scope for the given crawl configuration.
+    ///     When <paramref name="scopeMode" /> is <c>AllClientSources</c>, the association set is cleared.
+    /// </summary>
+    Task<bool> UpdateSourceScopeAsync(
+        Guid configId,
+        Domain.Enums.ProCursorSourceScopeMode scopeMode,
+        IReadOnlyList<Guid> proCursorSourceIds,
         CancellationToken ct = default);
 }

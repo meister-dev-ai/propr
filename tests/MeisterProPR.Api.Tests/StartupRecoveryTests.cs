@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Api.Tests.Fixtures;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -27,9 +30,14 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
 
     public async Task InitializeAsync()
     {
+        if (!fixture.IsAvailable)
+        {
+            return;
+        }
+
         // Wipe jobs so a stale Processing job from a previous run doesn't interfere.
         var opts = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         await using var db = new MeisterProPRDbContext(opts);
         await db.ReviewJobs.ExecuteDeleteAsync();
@@ -41,15 +49,17 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
     ///     starts a fresh <see cref="WebApplicationFactory{TEntryPoint}" /> pointing at the
     ///     same database. Asserts the job is now <see cref="JobStatus.Pending" /> after startup.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task Startup_ProcessingJobInDatabase_TransitionsJobToPending()
     {
+        fixture.SkipIfUnavailable();
+
         var connectionString = fixture.ConnectionString;
 
         // Step 1 — prepare DB and seed a stale Processing job directly (pre-restart).
         // Migrations already applied by PostgresContainerFixture.InitializeAsync().
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, o => o.UseVector())
             .Options;
 
         Guid stalJobId;

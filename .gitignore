@@ -1,4 +1,4 @@
-﻿# AI assistant instruction files (kept locally, managed via speckit)
+# AI assistant instruction files (kept locally, managed via speckit)
 CLAUDE.md
 GEMINI.md
 
@@ -33,6 +33,9 @@ artifacts/
 # IDE
 .idea
 .vscode/settings.json
+logs/
+*.tmp
+*.swp
 *.DS_Store
 Thumbs.db
 
@@ -51,6 +54,7 @@ specs/
 .agents
 !.github/workflows
 skills-lock.json
+AGENTS.md
 
 # Node / admin-ui
 admin-ui/node_modules/
@@ -61,3 +65,4 @@ admin-ui/.env.*.local
 # Derived from root openapi.json — not checked in
 admin-ui/openapi.json
 admin-ui/src/services/generated/
+.vscode/mcp.json

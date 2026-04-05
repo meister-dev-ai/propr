@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -23,7 +27,7 @@ public interface IAdoCommentPoster
     ///     Pass <c>null</c> to skip deduplication and post all comments.
     /// </param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    Task PostAsync(
+    Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,

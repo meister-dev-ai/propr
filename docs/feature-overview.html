@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meister DEV - ProPR: Automated AI Code Reviews for Azure DevOps</title>
+<!-- Include Flaticon UIcons (Regular Rounded) to match Admin UI -->
+<link rel='stylesheet' href='../admin-ui/public/uicons/uicons-regular-rounded.css'>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-main: #141c2b;
+    --bg-panel: rgba(27, 38, 59, 0.6);
+    --bg-card: #202c42;
+    --border-panel: #3f5573;
+    --border-card: #4a6382;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --text-main: #f8fafc;
+    --text-dim: #94a3b8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 60px 40px;
+    background-color: var(--bg-main);
+    background-image: 
+      linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+    background-size: 30px 30px;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  .diagram-container {
+    width: 1400px;
+    max-width: 100%;
+  }
+
+  .header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 50px;
+    gap: 20px;
+  }
+
+  .logo-lockup {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .logo-lockup img {
+    height: 70px;
+    width: auto;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 38px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+  }
+
+  h1 span.brand {
+    color: var(--accent);
+  }
+
+  .architecture-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr 340px;
+    gap: 30px;
+  }
+
+  .main-panel {
+    border: 2px solid var(--border-panel);
+    border-radius: 20px;
+    padding: 30px 24px;
+    background: var(--bg-panel);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .panel-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .panel-title {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.5px;
+  }
+
+  .panel-subtitle {
+    font-size: 15px;
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+
+  .hero-icon {
+    height: 80px;
+    margin-bottom: 30px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hero-icon svg {
+    height: 100%;
+    width: auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 2px solid var(--border-card);
+    border-radius: 12px;
+    padding: 24px 20px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  }
+
+  /* Structural classes */
+  .devops-panel .card, .ai-panel .card {
+    margin-bottom: 24px;
+  }
+  .devops-panel .card:last-child, .ai-panel .card:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Self-hosted specific flex layouts */
+  .sh-container {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    width: 100%;
+  }
+
+  .sh-top-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    width: 100%;
+  }
+
+  .sh-bottom-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    width: 75%;
+    margin: 0 auto;
+  }
+
+  .sh-top-row .card, .sh-bottom-row .card {
+    padding: 24px 16px;
+    height: 100%;
+  }
+
+  /* Card specific elements */
+  .card-icon {
+    height: 56px;
+    margin-bottom: 20px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+  }
+
+  .card-icon svg {
+    height: 100%;
+    width: auto;
+  }
+
+  .hero-icon {
+    height: 80px;
+    margin-bottom: 30px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+  }
+
+  .hero-icon svg {
+    height: 100%;
+    width: auto;
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  .card-text {
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.6;
+  }
+
+  .token-text {
+    text-align: left;
+    margin-top: 10px;
+    border-top: 1px dashed var(--border-panel);
+    padding-top: 16px;
+  }
+  
+  .token-text strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+
+  /* Custom C# badge layout inside SVGs */
+  .csharp-text {
+    fill: #ffffff;
+    font-family: 'Inter', sans-serif;
+    font-weight: bold;
+    font-size: 34px;
+  }
+  .csharp-hash {
+    fill: var(--accent);
+    font-family: 'Inter', sans-serif;
+    font-weight: bold;
+    font-size: 24px;
+  }
+
+  .jwt-badge {
+    fill: var(--accent);
+    font-family: 'Inter', sans-serif;
+    font-weight: bold;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<div class="diagram-container">
+  <div class="header">
+    <div class="logo-lockup">
+      <img src="../resources/images/logo.png" alt="Meister DEV - ProPR Logo">
+      <h1>Automated AI Code Reviews<br>for <span class="brand">Azure DevOps</span></h1>
+    </div>
+    <p style="text-align:center; color: var(--text-dim); font-size: 18px; margin: 0;">Ship better code, faster &mdash; let AI review your pull requests so your team doesn't have to.</p>
+  </div>
+
+  <div class="architecture-grid">
+    
+    <!-- ==================== DEVOPS ENVIRONMENT ==================== -->
+    <div class="main-panel devops-panel">
+      <div class="panel-header">
+        <div class="panel-title">INTEGRATE WITH AZURE DEVOPS</div>
+        <div class="panel-subtitle">Works where your team already works</div>
+      </div>
+      
+      <div class="hero-icon">
+        <i class="fi fi-rr-cloud"></i>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">
+          <i class="fi fi-rr-code-branch"></i>
+        </div>
+        <div class="card-title">Zero-Friction PR Reviews</div>
+        <div class="card-text">Automatically picks up assigned pull requests as soon as they're opened — no manual triggers needed.</div>
+      </div>
+
+      <div class="card" style="flex: 1;">
+        <div class="card-icon">
+          <i class="fi fi-rr-comment-alt-dots"></i>
+        </div>
+        <div class="card-title">Human Oversight,<br>Always</div>
+        <div class="card-text">AI suggestions appear as threaded comments directly in your PRs. Developers stay in control — every fix is applied intentionally, never automatically.</div>
+      </div>
+    </div>
+
+
+    <!-- ==================== SELF-HOSTED ENVIRONMENT ==================== -->
+    <div class="main-panel selfhosted-panel">
+      <div class="panel-header">
+        <div class="panel-title">DEPLOY ON YOUR INFRASTRUCTURE</div>
+        <div class="panel-subtitle">Your code never leaves your environment</div>
+      </div>
+      
+      <div class="sh-container">
+        <!-- Row 1 -->
+        <div class="sh-top-row">
+          
+          <!-- Box 1 -->
+          <div class="card">
+            <div class="card-icon">
+              <!-- Shield + JWT context -->
+              <i class="fi fi-rr-shield-check"></i>
+            </div>
+            <div class="card-title">Tailored for<br>Every Team</div>
+            <div class="card-text">Each client gets its own secure identity, custom review focus, and AI prompt tuning — so feedback always fits the team's standards.</div>
+          </div>
+
+          <!-- Box 2 -->
+          <div class="card">
+            <div class="card-icon" style="position: relative;">
+              <!-- C# Hexagon -->
+              <i class="fi fi-rr-hexagon" style="font-size: 72px; position: absolute;"></i>
+              <span style="font-size: 24px; font-weight: 800; z-index: 10; margin-top: 5px;">C#</span>
+            </div>
+            <div class="card-title" style="font-size: 15px;">Self-Hosted &<br>Fully Owned</div>
+            <div class="card-text">Runs entirely on your own servers. Your source code and reviews stay private — no third-party cloud ever sees your data.</div>
+          </div>
+
+          <!-- Box 3 -->
+          <div class="card">
+            <div class="card-icon">
+              <i class="fi fi-rr-dashboard"></i>
+            </div>
+            <div class="card-title">Review Triage<br>Dashboard</div>
+            <div class="card-text">A clean UI to browse, filter, and act on all AI-generated comments across every PR and project at a glance.</div>
+          </div>
+
+        </div>
+
+        <!-- Row 2 -->
+        <div class="sh-bottom-row">
+          
+          <!-- Box 4 -->
+          <div class="card">
+            <div class="card-icon">
+              <i class="fi fi-rr-document"></i>
+            </div>
+            <div class="card-title">Instant PR<br>Overviews</div>
+            <div class="card-text">Get the big picture in seconds. A high-level summary is posted to every PR so reviewers know exactly where to focus.</div>
+          </div>
+
+          <!-- Box 5 -->
+          <div class="card">
+            <div class="card-icon">
+              <i class="fi fi-rr-document-circle-wrong"></i>
+            </div>
+            <div class="card-title">Smart Noise<br>Reduction</div>
+            <div class="card-text">Auto-skips generated, vendored, and boilerplate files so reviews focus only on the code that actually matters.</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================== AI INTELLIGENCE ==================== -->
+    <div class="main-panel ai-panel">
+      <div class="panel-header">
+        <div class="panel-title">POWERED BY MICROSOFT AI</div>
+        <div class="panel-subtitle">State-of-the-art reasoning, optimized for code</div>
+      </div>
+      
+      <div class="hero-icon">
+        <!-- AI Brain -->
+        <i class="fi fi-rr-brain"></i>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">
+          <!-- AI Chip -->
+          <i class="fi fi-rr-microchip"></i>
+        </div>
+        <div class="card-title">Best-in-Class AI<br>Models</div>
+        <div class="card-text">Powered by Microsoft Foundry — giving you access to the most capable AI reasoning models, purpose-built for enterprise use.</div>
+      </div>
+
+      <div class="card" style="flex: 1;">
+        <div class="card-icon">
+          <!-- Robot Arm / Mechanical Bot -->
+          <i class="fi fi-rr-robot"></i>
+        </div>
+        <div class="card-title">Deep, Agentic<br>Code Analysis</div>
+        <div class="card-text token-text">
+          <strong>Reviews like a senior engineer:</strong>
+          Understands context across files, spots real bugs and security issues, and keeps costs low with intelligent token optimization.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

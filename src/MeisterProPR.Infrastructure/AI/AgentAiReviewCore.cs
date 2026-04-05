@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -29,7 +32,11 @@ public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewO
             new(ChatRole.User, ReviewPrompts.BuildUserMessage(pullRequest)),
         };
 
-        var chatOptions = new ChatOptions { MaxOutputTokens = 8192, ModelId = options.Value.ModelId };
+        var chatOptions = new ChatOptions
+        {
+            MaxOutputTokens = 8192,
+            ModelId = systemContext.ModelId ?? options.Value.ModelId,
+        };
         var response = await chatClient.GetResponseAsync(messages, chatOptions, cancellationToken);
         var json = response.Text ?? "";
 

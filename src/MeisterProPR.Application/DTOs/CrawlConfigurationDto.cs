@@ -1,3 +1,9 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Domain.Enums;
+
 namespace MeisterProPR.Application.DTOs;
 
 /// <summary>Data transfer object for a crawl configuration.</summary>
@@ -15,6 +21,10 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="RepoFilters">
 ///     Optional repository-scope filters. Empty list means all repositories are crawled.
 /// </param>
+/// <param name="OrganizationScopeId">Optional client-scoped organization selector backing the configuration.</param>
+/// <param name="ProCursorSourceScopeMode">Whether the crawl uses all client sources or an explicit subset.</param>
+/// <param name="ProCursorSourceIds">Explicit ProCursor source IDs selected for this crawl when source scoping is enabled.</param>
+/// <param name="InvalidProCursorSourceIds">Selected ProCursor source IDs that are now invalid and need operator repair.</param>
 public sealed record CrawlConfigurationDto(
     Guid Id,
     Guid ClientId,
@@ -24,13 +34,21 @@ public sealed record CrawlConfigurationDto(
     int CrawlIntervalSeconds,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<CrawlRepoFilterDto> RepoFilters);
+    IReadOnlyList<CrawlRepoFilterDto> RepoFilters,
+    Guid? OrganizationScopeId = null,
+    ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+    IReadOnlyList<Guid>? ProCursorSourceIds = null,
+    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null);
 
 /// <summary>Data transfer object for a crawl repository filter entry.</summary>
 /// <param name="Id">Unique identifier.</param>
 /// <param name="RepositoryName">Plain ADO repository display name (case-insensitive match).</param>
 /// <param name="TargetBranchPatterns">Glob patterns for target branch matching. Empty = all branches.</param>
+/// <param name="CanonicalSourceRef">Provider-aware canonical source reference for the selected repository, when available.</param>
+/// <param name="DisplayName">Human-readable repository display snapshot used by guided configuration.</param>
 public sealed record CrawlRepoFilterDto(
     Guid Id,
     string RepositoryName,
-    IReadOnlyList<string> TargetBranchPatterns);
+    IReadOnlyList<string> TargetBranchPatterns,
+    CanonicalSourceReferenceDto? CanonicalSourceRef = null,
+    string? DisplayName = null);

@@ -1,12 +1,14 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using MeisterProPR.Application.Options;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -15,8 +17,8 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     Generates answers grounded in the pull request's diff, description, and existing threads.
 /// </summary>
 internal sealed partial class AgentMentionAnswerService(
-    IChatClient chatClient,
-    IOptions<AiReviewOptions> options,
+    IAiConnectionRepository aiConnectionRepository,
+    IAiChatClientFactory aiChatClientFactory,
     ILogger<AgentMentionAnswerService> logger) : IMentionAnswerService
 {
     private const string SystemPrompt =
@@ -37,12 +39,21 @@ internal sealed partial class AgentMentionAnswerService(
     /// <inheritdoc />
     public async Task<string> AnswerAsync(
         PullRequest pullRequest,
+        Guid clientId,
         string question,
         int threadId,
         CancellationToken cancellationToken = default)
     {
         var cleanQuestion = MentionPrefixRegex.Replace(question, string.Empty).Trim();
         var userMessage = BuildUserMessage(pullRequest, cleanQuestion, threadId);
+
+        var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, cancellationToken)
+            ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
+
+        var modelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault()
+            ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
+
+        var chatClient = aiChatClientFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey);
 
         var messages = new List<ChatMessage>
         {
@@ -56,7 +67,7 @@ internal sealed partial class AgentMentionAnswerService(
 
         LogGeneratingAnswer(logger, pullRequest.PullRequestId, cleanQuestion.Length);
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
         return response.Text ?? "";
     }
 

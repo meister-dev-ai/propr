@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Infrastructure.Data.Models;
 
 namespace MeisterProPR.Infrastructure.Data.Models;
@@ -20,6 +23,8 @@ public sealed class AiConnectionRecord
     ///     Per-client unique when non-null (enforced via partial unique index).
     /// </summary>
     public short? ModelCategory { get; set; }
+
+    public ICollection<AiConnectionModelCapabilityRecord> ModelCapabilities { get; set; } = [];
 
     public ClientRecord? Client { get; set; }
 }

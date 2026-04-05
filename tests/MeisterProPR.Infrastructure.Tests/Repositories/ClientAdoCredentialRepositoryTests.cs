@@ -1,9 +1,16 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -13,6 +20,20 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 /// </summary>
 public sealed class ClientAdoCredentialRepositoryTests
 {
+    private static ISecretProtectionCodec CreateCodec()
+    {
+        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterProPR.ClientAdoCredentialRepositoryTests.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(keysDirectory);
+
+        var services = new ServiceCollection();
+        services.AddDataProtection()
+            .SetApplicationName("MeisterProPR.Tests")
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+
+        var provider = services.BuildServiceProvider();
+        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+    }
+
     private static MeisterProPRDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
@@ -29,7 +50,6 @@ public sealed class ClientAdoCredentialRepositoryTests
             new ClientRecord
             {
                 Id = id,
-                Key = $"key-{id}",
                 DisplayName = "Test",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -43,7 +63,7 @@ public sealed class ClientAdoCredentialRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = await SeedClientAsync(db);
-        var sut = new ClientAdoCredentialRepository(db);
+        var sut = new ClientAdoCredentialRepository(db, CreateCodec());
 
         await sut.UpsertAsync(clientId, new ClientAdoCredentials("t", "c", "s"), CancellationToken.None);
         await sut.ClearAsync(clientId, CancellationToken.None);
@@ -63,7 +83,7 @@ public sealed class ClientAdoCredentialRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = await SeedClientAsync(db);
-        var sut = new ClientAdoCredentialRepository(db);
+        var sut = new ClientAdoCredentialRepository(db, CreateCodec());
 
         var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
 
@@ -75,7 +95,7 @@ public sealed class ClientAdoCredentialRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = await SeedClientAsync(db);
-        var sut = new ClientAdoCredentialRepository(db);
+        var sut = new ClientAdoCredentialRepository(db, CreateCodec());
 
         await sut.UpsertAsync(clientId, new ClientAdoCredentials("t1", "c1", "s1"), CancellationToken.None);
         await sut.UpsertAsync(clientId, new ClientAdoCredentials("t2", "c2", "s2"), CancellationToken.None);
@@ -96,15 +116,18 @@ public sealed class ClientAdoCredentialRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = await SeedClientAsync(db);
-        var sut = new ClientAdoCredentialRepository(db);
+        var sut = new ClientAdoCredentialRepository(db, CreateCodec());
         var credentials = new ClientAdoCredentials("tenant-abc", "client-abc", "secret-abc");
 
         await sut.UpsertAsync(clientId, credentials, CancellationToken.None);
         var result = await sut.GetByClientIdAsync(clientId, CancellationToken.None);
+        var record = await db.Clients.FindAsync(clientId);
 
         Assert.NotNull(result);
         Assert.Equal("tenant-abc", result.TenantId);
         Assert.Equal("client-abc", result.ClientId);
         Assert.Equal("secret-abc", result.Secret);
+        Assert.NotNull(record);
+        Assert.NotEqual("secret-abc", record.AdoClientSecret);
     }
 }

@@ -1,10 +1,11 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -13,7 +14,7 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     reviewer-authored comment thread has been resolved, using two distinct prompt paths:
 ///     (1) code-change evaluation and (2) conversational reply generation.
 /// </summary>
-public sealed class AgentAiCommentResolutionCore(IChatClient chatClient, IOptions<AiReviewOptions> options) : IAiCommentResolutionCore
+public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
 {
     private const string CodeChangeSystemPrompt = """
                                                   You are an expert code reviewer. A pull request has received new commits since you last
@@ -57,6 +58,8 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient, IOption
     public async Task<ThreadResolutionResult> EvaluateCodeChangeAsync(
         PrCommentThread thread,
         PullRequest pr,
+        IChatClient chatClient,
+        string modelId,
         CancellationToken cancellationToken = default)
     {
         var userMessage = BuildCodeChangeUserMessage(thread, pr);
@@ -66,13 +69,15 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient, IOption
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
         return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 
     /// <inheritdoc />
     public async Task<ThreadResolutionResult> EvaluateConversationalReplyAsync(
         PrCommentThread thread,
+        IChatClient chatClient,
+        string modelId,
         CancellationToken cancellationToken = default)
     {
         var userMessage = BuildConversationalUserMessage(thread);
@@ -82,7 +87,7 @@ public sealed class AgentAiCommentResolutionCore(IChatClient chatClient, IOption
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = options.Value.ModelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
         return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 

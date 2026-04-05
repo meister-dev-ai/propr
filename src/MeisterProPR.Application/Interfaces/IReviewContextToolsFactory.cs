@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>
@@ -15,6 +18,7 @@ public interface IReviewContextToolsFactory
     /// <param name="pullRequestId">Pull request numeric identifier.</param>
     /// <param name="iterationId">Pull request iteration identifier.</param>
     /// <param name="clientId">Optional client identifier for credential lookup.</param>
+    /// <param name="knowledgeSourceIds">Optional persisted ProCursor source scope captured for the queued review job.</param>
     IReviewContextTools Create(
         string organizationUrl,
         string projectId,
@@ -22,5 +26,6 @@ public interface IReviewContextToolsFactory
         string sourceBranch,
         int pullRequestId,
         int iterationId,
-        Guid? clientId);
+        Guid? clientId,
+        IReadOnlyList<Guid>? knowledgeSourceIds = null);
 }

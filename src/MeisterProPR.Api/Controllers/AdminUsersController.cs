@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -17,9 +21,10 @@ public sealed class AdminUsersController(
     [HttpGet("/admin/users")]
     public async Task<IActionResult> ListUsers(CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         var users = await userRepository.ListAsync(ct);
@@ -30,9 +35,10 @@ public sealed class AdminUsersController(
     [HttpPost("/admin/users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
@@ -69,9 +75,10 @@ public sealed class AdminUsersController(
     [HttpDelete("/admin/users/{id:guid}")]
     public async Task<IActionResult> DisableUser(Guid id, CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         var user = await userRepository.GetByIdAsync(id, ct);
@@ -91,9 +98,10 @@ public sealed class AdminUsersController(
     [HttpGet("/admin/users/{id:guid}")]
     public async Task<IActionResult> GetUser(Guid id, CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         var user = await userRepository.GetByIdWithAssignmentsAsync(id, ct);
@@ -109,9 +117,10 @@ public sealed class AdminUsersController(
     [HttpPost("/admin/users/{id:guid}/clients")]
     public async Task<IActionResult> AssignClientRole(Guid id, [FromBody] AssignClientRoleRequest request, CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         var user = await userRepository.GetByIdAsync(id, ct);
@@ -137,9 +146,10 @@ public sealed class AdminUsersController(
     [HttpDelete("/admin/users/{id:guid}/clients/{clientId:guid}")]
     public async Task<IActionResult> RemoveClientRole(Guid id, Guid clientId, CancellationToken ct)
     {
-        if (this.HttpContext.Items["IsAdmin"] is not true)
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
         {
-            return this.Forbid();
+            return auth;
         }
 
         var user = await userRepository.GetByIdAsync(id, ct);

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
@@ -23,7 +26,14 @@ public sealed class AdoPrCrawlerWorkerTests
                 })
             .Build();
 
-        var metrics = new ReviewJobMetrics(Substitute.For<IJobRepository>());
+        var metricsScope = Substitute.For<IServiceScope>();
+        metricsScope.ServiceProvider.GetService(typeof(IJobRepository))
+            .Returns(Substitute.For<IJobRepository>());
+
+        var metricsScopeFactory = Substitute.For<IServiceScopeFactory>();
+        metricsScopeFactory.CreateScope().Returns(metricsScope);
+
+        var metrics = new ReviewJobMetrics(metricsScopeFactory);
         return new AdoPrCrawlerWorker(
             scopeFactory,
             metrics,

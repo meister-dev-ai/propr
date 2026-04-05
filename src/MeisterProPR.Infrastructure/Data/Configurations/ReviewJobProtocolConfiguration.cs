@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -25,6 +28,16 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
         builder.Property(p => p.IterationCount).HasColumnName("iteration_count").IsRequired(false);
         builder.Property(p => p.ToolCallCount).HasColumnName("tool_call_count").IsRequired(false);
         builder.Property(p => p.FinalConfidence).HasColumnName("final_confidence").IsRequired(false);
+
+        builder.Property(p => p.AiConnectionCategory)
+            .HasColumnName("ai_connection_category")
+            .HasConversion<short?>()
+            .IsRequired(false);
+
+        builder.Property(p => p.ModelId)
+            .HasColumnName("model_id")
+            .HasMaxLength(256)
+            .IsRequired(false);
 
         builder.HasMany(p => p.Events)
             .WithOne()

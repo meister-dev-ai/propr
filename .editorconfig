@@ -4,6 +4,9 @@
 # C# files
 [*.cs]
 
+file_header_template = Copyright (c) Andreas Rain.\nLicensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+dotnet_diagnostic.IDE0073.severity = warning
+
 #### Core EditorConfig Options ####
 
 # Indentation and spacing

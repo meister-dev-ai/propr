@@ -9,6 +9,7 @@ when-to-use: When test files change — any file in tests/, files matching *.Tes
 
 - **Unit tests**: xUnit with NSubstitute for mocking. `Substitute.For<IFoo>()` creates mocks. `Arg.Any<T>()`, `Arg.Is<T>(x => ...)` are argument matchers. `Received()`, `DidNotReceive()`, `DidNotReceiveWithAnyArgs()` are NSubstitute verification calls.
 - **API integration tests**: `WebApplicationFactory<Program>` with a real in-memory EF Core database (`UseInMemoryDatabase`). Tests call actual HTTP endpoints via `factory.CreateClient()`.
+	Integration tests MUST register the protection codec (or a test-friendly equivalent) and assert that secrets are never returned in API responses; where relevant, tests should assert database rows contain protected (non-plaintext) values.
 - **Infrastructure integration tests**: Testcontainers (`Testcontainers.PostgreSql`) spins up a real PostgreSQL container. These tests verify EF Core behaviour against a real database engine.
 
 ## In-Memory Database Scope

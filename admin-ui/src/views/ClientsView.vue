@@ -1,59 +1,81 @@
-<template>
-  <div class="page-view">
-    <h2 class="view-title">Clients</h2>
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
-    <div class="section-card">
-      <div class="section-card-header">
-        <div class="section-card-header-left">
-          <h3>All Clients</h3>
-          <span v-if="!loading" class="chip chip-muted">{{ clients.length }} client{{ clients.length === 1 ? '' : 's' }}</span>
+<template>
+  <div class="page-with-sidebar">
+    <!-- Sidebar Navigation / Filters -->
+    <aside class="page-sidebar">
+      <div class="sidebar-nav">
+        <div class="sidebar-nav-group">
+          <h4>Clients</h4>
+          <button class="sidebar-nav-link active">
+            <i class="fi fi-rr-users"></i> All Clients
+          </button>
         </div>
-        <div class="section-card-header-actions">
+        <div class="sidebar-nav-group">
+          <h4>Filters</h4>
           <input
             v-model="filter"
             type="search"
-            placeholder="Search…"
+            placeholder="Search clients…"
             class="header-search"
+            style="width: 100%;"
           />
-          <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
-            <i class="fi fi-rr-add"></i> New Client
-          </button>
         </div>
       </div>
+    </aside>
 
-      <p v-if="loading" class="loading" style="padding: 1rem 1.25rem;">Loading…</p>
-      <p v-else-if="error" class="error" style="padding: 1rem 1.25rem;">{{ error }}</p>
-      <template v-else>
-        <div v-if="!clients.length" class="clients-empty-state">
-          <i class="fi fi-rr-users empty-icon"></i>
-          <p class="empty-heading">No clients yet</p>
-          <p class="empty-sub" v-if="isAdmin">Get started by creating your first client.</p>
-          <p class="empty-sub" v-else>No clients are assigned to your account. Contact your administrator.</p>
-          <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
-            <i class="fi fi-rr-add"></i> Create First Client
-          </button>
+    <!-- Main Content Area -->
+    <main class="page-main-content">
+      <div class="page-toolbar">
+        <h2 class="view-title">Clients</h2>
+        <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
+          <i class="fi fi-rr-add"></i> New Client
+        </button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-card-header">
+          <div class="section-card-header-left">
+            <h3>Directory</h3>
+            <span v-if="!loading" class="chip chip-muted">{{ clients.length }} client{{ clients.length === 1 ? '' : 's' }}</span>
+          </div>
         </div>
-        <ClientTable v-else :clients="clients" :filter="filter" />
-      </template>
-    </div>
 
-    <!-- New Client Modal -->
-    <Teleport to="body">
-      <div v-if="showCreateForm" class="confirm-dialog-overlay" @click.self="showCreateForm = false">
-        <div class="confirm-dialog client-dialog">
-          <div class="client-dialog-header">
-            <h3 class="client-dialog-title">New Client</h3>
-            <button class="dialog-close-btn" aria-label="Close" @click="showCreateForm = false">
-              <i class="fi fi-rr-cross-small"></i>
+        <p v-if="loading" class="loading" style="padding: 1rem 1.25rem;">Loading…</p>
+        <p v-else-if="error" class="error" style="padding: 1rem 1.25rem;">{{ error }}</p>
+        <template v-else>
+          <div v-if="!clients.length" class="clients-empty-state">
+            <i class="fi fi-rr-users empty-icon"></i>
+            <p class="empty-heading">No clients yet</p>
+            <p class="empty-sub" v-if="isAdmin">Get started by creating your first client.</p>
+            <p class="empty-sub" v-else>No clients are assigned to your account. Contact your administrator.</p>
+            <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
+              <i class="fi fi-rr-add"></i> Create First Client
             </button>
           </div>
-          <ClientForm
-            @client-created="onClientCreated"
-            @cancel="showCreateForm = false"
-          />
-        </div>
+          <ClientTable v-else :clients="clients" :filter="filter" />
+        </template>
       </div>
-    </Teleport>
+
+      <!-- New Client Modal -->
+      <Teleport to="body">
+        <div v-if="showCreateForm" class="confirm-dialog-overlay" @click.self="showCreateForm = false">
+          <div class="confirm-dialog client-dialog">
+            <div class="client-dialog-header">
+              <h3 class="client-dialog-title">New Client</h3>
+              <button class="dialog-close-btn" aria-label="Close" @click="showCreateForm = false">
+                <i class="fi fi-rr-cross-small"></i>
+              </button>
+            </div>
+            <ClientForm
+              @client-created="onClientCreated"
+              @cancel="showCreateForm = false"
+            />
+          </div>
+        </div>
+      </Teleport>
+    </main>
   </div>
 </template>
 
@@ -70,6 +92,7 @@ interface Client {
   isActive: boolean
   hasAdoCredentials: boolean
   createdAt: string
+  recentUsageTokens?: number
 }
 
 const { isAdmin } = useSession()

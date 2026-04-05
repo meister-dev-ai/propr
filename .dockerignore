@@ -32,9 +32,11 @@ Thumbs.db
 # Docker files themselves
 Dockerfile*
 .dockerignore
+coverage/
+logs/
 
 # Logs
-*.log
+*.log*
 
 # NuGet cache
 packages/

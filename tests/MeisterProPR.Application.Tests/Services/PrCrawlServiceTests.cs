@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
@@ -27,6 +30,9 @@ public sealed class PrCrawlServiceTests
 
     private readonly IAssignedPrFetcher _prFetcher = Substitute.For<IAssignedPrFetcher>();
     private readonly IPrStatusFetcher _statusFetcher = Substitute.For<IPrStatusFetcher>();
+    private readonly IThreadMemoryService _threadMemoryService = Substitute.For<IThreadMemoryService>();
+    private readonly IReviewerThreadStatusFetcher _threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
+    private readonly IReviewPrScanRepository _prScanRepository = Substitute.For<IReviewPrScanRepository>();
     private readonly PrCrawlService _sut;
 
     public PrCrawlServiceTests()
@@ -47,6 +53,36 @@ public sealed class PrCrawlServiceTests
             "repo-1",
             prId,
             iterationId);
+    }
+
+    private static ReviewPrScan MakeScan(int prId, int iterationId, params ReviewPrScanThread[] threads)
+    {
+        var scan = new ReviewPrScan(
+            Guid.NewGuid(),
+            DefaultConfig.ClientId,
+            "repo-1",
+            prId,
+            iterationId.ToString());
+
+        foreach (var thread in threads)
+        {
+            scan.Threads.Add(thread);
+        }
+
+        return scan;
+    }
+
+    private PrCrawlService CreateSutWithScanDependencies()
+    {
+        return new PrCrawlService(
+            this._crawlConfigs,
+            this._prFetcher,
+            this._jobs,
+            this._statusFetcher,
+            NullLogger<PrCrawlService>.Instance,
+            this._threadStatusFetcher,
+            this._threadMemoryService,
+            this._prScanRepository);
     }
 
     [Fact]
@@ -128,6 +164,332 @@ public sealed class PrCrawlServiceTests
                     j.PullRequestId == 42 &&
                     j.IterationId == 1 &&
                     j.ClientId == DefaultConfig.ClientId));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SelectedSourceScope_SnapshotsSelectedProCursorSourcesOnQueuedJob()
+    {
+        var sourceId = Guid.NewGuid();
+        var config = DefaultConfig with
+        {
+            ProCursorSourceScopeMode = ProCursorSourceScopeMode.SelectedSources,
+            ProCursorSourceIds = [sourceId],
+            InvalidProCursorSourceIds = [],
+        };
+
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        var pr = MakePr(48);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(config).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+
+        await this._sut.CrawlAsync();
+
+        await this._jobs.Received(1).AddAsync(
+            Arg.Is<ReviewJob>(job =>
+                job.PullRequestId == pr.PullRequestId &&
+                job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
+                job.ProCursorSourceIds.SequenceEqual(new[] { sourceId })));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_InvalidSelectedSourceAssociations_DoesNotAddJob()
+    {
+        var config = DefaultConfig with
+        {
+            ProCursorSourceScopeMode = ProCursorSourceScopeMode.SelectedSources,
+            ProCursorSourceIds = [Guid.NewGuid()],
+            InvalidProCursorSourceIds = [Guid.NewGuid()],
+        };
+
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(config).ReturnsForAnyArgs([MakePr(49)]);
+        this._jobs.FindActiveJob(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+
+        await this._sut.CrawlAsync();
+
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SameIterationWithoutNewReplies_DoesNotAddJob()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(42, iterationId: 3);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(MakeScan(
+                pr.PullRequestId,
+                pr.LatestIterationId,
+                new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+        this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                DefaultConfig.ReviewerId!.Value,
+                DefaultConfig.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([
+                new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+            ]));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SameIterationWithoutNewReplies_DoesNotRecordNoOpActivity()
+    {
+        var sut = this.CreateSutWithScanDependencies();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(42, iterationId: 3);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(MakeScan(
+                pr.PullRequestId,
+                pr.LatestIterationId,
+                new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+        this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                DefaultConfig.ReviewerId!.Value,
+                DefaultConfig.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([
+                new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+            ]));
+
+        await sut.CrawlAsync();
+
+        await this._threadMemoryService.DidNotReceive().RecordNoOpAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SameIterationWithNewReplies_AddsJob()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(43, iterationId: 5);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(MakeScan(
+                pr.PullRequestId,
+                pr.LatestIterationId,
+                new ReviewPrScanThread { ThreadId = 8, LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
+        this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                DefaultConfig.ReviewerId!.Value,
+                DefaultConfig.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([
+                new PrThreadStatusEntry(8, "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
+            ]));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.Received(1)
+            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.PullRequestId && j.IterationId == pr.LatestIterationId));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_NewIterationStillAddsJob_WhenScanExists()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(44, iterationId: 6);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(MakeScan(pr.PullRequestId, iterationId: 5)));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.Received(1)
+            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.PullRequestId && j.IterationId == pr.LatestIterationId));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_MissingScanStillAddsJob_ForRecovery()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(45, iterationId: 2);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(null));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.Received(1)
+            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.PullRequestId && j.IterationId == pr.LatestIterationId));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_MissingScanButCompletedSameIterationExists_DoesNotAddJob()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        var pr = MakePr(46, iterationId: 2);
+        var completedJob = new ReviewJob(
+            Guid.NewGuid(),
+            DefaultConfig.ClientId,
+            pr.OrganizationUrl,
+            pr.ProjectId,
+            pr.RepositoryId,
+            pr.PullRequestId,
+            pr.LatestIterationId)
+        {
+            Status = JobStatus.Completed,
+            CompletedAt = DateTimeOffset.UtcNow,
+        };
+
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._jobs.FindCompletedJob(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                pr.LatestIterationId)
+            .Returns(completedJob);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(null));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SameIterationWithNewRepliesAndCompletedJob_AddsJob()
+    {
+        // Arrange
+        var sut = this.CreateSutWithScanDependencies();
+        var pr = MakePr(47, iterationId: 5);
+        var completedJob = new ReviewJob(
+            Guid.NewGuid(),
+            DefaultConfig.ClientId,
+            pr.OrganizationUrl,
+            pr.ProjectId,
+            pr.RepositoryId,
+            pr.PullRequestId,
+            pr.LatestIterationId)
+        {
+            Status = JobStatus.Completed,
+            CompletedAt = DateTimeOffset.UtcNow,
+        };
+
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        this._prFetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._jobs.FindCompletedJob(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                pr.LatestIterationId)
+            .Returns(completedJob);
+        this._prScanRepository.GetAsync(DefaultConfig.ClientId, pr.RepositoryId, pr.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(MakeScan(
+                pr.PullRequestId,
+                pr.LatestIterationId,
+                new ReviewPrScanThread { ThreadId = 9, LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
+        this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                pr.OrganizationUrl,
+                pr.ProjectId,
+                pr.RepositoryId,
+                pr.PullRequestId,
+                DefaultConfig.ReviewerId!.Value,
+                DefaultConfig.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([
+                new PrThreadStatusEntry(9, "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
+            ]));
+
+        // Act
+        await sut.CrawlAsync();
+
+        // Assert
+        await this._jobs.Received(1)
+            .AddAsync(Arg.Is<ReviewJob>(j => j.PullRequestId == pr.PullRequestId && j.IterationId == pr.LatestIterationId));
     }
 
     [Fact]

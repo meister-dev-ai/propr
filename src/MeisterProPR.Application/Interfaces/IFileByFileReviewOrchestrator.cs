@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
@@ -18,7 +22,7 @@ public interface IFileByFileReviewOrchestrator
     /// <param name="baseContext">Shared context used for all per-file passes.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <param name="overrideClient">
-    ///     Optional <see cref="IChatClient"/> to use for the synthesis pass instead of the
+    ///     Optional <see cref="IChatClient" /> to use for the synthesis pass instead of the
     ///     default DI-injected singleton. Used when a per-client AI connection is active.
     /// </param>
     /// <returns>The final aggregated review result.</returns>

@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
   <div class="login-container">
     <div class="login-view">
@@ -36,10 +39,11 @@
 import {ref} from 'vue'
 import {useRouter} from 'vue-router'
 import {useSession} from '@/composables/useSession'
+import { API_BASE_URL } from '@/services/apiBase'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { setTokens } = useSession()
+const { setTokens, loadClientRoles } = useSession()
 
 const username = ref('')
 const password = ref('')
@@ -62,14 +66,11 @@ async function handleSubmit() {
 
   loading.value = true
   try {
-    const res = await fetch(
-      (import.meta.env.VITE_API_BASE_URL ?? '') + '/auth/login',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.value, password: password.value }),
-      },
-    )
+    const res = await fetch(API_BASE_URL + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.value, password: password.value }),
+    })
 
     if (res.status === 401) {
       authError.value = 'Invalid username or password'
@@ -83,7 +84,8 @@ async function handleSubmit() {
 
     const data = await res.json() as { accessToken: string; refreshToken: string }
     setTokens(data.accessToken, data.refreshToken)
-    router.push('/')
+    await loadClientRoles()
+    router.push({ name: 'home' })
   } catch {
     authError.value = 'Connection error. Please try again.'
   } finally {

@@ -20,6 +20,8 @@ configure dedicated AI connections to use different models or endpoints.
 - [Per-Client ADO Credentials](#per-client-ado-credentials)
 - [Per-Client AI Connections](#per-client-ai-connections)
 - [Client Management API](#client-management-api)
+- [ProCursor Source Management](#procursor-source-management)
+- [ProCursor Token Usage Reporting](#procursor-token-usage-reporting)
 - [File Exclusion Rules](#file-exclusion-rules)
 - [Prompt Overrides](#prompt-overrides)
 - [Finding Dismissals](#finding-dismissals)
@@ -58,21 +60,10 @@ PostgreSQL 17 container together.
 Create `.env` at the repository root (same folder as your compose file):
 
 ```env
-# --- Admin user bootstrap (DB mode — seeds first admin on startup) ---
+# --- Admin user bootstrap (seeds first admin on startup) ---
 MEISTER_BOOTSTRAP_ADMIN_USER=admin
 MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password-here>
 MEISTER_JWT_SECRET=<random-string-at-least-32-chars>
-
-# --- Legacy admin key (deprecated — use JWT login instead) ---
-# MEISTER_ADMIN_KEY=your-admin-key-here
-
-# --- Client keys (bootstrap seed in DB mode) ---
-MEISTER_CLIENT_KEYS=your-client-key-here
-
-# --- AI ---
-AI_ENDPOINT=https://myresource.openai.azure.com/
-AI_DEPLOYMENT=gpt-4o
-# AI_API_KEY=           # omit to use DefaultAzureCredential
 
 # --- Global Azure identity (DefaultAzureCredential env-var chain) ---
 # Used for ADO operations when a client has no per-client credentials configured.
@@ -94,7 +85,11 @@ AZURE_CLIENT_SECRET=<global-service-principal-secret>
 # OTLP_ENDPOINT=http://localhost:4317
 ```
 
-> Keep this file out of source control. It is already listed in `.gitignore`.
+> **AI connections** are configured per-client via the admin UI after first login — they are
+> no longer global env vars.
+>
+> **Client keys have been removed.** Create clients via `POST /api/clients`; review triggers now
+> use a client-scoped route plus `X-User-Pat` and `X-Ado-Token`.
 
 ### Step 2 — Start the stack
 
@@ -102,8 +97,14 @@ AZURE_CLIENT_SECRET=<global-service-principal-secret>
 docker compose up --build
 ```
 
-The API is available on `https://localhost:5443` (HTTPS) and `http://localhost:8080` (HTTP).
+The admin UI is available on `https://localhost:5443/` and the public API is available on
+`https://localhost:5443/api/...` when you use the default docker-compose stack.
 The container runs as a non-root user and performs its own health check every 30 seconds.
+
+The compose stack also mounts a named volume at `/app/.data-protection-keys` and sets
+`MEISTER_DATA_PROTECTION_KEYS_PATH` automatically. Preserve that volume across restarts and
+redeployments; otherwise the backend will lose the key material required to decrypt stored client
+ADO secrets and AI connection API keys.
 
 ### Step 3 — Log in to the admin API and UI
 
@@ -111,7 +112,7 @@ On first startup the server seeds an admin account from the bootstrap env vars. 
 your credentials for a JWT:
 
 ```bash
-curl -k -X POST https://localhost:5443/auth/login \
+curl -k -X POST https://localhost:5443/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "<strong-password-here>"}'
 ```
@@ -128,17 +129,17 @@ Response:
 ```
 
 Store the `accessToken` and pass it as `Authorization: Bearer <token>` on all subsequent
-admin calls. The Admin UI handles this automatically. Tokens expire after 15 minutes;
-use `POST /auth/refresh` with the refresh token to obtain a new one.
+admin calls. The Admin UI at `https://localhost:5443/` handles this automatically. Tokens
+expire after 15 minutes; use `POST /api/auth/refresh` with the refresh token to obtain a new one.
 
 ### Step 4 — Register your first client
 
 ```bash
 # Use the accessToken from the login step
-curl -k -X POST https://localhost:5443/clients \
+curl -k -X POST https://localhost:5443/api/clients \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
-  -d '{"key": "my-secret-client-key", "displayName": "My First Client"}'
+  -d '{"displayName": "My First Client"}'
 ```
 
 Note the returned `id` (a UUID) — you will need it in subsequent steps.
@@ -150,7 +151,7 @@ rather than the global backend identity, store the credentials:
 
 ```bash
 # <client-id> is the UUID from Step 4
-curl -k -X PUT https://localhost:5443/clients/<client-id>/ado-credentials \
+curl -k -X PUT https://localhost:5443/api/clients/<client-id>/ado-credentials \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
   -d '{
@@ -161,32 +162,145 @@ curl -k -X PUT https://localhost:5443/clients/<client-id>/ado-credentials \
 ```
 
 The secret is stored in the database and never returned in API responses.
+Legacy plaintext secret rows from older deployments are upgraded automatically during startup
+before the app begins processing jobs.
 
 To remove per-client credentials and revert to the global identity:
 
 ```bash
-curl -k -X DELETE https://localhost:5443/clients/<client-id>/ado-credentials \
+curl -k -X DELETE https://localhost:5443/api/clients/<client-id>/ado-credentials \
   -H "Authorization: Bearer <accessToken>"
 ```
 
-### Step 6 — Add a crawl configuration
+### Step 6 — Resolve and store the reviewer identity
 
-Tell the backend which Azure DevOps project to monitor for PRs assigned to a specific reviewer:
+Look up the Azure DevOps identity that should own reviewed pull requests for this client:
 
 ```bash
-curl -k -X POST https://localhost:5443/clients/<client-id>/crawl-configurations \
+curl -k "https://localhost:5443/api/identities/resolve?orgUrl=https://dev.azure.com/my-org&displayName=My%20Service%20Principal" \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+The response contains one or more VSS identity GUIDs. Store the correct identity on the client:
+
+```bash
+curl -k -X PUT https://localhost:5443/api/clients/<client-id>/reviewer-identity \
   -H "Content-Type: application/json" \
-  -H "X-Client-Key: my-secret-client-key" \
+  -H "Authorization: Bearer <accessToken>" \
   -d '{
-    "organizationUrl": "https://dev.azure.com/my-org",
-    "projectId": "my-project-name-or-guid",
-    "reviewerDisplayName": "My Service Principal",
-    "crawlIntervalSeconds": 60
+    "reviewerId": "<resolved-vss-identity-guid>"
   }'
 ```
 
-`reviewerDisplayName` must match the display name of the Azure DevOps identity (user or service
-principal) whose assigned PRs you want reviewed.
+### Step 7 — Register an allowed Azure DevOps organization
+
+Guided admin flows work against client-scoped organization scopes. Add the Azure DevOps
+organization that this client is allowed to use:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/ado-organization-scopes \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "organizationUrl": "https://dev.azure.com/my-org",
+    "displayName": "My Org"
+  }'
+```
+
+Note the returned scope `id` as `<scope-id>`. Guided discovery, ProCursor source creation, and
+crawl configuration now use this identifier instead of relying on free-text organization URLs.
+
+### Step 8 — Use guided discovery to resolve projects and sources
+
+Once the scope is registered, resolve the available projects, repositories or wikis, and branch
+options from the backend:
+
+```bash
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/projects?organizationScopeId=<scope-id>" \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/sources?organizationScopeId=<scope-id>&projectId=my-project&sourceKind=repository" \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/branches?organizationScopeId=<scope-id>&projectId=my-project&sourceKind=repository&canonicalSourceProvider=azureDevOps&canonicalSourceValue=repo-1" \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+The admin UI calls the same endpoints behind its cascading dropdowns. If the selected
+organization scope is missing, disabled, or stale, these endpoints fail before the admin can save
+an invalid source or crawler configuration.
+
+### Step 9 — Create a guided ProCursor source
+
+Use the discovered organization scope, canonical source reference, and branch value to register a
+ProCursor source:
+
+```bash
+curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/sources \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Platform Docs",
+    "sourceKind": "repository",
+    "organizationScopeId": "<scope-id>",
+    "projectId": "my-project",
+    "canonicalSourceRef": {
+      "provider": "azureDevOps",
+      "value": "repo-1"
+    },
+    "sourceDisplayName": "platform-docs",
+    "defaultBranch": "main",
+    "rootPath": "/docs",
+    "symbolMode": "auto",
+    "trackedBranches": [
+      {
+        "branchName": "main",
+        "refreshTriggerMode": "branchUpdate",
+        "miniIndexEnabled": true
+      }
+    ]
+  }'
+```
+
+Use `sourceKind: "adoWiki"` to create a guided wiki source. Legacy callers can still send
+`organizationUrl` and `repositoryId`, but the guided `organizationScopeId` plus
+`canonicalSourceRef` path is the supported admin flow and gets save-time drift validation.
+
+### Step 10 — Add a guided crawl configuration with source scope
+
+Resolve repository filters for the selected project, then create the crawl configuration using the
+guided canonical filter payload and optional ProCursor source subset:
+
+```bash
+curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/crawl-filters?organizationScopeId=<scope-id>&projectId=my-project" \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "clientId": "<client-id>",
+    "organizationScopeId": "<scope-id>",
+    "projectId": "my-project",
+    "crawlIntervalSeconds": 60,
+    "repoFilters": [
+      {
+        "displayName": "platform-docs",
+        "canonicalSourceRef": {
+          "provider": "azureDevOps",
+          "value": "repo-1"
+        },
+        "targetBranchPatterns": ["main"]
+      }
+    ],
+    "proCursorSourceScopeMode": "selectedSources",
+    "proCursorSourceIds": ["<source-id>"]
+  }'
+```
+
+Set `proCursorSourceScopeMode` to `allClientSources` to retain the compatibility behavior. When
+`selectedSources` is used, the chosen source IDs are snapshotted onto queued review jobs so later
+admin edits do not change already-queued work.
 
 The backend will begin polling for open PRs assigned to that reviewer and submit reviews
 automatically.
@@ -201,13 +315,10 @@ git clone <repo-url>
 cd meister-propr
 
 # Set required config via user secrets
-dotnet user-secrets set "AI_ENDPOINT"         "https://myresource.openai.azure.com/"  --project src/MeisterProPR.Api
-dotnet user-secrets set "AI_DEPLOYMENT"       "gpt-4o"                                --project src/MeisterProPR.Api
 dotnet user-secrets set "DB_CONNECTION_STRING" "Host=localhost;Database=meisterpropr;Username=postgres;Password=devpassword" --project src/MeisterProPR.Api
 dotnet user-secrets set "MEISTER_JWT_SECRET"               "dev-jwt-secret-at-least-32-chars-ok!!" --project src/MeisterProPR.Api
 dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_USER"     "admin"                    --project src/MeisterProPR.Api
 dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_PASSWORD" "AdminPass1!"              --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_CLIENT_KEYS" "my-secret-key"                         --project src/MeisterProPR.Api
 
 # Global service principal for DefaultAzureCredential (if not using Azure CLI / VS auth)
 dotnet user-secrets set "AZURE_CLIENT_ID"     "<appId>"    --project src/MeisterProPR.Api
@@ -217,6 +328,9 @@ dotnet user-secrets set "AZURE_CLIENT_SECRET" "<password>" --project src/Meister
 # Run
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/MeisterProPR.Api
 ```
+
+> **AI connections and reviewer identity** are configured after first login — no additional
+> shared review-trigger secrets are required to start the API.
 
 The API starts on `https://localhost:5443` (HTTPS) and `http://localhost:5080` (HTTP).
 
@@ -240,22 +354,25 @@ In `Development` mode, Swagger UI is available at `https://localhost:5443/swagge
 
 ### 1 — AI endpoint
 
-The backend uses `Microsoft.Extensions.AI` with the Azure OpenAI chat client and accepts
-endpoints from two sources:
+The backend stores AI connections per client in PostgreSQL. Each client needs an endpoint URL,
+one or more models, and one active model before reviews or crawls can run.
 
 **Option A — Azure OpenAI**
 
 1. Create an **Azure OpenAI** resource in the Azure portal.
-2. Deploy a model that supports the Responses API (e.g. `gpt-4o`, `o4-mini`) and note the
-   **deployment name**.
+2. Deploy a model that supports the Responses API (e.g. `gpt-4o`, `o4-mini`).
 3. The endpoint looks like `https://<resource-name>.openai.azure.com/`.
+4. When you register the client AI connection, add the model names you want available and then
+  activate one of them for the client.
 
 **Option B — Azure AI Foundry**
 
 1. Open your AI Foundry project in the portal.
 2. Copy the **project endpoint** shown on the overview page, e.g.
    `https://<resource>.services.ai.azure.com/api/projects/<project>`.
-3. Use the **model name** (e.g. `gpt-4o`) as `AI_DEPLOYMENT`.
+3. Strip the `/api/projects/<project>` suffix and use the resource root endpoint
+  `https://<resource>.services.ai.azure.com/` when creating the client AI connection.
+4. Activate the desired model name (for example `gpt-4o`) on that client connection.
 
 ---
 
@@ -317,30 +434,36 @@ EF Core runs migrations automatically on startup — no manual schema setup is n
 
 ### Required
 
-| Variable              | Description                                                                   |
-|-----------------------|-------------------------------------------------------------------------------|
-| `AI_ENDPOINT`         | Azure OpenAI endpoint (`https://….openai.azure.com/`) **or** Azure AI Foundry project URL (`https://….services.ai.azure.com/api/projects/…`) |
-| `AI_DEPLOYMENT`       | Model deployment name, e.g. `gpt-4o` or `o4-mini`                            |
-| `MEISTER_CLIENT_KEYS` | Comma-separated client keys — required when `DB_CONNECTION_STRING` is not set; acts as bootstrap seed when it is set |
-
-### Required in DB mode
-
 | Variable                           | Description                                                                       |
 |------------------------------------|-----------------------------------------------------------------------------------|
+| `DB_CONNECTION_STRING`             | PostgreSQL connection string. Required for all persistent state.                  |
+| `MEISTER_DATA_PROTECTION_KEYS_PATH`| File-system path used for the ASP.NET Core Data Protection key ring. The default compose stack mounts `/app/.data-protection-keys` to durable storage. |
 | `MEISTER_JWT_SECRET`               | HS256 signing key for JWT tokens — minimum 32 characters, cryptographically random |
 | `MEISTER_BOOTSTRAP_ADMIN_USER`     | Username for the admin account seeded on first startup                            |
 | `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Password for the admin account seeded on first startup                            |
 
-The application **will not start** in DB mode if `MEISTER_JWT_SECRET` is absent or shorter than 32 characters, or if no admin user exists and the bootstrap variables are not set.
+The application **will not start** if `MEISTER_JWT_SECRET` is absent or shorter than 32 characters, or if no admin user exists and the bootstrap variables are not set.
 
 ### Optional
 
 | Variable                    | Description                                                                         |
 |-----------------------------|-------------------------------------------------------------------------------------|
-| `DB_CONNECTION_STRING`           | PostgreSQL connection string. When set, enables DB mode (persisted jobs + client registry). |
 | `PR_CRAWL_INTERVAL_SECONDS`      | Polling interval in seconds for the PR crawler background worker (default `60`, minimum `10`). |
 | `MENTION_CRAWL_INTERVAL_SECONDS` | Polling interval in seconds for the mention-scan background worker (default `60`, minimum `10`). |
-| `AI_API_KEY`                     | API key for the AI endpoint. Omit to use `DefaultAzureCredential`.                 |
+| `AI_EVALUATOR_ENDPOINT`          | Optional endpoint for the instruction-relevance evaluator.                          |
+| `AI_EVALUATOR_DEPLOYMENT`        | Model name for the optional evaluator endpoint.                                     |
+| `AI_API_KEY`                     | Optional API key used with `AI_EVALUATOR_ENDPOINT`. Client review connections store their own API keys per client. |
+| `PROCURSOR_MAX_INDEX_CONCURRENCY` | Maximum number of concurrent durable ProCursor refresh jobs (default `2`).         |
+| `PROCURSOR_MAX_QUERY_RESULTS`     | Maximum number of knowledge or symbol results returned by ProCursor (default `5`). |
+| `PROCURSOR_MAX_SOURCES_PER_QUERY` | Maximum number of enabled knowledge sources scanned for one ProCursor query (default `20`). |
+| `PROCURSOR_CHUNK_TARGET_LINES`    | Target chunk size for indexed source text (default `120`).                         |
+| `PROCURSOR_MINI_INDEX_TTL_MINUTES` | Lifetime of review-target ProCursor overlays in minutes (default `30`).           |
+| `PROCURSOR_REFRESH_POLL_SECONDS`  | Polling interval for the ProCursor index worker (default `30`).                    |
+| `PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES` | How long stale ProCursor temp workspaces are kept before cleanup (default `120`). |
+| `PROCURSOR_EMBEDDING_DIMENSIONS`  | Expected embedding vector width for ProCursor snapshots (default `1536`).          |
+| `PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS` | Polling interval for the ProCursor token-usage rollup worker (default `900`). |
+| `PROCURSOR_TOKEN_USAGE_EVENT_RETENTION_DAYS` | How long raw ProCursor token usage events are kept before purge (default `365`). |
+| `PROCURSOR_TOKEN_USAGE_ROLLUP_RETENTION_DAYS` | How long aggregated ProCursor rollups are kept before purge (default `730`). |
 | `AZURE_CLIENT_ID`           | Global service principal app ID (`DefaultAzureCredential` env-var chain)           |
 | `AZURE_TENANT_ID`           | Azure AD tenant ID                                                                  |
 | `AZURE_CLIENT_SECRET`       | Global service principal secret (local dev — **never commit**)                     |
@@ -475,14 +598,48 @@ flowchart TD
     CACHE_G --> ADO
 ```
 
+  ### Guided organization scopes and discovery
+
+  Per-client credentials answer which identity can talk to Azure DevOps. Organization scopes answer
+  which Azure DevOps organization URLs administrators are allowed to choose inside the guided admin
+  flows.
+
+  Guided ProCursor and crawl-config onboarding now follows this model:
+
+  1. Store credentials once per client with `PUT /clients/{id}/ado-credentials`.
+  2. Register one or more allowed organizations with `POST /clients/{id}/ado-organization-scopes`.
+  3. Resolve projects, repositories, wikis, branches, and crawl filters through the
+    `/admin/clients/{id}/ado/discovery/*` endpoints.
+  4. Save ProCursor sources and crawl configurations using `organizationScopeId` plus canonical
+    source references instead of free-text repository identifiers.
+
+  If the selected organization scope is missing or disabled, or if the chosen repository, wiki, or
+  branch no longer exists, the backend now rejects the save request with an actionable admin error
+  instead of letting the issue surface later in a worker cycle.
+
 ---
 
 ## Per-Client AI Connections
 
-By default all AI review calls use the **global AI endpoint** configured via `AI_ENDPOINT` and
-`AI_DEPLOYMENT`. You can override this per-client by registering one or more named AI connections
-and activating them. This lets you use different models for different clients — for example a
-cost-efficient model for high-volume clients and a reasoning model for critical reviews.
+Each client must have an AI connection configured via the admin UI or API before reviews can run.
+There is no longer a global `AI_ENDPOINT` / `AI_DEPLOYMENT` env var — all AI configuration is
+per-client in the database.
+
+> **Operator migration guide**: If you are upgrading from a previous version that used
+> `AI_ENDPOINT` and `AI_DEPLOYMENT` environment variables, configure a per-client AI connection
+> via the admin UI (or `POST /clients/{id}/ai-connections` + `POST .../activate`) for each
+> client **before** removing the legacy env vars. Once all clients have an active AI connection,
+> remove `AI_ENDPOINT`, `AI_DEPLOYMENT`, and `MEISTER_CLIENT_KEYS`
+> from your `.env` / compose environment configuration. Keep `AI_API_KEY` only if you also use
+> `AI_EVALUATOR_ENDPOINT`.
+>
+> **Note:** `MEISTER_ADMIN_KEY` and the `X-Admin-Key` header have been removed and are not
+> supported by the runtime. Use Admin JWTs (`Authorization: Bearer <token>`) or admin
+> Personal Access Tokens (`X-User-Pat`) instead.
+
+You can register one or more named AI connections per client and activate the one to use. This
+lets you use different models for different clients — for example a cost-efficient model for
+high-volume clients and a reasoning model for critical reviews.
 
 ### Register an AI connection
 
@@ -513,11 +670,42 @@ curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/<conne
   -d '{ "model": "gpt-4o" }'
 ```
 
-To fall back to the global endpoint, deactivate the connection:
+To leave the client without an active AI connection, deactivate the connection:
 
 ```bash
 curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/<connection-id>/deactivate \
   -H "Authorization: Bearer <accessToken>"
+```
+
+### ProCursor pricing and embedding metadata
+
+ProCursor token reporting uses the capability metadata stored on each AI connection model at the
+moment an event is captured. For embedding-capable connections, configure at least the tokenizer,
+max input tokens, and embedding dimensions. If you also provide `inputCostPer1MUsd` and
+`outputCostPer1MUsd`, the backend stores an estimated USD cost on each captured ProCursor usage
+event so rebuilds can recompute rollups without re-reading live pricing.
+
+Example PATCH payload for an embedding connection:
+
+```bash
+curl -k -X PATCH https://localhost:5443/clients/<client-id>/ai-connections/<connection-id> \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Embedding Pool",
+    "models": ["text-embedding-3-small"],
+    "modelCategory": "embedding",
+    "modelCapabilities": [
+      {
+        "modelName": "text-embedding-3-small",
+        "tokenizerName": "cl100k_base",
+        "maxInputTokens": 8192,
+        "embeddingDimensions": 1536,
+        "inputCostPer1MUsd": 0.02,
+        "outputCostPer1MUsd": 0
+      }
+    ]
+  }'
 ```
 
 ### Discover available models
@@ -538,15 +726,16 @@ curl -k -X POST https://localhost:5443/clients/<client-id>/ai-connections/discov
 | `PATCH`  | `/clients/{id}/ai-connections/{connectionId}`                    | Update display name, URL, models, or API key |
 | `DELETE` | `/clients/{id}/ai-connections/{connectionId}`                    | Remove an AI connection                     |
 | `POST`   | `/clients/{id}/ai-connections/{connectionId}/activate`           | Activate a connection with a specific model |
-| `POST`   | `/clients/{id}/ai-connections/{connectionId}/deactivate`         | Deactivate (revert to global endpoint)      |
+| `POST`   | `/clients/{id}/ai-connections/{connectionId}/deactivate`         | Deactivate the current connection           |
 | `POST`   | `/clients/{id}/ai-connections/discover-models`                   | Probe an endpoint and list available models |
 
 ---
 
 ## Client Management API
 
-All client management endpoints require an Admin JWT (`Authorization: Bearer <token>`) or,
-for legacy deployments, the `X-Admin-Key` header.
+All client management endpoints require an Admin JWT (`Authorization: Bearer <token>`) or
+an admin `X-User-Pat` header. The older `X-Admin-Key` header has been removed and is no longer
+accepted by the running server.
 
 | Method   | Path                                                                  | Description                                 |
 |----------|-----------------------------------------------------------------------|---------------------------------------------|
@@ -557,9 +746,20 @@ for legacy deployments, the `X-Admin-Key` header.
 | `DELETE` | `/clients/{id}`                                                       | Delete a client                             |
 | `PUT`    | `/clients/{id}/ado-credentials`                                       | Set (or replace) per-client ADO credentials |
 | `DELETE` | `/clients/{id}/ado-credentials`                                       | Clear per-client ADO credentials            |
-| `POST`   | `/clients/{id}/crawl-configurations`                                  | Add a crawl configuration                   |
-| `GET`    | `/clients/{id}/crawl-configurations`                                  | List crawl configurations for a client      |
-| `DELETE` | `/clients/{id}/crawl-configurations/{cfgId}`                          | Remove a crawl configuration                |
+| `GET`    | `/clients/{id}/ado-organization-scopes`                               | List allowed Azure DevOps organizations     |
+| `POST`   | `/clients/{id}/ado-organization-scopes`                               | Add an allowed Azure DevOps organization    |
+| `PATCH`  | `/clients/{id}/ado-organization-scopes/{scopeId}`                     | Rename, retarget, or enable/disable a scope |
+| `DELETE` | `/clients/{id}/ado-organization-scopes/{scopeId}`                     | Remove an allowed Azure DevOps organization |
+| `PUT`    | `/clients/{id}/reviewer-identity`                                     | Set the Azure DevOps reviewer identity      |
+| `GET`    | `/identities/resolve?orgUrl=...&displayName=...`                      | Resolve Azure DevOps identity GUIDs         |
+| `GET`    | `/admin/clients/{id}/ado/discovery/projects?organizationScopeId=...`  | List projects for one allowed organization  |
+| `GET`    | `/admin/clients/{id}/ado/discovery/sources?...`                       | List repositories or wikis for one project  |
+| `GET`    | `/admin/clients/{id}/ado/discovery/branches?...`                      | List branches for one discovered source     |
+| `GET`    | `/admin/clients/{id}/ado/discovery/crawl-filters?...`                 | List guided crawler filter options          |
+| `GET`    | `/admin/crawl-configurations`                                         | List accessible crawl configurations        |
+| `POST`   | `/admin/crawl-configurations`                                         | Add a crawl configuration                   |
+| `PATCH`  | `/admin/crawl-configurations/{cfgId}`                                 | Update a crawl configuration                |
+| `DELETE` | `/admin/crawl-configurations/{cfgId}`                                 | Remove a crawl configuration                |
 | `GET`    | `/clients/{id}/prompt-overrides`                                      | List prompt overrides for a client          |
 | `POST`   | `/clients/{id}/prompt-overrides`                                      | Create a prompt override                    |
 | `PUT`    | `/clients/{id}/prompt-overrides/{overrideId}`                         | Replace a prompt override                   |
@@ -568,7 +768,159 @@ for legacy deployments, the `X-Admin-Key` header.
 | `POST`   | `/clients/{id}/finding-dismissals`                                    | Create a finding dismissal                  |
 | `PATCH`  | `/clients/{id}/finding-dismissals/{dismissalId}`                      | Update dismissal label                      |
 | `DELETE` | `/clients/{id}/finding-dismissals/{dismissalId}`                      | Delete a finding dismissal                  |
-| `POST`   | `/admin/clients/{id}/rotate-key`                                      | Rotate the client key (7-day grace period)  |
+| `GET`    | `/admin/clients/{id}/procursor/sources`                               | List configured ProCursor sources           |
+| `POST`   | `/admin/clients/{id}/procursor/sources`                               | Create a ProCursor repository or wiki source |
+| `POST`   | `/admin/clients/{id}/procursor/sources/{sourceId}/refresh`            | Queue a durable ProCursor refresh           |
+| `GET`    | `/admin/clients/{id}/procursor/sources/{sourceId}/branches`           | List tracked branches and freshness         |
+| `POST`   | `/admin/clients/{id}/procursor/sources/{sourceId}/branches`           | Add a tracked branch                        |
+| `PUT`    | `/admin/clients/{id}/procursor/sources/{sourceId}/branches/{branchId}` | Update one tracked branch                 |
+| `DELETE` | `/admin/clients/{id}/procursor/sources/{sourceId}/branches/{branchId}` | Remove one tracked branch                 |
+
+---
+
+## ProCursor Source Management
+
+ProCursor is configured per client. Each source belongs to one client, indexes a git-backed Azure
+DevOps repository or git-backed wiki, and tracks one or more branches that can refresh manually or
+on branch-head movement. The recommended admin flow is now guided: choose a client-scoped
+organization scope, resolve a canonical repository or wiki from discovery endpoints, and save the
+source with `organizationScopeId` plus `canonicalSourceRef`.
+
+### 1 — Create a source
+
+```bash
+curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/sources \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Platform Docs",
+    "sourceKind": "repository",
+    "organizationScopeId": "<scope-id>",
+    "projectId": "my-project",
+    "canonicalSourceRef": {
+      "provider": "azureDevOps",
+      "value": "repo-1"
+    },
+    "sourceDisplayName": "platform-docs",
+    "defaultBranch": "main",
+    "rootPath": "/docs",
+    "symbolMode": "auto",
+    "trackedBranches": [
+      {
+        "branchName": "main",
+        "refreshTriggerMode": "branchUpdate",
+        "miniIndexEnabled": true
+      }
+    ]
+  }'
+```
+
+Use `sourceKind: "adoWiki"` when the backing repository is an Azure DevOps git-based wiki. Set
+`symbolMode: "text_only"` for sources where symbol extraction is not needed. Legacy callers may
+still send `organizationUrl` and `repositoryId`, but guided saves are preferred because the
+backend revalidates the selected organization scope, source, and branch before persisting them.
+
+### 2 — Trigger the initial refresh
+
+```bash
+curl -k -X POST https://localhost:5443/admin/clients/<client-id>/procursor/sources/<source-id>/refresh \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "jobKind": "refresh" }'
+```
+
+The response returns the durable job metadata. ProCursor deduplicates active jobs per source,
+tracked branch, and requested commit so repeated refresh requests do not stampede the worker.
+
+### 3 — Check freshness and tracked branches
+
+```bash
+curl -k https://localhost:5443/admin/clients/<client-id>/procursor/sources \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -k https://localhost:5443/admin/clients/<client-id>/procursor/sources/<source-id>/branches \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+The source response includes the latest snapshot, commit SHA, and freshness status. Branch responses
+include `lastSeenCommitSha`, `lastIndexedCommitSha`, and branch-level freshness so operators can see
+whether the latest observed branch head has already been indexed.
+
+The same source list is reused by guided crawl configurations. When a crawl configuration switches
+to `selectedSources`, the chosen ProCursor source IDs are shown in the admin UI and copied onto
+queued review jobs so later admin edits do not retroactively change in-flight work.
+
+### 4 — Verify worker health
+
+```bash
+curl -k https://localhost:5443/healthz
+```
+
+The health payload now includes `procursor-index-worker`, which reports whether the ProCursor worker
+is running, when it last started and completed a cycle, and how many jobs are active.
+
+---
+
+## ProCursor Token Usage Reporting
+
+ProCursor token reporting is read-only analytics built from the dedicated `procursor_token_usage_events`
+and `procursor_token_usage_rollups` tables. Provider-reported usage is preferred when the AI client
+returns it. When usage metadata is unavailable, the backend falls back to the configured tokenizer
+and marks the event as estimated so the UI can explain the gap clearly.
+
+### Rollup cadence and retention
+
+- `PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS` controls how often the rollup worker refreshes daily
+  and monthly buckets.
+- `PROCURSOR_TOKEN_USAGE_EVENT_RETENTION_DAYS` controls when raw event rows are purged.
+- `PROCURSOR_TOKEN_USAGE_ROLLUP_RETENTION_DAYS` controls when aggregated rollups are purged.
+
+The `/healthz` payload now includes `procursor-token-usage-rollup-worker`, which reports whether the
+rollup worker is running, its most recent cycle timestamps, and when retention last ran.
+
+### Check rollup freshness
+
+```bash
+curl -k https://localhost:5443/admin/clients/<client-id>/procursor/token-usage/freshness \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Use this endpoint when you need to confirm whether a dashboard response is being served entirely
+from rollups or whether recent activity is being gap-filled from event rows.
+
+### Rebuild a selected interval
+
+```bash
+curl -k -X POST https://localhost:5443/admin/clients/<client-id>/procursor/token-usage/rebuild \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "2026-04-01",
+    "to": "2026-04-30",
+    "includeMonthly": true
+  }'
+```
+
+Rebuilds recompute rollups from captured event history only. They do not reconstruct usage that
+predates instrumentation.
+
+### UI rollout
+
+The client-wide analytics tab and source-level usage drill-down are behind the Vite flag
+`VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING`.
+
+- Set `VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING=true` for controlled environments where the
+  reporting surface should be visible.
+- Omit the variable or set it to `false` to keep the new UI hidden while backend capture and
+  rollups continue to run.
+
+For local admin-ui development:
+
+```bash
+cd admin-ui
+$env:VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING = 'true'
+npm run dev
+```
 
 ---
 
@@ -760,16 +1112,19 @@ nginx on port `3000`.
 
 ## API Usage
 
-Review endpoints require both `X-Client-Key` (from `MEISTER_CLIENT_KEYS` or the client
-registry) and `X-Ado-Token` (a valid ADO PAT or OAuth token used only for caller identity
-verification).
+Submitting a review requires both a user credential and an Azure DevOps caller token:
+
+- `X-User-Pat`: a PAT issued by a user who has `ClientAdministrator` access for the target client
+- `X-Ado-Token`: a valid ADO PAT or browser-extension session token used only for caller identity verification
+
+The status endpoint uses only `X-Ado-Token` (and optionally `X-Ado-Org-Url` for browser-extension session tokens).
 
 ### Submit a review
 
 ```bash
 # organizationUrl, projectId, repositoryId, pullRequestId, iterationId are all required
-curl -k -X POST https://localhost:5443/reviews \
-  -H "X-Client-Key: my-secret-client-key" \
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviews \
+  -H "X-User-Pat: <client-administrator-pat>" \
   -H "X-Ado-Token: <your-ado-pat>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -784,18 +1139,17 @@ curl -k -X POST https://localhost:5443/reviews \
 Response `202 Accepted`:
 
 ```json
-{ "jobId": "3fa85f64-5717-4562-b3fc-2c963f66afa6" }
+{ "jobId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "status": "pending" }
 ```
 
-Submitting the same PR and iteration while a job is still active returns the **same** job ID
-(idempotent).
+Submitting the same PR and iteration while a job is still active returns `409 Conflict` with the
+existing job ID and its current status.
 
 ### Poll for the result
 
 ```bash
 # Replace the UUID with the jobId from the 202 response
-curl -k https://localhost:5443/reviews/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
-  -H "X-Client-Key: my-secret-client-key" \
+curl -k https://localhost:5443/api/reviews/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
   -H "X-Ado-Token: <your-ado-pat>"
 ```
 

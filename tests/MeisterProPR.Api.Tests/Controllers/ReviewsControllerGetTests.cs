@@ -1,43 +1,51 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
 
-public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFactory factory) : IClassFixture<ReviewsControllerGetTests.GetReviewsFactory>
+public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFactory factory)
+    : IClassFixture<ReviewsControllerGetTests.GetReviewsFactory>
 {
-    private static HttpRequestMessage CreateGetRequest(string jobId)
+    private static HttpRequestMessage CreateGetRequest(Guid jobId, string? adoToken = "valid-ado-token")
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"/reviews/{jobId}");
-        request.Headers.Add("X-Client-Key", "test-key-123");
-        request.Headers.Add("X-Ado-Token", "valid-ado-token");
+        if (!string.IsNullOrWhiteSpace(adoToken))
+        {
+            request.Headers.Add("X-Ado-Token", adoToken);
+        }
+
         return request;
     }
 
     [Fact]
     public async Task GetReview_CompletedJob_Returns200WithResult()
     {
-        // Use the factory's job repository directly to insert a completed job
+        await factory.ClearJobsAsync();
         var client = factory.CreateClient();
         var jobId = await factory.InsertCompletedJobAsync();
 
-        using var request = CreateGetRequest(jobId.ToString());
+        using var request = CreateGetRequest(jobId);
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-
-        Assert.True(body.RootElement.TryGetProperty("status", out var statusEl));
-        Assert.Equal("completed", statusEl.GetString());
-
+        Assert.Equal("completed", body.RootElement.GetProperty("status").GetString());
         Assert.True(body.RootElement.TryGetProperty("result", out var resultEl));
         Assert.True(resultEl.TryGetProperty("summary", out _));
     }
@@ -45,66 +53,43 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
     [Fact]
     public async Task GetReview_FailedJob_Returns200WithError()
     {
+        await factory.ClearJobsAsync();
         var client = factory.CreateClient();
         var jobId = await factory.InsertFailedJobAsync();
 
-        using var request = CreateGetRequest(jobId.ToString());
+        using var request = CreateGetRequest(jobId);
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-
-        Assert.True(body.RootElement.TryGetProperty("status", out var statusEl));
-        Assert.Equal("failed", statusEl.GetString());
-
+        Assert.Equal("failed", body.RootElement.GetProperty("status").GetString());
         Assert.True(body.RootElement.TryGetProperty("error", out var errorEl));
         Assert.NotNull(errorEl.GetString());
     }
 
     [Fact]
-    public async Task GetReview_NewJob_Returns200WithPendingStatus()
+    public async Task GetReview_PendingJob_Returns200WithPendingStatus()
     {
-        // First create a job
+        await factory.ClearJobsAsync();
         var client = factory.CreateClient();
-        using var postRequest = new HttpRequestMessage(HttpMethod.Post, "/reviews");
-        postRequest.Headers.Add("X-Client-Key", "test-key-123");
-        postRequest.Headers.Add("X-Ado-Token", "valid-ado-token");
-        postRequest.Content = JsonContent.Create(
-            new
-            {
-                organizationUrl = "https://dev.azure.com/org",
-                projectId = "proj-get-test",
-                repositoryId = "repo-get-test",
-                pullRequestId = 10,
-                iterationId = 1,
-            });
+        var jobId = await factory.InsertPendingJobAsync();
 
-        var postResponse = await client.SendAsync(postRequest);
-        Assert.Equal(HttpStatusCode.Accepted, postResponse.StatusCode);
-        var postBody = JsonDocument.Parse(await postResponse.Content.ReadAsStringAsync());
-        var jobId = postBody.RootElement.GetProperty("jobId").GetString()!;
+        using var request = CreateGetRequest(jobId);
+        var response = await client.SendAsync(request);
 
-        // Now get the job
-        using var getRequest = CreateGetRequest(jobId);
-        var getResponse = await client.SendAsync(getRequest);
-
-        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        var getBody = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync());
-
-        Assert.True(getBody.RootElement.TryGetProperty("status", out var statusElement));
-        Assert.Equal("pending", statusElement.GetString());
-        Assert.True(getBody.RootElement.TryGetProperty("jobId", out _));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("pending", body.RootElement.GetProperty("status").GetString());
+        Assert.Equal(jobId, body.RootElement.GetProperty("jobId").GetGuid());
     }
 
     [Fact]
     public async Task GetReview_NoAdoToken_Returns401()
     {
+        await factory.ClearJobsAsync();
         var client = factory.CreateClient();
-        var unknownId = Guid.NewGuid().ToString();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviews/{unknownId}");
-        request.Headers.Add("X-Client-Key", "test-key-123");
-        // No X-Ado-Token
 
+        using var request = CreateGetRequest(Guid.NewGuid(), adoToken: null);
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -113,10 +98,10 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
     [Fact]
     public async Task GetReview_UnknownJobId_Returns404()
     {
+        await factory.ClearJobsAsync();
         var client = factory.CreateClient();
-        var unknownId = Guid.NewGuid().ToString();
-        using var request = CreateGetRequest(unknownId);
 
+        using var request = CreateGetRequest(Guid.NewGuid());
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -124,31 +109,21 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
 
     public sealed class GetReviewsFactory : WebApplicationFactory<Program>
     {
-        private IJobRepository? _jobRepo;
+        private readonly string _dbName = $"TestDb_GetReviewsFactory_{Guid.NewGuid()}";
+        private readonly InMemoryDatabaseRoot _dbRoot = new();
 
-        public GetReviewsFactory()
+        public async Task ClearJobsAsync()
         {
-            Environment.SetEnvironmentVariable("MEISTER_CLIENT_KEYS", "test-key-123");
-            Environment.SetEnvironmentVariable("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
-            Environment.SetEnvironmentVariable("AI_DEPLOYMENT", "gpt-4o");
-            // Skip real ADO token HTTP calls in tests — PassThroughAdoTokenValidator accepts any non-empty token.
-            Environment.SetEnvironmentVariable("ADO_SKIP_TOKEN_VALIDATION", "true");
-        }
-
-        private static void ReplaceService<T>(IServiceCollection services, T implementation) where T : class
-        {
-            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
-            if (descriptor != null)
-            {
-                services.Remove(descriptor);
-            }
-
-            services.AddSingleton(implementation);
+            using var scope = this.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.ReviewJobs.RemoveRange(db.ReviewJobs);
+            await db.SaveChangesAsync();
         }
 
         public async Task<Guid> InsertCompletedJobAsync()
         {
-            var repo = this._jobRepo ?? throw new InvalidOperationException("Factory not initialized");
+            using var scope = this.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -157,14 +132,15 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
                 "repo",
                 200,
                 1);
-            await repo.AddAsync(job);
-            await repo.SetResultAsync(job.Id, new ReviewResult("AI completed", new List<ReviewComment>().AsReadOnly()));
+            await repository.AddAsync(job);
+            await repository.SetResultAsync(job.Id, new ReviewResult("AI completed", Array.Empty<ReviewComment>()));
             return job.Id;
         }
 
         public async Task<Guid> InsertFailedJobAsync()
         {
-            var repo = this._jobRepo ?? throw new InvalidOperationException("Factory not initialized");
+            using var scope = this.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -173,8 +149,24 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
                 "repo",
                 300,
                 1);
-            await repo.AddAsync(job);
-            await repo.SetFailedAsync(job.Id, "Something went wrong");
+            await repository.AddAsync(job);
+            await repository.SetFailedAsync(job.Id, "Something went wrong");
+            return job.Id;
+        }
+
+        public async Task<Guid> InsertPendingJobAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+            var job = new ReviewJob(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "https://dev.azure.com/org",
+                "proj",
+                "repo",
+                400,
+                1);
+            await repository.AddAsync(job);
             return job.Id;
         }
 
@@ -182,24 +174,57 @@ public class ReviewsControllerGetTests(ReviewsControllerGetTests.GetReviewsFacto
         {
             builder.UseEnvironment("Testing");
 
+            var dbName = this._dbName;
+            var dbRoot = this._dbRoot;
             builder.ConfigureServices(services =>
             {
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(Arg.Any<string>()).Returns(true);
-                clientRegistry.GetClientIdByKeyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                    .Returns(Guid.NewGuid());
+                services.AddDbContext<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<IJobRepository, JobRepository>();
 
-                ReplaceService(services, clientRegistry);
+                var adoValidator = Substitute.For<IAdoTokenValidator>();
+                adoValidator.IsValidAsync("valid-ado-token", Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                    .Returns(true);
+                adoValidator.IsValidAsync(Arg.Is<string>(value => value != "valid-ado-token"), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                    .Returns(false);
+
+                ReplaceService(services, adoValidator);
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
+                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IClientRegistry>());
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
+                services.AddSingleton(userRepo);
+
+                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
+                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
+                services.AddSingleton(crawlRepo);
+
+                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
+                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
+                services.AddSingleton(adoCredentialRepository);
             });
         }
 
-        protected override IHost CreateHost(IHostBuilder builder)
+        private static void ReplaceService<T>(IServiceCollection services, T implementation)
+            where T : class
         {
-            var host = base.CreateHost(builder);
-            this._jobRepo = host.Services.GetRequiredService<IJobRepository>();
-            return host;
+            var descriptor = services.FirstOrDefault(candidate => candidate.ServiceType == typeof(T));
+            if (descriptor is not null)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddSingleton(implementation);
         }
     }
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -29,7 +32,7 @@ describe('ClientsView', () => {
   })
 
   it('fetches clients on mount and passes them to ClientTable', async () => {
-    mockGet.mockResolvedValue({ data: sampleClients })
+    mockGet.mockResolvedValue({ data: sampleClients, response: { ok: true } })
     const { default: ClientsView } = await import('@/views/ClientsView.vue')
     const wrapper = mount(ClientsView)
     await flushPromises()
@@ -38,7 +41,7 @@ describe('ClientsView', () => {
   })
 
   it('passes the search filter to ClientTable', async () => {
-    mockGet.mockResolvedValue({ data: sampleClients })
+    mockGet.mockResolvedValue({ data: sampleClients, response: { ok: true } })
     const { default: ClientsView } = await import('@/views/ClientsView.vue')
     const wrapper = mount(ClientsView)
     await flushPromises()
@@ -55,7 +58,7 @@ describe('ClientsView', () => {
     const wrapper = mount(ClientsView)
     await nextTick() // allow loading=true to flush to DOM
     expect(wrapper.text()).toContain('Loading')
-    resolveGet({ data: [] })
+    resolveGet({ data: [], response: { ok: true } })
     await flushPromises()
     expect(wrapper.text()).not.toContain('Loading')
   })

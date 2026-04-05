@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 
@@ -42,7 +45,7 @@ describe('ClientTable', () => {
     const wrapper = mount(ClientTable, {
       props: { clients: sampleClients, filter: 'zzznomatch' },
     })
-    expect(wrapper.text()).toContain('No clients found')
+    expect(wrapper.text()).toContain('No clients match your search.')
   })
 
   it('shows empty state when clients array is empty', async () => {
@@ -50,6 +53,6 @@ describe('ClientTable', () => {
     const wrapper = mount(ClientTable, {
       props: { clients: [], filter: '' },
     })
-    expect(wrapper.text()).toContain('No clients found')
+    expect(wrapper.text()).toContain('No clients match your search.')
   })
 })

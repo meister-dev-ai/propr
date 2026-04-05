@@ -1,8 +1,17 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
@@ -12,127 +21,54 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
 
-/// <summary>
-///     Integration tests for <see cref="MeisterProPR.Api.Controllers.ClientsController" />
-///     reviewer-identity endpoint.
-/// </summary>
 public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTests.ReviewerApiFactory factory)
     : IClassFixture<ClientsControllerReviewerTests.ReviewerApiFactory>
 {
-    private const string ValidAdminKey = "admin-key-min-16-chars-ok";
-    private const string ValidClientKey = "client-key-min-16-chars-ok";
-
     [Fact]
     public async Task GetClient_AfterReviewerSet_ReviewerIdIsReturned()
     {
+        await factory.ResetReviewersAsync();
         var reviewerId = Guid.NewGuid();
-
-        // Seed a separate client with a reviewer already set
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(
-                new ClientRecord
-                {
-                    Id = Guid.NewGuid(),
-                    Key = $"reviewer-set-key-{Guid.NewGuid():N}",
-                    DisplayName = "With Reviewer",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    ReviewerId = reviewerId,
-                });
-            await db.SaveChangesAsync();
-        }
-
-        // Find the ID of the newly seeded client
-        Guid seededId;
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            seededId = await db.Clients
-                .Where(c => c.ReviewerId == reviewerId)
-                .Select(c => c.Id)
-                .FirstAsync();
-        }
+        await factory.SetReviewerAsync(factory.OtherClientId, reviewerId);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{seededId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.OtherClientId}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(body.RootElement.TryGetProperty("reviewerId", out var prop));
-        Assert.Equal(reviewerId.ToString(), prop.GetString());
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(reviewerId.ToString(), body.GetProperty("reviewerId").GetString());
     }
-
-    // T018 — GET /clients/{id} includes reviewerId (null before set, non-null after)
 
     [Fact]
     public async Task GetClient_BeforeReviewerSet_ReviewerIdIsNull()
     {
-        // Reset reviewer to null to be resilient against test execution order.
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var record = await db.Clients.FindAsync(factory.ClientId);
-            record!.ReviewerId = null;
-            await db.SaveChangesAsync();
-        }
-
-        var clientId = factory.ClientId;
+        await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientId}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(body.RootElement.TryGetProperty("reviewerId", out var prop));
-        Assert.Equal(JsonValueKind.Null, prop.ValueKind);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("reviewerId").ValueKind);
     }
-
-    // T020 — POST crawl-config without reviewerDisplayName succeeds
-
-    [Fact]
-    public async Task PostCrawlConfig_WithoutReviewerDisplayName_Returns201()
-    {
-        var clientId = factory.ClientId;
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{clientId}/crawl-configurations");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(
-            new
-            {
-                organizationUrl = "https://dev.azure.com/myorg",
-                projectId = "MyProject",
-                crawlIntervalSeconds = 60,
-                // No reviewerDisplayName — this field must no longer be required
-            });
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-    }
-
-    // T019 — PUT with Guid.Empty returns 400
 
     [Fact]
     public async Task PutReviewerIdentity_EmptyGuid_Returns400()
     {
-        var clientId = factory.ClientId;
+        await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{clientId}/reviewer-identity");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.Empty });
 
         var response = await httpClient.SendAsync(request);
@@ -142,309 +78,175 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
     [Fact]
     public async Task PutReviewerIdentity_UnknownClient_Returns404()
     {
+        await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{Guid.NewGuid()}/reviewer-identity");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{Guid.NewGuid()}/reviewer-identity");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.NewGuid() });
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    // T017 — PUT /clients/{id}/reviewer-identity with valid GUID returns 204 and persists
-
     [Fact]
     public async Task PutReviewerIdentity_ValidGuid_Returns204AndPersists()
     {
-        var clientId = factory.ClientId;
+        await factory.ResetReviewersAsync();
         var reviewerId = Guid.NewGuid();
-
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{clientId}/reviewer-identity");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId });
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-
-        // Verify persisted
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var stored = await db.Clients.FindAsync(clientId);
-        Assert.Equal(reviewerId, stored!.ReviewerId);
+        Assert.Equal(reviewerId, await factory.GetReviewerAsync(factory.ClientId));
     }
 
     [Fact]
-    public async Task PutReviewerIdentity_WithoutAdminKey_Returns401()
+    public async Task PutReviewerIdentity_WithoutCredentials_Returns401()
     {
+        await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{factory.ClientId}/reviewer-identity");
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
         request.Content = JsonContent.Create(new { reviewerId = Guid.NewGuid() });
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    // T001 — PUT with valid X-Client-Key for own client returns 204 and persists
-
     [Fact]
-    public async Task PutReviewerIdentity_WithClientKey_OwnClient_Returns204()
+    public async Task PutReviewerIdentity_ClientAdministratorForAssignedClient_Returns204()
     {
+        await factory.ResetReviewersAsync();
         var reviewerId = Guid.NewGuid();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{factory.ClientId}/reviewer-identity");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
         request.Content = JsonContent.Create(new { reviewerId });
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var stored = await db.Clients.FindAsync(factory.ClientId);
-        Assert.Equal(reviewerId, stored!.ReviewerId);
+        Assert.Equal(reviewerId, await factory.GetReviewerAsync(factory.ClientId));
     }
 
-    // T002 — PUT with valid X-Client-Key but targeting a different client returns 403
-
     [Fact]
-    public async Task PutReviewerIdentity_WithClientKey_WrongClient_Returns403()
+    public async Task PutReviewerIdentity_ClientAdministratorForOtherClient_Returns403()
     {
+        await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{Guid.NewGuid()}/reviewer-identity");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.OtherClientId}/reviewer-identity");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.NewGuid() });
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    // T003 — PUT with X-Client-Key and Guid.Empty returns 400
-
-    [Fact]
-    public async Task PutReviewerIdentity_WithClientKey_EmptyGuid_Returns400()
-    {
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{factory.ClientId}/reviewer-identity");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-        request.Content = JsonContent.Create(new { reviewerId = Guid.Empty });
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    // T004 — PUT with X-Client-Key, same GUID twice returns 204 both times (idempotent)
-
-    [Fact]
-    public async Task PutReviewerIdentity_WithClientKey_IdempotentSameValue_Returns204()
-    {
-        var reviewerId = Guid.NewGuid();
-        var httpClient = factory.CreateClient();
-
-        using var first = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{factory.ClientId}/reviewer-identity");
-        first.Headers.Add("X-Client-Key", ValidClientKey);
-        first.Content = JsonContent.Create(new { reviewerId });
-        var firstResponse = await httpClient.SendAsync(first);
-        Assert.Equal(HttpStatusCode.NoContent, firstResponse.StatusCode);
-
-        using var second = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/clients/{factory.ClientId}/reviewer-identity");
-        second.Headers.Add("X-Client-Key", ValidClientKey);
-        second.Content = JsonContent.Create(new { reviewerId });
-        var secondResponse = await httpClient.SendAsync(second);
-        Assert.Equal(HttpStatusCode.NoContent, secondResponse.StatusCode);
-    }
-
-    // T007 — GET /profile with own client key returns 200 with null reviewerId; hasAdoCredentials absent
-
-    [Fact]
-    public async Task GetClientProfile_WithClientKey_NoReviewerSet_Returns200WithNullReviewerId()
-    {
-        // Reset reviewer to null to be resilient against test execution order.
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var record = await db.Clients.FindAsync(factory.ClientId);
-            record!.ReviewerId = null;
-            await db.SaveChangesAsync();
-        }
-
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{factory.ClientId}/profile");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(body.RootElement.TryGetProperty("reviewerId", out var reviewerProp));
-        Assert.Equal(JsonValueKind.Null, reviewerProp.ValueKind);
-        Assert.False(body.RootElement.TryGetProperty("hasAdoCredentials", out _));
-    }
-
-    // T008 — GET /profile after reviewer set returns 200 with matching reviewerId
-
-    [Fact]
-    public async Task GetClientProfile_WithClientKey_AfterReviewerSet_Returns200WithReviewerId()
-    {
-        var reviewerId = Guid.NewGuid();
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var client = await db.Clients.FindAsync(factory.ClientId);
-            client!.ReviewerId = reviewerId;
-            await db.SaveChangesAsync();
-        }
-
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{factory.ClientId}/profile");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(body.RootElement.TryGetProperty("reviewerId", out var prop));
-        Assert.Equal(reviewerId.ToString(), prop.GetString());
-
-        // Restore reviewer to null so other tests that assert reviewer is absent are not affected
-        // by execution order (xUnit does not guarantee order within a class).
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var client = await db.Clients.FindAsync(factory.ClientId);
-            client!.ReviewerId = null;
-            await db.SaveChangesAsync();
-        }
-    }
-
-    // T009 — GET /profile with client key targeting a different client returns 403
-
-    [Fact]
-    public async Task GetClientProfile_WithClientKey_WrongClient_Returns403()
-    {
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{Guid.NewGuid()}/profile");
-        request.Headers.Add("X-Client-Key", ValidClientKey);
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    // T010 — GET /profile with no client key returns 401
-
-    [Fact]
-    public async Task GetClientProfile_WithoutClientKey_Returns401()
-    {
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{factory.ClientId}/profile");
-        // No X-Client-Key header
-
-        var response = await httpClient.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     public sealed class ReviewerApiFactory : WebApplicationFactory<Program>
     {
+        private const string TestJwtSecret = "test-reviewer-jwt-secret-32chars!";
+
         private readonly string _dbName = $"TestDb_Reviewer_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
         public Guid ClientId { get; } = Guid.NewGuid();
+        public Guid OtherClientId { get; } = Guid.NewGuid();
+        public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
+
+        public string GenerateAdminToken()
+        {
+            return this.GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+        }
+
+        public string GenerateClientAdministratorToken()
+        {
+            return this.GenerateToken(this.ClientAdministratorUserId, AppUserRole.User);
+        }
+
+        public async Task ResetReviewersAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            foreach (var client in db.Clients)
+            {
+                client.ReviewerId = null;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SetReviewerAsync(Guid clientId, Guid reviewerId)
+        {
+            using var scope = this.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var client = await db.Clients.FindAsync(clientId);
+            client!.ReviewerId = reviewerId;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task<Guid?> GetReviewerAsync(Guid clientId)
+        {
+            using var scope = this.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var client = await db.Clients.FindAsync(clientId);
+            return client?.ReviewerId;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
-            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
-            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
-            builder.UseSetting("MEISTER_CLIENT_KEYS", ValidClientKey);
-            builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
             var dbRoot = this._dbRoot;
             var clientId = this.ClientId;
+            var clientAdministratorUserId = this.ClientAdministratorUserId;
 
             builder.ConfigureServices(services =>
             {
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
-                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
-                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
-
-                services.AddDbContext<MeisterProPRDbContext>(opts =>
-                    opts.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+                services.AddDbContext<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
+
+                ReplaceService(services, Substitute.For<IAdoTokenValidator>());
+                ReplaceService(services, Substitute.For<IPullRequestFetcher>());
+                ReplaceService(services, Substitute.For<IAdoCommentPoster>());
+                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
+                    {
+                        { clientId, ClientRole.ClientAdministrator },
+                    }));
+                userRepo.GetUserClientRolesAsync(
+                        Arg.Is<Guid>(id => id != clientAdministratorUserId),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                crawlRepo.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                crawlRepo.AddAsync(
-                        Arg.Any<Guid>(),
-                        Arg.Any<string>(),
-                        Arg.Any<string>(),
-                        Arg.Any<int>(),
-                        Arg.Any<CancellationToken>())
-                    .Returns(ci => Task.FromResult(
-                        new CrawlConfigurationDto(
-                            Guid.NewGuid(),
-                            ci.ArgAt<Guid>(0),
-                            ci.ArgAt<string>(1),
-                            ci.ArgAt<string>(2),
-                            null,
-                            ci.ArgAt<int>(3),
-                            true,
-                            DateTimeOffset.UtcNow,
-                            [])));
                 services.AddSingleton(crawlRepo);
 
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(ValidClientKey).Returns(true);
-                clientRegistry.GetClientIdByKeyAsync(ValidClientKey, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(clientId));
-                clientRegistry.GetClientIdByKeyAsync(
-                        Arg.Is<string>(k => k != ValidClientKey),
-                        Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(null));
-                services.AddSingleton(clientRegistry);
-
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
+                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                adoCredRepo.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
+                adoCredentialRepository.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
                     .Returns(Task.CompletedTask);
-                adoCredRepo.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                adoCredentialRepository.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.CompletedTask);
-                services.AddSingleton(adoCredRepo);
+                services.AddSingleton(adoCredentialRepository);
+                services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
 
@@ -454,18 +256,54 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
 
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(
+            db.Clients.AddRange(
                 new ClientRecord
                 {
                     Id = this.ClientId,
-                    Key = ValidClientKey,
                     DisplayName = "Reviewer Test Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+                new ClientRecord
+                {
+                    Id = this.OtherClientId,
+                    DisplayName = "Other Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                 });
             db.SaveChanges();
 
             return host;
+        }
+
+        private string GenerateToken(Guid userId, AppUserRole globalRole)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity([
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", globalRole.ToString()),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        private static void ReplaceService<T>(IServiceCollection services, T implementation)
+            where T : class
+        {
+            var descriptor = services.FirstOrDefault(candidate => candidate.ServiceType == typeof(T));
+            if (descriptor is not null)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddSingleton(implementation);
         }
     }
 }

@@ -1,5 +1,9 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Diagnostics.Metrics;
 using MeisterProPR.Application.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Api.Telemetry;
 
@@ -9,8 +13,8 @@ public sealed class ReviewJobMetrics : IDisposable
     private readonly Meter _meter;
 
     /// <summary>Creates the metrics meter and instruments.</summary>
-    /// <param name="jobRepository">Repository used to observe queue depth.</param>
-    public ReviewJobMetrics(IJobRepository jobRepository)
+    /// <param name="scopeFactory">Factory used to resolve scoped repositories for observations.</param>
+    public ReviewJobMetrics(IServiceScopeFactory scopeFactory)
     {
         this._meter = new Meter("MeisterProPR", "1.0.0");
         this.JobDuration = this._meter.CreateHistogram<double>(
@@ -19,7 +23,7 @@ public sealed class ReviewJobMetrics : IDisposable
             "Duration of review job processing");
         this._meter.CreateObservableGauge(
             "review_job_queue_depth",
-            () => jobRepository.GetPendingJobs().Count,
+            () => ObserveQueueDepth(scopeFactory),
             "jobs",
             "Number of jobs currently waiting to be processed");
         this.CrawlPrsDiscovered = this._meter.CreateCounter<long>(
@@ -30,6 +34,13 @@ public sealed class ReviewJobMetrics : IDisposable
             "meisterpropr_crawl_duration_seconds",
             "s",
             "Duration of a complete crawl cycle across all active configurations");
+    }
+
+    private static int ObserveQueueDepth(IServiceScopeFactory scopeFactory)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var jobRepository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        return jobRepository.GetPendingJobs().Count;
     }
 
     /// <summary>Histogram measuring PR crawl cycle durations in seconds.</summary>

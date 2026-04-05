@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -44,7 +47,7 @@ internal sealed class AiConnectionEntityTypeConfiguration : IEntityTypeConfigura
 
         builder.Property(x => x.ApiKey)
             .HasColumnName("api_key")
-            .HasMaxLength(500)
+            .HasMaxLength(4000)
             .IsRequired(false);
 
         builder.Property(x => x.CreatedAt)
@@ -58,6 +61,11 @@ internal sealed class AiConnectionEntityTypeConfiguration : IEntityTypeConfigura
         builder.HasOne(x => x.Client)
             .WithMany()
             .HasForeignKey(x => x.ClientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.ModelCapabilities)
+            .WithOne(x => x.AiConnection)
+            .HasForeignKey(x => x.AiConnectionId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(x => new { x.ClientId, x.DisplayName })

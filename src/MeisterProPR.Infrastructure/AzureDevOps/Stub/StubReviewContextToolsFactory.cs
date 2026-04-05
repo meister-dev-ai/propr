@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -17,7 +21,8 @@ public sealed class StubReviewContextToolsFactory : IReviewContextToolsFactory
         string sourceBranch,
         int pullRequestId,
         int iterationId,
-        Guid? clientId)
+        Guid? clientId,
+        IReadOnlyList<Guid>? knowledgeSourceIds = null)
     {
         return new NullReviewContextTools();
     }
@@ -42,5 +47,31 @@ internal sealed class NullReviewContextTools : IReviewContextTools
     public Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct)
     {
         return Task.FromResult("");
+    }
+
+    /// <inheritdoc />
+    public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+    {
+        return Task.FromResult(new ProCursorKnowledgeAnswerDto(
+            "unavailable",
+            [],
+            "ProCursor knowledge retrieval is unavailable in stub review mode."));
+    }
+
+    /// <inheritdoc />
+    public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+        string symbol,
+        string? queryMode,
+        int? maxRelations,
+        CancellationToken ct)
+    {
+        return Task.FromResult(new ProCursorSymbolInsightDto(
+            "unavailable",
+            null,
+            false,
+            false,
+            null,
+            [],
+            null));
     }
 }

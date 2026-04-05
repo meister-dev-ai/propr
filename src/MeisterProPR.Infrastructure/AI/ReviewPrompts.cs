@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
@@ -18,7 +21,10 @@ internal static class ReviewPrompts
         "All review findings MUST go into the \"comments\" array as " +
         "{\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}. " +
         "Do NOT use key_issues, verdict, issues, review, suggested_changes, suggested_fixes, key_findings, or any other structure. " +
-        "\"summary\" must be a plain string, NOT an array or object.";
+        "\"summary\" must be a plain string, NOT an array or object. " +
+        "CRITICAL: Your response message strings MUST NOT contain any HTML tags (e.g., no <style>, <script>, <div>, <!DOCTYPE>, or any < or > characters). " +
+        "If you need to show code with angle brackets, wrap it in markdown code fences (triple backticks) or escape it. " +
+        "Never output raw HTML tags in comment messages.";
 
     /// <summary>
     ///     Fixed reviewer-persona primer. Output constraint aligns with <see cref="OutputKeyReminder" />.
@@ -32,6 +38,11 @@ internal static class ReviewPrompts
                                          Do NOT wrap it in markdown code fences (no ```json or ```). Do NOT add any
                                          text before or after the JSON. The very first character must be '{' and the
                                          very last character must be '}'. Any other format will cause a parse error.
+                                         
+                                         HTML SAFETY RULE: Your message strings MUST NOT contain any HTML tags or raw angle brackets.
+                                         Never output <style>, <script>, <div>, <!DOCTYPE>, or any < or > characters outside of markdown code blocks.
+                                         If you need to reference code with angle brackets, wrap the code in triple backticks (```code here```).
+                                         
                                          Schema:
                                          {
                                            "summary": "<overall narrative>",
@@ -74,6 +85,12 @@ internal static class ReviewPrompts
                                                 "summary" field only. If you want to highlight something positive or note a
                                                 non-actionable observation, write it in the summary narrative. The "comments"
                                                 array is for actionable findings only.
+
+                                                HTML SAFETY RULE: Your message strings (both in the "summary" and in comment "message" fields)
+                                                MUST NOT contain any HTML tags or raw angle brackets. This includes <style>, <script>, <div>,
+                                                <!DOCTYPE>, or any standalone < or > characters. If you need to show code that contains angle brackets,
+                                                always wrap it in markdown triple backticks (```code here```). This preserves the code formatting
+                                                and prevents HTML injection in Azure DevOps. Do NOT output raw HTML tags.
 
                                                 SUGGESTION rule: A SUGGESTION entry in the "comments" array is only valid if:
                                                   1. It names a specific, observable thing to change (not "consider refactoring this area").
@@ -561,4 +578,59 @@ internal static class ReviewPrompts
 
         return sb.ToString();
     }
+
+    /// <summary>
+    ///     System prompt for the memory-augmented reconsideration step (US3, feature 026).
+    ///     Instructs the AI to review draft findings in light of historical resolved threads.
+    /// </summary>
+    internal static string BuildMemoryReconsiderationSystemPrompt(string reviewerIdentity)
+    {
+        return $"""
+                You are {reviewerIdentity}, an expert code reviewer with access to historical memory of past PR review decisions.
+                You are in the RECONSIDERATION phase — you will be given draft findings from an initial review pass
+                alongside records of how similar issues were resolved previously in this codebase.
+
+                Your task: evaluate each draft finding against the historical context and decide whether to:
+                  - RETAIN: The current finding is valid even considering past resolutions (same problem recurs unfixed, or a different instance).
+                  - DOWNGRADE: Lower the severity if history shows the team typically accepts this pattern.
+                  - DISCARD: Remove the finding if a past resolution clearly demonstrates the same concern was intentionally accepted or by design.
+
+                CRITICAL OUTPUT RULE: Your ENTIRE response must be a single raw JSON object using exactly these keys:
+                  "summary" (string), "comments" (array with file_path/line_number/severity/message),
+                  "confidence_evaluations" (array), "investigation_complete" (bool), "loop_complete" (bool).
+                Do NOT wrap in markdown fences. Return only valid JSON.
+                """;
+    }
+
+    /// <summary>
+    ///     User message for the memory-augmented reconsideration step.
+    ///     Combines draft findings JSON with formatted historical matches.
+    /// </summary>
+    internal static string BuildMemoryReconsiderationUserMessage(
+        string draftFindingsJson,
+        IReadOnlyList<Application.DTOs.ThreadMemoryMatchDto> matches)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## Draft Findings from Initial Review");
+        sb.AppendLine(draftFindingsJson);
+        sb.AppendLine();
+        sb.AppendLine("## Historical Memory — Past Resolved Threads");
+
+        for (var i = 0; i < matches.Count; i++)
+        {
+            var m = matches[i];
+            sb.AppendLine($"### Match {i + 1} (Similarity: {m.SimilarityScore:F2}, Memory ID: {m.MemoryRecordId})");
+            if (m.FilePath is not null)
+            {
+                sb.AppendLine($"- **File**: {m.FilePath}");
+            }
+
+            sb.AppendLine($"- **How it was resolved**: {m.ResolutionSummary}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("Reconsider the draft findings above using the historical context. Return your reconsidered findings as a JSON object.");
+        return sb.ToString();
+    }
 }
+

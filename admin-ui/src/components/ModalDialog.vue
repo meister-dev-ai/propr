@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
     <div v-if="isOpen" class="modal-overlay" @click="close">
         <div class="modal-dialog" @click.stop>

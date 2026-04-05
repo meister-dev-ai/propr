@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
   <table v-if="filteredClients.length > 0" class="client-table">
     <thead>
@@ -5,6 +8,7 @@
         <th>Display Name</th>
         <th>Status</th>
         <th>ADO Credentials</th>
+        <th>Usage (30d)</th>
         <th>Created</th>
       </tr>
     </thead>
@@ -21,6 +25,15 @@
           <span :class="client.hasAdoCredentials ? 'chip chip-success' : 'chip chip-muted'">
             <i :class="client.hasAdoCredentials ? 'fi fi-rr-plug-connection' : 'fi fi-rr-minus-circle'"></i>
             {{ client.hasAdoCredentials ? 'Configured' : 'None' }}
+          </span>
+        </td>
+        <td>
+          <span class="chip usage-badge" v-if="client.recentUsageTokens !== undefined">
+            <i class="fi fi-rr-chart-line-up"></i>
+            {{ formatTokens(client.recentUsageTokens) }}
+          </span>
+          <span class="chip usage-badge" v-else>
+            <i class="fi fi-rr-minus-circle"></i> --
           </span>
         </td>
         <td>{{ formatDate(client.createdAt) }}</td>
@@ -40,6 +53,7 @@ interface Client {
   isActive: boolean
   hasAdoCredentials: boolean
   createdAt: string
+  recentUsageTokens?: number
 }
 
 const props = defineProps<{
@@ -58,6 +72,14 @@ const filteredClients = computed(() =>
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
+
+function formatTokens(tokens?: number): string {
+  if (!tokens) return '0'
+  if (tokens >= 1000) {
+    return (tokens / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  }
+  return tokens.toString()
+}
 </script>
 
 <style scoped>
@@ -71,5 +93,17 @@ function formatDate(iso: string): string {
   color: var(--color-text-muted);
   font-size: 0.875rem;
   margin: 0;
+}
+
+.usage-badge {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+.usage-badge i {
+  margin-right: 4px;
 }
 </style>

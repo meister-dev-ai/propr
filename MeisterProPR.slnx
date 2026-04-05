@@ -4,6 +4,7 @@
         <Project Path="src/MeisterProPR.Application/MeisterProPR.Application.csproj"/>
         <Project Path="src/MeisterProPR.Domain/MeisterProPR.Domain.csproj"/>
         <Project Path="src/MeisterProPR.Infrastructure/MeisterProPR.Infrastructure.csproj"/>
+        <Project Path="src/MeisterProPR.ProCursor/MeisterProPR.ProCursor.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj"/>

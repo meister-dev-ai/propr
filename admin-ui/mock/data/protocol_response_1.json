@@ -898,5 +898,66 @@
                 "error": null
             }
         ]
+    },
+    {
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "jobId": "92370267-16e6-494d-aa4a-643bb933c5fd",
+        "attemptNumber": 1,
+        "label": "/src/services/packageService.ts",
+        "fileResultId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "startedAt": "2026-03-26T19:43:00.000000+00:00",
+        "completedAt": "2026-03-26T19:43:22.000000+00:00",
+        "outcome": "Completed",
+        "totalInputTokens": 2616,
+        "totalOutputTokens": 134,
+        "iterationCount": 1,
+        "toolCallCount": 0,
+        "finalConfidence": 82,
+        "events": [
+            {
+                "id": "c3d4e5f6-a7b8-9012-cdef-012345678901",
+                "kind": "aiCall",
+                "name": "ai_call_iter_1",
+                "occurredAt": "2026-03-26T19:43:02.000000+00:00",
+                "inputTokens": 2616,
+                "outputTokens": 134,
+                "inputTextSample": "Reviewing file /src/services/packageService.ts [Modify]\nPR: Refactor package service to use async/await pattern\n\n--- FILE UNDER REVIEW ---\nexport class PackageService {\n  async install(name: string): Promise<void> {\n    const result = await fetch(`/api/packages/${name}`, { method: 'POST' });\n    const data = result.json();\n    this.cache.set(name, data);\n  }\n}",
+                "outputSummary": "{\"summary\":\"Reviewed packageService.ts. Found an await omission on json() call and a potential race condition in cache updates.\",\"comments\":[{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":3,\"severity\":\"error\",\"message\":\"Missing await on result.json() — this stores a Promise in the cache instead of the resolved value.\"},{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":4,\"severity\":\"error\",\"message\":\"Cache update is not atomic — concurrent installs of the same package can overwrite each other's results.\"},{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":2,\"severity\":\"warning\",\"message\":\"No error handling for the fetch call — network failures or non-2xx responses are silently ignored.\"},{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":1,\"severity\":\"suggestion\",\"message\":\"Consider extracting the base URL to a configuration constant for easier environment-specific overrides.\"}],\"confidence_evaluations\":[{\"concern\":\"correctness\",\"confidence\":95},{\"concern\":\"code_quality\",\"confidence\":88}],\"investigation_complete\":true,\"loop_complete\":true}",
+                "error": null
+            },
+            {
+                "id": "d4e5f6a7-b8c9-0123-def0-123456789012",
+                "kind": "memoryOperation",
+                "name": "memory_retrieval_executed",
+                "occurredAt": "2026-03-26T19:43:10.000000+00:00",
+                "inputTokens": null,
+                "outputTokens": null,
+                "inputTextSample": "{\"filePath\":\"/src/services/packageService.ts\",\"resultCount\":2,\"similarityScores\":[0.87,0.79],\"memoryRecordIds\":[\"aaaa1111-0000-0000-0000-000000000001\",\"aaaa1111-0000-0000-0000-000000000002\"]}",
+                "outputSummary": null,
+                "error": null
+            },
+            {
+                "id": "e5f6a7b8-c9d0-1234-ef01-234567890123",
+                "kind": "aiCall",
+                "name": "ai_call_memory_reconsideration",
+                "occurredAt": "2026-03-26T19:43:15.000000+00:00",
+                "inputTokens": 1234,
+                "outputTokens": 278,
+                "inputTextSample": "[MEMORY-AUGMENTED RECONSIDERATION]\nPrior thread context indicates the team actively uses a mutex-based cache wrapper — the concurrency comment is not actionable. The base URL extraction has been deferred by team convention. Reconsider draft comments accordingly.",
+                "outputSummary": "{\"summary\":\"Reconsideration applied: removed suggestion about base URL extraction (team convention, not actionable) and removed the cache race condition warning (team uses mutex wrapper — not a real risk here). Kept the missing await and the missing error handling.\",\"comments\":[{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":3,\"severity\":\"error\",\"message\":\"Missing await on result.json() — this stores a Promise in the cache instead of the resolved value.\"},{\"file_path\":\"/src/services/packageService.ts\",\"line_number\":2,\"severity\":\"warning\",\"message\":\"No error handling for the fetch call — network failures or non-2xx responses are silently ignored.\"}],\"confidence_evaluations\":[{\"concern\":\"correctness\",\"confidence\":96},{\"concern\":\"code_quality\",\"confidence\":90}],\"investigation_complete\":true,\"loop_complete\":true}",
+                "error": null
+            },
+            {
+                "id": "f6a7b8c9-d0e1-2345-f012-345678901234",
+                "kind": "memoryOperation",
+                "name": "memory_reconsideration_completed",
+                "occurredAt": "2026-03-26T19:43:22.000000+00:00",
+                "inputTokens": null,
+                "outputTokens": null,
+                "inputTextSample": "{\"filePath\":\"/src/services/packageService.ts\",\"contributingMemoryIds\":[\"aaaa1111-0000-0000-0000-000000000001\",\"aaaa1111-0000-0000-0000-000000000002\"],\"originalCommentCount\":4,\"finalCommentCount\":2,\"retainedCount\":1,\"discardedCount\":2,\"downgradedCount\":1,\"discarded\":[{\"filePath\":\"/src/services/packageService.ts\",\"lineNumber\":4,\"severity\":\"error\",\"message\":\"Cache update is not atomic — concurrent installs of the same package can overwrite each othe\"},{\"filePath\":\"/src/services/packageService.ts\",\"lineNumber\":1,\"severity\":\"suggestion\",\"message\":\"Consider extracting the base URL to a configuration constant for easier environment-specific\"}],\"downgraded\":[{\"filePath\":\"/src/services/packageService.ts\",\"lineNumber\":2,\"originalSeverity\":\"error\",\"newSeverity\":\"warning\",\"message\":\"No error handling for the fetch call — network failures or non-2xx responses are silently i\"}]}",
+                "outputSummary": null,
+                "error": null
+            }
+        ]
     }
 ]

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Domain.ValueObjects;
@@ -32,6 +35,11 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     When <c>null</c> (first-pass fetch), <see cref="AllPrFileSummaries" /> derives it from
 ///     <see cref="ChangedFiles" />.
 /// </param>
+/// <param name="AuthorizedIdentityId">
+///     VSS identity GUID of the authenticated Azure DevOps connection used to fetch and post
+///     review correspondence. When populated, reviewer-owned thread detection treats this
+///     identity as equivalent to the configured reviewer identity.
+/// </param>
 public sealed record PullRequest(
     string OrganizationUrl,
     string ProjectId,
@@ -46,7 +54,8 @@ public sealed record PullRequest(
     IReadOnlyList<ChangedFile> ChangedFiles,
     PrStatus Status = PrStatus.Active,
     IReadOnlyList<PrCommentThread>? ExistingThreads = null,
-    IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null)
+    IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
+    Guid? AuthorizedIdentityId = null)
 {
     /// <summary>
     ///     Full manifest of all files changed in the PR since the target branch (path + change type only).

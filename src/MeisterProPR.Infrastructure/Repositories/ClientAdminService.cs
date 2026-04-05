@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -27,18 +30,11 @@ public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClien
     }
 
     /// <inheritdoc />
-    public async Task<ClientDto?> CreateAsync(string key, string displayName, CancellationToken ct = default)
+    public async Task<ClientDto> CreateAsync(string displayName, CancellationToken ct = default)
     {
-        var exists = await dbContext.Clients.AnyAsync(c => c.Key == key, ct);
-        if (exists)
-        {
-            return null;
-        }
-
         var client = new ClientRecord
         {
             Id = Guid.NewGuid(),
-            Key = key,
             DisplayName = displayName,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -15,27 +18,22 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
 using Serilog.Sinks.Grafana.Loki;
+using Swashbuckle.AspNetCore.Swagger;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .CreateBootstrapLogger();
-
-static void RequireConfig(IConfiguration config, string name)
-{
-    if (string.IsNullOrWhiteSpace(config[name]))
-    {
-        throw new InvalidOperationException($"{name} is not set in configuration.");
-    }
-}
 
 try
 {
@@ -49,31 +47,46 @@ try
     }
 
     var dbConnectionString = builder.Configuration["DB_CONNECTION_STRING"];
-    var isDbMode = !string.IsNullOrWhiteSpace(dbConnectionString);
-
-    // Validation runs after CreateBuilder so builder.Configuration includes all
-    // sources (env vars, user secrets, appsettings) and WebApplicationFactory
-    // can inject overrides via UseSetting before these checks run.
-    // InvalidOperationException is excluded from the catch filter below so these
-    // failures propagate to callers such as WebApplicationFactory in tests.
-    RequireConfig(builder.Configuration, "AI_ENDPOINT");
-    RequireConfig(builder.Configuration, "AI_DEPLOYMENT");
-
-    // MEISTER_CLIENT_KEYS is only required in legacy (non-DB) mode.
-    // In DB mode it is optional and used solely for one-time bootstrap seeding.
-    if (!isDbMode)
-    {
-        RequireConfig(builder.Configuration, "MEISTER_CLIENT_KEYS");
-    }
 
     builder.Host.UseSerilog((context, services, configuration) =>
     {
+        static string? RedactSecret(string? value)
+            => string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
+
         configuration
             .ReadFrom.Configuration(context.Configuration)
             .ReadFrom.Services(services)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", "Meister DEV ProPR")
-            // Scrub secrets from log output: X-Client-Key, X-Ado-Token, AZURE_CLIENT_SECRET, AdoClientSecret
+            // Scrub secrets from log output: X-Ado-Token, X-User-Pat, AZURE_CLIENT_SECRET, AdoClientSecret
+            .Destructure.ByTransforming<CreateAiConnectionRequest>(request => new
+            {
+                request.DisplayName,
+                request.EndpointUrl,
+                request.Models,
+                ApiKey = RedactSecret(request.ApiKey),
+                request.ModelCapabilities,
+                request.ModelCategory,
+            })
+            .Destructure.ByTransforming<UpdateAiConnectionRequest>(request => new
+            {
+                request.DisplayName,
+                request.EndpointUrl,
+                request.Models,
+                ApiKey = RedactSecret(request.ApiKey),
+                request.ModelCapabilities,
+            })
+            .Destructure.ByTransforming<SetAdoCredentialsRequest>(request => new
+            {
+                request.TenantId,
+                request.ClientId,
+                Secret = RedactSecret(request.Secret),
+            })
+            .Destructure.ByTransforming<DiscoverModelsRequest>(request => new
+            {
+                request.EndpointUrl,
+                ApiKey = RedactSecret(request.ApiKey),
+            })
             .Destructure.ByTransforming<HttpRequest>(r => new
             {
                 r.Method,
@@ -98,27 +111,31 @@ try
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
 
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddProCursorModule(builder.Configuration);
 
-    // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret)
-    builder.Services.AddDataProtection();
+    // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret).
+    var dataProtectionBuilder = builder.Services.AddDataProtection()
+        .SetApplicationName("MeisterProPR");
+    var dataProtectionKeysPath = builder.Configuration["MEISTER_DATA_PROTECTION_KEYS_PATH"];
+    if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+    {
+        Directory.CreateDirectory(dataProtectionKeysPath);
+        dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+    }
     builder.Services.AddTransient<ReviewOrchestrationService>();
 
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
-    builder.Services.AddSingleton<IValidator<CreateCrawlConfigRequest>, CreateCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
+    builder.Services.AddSingleton<IValidator<CreateClientAdoOrganizationScopeRequest>, CreateClientAdoOrganizationScopeRequestValidator>();
+    builder.Services.AddSingleton<IValidator<PatchClientAdoOrganizationScopeRequest>, PatchClientAdoOrganizationScopeRequestValidator>();
     builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
 
-    // Only registered in DB mode — PrCrawlService depends on ICrawlConfigurationRepository
-    // which is only available when DB_CONNECTION_STRING is configured.
-    if (isDbMode)
-    {
-        builder.Services.AddScoped<IPrCrawlService, PrCrawlService>();
-        builder.Services.AddScoped<IMentionScanService, MentionScanService>();
-        builder.Services.AddScoped<IMentionReplyService, MentionReplyService>();
-    }
+    builder.Services.AddScoped<IPrCrawlService, PrCrawlService>();
+    builder.Services.AddScoped<IMentionScanService, MentionScanService>();
+    builder.Services.AddScoped<IMentionReplyService, MentionReplyService>();
 
     // Register ReviewJobWorker as singleton so WorkerHealthCheck can inject it by concrete type,
     // then forward the same instance as IHostedService.
@@ -130,28 +147,32 @@ try
     builder.Services.AddSingleton<AdoPrCrawlerWorker>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
 
+    // ProCursor indexing uses a dedicated durable worker and exposes live state via health checks.
+    builder.Services.AddSingleton<ProCursorIndexWorker>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorIndexWorker>());
+
+    // ProCursor usage reporting uses a dedicated rollup worker so reads can rely on refreshed aggregates.
+    builder.Services.AddSingleton<ProCursorTokenUsageRollupWorker>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorTokenUsageRollupWorker>());
+
     // MentionScanWorker (producer) and MentionReplyWorker (consumer) share a single bounded
     // Channel<MentionReplyJob>. Channel capacity is 1000; writer blocks when full (Wait mode).
-    // Both workers only run in DB mode — without DB there is no persistent scan state.
-    if (isDbMode)
-    {
-        var mentionChannel = Channel.CreateBounded<MentionReplyJob>(
-            new BoundedChannelOptions(1000)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = false,
-            });
-        builder.Services.AddSingleton(mentionChannel);
-        builder.Services.AddSingleton(mentionChannel.Reader);
-        builder.Services.AddSingleton(mentionChannel.Writer);
+    var mentionChannel = Channel.CreateBounded<MentionReplyJob>(
+        new BoundedChannelOptions(1000)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
+    builder.Services.AddSingleton(mentionChannel);
+    builder.Services.AddSingleton(mentionChannel.Reader);
+    builder.Services.AddSingleton(mentionChannel.Writer);
 
-        builder.Services.AddSingleton<MentionScanWorker>();
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
+    builder.Services.AddSingleton<MentionScanWorker>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
 
-        builder.Services.AddSingleton<MentionReplyWorker>();
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
-    }
+    builder.Services.AddSingleton<MentionReplyWorker>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
 
     // Fixed origins: testbed (localhost:3000) and Azure DevOps.
     // Additional origins can be added via CORS_ORIGINS (comma-separated).
@@ -185,6 +206,7 @@ try
     });
 
     builder.Services.AddControllers()
+        .AddApplicationPart(typeof(ProCursorKnowledgeSourcesController).Assembly)
         .AddJsonOptions(opts =>
             opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
@@ -219,17 +241,36 @@ try
     });
 
     var healthChecksBuilder = builder.Services.AddHealthChecks()
-        .AddCheck<WorkerHealthCheck>("worker");
+        .AddCheck<WorkerHealthCheck>("worker")
+        .AddCheck<ProCursorIndexWorkerHealthCheck>("procursor-index-worker")
+        .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
 
-    if (isDbMode)
+    if (!string.IsNullOrWhiteSpace(dbConnectionString))
     {
         healthChecksBuilder.AddCheck<DatabaseHealthCheck>("database");
     }
 
     var app = builder.Build();
 
+    if (args.Contains("--generate-openapi", StringComparer.OrdinalIgnoreCase))
+    {
+        using var scope = app.Services.CreateScope();
+        var swaggerProvider = scope.ServiceProvider.GetRequiredService<ISwaggerProvider>();
+        var openApi = swaggerProvider.GetSwagger("v1");
+        var outputPath = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "..", "openapi.json"));
+
+        await using var stream = File.Create(outputPath);
+        await using var writer = new StreamWriter(stream);
+        var jsonWriter = new OpenApiJsonWriter(writer);
+        openApi.SerializeAsV3(jsonWriter);
+        await writer.FlushAsync();
+
+        Log.Information("Generated OpenAPI document at {OpenApiPath}", outputPath);
+        return;
+    }
+
     // DB migration + bootstrap + startup recovery (DB mode only)
-    if (isDbMode)
+    if (!string.IsNullOrWhiteSpace(dbConnectionString))
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
@@ -237,31 +278,8 @@ try
         // Apply any pending migrations automatically on startup
         await db.Database.MigrateAsync();
 
-        // One-time bootstrap: seed clients from MEISTER_CLIENT_KEYS if clients table is empty
-        var clientCount = await db.Clients.CountAsync();
-        var legacyKeys = builder.Configuration["MEISTER_CLIENT_KEYS"];
-        if (clientCount == 0 && !string.IsNullOrWhiteSpace(legacyKeys))
-        {
-            var keys = legacyKeys.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            foreach (var key in keys)
-            {
-                db.Clients.Add(
-                    new ClientRecord
-                    {
-                        Id = Guid.NewGuid(),
-                        Key = key,
-                        DisplayName = "Bootstrapped from MEISTER_CLIENT_KEYS",
-                        IsActive = true,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    });
-            }
-
-            await db.SaveChangesAsync();
-            Log.Warning(
-                "Bootstrap: seeded {Count} client(s) from MEISTER_CLIENT_KEYS. " +
-                "This env var is deprecated in DB mode and will be ignored on subsequent startups.",
-                keys.Length);
-        }
+        var secretBackfillService = scope.ServiceProvider.GetRequiredService<MeisterProPR.Infrastructure.Services.SecretBackfillService>();
+        await secretBackfillService.BackfillAsync();
 
         // Startup recovery: transition stale Processing jobs (e.g., from a crash) back to Pending
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
@@ -311,8 +329,7 @@ try
     });
 
     app.UseCors();
-    app.UseMiddleware<AdminKeyMiddleware>();
-    app.UseMiddleware<ClientKeyMiddleware>();
+    app.UseMiddleware<AuthMiddleware>();
     app.MapControllers();
     app.MapHealthChecks("/healthz");
     app.MapPrometheusScrapingEndpoint();

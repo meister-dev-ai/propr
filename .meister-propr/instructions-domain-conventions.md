@@ -33,6 +33,8 @@ In tests, `RepositoryId` and `RepositoryName` are often both set to the same pla
 `AiConnection` represents a per-client AI endpoint configuration. Key invariants:
 - Only one `AiConnection` per client can be `IsActive = true` at a time (enforced by a filtered unique index on `(ClientId)` where `is_active = true`).
 - `ApiKey` is write-only — it is stored but never surfaced in DTOs or GET responses.
+- `ApiKey` is write-only — it is stored protected using the project's protection codec (purpose `AiConnectionApiKey`) and never surfaced in DTOs or GET responses.
+- Client ADO credentials (PATs) are persisted protected using the `ClientAdoCredentials` purpose; repositories should Protect on write and Unprotect on read where appropriate.
 - `Models` is a list of deployment/model names the endpoint supports. `ActiveModel` must be one of the values in `Models`.
 - `ActivateAsync` in the repository deactivates all other connections before activating the target. The two-step update is acceptable for the current concurrency requirements.
 

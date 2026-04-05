@@ -1,9 +1,14 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using FactAttribute = Xunit.SkippableFactAttribute;
+using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -19,13 +24,18 @@ public sealed class ReviewFileResultRepositoryTests(PostgresContainerFixture fix
 
     public async Task DisposeAsync()
     {
-        await this._dbContext.DisposeAsync();
+        if (this._dbContext is not null)
+        {
+            await this._dbContext.DisposeAsync();
+        }
     }
 
     public async Task InitializeAsync()
     {
+        fixture.SkipIfUnavailable();
+
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();

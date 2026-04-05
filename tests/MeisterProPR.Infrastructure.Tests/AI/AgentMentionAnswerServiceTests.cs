@@ -1,3 +1,8 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
@@ -12,6 +17,37 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 public sealed class AgentMentionAnswerServiceTests
 {
     private static readonly Guid BotGuid = new("0CAEB875-08D2-6D69-88FB-302B06D21993");
+    private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-1111-2222-3333-444444444444");
+
+    private static AiConnectionDto BuildActiveConnection()
+    {
+        return new AiConnectionDto(
+            Guid.NewGuid(),
+            ClientId,
+            "Test Connection",
+            "https://ai.example.com",
+            ["gpt-4o"],
+            IsActive: true,
+            ActiveModel: "gpt-4o",
+            CreatedAt: DateTimeOffset.UtcNow,
+            ApiKey: "test-key");
+    }
+
+    private static AgentMentionAnswerService CreateSut(IChatClient chatClient)
+    {
+        var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
+        aiConnectionRepository.GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(BuildActiveConnection());
+
+        var aiChatClientFactory = Substitute.For<IAiChatClientFactory>();
+        aiChatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(chatClient);
+
+        return new AgentMentionAnswerService(
+            aiConnectionRepository,
+            aiChatClientFactory,
+            NullLogger<AgentMentionAnswerService>.Instance);
+    }
 
     private static IChatClient MakeChatClient(string reply = "The answer.")
     {
@@ -49,11 +85,11 @@ public sealed class AgentMentionAnswerServiceTests
             .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
-        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = CreateSut(chatClient);
         var rawMention = $"@<{BotGuid}> Is this method safe?";
 
         // Act
-        await sut.AnswerAsync(MakePr(), rawMention, 5);
+        await sut.AnswerAsync(MakePr(), ClientId, rawMention, 5);
 
         // Assert: the user message must contain the cleaned question, not the raw GUID prefix
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -79,10 +115,10 @@ public sealed class AgentMentionAnswerServiceTests
                 new PrThreadComment("alice", $"@<{BotGuid}> Is this safe?", BotGuid),
             ]);
         var pr = MakePr(threads: [thread]);
-        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = CreateSut(chatClient);
 
         // Act
-        await sut.AnswerAsync(pr, $"@<{BotGuid}> Is this safe?", 5);
+        await sut.AnswerAsync(pr, ClientId, $"@<{BotGuid}> Is this safe?", 5);
 
         // Assert: location info is present in the user message
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -95,10 +131,10 @@ public sealed class AgentMentionAnswerServiceTests
     {
         // Arrange
         var chatClient = MakeChatClient("fine");
-        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = CreateSut(chatClient);
 
         // Act & Assert: no exception, returns AI text
-        var result = await sut.AnswerAsync(MakePr(), $"@<{BotGuid}> Hello?", 999);
+        var result = await sut.AnswerAsync(MakePr(), ClientId, $"@<{BotGuid}> Hello?", 999);
         Assert.Equal("fine", result);
     }
 
@@ -107,10 +143,10 @@ public sealed class AgentMentionAnswerServiceTests
     {
         // Arrange
         var chatClient = MakeChatClient("Certainly, here is the answer.");
-        var sut = new AgentMentionAnswerService(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()), NullLogger<AgentMentionAnswerService>.Instance);
+        var sut = CreateSut(chatClient);
 
         // Act
-        var result = await sut.AnswerAsync(MakePr(), "any question", 1);
+        var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", 1);
 
         // Assert
         Assert.Equal("Certainly, here is the answer.", result);

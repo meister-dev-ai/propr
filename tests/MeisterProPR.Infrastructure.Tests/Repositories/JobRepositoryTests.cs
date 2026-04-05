@@ -1,10 +1,16 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using FactAttribute = Xunit.SkippableFactAttribute;
+using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -21,13 +27,18 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
     public async Task DisposeAsync()
     {
-        await this._dbContext.DisposeAsync();
+        if (this._dbContext is not null)
+        {
+            await this._dbContext.DisposeAsync();
+        }
     }
 
     public async Task InitializeAsync()
     {
+        fixture.SkipIfUnavailable();
+
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(fixture.ConnectionString)
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         // Wipe job rows between tests so count-based assertions stay deterministic.
@@ -61,10 +72,61 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task Add_WithSelectedProCursorSourceScope_PersistsAndHydratesSnapshot()
+    {
+        var sourceA = Guid.NewGuid();
+        var sourceB = Guid.NewGuid();
+        var job = MakeJob();
+        this._dbContext.Clients.Add(new ClientRecord
+        {
+            Id = job.ClientId,
+            DisplayName = "Test Client",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        this._dbContext.ProCursorKnowledgeSources.AddRange(
+            new ProCursorKnowledgeSource(
+                sourceA,
+                job.ClientId,
+                "Source A",
+                ProCursorSourceKind.Repository,
+                job.OrganizationUrl,
+                job.ProjectId,
+                "repo-a",
+                "main",
+                null,
+                true,
+                "auto"),
+            new ProCursorKnowledgeSource(
+                sourceB,
+                job.ClientId,
+                "Source B",
+                ProCursorSourceKind.Repository,
+                job.OrganizationUrl,
+                job.ProjectId,
+                "repo-b",
+                "main",
+                null,
+                true,
+                "auto"));
+        await this._dbContext.SaveChangesAsync();
+
+        job.SetProCursorSourceScope(ProCursorSourceScopeMode.SelectedSources, [sourceA, sourceB, sourceA]);
+
+        await this._repo.AddAsync(job);
+
+        var fetched = this._repo.GetById(job.Id);
+
+        Assert.NotNull(fetched);
+        Assert.Equal(ProCursorSourceScopeMode.SelectedSources, fetched!.ProCursorSourceScopeMode);
+        Assert.Equal([sourceA, sourceB], fetched.ProCursorSourceIds);
+    }
+
+    [Fact]
     public async Task FindActiveJob_ReturnsNullForCompletedJob()
     {
-        // Completed jobs no longer block re-creation — the orchestrator's skip logic
-        // handles "nothing changed" cases so that conversational replies can still fire.
+        // Completed jobs are terminal and must not be treated as active work.
+        // Crawl dedup against same-iteration completed jobs is handled separately.
         var job = MakeJob();
         await this._repo.AddAsync(job);
         await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
@@ -77,6 +139,32 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             job.PullRequestId,
             job.IterationId);
         Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task FindCompletedJob_ReturnsMostRecentCompletedJob()
+    {
+        var job1 = MakeJob(prId: 500, iterationId: 2);
+        await this._repo.AddAsync(job1);
+        await this._repo.TryTransitionAsync(job1.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job1.Id, new ReviewResult("summary 1", []));
+
+        await Task.Delay(10);
+
+        var job2 = MakeJob(job1.ClientId, job1.OrganizationUrl, job1.ProjectId, job1.RepositoryId, job1.PullRequestId, job1.IterationId);
+        await this._repo.AddAsync(job2);
+        await this._repo.TryTransitionAsync(job2.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job2.Id, new ReviewResult("summary 2", []));
+
+        var found = this._repo.FindCompletedJob(
+            job1.OrganizationUrl,
+            job1.ProjectId,
+            job1.RepositoryId,
+            job1.PullRequestId,
+            job1.IterationId);
+
+        Assert.NotNull(found);
+        Assert.Equal(job2.Id, found.Id);
     }
 
     [Fact]

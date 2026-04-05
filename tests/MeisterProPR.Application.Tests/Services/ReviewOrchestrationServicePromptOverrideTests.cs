@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -52,6 +56,11 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
+        var aiRepo = Substitute.For<IAiConnectionRepository>();
+        var connDto = new AiConnectionDto(Guid.NewGuid(), Guid.NewGuid(), "Test Connection", "https://api.test.com/", ["gpt-4o"], IsActive: true, ActiveModel: "gpt-4o", CreatedAt: DateTimeOffset.UtcNow);
+        aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(connDto));
+
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -70,6 +79,8 @@ public class ReviewOrchestrationServicePromptOverrideTests
             instructionEvaluator,
             Substitute.For<IOptions<AiReviewOptions>>(),
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
+            aiRepo,
+            Substitute.For<IAiChatClientFactory>(),
             promptOverrideService: promptOverrideService);
     }
 
@@ -121,7 +132,8 @@ public class ReviewOrchestrationServicePromptOverrideTests
         orchestrator
             .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
@@ -154,7 +166,8 @@ public class ReviewOrchestrationServicePromptOverrideTests
         orchestrator
             .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
@@ -183,7 +196,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
 
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         orchestrator
-            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
@@ -218,7 +231,8 @@ public class ReviewOrchestrationServicePromptOverrideTests
         orchestrator
             .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(

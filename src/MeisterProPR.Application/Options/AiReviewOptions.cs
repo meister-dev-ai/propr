@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.ComponentModel.DataAnnotations;
 
 namespace MeisterProPR.Application.Options;
@@ -59,10 +62,9 @@ public sealed class AiReviewOptions
     public int MaxBackoffSeconds { get; set; } = 30;
 
     /// <summary>
-    ///     Model deployment name passed as <see cref="Microsoft.Extensions.AI.ChatOptions.ModelId" />
-    ///     on every AI call. Bound to <c>AI_DEPLOYMENT</c>.
+    ///     Fallback model identifier passed as <see cref="Microsoft.Extensions.AI.ChatOptions.ModelId" />
+    ///     when a caller does not supply a client-scoped model explicitly.
     /// </summary>
-    [Required(ErrorMessage = "AI_DEPLOYMENT is required.")]
     public string ModelId { get; set; } = string.Empty;
 
     /// <summary>
@@ -109,4 +111,25 @@ public sealed class AiReviewOptions
     /// </summary>
     [Range(1, 500, ErrorMessage = "QualityFilterThreshold must be between 1 and 500.")]
     public int QualityFilterThreshold { get; set; } = 20;
+
+    /// <summary>
+    ///     Maximum number of past resolutions to retrieve per file review query.
+    ///     Bound to <c>AI_MEMORY_TOP_N</c>. Range: 1–20.
+    /// </summary>
+    [Range(1, 20, ErrorMessage = "MemoryTopN must be between 1 and 20.")]
+    public int MemoryTopN { get; set; } = 3;
+
+    /// <summary>
+    ///     Minimum cosine similarity score (0.0–1.0) for a past resolution to be included in
+    ///     reconsideration context. Bound to <c>AI_MEMORY_MIN_SIMILARITY</c>.
+    /// </summary>
+    [Range(0.0f, 1.0f, ErrorMessage = "MemoryMinSimilarity must be between 0.0 and 1.0.")]
+    public float MemoryMinSimilarity { get; set; } = 0.80f;
+
+    /// <summary>
+    ///     Embedding vector dimensions; must match the configured embedding model.
+    ///     Bound to <c>AI_MEMORY_EMBEDDING_DIMENSIONS</c>. Range: 64–4096.
+    /// </summary>
+    [Range(64, 4096, ErrorMessage = "MemoryEmbeddingDimensions must be between 64 and 4096.")]
+    public int MemoryEmbeddingDimensions { get; set; } = 1536;
 }

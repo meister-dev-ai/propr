@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
 
@@ -9,12 +12,6 @@ public sealed class CreateClientRequestValidator : AbstractValidator<CreateClien
     /// <summary>Initializes a new instance of <see cref="CreateClientRequestValidator" />.</summary>
     public CreateClientRequestValidator()
     {
-        this.RuleFor(r => r.Key)
-            .NotEmpty()
-            .WithMessage("Key is required.")
-            .MinimumLength(16)
-            .WithMessage("Key must be at least 16 characters.");
-
         this.RuleFor(r => r.DisplayName)
             .NotEmpty()
             .WithMessage("DisplayName is required.");

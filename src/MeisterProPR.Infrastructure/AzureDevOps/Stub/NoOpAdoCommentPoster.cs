@@ -1,3 +1,7 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
@@ -12,7 +16,7 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.Stub;
 public sealed partial class NoOpAdoCommentPoster(ILogger<NoOpAdoCommentPoster> logger) : IAdoCommentPoster
 {
     /// <inheritdoc />
-    public Task PostAsync(
+    public Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -29,7 +33,12 @@ public sealed partial class NoOpAdoCommentPoster(ILogger<NoOpAdoCommentPoster> l
             LogStubComment(logger, comment.Severity, comment.FilePath, comment.LineNumber, comment.Message);
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty(
+            result.Comments.Count + result.CarriedForwardCandidatesSkipped,
+            result.CarriedForwardCandidatesSkipped) with
+        {
+            PostedCount = result.Comments.Count,
+        });
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ADO_STUB_PR is enabled — skipping comment post for PR#{PrId}. Review summary: {Summary}")]

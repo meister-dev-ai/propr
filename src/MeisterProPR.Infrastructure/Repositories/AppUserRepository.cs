@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -58,6 +61,18 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default)
+    {
+        var record = await db.AppUsers.FindAsync([id], ct);
+        if (record is null)
+        {
+            return;
+        }
+
+        record.PasswordHash = passwordHash;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task AddClientAssignmentAsync(UserClientRole assignment, CancellationToken ct = default)
     {
         // Upsert: if assignment already exists for this user+client, update the role.
@@ -103,11 +118,13 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         return records.Select(MapToDomain).ToList().AsReadOnly();
     }
 
-    public async Task<ClientRole?> GetClientRoleAsync(Guid userId, Guid clientId, CancellationToken ct = default)
+    public async Task<Dictionary<Guid, ClientRole>> GetUserClientRolesAsync(Guid userId, CancellationToken ct = default)
     {
-        var record = await db.UserClientRoles
-            .FirstOrDefaultAsync(r => r.UserId == userId && r.ClientId == clientId, ct);
-        return record?.Role;
+        var records = await db.UserClientRoles
+            .Where(r => r.UserId == userId)
+            .Select(r => new { r.ClientId, r.Role })
+            .ToListAsync(ct);
+        return records.ToDictionary(r => r.ClientId, r => r.Role);
     }
 
     private static AppUser MapToDomain(AppUserRecord record)

@@ -3,6 +3,7 @@
     <ItemGroup>
         <ProjectReference Include="..\MeisterProPR.Application\MeisterProPR.Application.csproj" />
         <ProjectReference Include="..\MeisterProPR.Infrastructure\MeisterProPR.Infrastructure.csproj" />
+        <ProjectReference Include="..\MeisterProPR.ProCursor\MeisterProPR.ProCursor.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -13,7 +14,7 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
-        <PackageReference Include="Microsoft.OpenApi" Version="3.5.0" />
+        <PackageReference Include="Microsoft.OpenApi" Version="2.4.1" />
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.1" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.0-beta.1" />
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.1" />

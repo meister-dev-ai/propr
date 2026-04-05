@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -18,7 +21,7 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     the AI signals completion or the iteration limit is reached.
 /// </summary>
 public sealed partial class ToolAwareAiReviewCore(
-    IChatClient chatClient,
+    IChatClient? chatClient,
     IOptions<AiReviewOptions> options,
     ILogger<ToolAwareAiReviewCore> logger) : IAiReviewCore
 {
@@ -70,10 +73,11 @@ public sealed partial class ToolAwareAiReviewCore(
         state.Messages.Add(new ChatMessage(ChatRole.User, userMessage));
 
         var registeredTools = BuildTools(systemContext.ReviewTools, cancellationToken);
+        var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var chatOptions = new ChatOptions
         {
             MaxOutputTokens = 8192,
-            ModelId = opts.ModelId,
+            ModelId = effectiveModelId,
             Tools = registeredTools.Count > 0 ? [.. registeredTools] : null,
         };
 
@@ -87,7 +91,8 @@ public sealed partial class ToolAwareAiReviewCore(
         }
 
         // T044: use tier-specific client when configured; fall back to injected default
-        var effectiveClient = systemContext.TierChatClient ?? chatClient;
+        var effectiveClient = systemContext.TierChatClient ?? chatClient
+            ?? throw new InvalidOperationException("No chat client available for review execution.");
 
         using var activity = ActivitySource.StartActivity("ReviewLoop");
         activity?.SetTag("pr.id", pullRequest.PullRequestId);
@@ -214,7 +219,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         "summary, comments, confidence_evaluations, loop_complete (set to true), investigation_complete (set to true). " +
                         "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
                         "The response must start with '{' and end with '}'."));
-                var finalOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = opts.ModelId };
+                var finalOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
                 var finalResponse = await effectiveClient.GetResponseAsync(state.Messages, finalOptions, cancellationToken);
                 state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
                 lastTextResponse = finalResponse.Text ?? "";
@@ -246,7 +251,7 @@ public sealed partial class ToolAwareAiReviewCore(
                     "\"investigation_complete\": true, " +
                     "\"loop_complete\": true. " +
                     "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
-                var correctionOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = opts.ModelId };
+                var correctionOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
                 var correctionResponse = await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
                 state.AccumulateTokens(correctionResponse.Usage?.InputTokenCount, correctionResponse.Usage?.OutputTokenCount);
                 var corrected = correctionResponse.Text ?? "";
@@ -305,7 +310,26 @@ public sealed partial class ToolAwareAiReviewCore(
                     "Get the content of a file at a specific line range (1-based, inclusive). Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
             });
 
-        return [getChangedFiles, getFileTree, getFileContent];
+        var askProCursorKnowledge = AIFunctionFactory.Create(
+            (string question) => reviewTools.AskProCursorKnowledgeAsync(question, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = "ask_procursor_knowledge",
+                Description =
+                    "Ask ProCursor a repository-aware knowledge question using the current review repository context. Returns sourced results with freshness metadata or an explicit no-result/unavailable status.",
+            });
+
+        var getProCursorSymbolInfo = AIFunctionFactory.Create(
+            (string symbol, string? queryMode, int? maxRelations) =>
+                reviewTools.GetProCursorSymbolInfoAsync(symbol, queryMode, maxRelations, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = "get_procursor_symbol_info",
+                Description =
+                    "Ask ProCursor for symbol-aware insight using the current review repository context. Returns definitions plus related references, calls, inheritance, or containment when available.",
+            });
+
+        return [getChangedFiles, getFileTree, getFileContent, askProCursorKnowledge, getProCursorSymbolInfo];
     }
 
     private async Task<string> InvokeToolAsync(

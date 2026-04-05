@@ -1,5 +1,13 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Claims;
+using System.Text;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
@@ -7,7 +15,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests;
@@ -21,7 +31,6 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
     : IClassFixture<ControllerSmokeTests.SmokeFactory>
 {
     private const string ValidAdminKey = "smoke-admin-key-min-16-chars";
-    private const string ValidClientKey = "smoke-client-key-min-16-chars";
 
     /// <summary>
     ///     Verifies that GET /clients resolves the full controller DI graph (including
@@ -34,7 +43,7 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
     {
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
-        request.Headers.Add("X-Admin-Key", ValidAdminKey);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
 
@@ -63,22 +72,44 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
     /// </summary>
     public sealed class SmokeFactory : WebApplicationFactory<Program>
     {
+        private const string TestJwtSecret = "test-smoke-jwt-secret-32chars!!!";
         private readonly string _dbName = $"TestDb_Smoke_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
+
+        public string GenerateAdminToken()
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity([
+                    new Claim("sub", Guid.NewGuid().ToString()),
+                    new Claim("global_role", "Admin"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
-            builder.UseSetting("MEISTER_CLIENT_KEYS", ValidClientKey);
             builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
             var dbRoot = this._dbRoot;
 
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<IHostedService>();
+
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
                 services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
@@ -91,19 +122,19 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 services.AddSingleton(crawlRepo);
 
-                var clientRegistry = Substitute.For<IClientRegistry>();
-                clientRegistry.IsValidKey(ValidClientKey).Returns(true);
-                clientRegistry.GetClientIdByKeyAsync(ValidClientKey, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(Guid.NewGuid()));
-                services.AddSingleton(clientRegistry);
+                services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
                 services.AddSingleton(adoCredRepo);
+                services.AddSingleton(Substitute.For<IClientAdoOrganizationScopeRepository>());
+                services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
 

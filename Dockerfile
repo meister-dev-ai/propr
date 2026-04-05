@@ -20,11 +20,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root user (rootless container)
-RUN useradd --system --no-create-home appuser && chown -R appuser /app
-USER appuser
-
 COPY --from=build /app .
+
+# Non-root user (rootless container) plus a writable Data Protection key-ring path.
+RUN useradd --system --no-create-home appuser \
+    && mkdir -p /app/.data-protection-keys \
+    && chown -R appuser /app
+USER appuser
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080

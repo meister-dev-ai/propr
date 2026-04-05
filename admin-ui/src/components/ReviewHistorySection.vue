@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
     <div class="review-history-section">
         <p v-if="loading" class="loading">Loading…</p>
@@ -5,7 +8,7 @@
         <p v-else-if="groups.length === 0" class="empty-state">No reviews yet.</p>
 
         <template v-else>
-            <section v-for="group in groups" :key="group.key" class="pr-group-card">
+            <section v-for="group in paginatedGroups" :key="group.key" class="pr-group-card">
                 <div class="pr-card-header">
                     <div class="pr-card-title">
                         <a :href="group.prUrl" target="_blank" rel="noopener noreferrer" class="pr-link">
@@ -23,6 +26,14 @@
                             <span class="totals-separator">/</span>
                             <span class="fat-tokens total-value">{{ formatTokens(group.totalOutTokens) }} Out</span>
                         </div>
+                        <RouterLink
+                            v-if="canInspectClient(group.clientId)"
+                            :to="prReviewLink(group)"
+                            class="btn-ghost pr-view-btn"
+                            title="View PR analysis"
+                        >
+                            PR View ↗
+                        </RouterLink>
                         <button
                             v-if="group.items.length > ITEMS_VISIBLE_DEFAULT"
                             class="btn-ghost expand-btn"
@@ -66,7 +77,8 @@
                             <template v-if="item.status === 'processing' && item.id && processingProtocols[item.id]">
                                 <div class="active-chips">
                                     <RouterLink 
-                                        :to="`/jobs/${item.id}/protocol${props.clientId ? '?clientId=' + props.clientId : ''}`"
+                                        v-if="canInspectClient(props.clientId || item.clientId)"
+                                        :to="{ name: 'job-protocol', params: { id: item.id }, query: { clientId: props.clientId || item.clientId } }"
                                         class="chip-processing"
                                     >
                                         <ProgressOrb class="chip-orb" />
@@ -74,6 +86,12 @@
                                             {{ processingProtocols[item.id].length }} Reviews
                                         </span>
                                     </RouterLink>
+                                    <span v-else class="chip-processing">
+                                        <ProgressOrb class="chip-orb" />
+                                        <span class="chip-label">
+                                            {{ processingProtocols[item.id].length }} Reviews
+                                        </span>
+                                    </span>
                                 </div>
                             </template>
                             <template v-else>
@@ -82,16 +100,46 @@
                         </div>
 
                         <div class="list-action-col">
-                            <RouterLink :to="`/jobs/${item.id}/protocol${props.clientId ? '?clientId=' + props.clientId : ''}`" class="btn-ghost protocol-btn">
+                            <RouterLink
+                                v-if="canInspectClient(props.clientId || item.clientId)"
+                                :to="{ name: 'job-protocol', params: { id: item.id }, query: { clientId: props.clientId || item.clientId } }"
+                                class="btn-ghost protocol-btn"
+                            >
                                 Protocol ↗
                             </RouterLink>
                         </div>
                     </div>
                 </div>
             </section>
+
+            <div v-if="totalPages > 1" class="pagination-controls">
+                <div class="pagination-info">
+                    Page {{ currentPage }} of {{ totalPages }}
+                </div>
+                <div class="pagination-buttons">
+                    <button 
+                        class="btn-secondary" 
+                        @click="previousPage" 
+                        :disabled="currentPage === 1"
+                        title="Previous page"
+                    >
+                        <i class="fi fi-rr-arrow-left"></i>
+                        Previous
+                    </button>
+                    <button 
+                        class="btn-secondary" 
+                        @click="nextPage" 
+                        :disabled="currentPage === totalPages"
+                        title="Next page"
+                    >
+                        Next
+                        <i class="fi fi-rr-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
         </template>
         
-        <ModalDialog v-model:isOpen="isSummaryModalOpen" title="Review Summary" size="lg">
+        <ModalDialog :isOpen="isSummaryModalOpen" @update:isOpen="isSummaryModalOpen = $event" title="Review Summary" size="lg">
             <div class="summary-modal-content markdown-content">
                 <div v-html="renderMarkdown(selectedSummary)"></div>
             </div>
@@ -100,10 +148,11 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import ModalDialog from '@/components/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
+import { useSession } from '@/composables/useSession'
 import { createAdminClient } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 import MarkdownIt from 'markdown-it'
@@ -121,8 +170,10 @@ function renderMarkdown(content: string | null | undefined): string {
 }
 
 const props = withDefaults(defineProps<{ clientId?: string }>(), { clientId: undefined })
+const { hasClientRole } = useSession()
 
 const ITEMS_VISIBLE_DEFAULT = 3
+const ITEMS_PER_PAGE = 10
 
 type JobListItem = components['schemas']['JobListItem']
 type JobStatus = components['schemas']['JobStatus']
@@ -131,6 +182,8 @@ type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 interface PrGroup {
     key: string
     pullRequestId: number
+    organizationUrl: string
+    projectId: string
     repositoryId: string
     prTitle: string | null
     prRepositoryName: string | null
@@ -140,6 +193,7 @@ interface PrGroup {
     latestActivityAt: string
     totalInTokens: number
     totalOutTokens: number
+    clientId: string
     items: JobListItem[]
 }
 
@@ -147,11 +201,22 @@ const loading = ref(false)
 const error = ref('')
 const groups = ref<PrGroup[]>([])
 const expandedGroups = ref<Set<string>>(new Set())
+const currentPage = ref(1)
 
 const isSummaryModalOpen = ref(false)
 const selectedSummary = ref('')
 
 const processingProtocols = ref<Record<string, ReviewJobProtocolDto[]>>({})
+
+const totalPages = computed(() => {
+    return Math.ceil(groups.value.length / ITEMS_PER_PAGE)
+})
+
+const paginatedGroups = computed(() => {
+    const start = (currentPage.value - 1) * ITEMS_PER_PAGE
+    const end = start + ITEMS_PER_PAGE
+    return groups.value.slice(start, end)
+})
 
 function openSummaryModal(item: JobListItem) {
     if (item.status === 'processing' && item.id && processingProtocols.value[item.id]) return // Don't open empty modal on chips
@@ -228,9 +293,37 @@ function toggleGroupExpanded(key: string) {
     expandedGroups.value = new Set(expandedGroups.value)
 }
 
+function nextPage() {
+    if (currentPage.value < totalPages.value) {
+        currentPage.value++
+    }
+}
+
+function previousPage() {
+    if (currentPage.value > 1) {
+        currentPage.value--
+    }
+}
+
+function refresh() {
+    currentPage.value = 1
+    return loadJobs(true)
+}
+
+// Export the refresh method for use by parent component
+if (typeof defineExpose !== 'undefined') {
+    defineExpose({
+        refresh
+    })
+}
+
 function visibleItems(group: PrGroup): JobListItem[] {
     if (expandedGroups.value.has(group.key)) return group.items
     return group.items.slice(0, ITEMS_VISIBLE_DEFAULT)
+}
+
+function canInspectClient(clientId: string | null | undefined): boolean {
+    return typeof clientId === 'string' && clientId.length > 0 && hasClientRole(clientId, 0)
 }
 
 function buildGroups(items: JobListItem[]): PrGroup[] {
@@ -249,6 +342,8 @@ function buildGroups(items: JobListItem[]): PrGroup[] {
             map.set(key, {
                 key,
                 pullRequestId: prId,
+                organizationUrl: orgUrl,
+                projectId: project,
                 repositoryId: repo,
                 prTitle: item.prTitle ?? null,
                 prRepositoryName: item.prRepositoryName ?? null,
@@ -258,6 +353,7 @@ function buildGroups(items: JobListItem[]): PrGroup[] {
                 latestActivityAt: item.submittedAt ?? '',
                 totalInTokens: 0,
                 totalOutTokens: 0,
+                clientId: item.clientId ?? '',
                 items: [],
             })
         }
@@ -325,6 +421,19 @@ function statusBadgeClass(status: JobStatus | undefined): string {
         case 'pending': return 'status-badge status-pending'
         case 'failed': return 'status-badge status-failed'
         default: return 'status-badge'
+    }
+}
+
+function prReviewLink(group: PrGroup): object {
+    return {
+        name: 'pr-review',
+        query: {
+            clientId: group.clientId,
+            orgUrl: group.organizationUrl,
+            project: group.projectId,
+            repositoryId: group.repositoryId,
+            pullRequestId: String(group.pullRequestId),
+        },
     }
 }
 </script>
@@ -647,25 +756,39 @@ function statusBadgeClass(status: JobStatus | undefined): string {
     color: var(--color-text-muted);
 }
 
-.btn-ghost {
+
+
+/* Pagination Controls */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    margin-top: 2rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+}
+
+.pagination-info {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.pagination-buttons {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.pagination-buttons button {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.4rem 0.8rem;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    background: transparent;
-    border: 1px solid transparent;
-    transition: all 0.2s;
-    text-decoration: none;
 }
 
-.btn-ghost:hover {
-    color: var(--color-text);
-    background: var(--color-surface);
-    border-color: var(--color-border);
-    text-decoration: none;
+.pagination-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 </style>

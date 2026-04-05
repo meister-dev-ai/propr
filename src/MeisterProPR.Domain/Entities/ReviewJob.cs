@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -8,6 +11,8 @@ namespace MeisterProPR.Domain.Entities;
 /// </summary>
 public sealed class ReviewJob
 {
+    private readonly List<Guid> _proCursorSourceIds = [];
+
     /// <summary>
     ///     Creates a new <see cref="ReviewJob" />.
     /// </summary>
@@ -139,11 +144,28 @@ public sealed class ReviewJob
     /// </summary>
     public ICollection<ReviewFileResult> FileReviewResults { get; } = [];
 
+    /// <summary>
+    ///     Snapshotted ProCursor source-scope mode captured when this job was queued.
+    /// </summary>
+    public ProCursorSourceScopeMode ProCursorSourceScopeMode { get; private set; } = ProCursorSourceScopeMode.AllClientSources;
+
+    /// <summary>
+    ///     Snapshotted ProCursor source IDs captured when this job was queued.
+    ///     Empty when the job uses the full client-wide source set.
+    /// </summary>
+    public IReadOnlyList<Guid> ProCursorSourceIds => this._proCursorSourceIds.AsReadOnly();
+
     /// <summary>Running aggregate of input tokens across all protocol passes.</summary>
     public long? TotalInputTokensAggregated { get; private set; }
 
     /// <summary>Running aggregate of output tokens across all protocol passes.</summary>
     public long? TotalOutputTokensAggregated { get; private set; }
+
+    /// <summary>
+    ///     Per-tier token cost breakdown. Serialised as JSONB.
+    ///     Each entry represents one (effort tier, model ID) combination observed across all protocols in this job.
+    /// </summary>
+    public List<TokenBreakdownEntry> TokenBreakdown { get; private set; } = [];
 
     /// <summary>Snapshot of the AI connection ID used when the job started. Nullable for backward compat.</summary>
     public Guid? AiConnectionId { get; private set; }
@@ -170,6 +192,38 @@ public sealed class ReviewJob
         this.TotalOutputTokensAggregated = (this.TotalOutputTokensAggregated ?? 0) + outputTokens;
     }
 
+    /// <summary>
+    ///     Merges tokens into the per-tier breakdown and increments the flat aggregates.
+    ///     If an entry for the (category, modelId) pair already exists it is updated in-place;
+    ///     otherwise a new entry is appended. Then calls <see cref="AccumulateTokens" />.
+    /// </summary>
+    public void AccumulateTierTokens(
+        AiConnectionModelCategory category,
+        string modelId,
+        long inputTokens,
+        long outputTokens)
+    {
+        var existing = this.TokenBreakdown.Find(e =>
+            e.ConnectionCategory == category &&
+            string.Equals(e.ModelId, modelId, StringComparison.Ordinal));
+
+        if (existing is not null)
+        {
+            this.TokenBreakdown.Remove(existing);
+            this.TokenBreakdown.Add(existing with
+            {
+                TotalInputTokens = existing.TotalInputTokens + inputTokens,
+                TotalOutputTokens = existing.TotalOutputTokens + outputTokens,
+            });
+        }
+        else
+        {
+            this.TokenBreakdown.Add(new TokenBreakdownEntry(category, modelId, inputTokens, outputTokens));
+        }
+
+        this.AccumulateTokens(inputTokens, outputTokens);
+    }
+
     /// <summary>Records the AI connection and model used at job-start time.</summary>
     public void SetAiConfig(Guid? connectionId, string? model)
     {
@@ -184,6 +238,28 @@ public sealed class ReviewJob
         this.PrRepositoryName = repositoryName;
         this.PrSourceBranch = StripRefsHeads(sourceBranch);
         this.PrTargetBranch = StripRefsHeads(targetBranch);
+    }
+
+    /// <summary>Records the ProCursor source scope snapshotted when the job was queued.</summary>
+    public void SetProCursorSourceScope(ProCursorSourceScopeMode scopeMode, IReadOnlyList<Guid>? sourceIds)
+    {
+        this.ProCursorSourceScopeMode = scopeMode;
+        this._proCursorSourceIds.Clear();
+
+        if (scopeMode != ProCursorSourceScopeMode.SelectedSources)
+        {
+            return;
+        }
+
+        foreach (var sourceId in sourceIds ?? [])
+        {
+            if (sourceId == Guid.Empty || this._proCursorSourceIds.Contains(sourceId))
+            {
+                continue;
+            }
+
+            this._proCursorSourceIds.Add(sourceId);
+        }
     }
 
     private static string? StripRefsHeads(string? branch) =>

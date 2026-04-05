@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -10,37 +13,113 @@ namespace MeisterProPR.Infrastructure.Repositories;
 /// <summary>Database-backed repository for per-client AI connection configurations.</summary>
 public sealed class AiConnectionRepository(
     MeisterProPRDbContext dbContext,
+    ISecretProtectionCodec secretProtectionCodec,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IAiConnectionRepository
 {
-    private static AiConnectionDto ToDto(AiConnectionRecord r) =>
+    private const string ApiKeyPurpose = "AiConnectionApiKey";
+
+    private static IReadOnlyList<AiConnectionModelCapabilityDto> MapModelCapabilities(
+        IEnumerable<AiConnectionModelCapabilityRecord> capabilities)
+    {
+        return capabilities
+            .OrderBy(capability => capability.ModelName, StringComparer.OrdinalIgnoreCase)
+            .Select(capability => new AiConnectionModelCapabilityDto(
+                capability.ModelName,
+                capability.TokenizerName,
+                capability.MaxInputTokens,
+                capability.EmbeddingDimensions,
+                capability.InputCostPer1MUsd,
+                capability.OutputCostPer1MUsd))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private string? ProtectApiKey(string? apiKey)
+        => string.IsNullOrWhiteSpace(apiKey)
+            ? apiKey
+            : secretProtectionCodec.Protect(apiKey, ApiKeyPurpose);
+
+    private string? UnprotectApiKey(string? apiKey)
+        => string.IsNullOrWhiteSpace(apiKey)
+            ? apiKey
+            : secretProtectionCodec.Unprotect(apiKey, ApiKeyPurpose);
+
+    private AiConnectionDto ToDto(AiConnectionRecord r) =>
         new(r.Id, r.ClientId, r.DisplayName, r.EndpointUrl, r.Models, r.IsActive, r.ActiveModel, r.CreatedAt,
-            r.ModelCategory.HasValue ? (AiConnectionModelCategory)r.ModelCategory.Value : null);
+            r.ModelCategory.HasValue ? (AiConnectionModelCategory)r.ModelCategory.Value : null,
+            MapModelCapabilities(r.ModelCapabilities),
+            this.UnprotectApiKey(r.ApiKey));
+
+    private static List<AiConnectionModelCapabilityRecord> ToCapabilityRecords(
+        Guid connectionId,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
+    {
+        if (modelCapabilities is null || modelCapabilities.Count == 0)
+        {
+            return [];
+        }
+
+        return modelCapabilities
+            .Select(capability => new AiConnectionModelCapabilityRecord
+            {
+                Id = Guid.NewGuid(),
+                AiConnectionId = connectionId,
+                ModelName = capability.ModelName.Trim(),
+                TokenizerName = capability.TokenizerName.Trim(),
+                MaxInputTokens = capability.MaxInputTokens,
+                EmbeddingDimensions = capability.EmbeddingDimensions,
+                InputCostPer1MUsd = capability.InputCostPer1MUsd,
+                OutputCostPer1MUsd = capability.OutputCostPer1MUsd,
+            })
+            .ToList();
+    }
+
+    private static void ReplaceModelCapabilities(
+        AiConnectionRecord record,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
+    {
+        record.ModelCapabilities.Clear();
+
+        foreach (var capability in ToCapabilityRecords(record.Id, modelCapabilities))
+        {
+            record.ModelCapabilities.Add(capability);
+        }
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default)
     {
-        return await dbContext.AiConnections
+        var records = await dbContext.AiConnections
+            .Include(a => a.ModelCapabilities)
             .Where(a => a.ClientId == clientId)
             .OrderByDescending(a => a.CreatedAt)
             .AsNoTracking()
-            .ToListAsync(ct)
-            .ContinueWith(t => (IReadOnlyList<AiConnectionDto>)t.Result.Select(ToDto).ToList(), ct);
+            .ToListAsync(ct);
+
+        return records
+            .Select(this.ToDto)
+            .ToList()
+            .AsReadOnly();
     }
 
     /// <inheritdoc />
     public async Task<AiConnectionDto?> GetActiveForClientAsync(Guid clientId, CancellationToken ct = default)
     {
+        // Only the default (no ModelCategory) connection participates in the "one active" rule.
         var record = await dbContext.AiConnections
-            .Where(a => a.ClientId == clientId && a.IsActive)
+            .Include(a => a.ModelCapabilities)
+            .Where(a => a.ClientId == clientId && a.IsActive && a.ModelCategory == null)
             .FirstOrDefaultAsync(ct);
-        return record is null ? null : ToDto(record);
+        return record is null ? null : this.ToDto(record);
     }
 
     /// <inheritdoc />
     public async Task<AiConnectionDto?> GetByIdAsync(Guid connectionId, CancellationToken ct = default)
     {
-        var record = await dbContext.AiConnections.FindAsync([connectionId], ct);
-        return record is null ? null : ToDto(record);
+        var record = await dbContext.AiConnections
+            .Include(a => a.ModelCapabilities)
+            .FirstOrDefaultAsync(a => a.Id == connectionId, ct);
+        return record is null ? null : this.ToDto(record);
     }
 
     /// <inheritdoc />
@@ -50,24 +129,27 @@ public sealed class AiConnectionRepository(
         string endpointUrl,
         IReadOnlyList<string> models,
         string? apiKey,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities = null,
         AiConnectionModelCategory? modelCategory = null,
         CancellationToken ct = default)
     {
+        var connectionId = Guid.NewGuid();
         var record = new AiConnectionRecord
         {
-            Id = Guid.NewGuid(),
+            Id = connectionId,
             ClientId = clientId,
             DisplayName = displayName,
             EndpointUrl = endpointUrl,
             Models = models.ToArray(),
             IsActive = false,
-            ApiKey = apiKey,
+            ApiKey = this.ProtectApiKey(apiKey),
             ModelCategory = modelCategory.HasValue ? (short)modelCategory.Value : null,
+            ModelCapabilities = ToCapabilityRecords(connectionId, modelCapabilities),
             CreatedAt = DateTimeOffset.UtcNow,
         };
         dbContext.AiConnections.Add(record);
         await dbContext.SaveChangesAsync(ct);
-        return ToDto(record);
+        return this.ToDto(record);
     }
 
     /// <inheritdoc />
@@ -77,9 +159,12 @@ public sealed class AiConnectionRepository(
         string? endpointUrl,
         IReadOnlyList<string>? models,
         string? apiKey,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities,
         CancellationToken ct = default)
     {
-        var record = await dbContext.AiConnections.FindAsync([connectionId], ct);
+        var record = await dbContext.AiConnections
+            .Include(a => a.ModelCapabilities)
+            .FirstOrDefaultAsync(a => a.Id == connectionId, ct);
         if (record is null)
         {
             return false;
@@ -102,7 +187,12 @@ public sealed class AiConnectionRepository(
 
         if (apiKey is not null)
         {
-            record.ApiKey = apiKey;
+            record.ApiKey = this.ProtectApiKey(apiKey);
+        }
+
+        if (modelCapabilities is not null)
+        {
+            ReplaceModelCapabilities(record, modelCapabilities);
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -126,7 +216,9 @@ public sealed class AiConnectionRepository(
     /// <inheritdoc />
     public async Task<bool> ActivateAsync(Guid connectionId, string model, CancellationToken ct = default)
     {
-        var target = await dbContext.AiConnections.FindAsync([connectionId], ct);
+        var target = await dbContext.AiConnections
+            .Include(a => a.ModelCapabilities)
+            .FirstOrDefaultAsync(a => a.Id == connectionId, ct);
         if (target is null)
         {
             return false;
@@ -137,19 +229,41 @@ public sealed class AiConnectionRepository(
             return false;
         }
 
-        // Deactivate all other connections for the same client in the same transaction.
-        var others = await dbContext.AiConnections
-            .Where(a => a.ClientId == target.ClientId && a.IsActive && a.Id != connectionId)
-            .ToListAsync(ct);
-
-        foreach (var other in others)
+        if (target.ModelCategory == (short)AiConnectionModelCategory.Embedding &&
+            !target.ModelCapabilities.Any(capability =>
+                string.Equals(capability.ModelName, model, StringComparison.OrdinalIgnoreCase)))
         {
-            other.IsActive = false;
-            other.ActiveModel = null;
+            return false;
         }
 
-        target.IsActive = true;
-        target.ActiveModel = model;
+        if (target.ModelCategory.HasValue)
+        {
+            // Categorized connections (lowEffort, highEffort, embedding, etc.) never set
+            // is_active — the partial unique index "ix_ai_connections_client_id_active"
+            // only allows one is_active=true per client.  For categorized connections the
+            // selected deployment is stored in active_model only; GetForTierAsync uses
+            // model_category, not is_active, so this is sufficient.
+            target.ActiveModel = model;
+        }
+        else
+        {
+            // Default connections: deactivate every other default connection for this client,
+            // then mark this one active.
+            var others = await dbContext.AiConnections
+                .Where(a => a.ClientId == target.ClientId && a.IsActive
+                            && a.Id != connectionId && a.ModelCategory == null)
+                .ToListAsync(ct);
+
+            foreach (var other in others)
+            {
+                other.IsActive = false;
+                other.ActiveModel = null;
+            }
+
+            target.IsActive = true;
+            target.ActiveModel = model;
+        }
+
         await dbContext.SaveChangesAsync(ct);
         return true;
     }
@@ -163,8 +277,16 @@ public sealed class AiConnectionRepository(
             return false;
         }
 
-        record.IsActive = false;
-        record.ActiveModel = null;
+        if (record.ModelCategory.HasValue)
+        {
+            // Categorized connections: clear selected model only — is_active stays false.
+            record.ActiveModel = null;
+        }
+        else
+        {
+            record.IsActive = false;
+            record.ActiveModel = null;
+        }
         await dbContext.SaveChangesAsync(ct);
         return true;
     }
@@ -181,18 +303,20 @@ public sealed class AiConnectionRepository(
         {
             await using var db = await contextFactory.CreateDbContextAsync(ct);
             var record = await db.AiConnections
+                .Include(a => a.ModelCapabilities)
                 .AsNoTracking()
                 .Where(a => a.ClientId == clientId && a.ModelCategory == category)
                 .FirstOrDefaultAsync(ct);
-            return record is null ? null : ToDto(record);
+            return record is null ? null : this.ToDto(record);
         }
         else
         {
             var record = await dbContext.AiConnections
+                .Include(a => a.ModelCapabilities)
                 .AsNoTracking()
                 .Where(a => a.ClientId == clientId && a.ModelCategory == category)
                 .FirstOrDefaultAsync(ct);
-            return record is null ? null : ToDto(record);
+            return record is null ? null : this.ToDto(record);
         }
     }
 }

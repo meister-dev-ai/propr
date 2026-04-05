@@ -1,7 +1,13 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
     <div class="page-view">
         <div class="header-stack">
-            <RouterLink class="back-link" to="/reviews">← Back to reviews</RouterLink>
+            <div class="header-nav-links">
+                <RouterLink class="back-link" :to="backToReviewsLink">← Back to reviews</RouterLink>
+                <RouterLink v-if="prReviewLink" :to="prReviewLink" class="back-link pr-view-link">PR Review ↗</RouterLink>
+            </div>
             <h2>Job Protocol</h2>
         </div>
 
@@ -11,18 +17,20 @@
 
         <template v-else>
             <!-- Aggregated totals across all passes -->
-            <div class="job-stat-strip">
-                <div class="stat-pill"><span class="stat-label">Job ID</span><span class="stat-value monospace-value" :title="protocols[0].jobId">{{ protocols[0].jobId }}</span></div>
-                <div class="stat-pill"><span class="stat-label">Reviews</span><span class="stat-value">{{ protocols.length }}</span></div>
+
+
+            <!-- Page Header Stats (Compact) -->
+            <div class="job-stat-strip compact-stats">
+                <div class="stat-pill"><span class="stat-label">Job</span><span class="stat-value monospace-value" :title="protocols[0].jobId">{{ jobShortId }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Duration</span><span class="stat-value">{{ overallDuration }}</span></div>
-                <div class="stat-pill"><span class="stat-label">In Tokens</span><span class="stat-value fat-tokens">{{ formatTokens(totalInputTokens) }}</span></div>
-                <div class="stat-pill"><span class="stat-label">Out Tokens</span><span class="stat-value fat-tokens">{{ formatTokens(totalOutputTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Total Tokens</span><span class="stat-value fat-tokens">{{ formatTokens(totalInputTokens + totalOutputTokens) }}</span></div>
             </div>
 
             <!-- Top Level Tabs -->
-            <div class="ui-tabs">
-                <button class="ui-tab" :class="{ 'active': activeTab === 'summary' }" @click="activeTab = 'summary'">Review Summary</button>
-                <button class="ui-tab" :class="{ 'active': activeTab === 'traces' }" @click="activeTab = 'traces'">Execution Traces</button>
+            <div class="detail-tabs">
+                <button class="tab-btn" :class="{ 'tab-active': activeTab === 'summary' }" @click="activeTab = 'summary'">Review Summary</button>
+                <button class="tab-btn" :class="{ 'tab-active': activeTab === 'traces' }" @click="activeTab = 'traces'">Execution Traces</button>
+                <button class="tab-btn" :class="{ 'tab-active': activeTab === 'tokens' }" @click="activeTab = 'tokens'">Token Breakdown</button>
             </div>
 
             <!-- Tab 1: Review Summary (Master-Detail) -->
@@ -267,9 +275,9 @@
                                         <td class="kind-cell">
                                             <span class="kind-badge" :class="kindBadgeClass(merged.callDetails.kind)">{{ merged.callDetails.kind ?? 'unknown' }}</span>
                                         </td>
-                                        <td class="name-cell" :class="{ 'tool-name': merged.callDetails.kind === 'toolCall', 'ai-name': merged.callDetails.kind === 'aiCall' }">
+                                        <td class="name-cell" :class="{ 'tool-name': merged.callDetails.kind === 'toolCall', 'ai-name': merged.callDetails.kind === 'aiCall', 'memory-name': merged.callDetails.kind === 'memoryOperation' }">
                                             {{ merged.name }}
-                                            <span v-if="merged.resultDetails?.outputSummary === null && merged.resultDetails?.error === null" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
+                                            <span v-if="merged.resultDetails?.outputSummary === null && merged.resultDetails?.error === null && merged.callDetails.kind !== 'memoryOperation'" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
                                         </td>
                                         <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.inputTokens) }}</td>
                                         <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.outputTokens) }}</td>
@@ -282,12 +290,76 @@
                 </div>
             </div>
             
+            <!-- Tab 3: Token Breakdown -->
+            <div class="tokens-tab-view" v-if="activeTab === 'tokens'">
+                <section class="section-card">
+                    <div class="section-card-header">
+                        <h3 class="section-title">Token Usage by Tier</h3>
+                    </div>
+                    <div class="section-inner">
+                        <p class="section-description">
+                            Breakdown of token consumption across administrative, memory, and review tiers.
+                        </p>
+                        <TokenBreakdownTable
+                            v-if="jobDetail"
+                            :breakdown="jobDetail.tokenBreakdown"
+                            :breakdown-consistent="jobDetail.breakdownConsistent"
+                        />
+                        <p v-else class="empty-state">No detailed token breakdown available for this job.</p>
+                    </div>
+                </section>
+            </div>
+            
             <ModalDialog v-model:isOpen="isEventModalOpen" :title="selectedMergedEvent?.name ?? 'Event Protocol'">
                 <div v-if="selectedMergedEvent" class="merged-modal-layout">
                     <section class="drawer-section">
                         <h4>Input</h4>
                         <div v-if="parsedInputResult" class="parsed-json-block">
-                            <template v-if="selectedMergedEvent.callDetails.kind === 'toolCall' && typeof parsedInputResult === 'object'">
+                            <template v-if="selectedMergedEvent.callDetails.kind === 'memoryOperation' && selectedMergedEvent.callDetails.name === 'memory_reconsideration_completed' && typeof parsedInputResult === 'object'">
+                                <div class="json-field">
+                                    <span class="json-key">File:</span>
+                                    <pre class="json-content">{{ parsedInputResult.filePath }}</pre>
+                                </div>
+                                <div class="json-field">
+                                    <span class="json-key">Comment counts:</span>
+                                    <pre class="json-content">{{ parsedInputResult.originalCommentCount }} original → {{ parsedInputResult.finalCommentCount }} final ({{ parsedInputResult.retainedCount }} retained, {{ parsedInputResult.discardedCount }} discarded, {{ parsedInputResult.downgradedCount }} downgraded)</pre>
+                                </div>
+                                <div v-if="parsedInputResult.contributingMemoryIds?.length" class="json-field">
+                                    <span class="json-key">Memory IDs used ({{ parsedInputResult.contributingMemoryIds.length }}):</span>
+                                    <pre class="json-content">{{ parsedInputResult.contributingMemoryIds.join('\n') }}</pre>
+                                </div>
+                                <div v-if="parsedInputResult.discarded?.length" class="json-field">
+                                    <span class="json-key">Discarded ({{ parsedInputResult.discarded.length }}):</span>
+                                    <div class="memory-comment-list">
+                                        <div v-for="(c, i) in parsedInputResult.discarded" :key="i" class="memory-comment-row">
+                                            <div class="memory-comment-header">
+                                                <span class="memory-sev-chip" :class="`memory-sev-chip--${c.severity}`">{{ (c.severity ?? 'note').toUpperCase() }}</span>
+                                                <span class="monospace-value memory-comment-loc">{{ c.filePath }}:L{{ c.lineNumber }}</span>
+                                            </div>
+                                            <p class="memory-comment-msg">{{ c.message }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="parsedInputResult.downgraded?.length" class="json-field">
+                                    <span class="json-key">Downgraded ({{ parsedInputResult.downgraded.length }}):</span>
+                                    <div class="memory-comment-list">
+                                        <div v-for="(c, i) in parsedInputResult.downgraded" :key="i" class="memory-comment-row">
+                                            <div class="memory-comment-header">
+                                                <span class="memory-sev-chip" :class="`memory-sev-chip--${c.originalSeverity}`">{{ (c.originalSeverity ?? '').toUpperCase() }}</span>
+                                                <i class="fi fi-rr-arrow-right memory-downgrade-arrow"></i>
+                                                <span class="memory-sev-chip" :class="`memory-sev-chip--${c.newSeverity}`">{{ (c.newSeverity ?? '').toUpperCase() }}</span>
+                                                <span class="monospace-value memory-comment-loc">{{ c.filePath }}:L{{ c.lineNumber }}</span>
+                                            </div>
+                                            <p class="memory-comment-msg">{{ c.message }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="!parsedInputResult.discarded?.length && !parsedInputResult.downgraded?.length" class="json-field">
+                                    <span class="json-key">Changes:</span>
+                                    <pre class="json-content">All comments retained unchanged.</pre>
+                                </div>
+                            </template>
+                            <template v-else-if="selectedMergedEvent.callDetails.kind === 'toolCall' && typeof parsedInputResult === 'object'">
                                 <div v-for="(val, key) in parsedInputResult" :key="key" class="json-field">
                                     <span class="json-key">{{ key }}:</span>
                                     <pre class="json-content">{{ typeof val === 'string' ? val : JSON.stringify(val, null, 2) }}</pre>
@@ -333,6 +405,10 @@
                             <template v-else-if="selectedMergedEvent.resultDetails.error !== null">
                                 <pre class="content-block error-block">{{ selectedMergedEvent.resultDetails.error }}</pre>
                             </template>
+                            <div v-else-if="selectedMergedEvent.callDetails.kind === 'memoryOperation'" class="memory-no-output">
+                                <i class="fi fi-rr-check-circle memory-no-output-icon"></i>
+                                <span>No output recorded for this memory operation.</span>
+                            </div>
                             <p v-else-if="selectedMergedEvent.resultDetails.outputSummary === null && selectedMergedEvent.resultDetails.error === null" class="no-content" style="color: var(--color-accent); font-weight: bold;">Currently Executing...</p>
                         </template>
                     </section>
@@ -428,6 +504,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import ModalDialog from '@/components/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
+import TokenBreakdownTable from '@/components/TokenBreakdownTable.vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 
@@ -451,6 +528,18 @@ type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 type ProtocolEventDto = components['schemas']['ProtocolEventDto']
 type ReviewJobResultDto = components['schemas']['ReviewJobResultDto']
 
+interface TokenBreakdownEntry {
+    connectionCategory: number | null
+    modelId: string | null
+    totalInputTokens: number
+    totalOutputTokens: number
+}
+
+interface JobDetail {
+    tokenBreakdown: TokenBreakdownEntry[]
+    breakdownConsistent: boolean | null
+}
+
 interface MergedEvent {
     id: string
     time: string
@@ -461,11 +550,12 @@ interface MergedEvent {
 
 const loading = ref(false)
 const error = ref('')
-const activeTab = ref<'summary' | 'traces'>('summary')
+const activeTab = ref<'summary' | 'traces' | 'tokens'>('summary')
 const protocols = ref<ReviewJobProtocolDto[]>([])
 const activePassId = ref<string | null>(null)
 const selectedMergedEvent = ref<MergedEvent | null>(null)
 const reviewStatus = ref<ReviewJobResultDto | null>(null)
+const jobDetail = ref<JobDetail | null>(null)
 const collapsedFolders = ref<Set<string>>(new Set())
 const selectedCommentPath = ref<string | null>(null)
 const isSummaryModalOpen = ref(false)
@@ -474,6 +564,37 @@ const isSummaryModalOpen = ref(false)
 const routeClientId = computed(() =>
     (route.query?.clientId as string | undefined) ?? reviewStatus.value?.clientId ?? undefined
 )
+
+const jobShortId = computed(() => {
+    const id = protocols.value[0]?.jobId
+    if (!id) return '—'
+    return id.substring(0, 8)
+})
+
+const prReviewLink = computed(() => {
+    if (!protocols.value.length || !routeClientId.value) return null
+    const p = protocols.value[0]
+    // Some protocols might not have full PR info yet if it's a very fresh/failed job
+    if (!p.organizationUrl || !p.projectId || !p.repositoryId || !p.pullRequestId) return null
+    
+    return {
+        name: 'pr-review',
+        query: {
+            clientId: routeClientId.value,
+            orgUrl: p.organizationUrl,
+            project: p.projectId,
+            repositoryId: p.repositoryId,
+            pullRequestId: String(p.pullRequestId),
+        },
+    }
+})
+
+const backToReviewsLink = computed(() => {
+    return {
+        name: 'reviews',
+        query: route.query.clientId ? { clientId: route.query.clientId } : {}
+    }
+})
 
 // One-click dismiss (US1)
 const dismissingIds = ref<Set<string>>(new Set())
@@ -878,9 +999,10 @@ async function loadProtocol(showLoading = false) {
     if (showLoading) loading.value = true
     try {
         const jobId = route.params.id as string
-        const [protocolRes, resultRes] = await Promise.all([
+        const [protocolRes, resultRes, detailRes] = await Promise.all([
             createAdminClient().GET('/jobs/{id}/protocol', { params: { path: { id: jobId } } }),
-            createAdminClient().GET('/jobs/{id}/result', { params: { path: { id: jobId } } })
+            createAdminClient().GET('/jobs/{id}/result', { params: { path: { id: jobId } } }),
+            createAdminClient().GET('/jobs/{id}', { params: { path: { id: jobId } } })
         ])
         
         const data = protocolRes.data as any
@@ -892,6 +1014,13 @@ async function loadProtocol(showLoading = false) {
             protocols.value = data
             if (resultRes.data) {
                 reviewStatus.value = resultRes.data
+            }
+            if (detailRes.data) {
+                const d = detailRes.data as any
+                jobDetail.value = {
+                    tokenBreakdown: d.tokenBreakdown ?? [],
+                    breakdownConsistent: d.breakdownConsistent ?? null,
+                }
             }
             if (!activePassId.value && data.length > 0 && data[0].id) {
                 activePassId.value = data[0].id
@@ -989,6 +1118,7 @@ function computePassDuration(pass: any): string {
 function kindBadgeClass(kind: string | null | undefined): string {
     if (kind === 'aiCall') return 'badge-purple';
     if (kind === 'toolCall') return 'badge-cyan';
+    if (kind === 'memoryOperation') return 'badge-green';
     return 'badge-gray';
 }
 
@@ -1030,16 +1160,22 @@ function formatConfidence(val: number | string | null | undefined): string {
 </script>
 
 <style scoped>
-.toolbar {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+.header-stack {
     margin-bottom: 2rem;
 }
 
-.toolbar h2 {
-    margin: 0;
+.header-nav-links {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
 }
+
+.pr-view-link {
+    color: var(--color-accent) !important;
+}
+
+
 
 .loading,
 .empty-state {
@@ -1945,6 +2081,13 @@ function formatConfidence(val: number | string | null | undefined): string {
     border: 1px solid var(--color-border);
     border-radius: 12px;
 }
+.breakdown-section {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+}
 .stat-pill {
     display: flex;
     flex-direction: column;
@@ -2042,10 +2185,80 @@ function formatConfidence(val: number | string | null | undefined): string {
 }
 .badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
 .badge-cyan { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+.badge-green { background: rgba(52, 211, 153, 0.15); color: #34d399; }
 .badge-gray { background: rgba(255, 255, 255, 0.1); color: var(--color-text-muted); }
 
 .tool-name { font-weight: 600; font-family: monospace; }
 .ai-name { font-style: italic; color: var(--color-text-muted); }
+.memory-name { color: #34d399; }
+
+/* Memory operation — discarded/downgraded comment list */
+.memory-comment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+.memory-comment-row {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.6rem 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.memory-comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.memory-comment-loc {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    margin-left: auto;
+}
+.memory-comment-msg {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+}
+.memory-downgrade-arrow {
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+}
+/* Severity chips for memory modal */
+.memory-sev-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+.memory-sev-chip--error    { background: rgba(239, 68, 68, 0.15);  color: #f87171; }
+.memory-sev-chip--warning  { background: rgba(234, 179, 8, 0.15);  color: #fbbf24; }
+.memory-sev-chip--info     { background: rgba(34, 211, 238, 0.12); color: #22d3ee; }
+.memory-sev-chip--suggestion { background: rgba(168, 85, 247, 0.12); color: #c084fc; }
+.memory-sev-chip--note     { background: rgba(255, 255, 255, 0.08); color: var(--color-text-muted); }
+/* Memory — no output state */
+.memory-no-output {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    padding: 0.75rem 0;
+}
+.memory-no-output-icon {
+    color: var(--color-success);
+    font-size: 1rem;
+    flex-shrink: 0;
+}
 
 /* Modal JSON Renderer */
 .parsed-json-block {
@@ -2334,6 +2547,42 @@ function formatConfidence(val: number | string | null | undefined): string {
 .ui-tab:hover {
     opacity: 1;
     background: transparent !important;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────── */
+/* UTILS                                                                          */
+/* ────────────────────────────────────────────────────────────────────────────── */
+
+.monospace-value {
+    font-family: var(--font-mono, monospace);
+}
+
+.tokens-tab-view {
+    padding: 2rem;
+    max-width: 60rem;
+    margin: 0 auto;
+}
+
+.section-inner {
+    padding: 1.5rem;
+}
+
+.section-description {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+.compact-stats {
+    margin-bottom: 1.5rem !important;
+}
+
+.monospace-badge {
+    font-family: var(--font-mono, monospace);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
 }
 
 .synthesis-waiting-state {

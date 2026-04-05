@@ -1,10 +1,13 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  base: '/admin/',
+  base: '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -13,15 +16,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/clients': { target: 'http://localhost:8080', changeOrigin: true },
-      '/reviews': { target: 'http://localhost:8080', changeOrigin: true },
-      '/identities': { target: 'http://localhost:8080', changeOrigin: true },
-      '/healthz': { target: 'http://localhost:8080', changeOrigin: true },
-      '/jobs': { target: 'http://localhost:8080', changeOrigin: true },
-      '/pats': { target: 'http://localhost:8080', changeOrigin: true },
-      '/auth': { target: 'http://localhost:8080', changeOrigin: true },
-      '/admin/crawl-configurations': { target: 'http://localhost:8080', changeOrigin: true },
-      '/admin/users': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
+      },
     },
   },
   build: {
@@ -40,7 +39,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['tests/setup.ts'],
     env: {
-      VITE_API_BASE_URL: 'http://localhost',
+      VITE_API_BASE_URL: 'http://localhost/api',
     },
     coverage: {
       provider: 'v8',

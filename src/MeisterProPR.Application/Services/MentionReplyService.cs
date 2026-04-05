@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -43,7 +46,12 @@ public sealed partial class MentionReplyService(
                 cancellationToken);
 
             // Generate an AI answer grounded in the PR, focused on the specific thread.
-            var answer = await answerService.AnswerAsync(pullRequest, job.MentionText, job.ThreadId, cancellationToken);
+            var answer = await answerService.AnswerAsync(
+                pullRequest,
+                job.ClientId,
+                job.MentionText,
+                job.ThreadId,
+                cancellationToken);
 
             // Post the reply to the ADO thread.
             await threadReplier.ReplyAsync(
