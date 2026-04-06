@@ -45,7 +45,7 @@ services:
 
   admin-ui:
     build:
-      context: .
+      context: ../..
       dockerfile: admin-ui/Dockerfile
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://127.0.0.1/healthz" ]
@@ -63,7 +63,7 @@ services:
     ports:
       - "5443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - nginx_certs:/etc/nginx/certs
     depends_on:
       meisterpropr:
@@ -75,7 +75,7 @@ services:
 
   meisterpropr:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     depends_on:
       postgres:

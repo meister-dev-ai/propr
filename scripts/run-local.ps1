@@ -14,8 +14,43 @@ $UiFolder   = Join-Path $RepoRoot 'admin-ui'
 $EnvFile    = Join-Path $RepoRoot '.env'
 
 if (-not $DbConnectionString) {
-    Write-Host "Provide -DbConnectionString or set DB_CONNECTION_STRING env var." -ForegroundColor Yellow
-    exit 1
+    Write-Host "DB connection string not provided; checking dotnet user-secrets..." -ForegroundColor Cyan
+    try {
+        if (Get-Command dotnet -ErrorAction SilentlyContinue) {
+            $secretList = dotnet user-secrets list --project $ApiProject 2>$null
+            if ($LASTEXITCODE -eq 0 -and $secretList) {
+                $candidates = @('DB_CONNECTION_STRING','DbConnectionString','ConnectionStrings:DefaultConnection','ConnectionStrings:Default','Database:ConnectionString','ConnectionStrings__DefaultConnection','ConnectionStrings__Default')
+                foreach ($k in $candidates) {
+                    $pattern = '^\s*' + [regex]::Escape($k) + '\s*='
+                    $match = $secretList | Where-Object { $_ -match $pattern } | Select-Object -First 1
+                    if ($match) {
+                        $idx = $match.IndexOf('=')
+                        if ($idx -ge 0) {
+                            $DbConnectionString = $match.Substring($idx+1).Trim()
+                            break
+                        }
+                    }
+                    # also try double-underscore form for hierarchical keys
+                    $k2 = $k -replace ':','__'
+                    $pattern2 = '^\s*' + [regex]::Escape($k2) + '\s*='
+                    $match2 = $secretList | Where-Object { $_ -match $pattern2 } | Select-Object -First 1
+                    if ($match2) {
+                        $idx = $match2.IndexOf('=')
+                        if ($idx -ge 0) {
+                            $DbConnectionString = $match2.Substring($idx+1).Trim()
+                            break
+                        }
+                    }
+                }
+            }
+        }
+    } catch {
+    }
+
+    if (-not $DbConnectionString) {
+        Write-Host "Provide -DbConnectionString or set DB_CONNECTION_STRING env var." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 function Read-DotEnv($path) {
