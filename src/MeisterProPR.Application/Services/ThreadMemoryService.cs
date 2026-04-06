@@ -802,47 +802,4 @@ public sealed partial class ThreadMemoryService(
 
         return text.Length > maxLength ? text[..maxLength] : text;
     }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogEmbeddingStored(ILogger log, int threadId, Guid clientId) =>
-        log.LogInformation("Memory embedding stored for thread {ThreadId} client {ClientId}", threadId, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogEmbeddingRemoved(ILogger log, int threadId, Guid clientId, string outcome) =>
-        log.LogInformation("Memory embedding {Outcome} for thread {ThreadId} client {ClientId}", outcome, threadId, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogProcessResolvedFailed(ILogger log, int threadId, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Failed to process resolved thread {ThreadId} for client {ClientId}", threadId, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogProcessReopenedFailed(ILogger log, int threadId, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Failed to process reopened thread {ThreadId} for client {ClientId}", threadId, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogRecordNoOpFailed(ILogger log, int threadId, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Failed to record no-op for thread {ThreadId} client {ClientId}", threadId, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogRetrieveAndReconsiderFailed(ILogger log, string filePath, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Failed to retrieve and reconsider for file {FilePath} client {ClientId}", filePath, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogReconsiderationAiFailed(ILogger log, Exception ex) =>
-        log.LogWarning(ex, "Memory reconsideration AI call failed; returning draft result unchanged");
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogReconsiderationFallback(ILogger log, string filePath, Guid clientId) =>
-        log.LogWarning(
-            "Memory reconsideration returned no usable result for file {FilePath} client {ClientId}; draft findings retained unchanged",
-            filePath,
-            clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogDuplicateSuppressionEmbeddingFailed(ILogger log, string? filePath, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Historical duplicate suppression embedding lookup failed for file {FilePath} client {ClientId}", filePath, clientId);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogDuplicateSuppressionLookupFailed(ILogger log, string repositoryId, int pullRequestId, Guid clientId, Exception ex) =>
-        log.LogWarning(ex, "Historical duplicate suppression repository lookup failed for repo {RepositoryId} PR {PullRequestId} client {ClientId}", repositoryId, pullRequestId, clientId);
 }

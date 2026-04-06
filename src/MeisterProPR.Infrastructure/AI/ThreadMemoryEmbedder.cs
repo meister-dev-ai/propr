@@ -145,10 +145,4 @@ public sealed partial class ThreadMemoryEmbedder(
 
         return parts.ToString();
     }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1848:Use the LoggerMessage delegates")]
-    private static void LogSummaryGenerationFailed(ILogger? log, Exception ex)
-    {
-        log?.LogWarning(ex, "Failed to generate AI resolution summary; using fallback text");
-    }
 }
