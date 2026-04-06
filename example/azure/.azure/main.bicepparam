@@ -1,0 +1,11 @@
+using './main.bicep'
+
+param projectName = 'meister-propr'
+param location = 'switzerlandnorth'
+param imageTag = 'latest'
+param dbConnectionString = ''
+param jwtSecret = ''
+param bootstrapAdminUser = 'admin'
+param bootstrapAdminPassword = ''
+param dbUser = ''
+param dbPassword = ''
