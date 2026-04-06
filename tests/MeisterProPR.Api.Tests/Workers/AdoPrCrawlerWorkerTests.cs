@@ -45,17 +45,14 @@ public sealed class AdoPrCrawlerWorkerTests
     public async Task ExecuteAsync_CallsCrawlService_OnEachTick()
     {
         // Arrange
-        var callCount = 0;
-        var crawlService = Substitute.For<ICrawlConfigurationRepository>();
-
-        // Build a scope factory that returns a scope with IPrCrawlService resolved
         var fakePrCrawlService = Substitute.For<IPrCrawlService>();
+        var crawlInvoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         fakePrCrawlService
             .CrawlAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                callCount++;
+                crawlInvoked.TrySetResult();
                 return Task.CompletedTask;
             });
 
@@ -72,7 +69,7 @@ public sealed class AdoPrCrawlerWorkerTests
         try
         {
             await worker.StartAsync(cts.Token);
-            await Task.Delay(200, CancellationToken.None);
+            await crawlInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1));
         }
         catch (OperationCanceledException)
         {
@@ -111,9 +108,14 @@ public sealed class AdoPrCrawlerWorkerTests
     {
         // Arrange: PrCrawlService throws; worker must handle and continue
         var scope = Substitute.For<IServiceScope>();
+        var crawlAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         scope.ServiceProvider
             .GetService(typeof(IPrCrawlService))
-            .Returns(_ => throw new InvalidOperationException("crawl failed"));
+            .Returns(_ =>
+            {
+                crawlAttempted.TrySetResult();
+                throw new InvalidOperationException("crawl failed");
+            });
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory.CreateScope().Returns(scope);
@@ -125,7 +127,7 @@ public sealed class AdoPrCrawlerWorkerTests
         var ex = await Record.ExceptionAsync(async () =>
         {
             await worker.StartAsync(CancellationToken.None);
-            await Task.Delay(100, CancellationToken.None);
+            await crawlAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
             await worker.StopAsync(CancellationToken.None);
         });
 
@@ -136,17 +138,22 @@ public sealed class AdoPrCrawlerWorkerTests
     public async Task ExecuteAsync_MissingCrawlService_DoesNotThrow()
     {
         var scope = Substitute.For<IServiceScope>();
+        var crawlAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         scope.ServiceProvider.GetService(typeof(IPrCrawlService)).Returns((object?)null);
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(scope);
+        scopeFactory.CreateScope().Returns(_ =>
+        {
+            crawlAttempted.TrySetResult();
+            return scope;
+        });
 
         var worker = BuildWorker(scopeFactory);
 
         var ex = await Record.ExceptionAsync(async () =>
         {
             await worker.StartAsync(CancellationToken.None);
-            await Task.Delay(100, CancellationToken.None);
+            await crawlAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
             await worker.StopAsync(CancellationToken.None);
         });
 

@@ -18,16 +18,28 @@ public sealed partial class MentionReplyWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<MentionReplyWorker> logger) : BackgroundService
 {
+    private TaskCompletionSource _startedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     /// <inheritdoc />
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
+        this._startedSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await this.HydratePendingJobsAsync(cancellationToken);
         await base.StartAsync(cancellationToken);
+        await this._startedSignal.Task.WaitAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        await this.DrainBufferedJobsAsync();
     }
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        this._startedSignal.TrySetResult();
         LogWorkerStarted(logger);
 
         try
@@ -39,7 +51,7 @@ public sealed partial class MentionReplyWorker(
         }
         catch (OperationCanceledException)
         {
-            // Normal shutdown
+            await this.DrainBufferedJobsAsync();
         }
 
         LogWorkerStopped(logger);
@@ -89,6 +101,14 @@ public sealed partial class MentionReplyWorker(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogJobError(logger, job.Id, ex);
+        }
+    }
+
+    private async Task DrainBufferedJobsAsync()
+    {
+        while (channelReader.TryRead(out var job))
+        {
+            await this.ProcessJobSafeAsync(job, CancellationToken.None);
         }
     }
 

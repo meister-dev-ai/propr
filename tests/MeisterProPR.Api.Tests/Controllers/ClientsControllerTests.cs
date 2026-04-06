@@ -450,6 +450,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
             builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);
@@ -680,6 +681,7 @@ public sealed class ClientsControllerAdoOrganizationScopesTests(
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
@@ -920,6 +922,7 @@ public sealed class ClientsJwtGetTests(ClientsJwtGetTests.ClientsJwtApiFactory f
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
             builder.UseSetting("MEISTER_ADMIN_KEY", ValidAdminKey);

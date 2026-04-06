@@ -226,6 +226,11 @@ public static class InfrastructureServiceExtensions
         services.AddOptions<WorkerOptions>()
             .Configure(opts =>
             {
+                if (int.TryParse(configuration["WORKER_POLL_INTERVAL_MILLISECONDS"], out var pollIntervalMilliseconds))
+                {
+                    opts.PollIntervalMilliseconds = pollIntervalMilliseconds;
+                }
+
                 if (int.TryParse(configuration["WORKER_STUCK_JOB_TIMEOUT_MINUTES"], out var timeout))
                 {
                     opts.StuckJobTimeoutMinutes = timeout;

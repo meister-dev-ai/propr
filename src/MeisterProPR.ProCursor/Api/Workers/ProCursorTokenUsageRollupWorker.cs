@@ -41,18 +41,32 @@ public sealed partial class ProCursorTokenUsageRollupWorker(
     public DateTimeOffset? LastRetentionRunAtUtc { get; private set; }
 
     /// <inheritdoc />
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public override async Task StartAsync(CancellationToken cancellationToken)
     {
         var intervalSeconds = Math.Max(1, this._options.RollupPollSeconds);
         LogWorkerStarted(logger, intervalSeconds);
         this.IsRunning = true;
 
+        try
+        {
+            await this.RunCycleAsync(cancellationToken);
+            await base.StartAsync(cancellationToken);
+        }
+        catch
+        {
+            this.IsRunning = false;
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var intervalSeconds = Math.Max(1, this._options.RollupPollSeconds);
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
 
         try
         {
-            await this.RunCycleAsync(stoppingToken);
-
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 await this.RunCycleAsync(stoppingToken);

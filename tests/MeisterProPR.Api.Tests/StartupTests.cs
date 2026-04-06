@@ -59,6 +59,8 @@ public sealed class StartupTests : IClassFixture<StartupTests.NoAiEndpointFactor
         {
             builder.UseEnvironment("Testing");
 
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+
             // Set JWT secret so JwtTokenService can be registered
             builder.UseSetting("MEISTER_JWT_SECRET", "test-startup-jwt-secret-32chars!!");
 

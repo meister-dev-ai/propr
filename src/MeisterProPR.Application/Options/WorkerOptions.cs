@@ -12,6 +12,13 @@ namespace MeisterProPR.Application.Options;
 public sealed class WorkerOptions
 {
     /// <summary>
+    ///     Milliseconds between review job polling cycles.
+    ///     Bound to <c>WORKER_POLL_INTERVAL_MILLISECONDS</c>.
+    /// </summary>
+    [Range(10, 60000, ErrorMessage = "PollIntervalMilliseconds must be between 10 and 60000.")]
+    public int PollIntervalMilliseconds { get; set; } = 2000;
+
+    /// <summary>
     ///     Minutes before a job stuck in the <c>Processing</c> state is transitioned to <c>Failed</c>.
     ///     Bound to <c>WORKER_STUCK_JOB_TIMEOUT_MINUTES</c>.
     /// </summary>

@@ -19,6 +19,22 @@ namespace MeisterProPR.Api.Tests.Workers;
 
 public sealed class ProCursorIndexWorkerTests
 {
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(10, CancellationToken.None);
+        }
+
+        Assert.True(condition(), failureMessage);
+    }
+
     [Fact]
     public async Task Worker_RetriesTransientFailure_AndEventuallyCompletesJob()
     {
@@ -122,7 +138,10 @@ public sealed class ProCursorIndexWorkerTests
 
         try
         {
-            await Task.Delay(100);
+            await WaitUntilAsync(
+                () => worker.LastCycleCompletedAt is not null,
+                TimeSpan.FromSeconds(1),
+                "Worker did not complete a cycle for the incomplete graph scenario.");
 
             Assert.True(worker.IsRunning);
             Assert.NotNull(worker.LastCycleStartedAt);
@@ -260,7 +279,7 @@ public sealed class ProCursorIndexWorkerTests
                 return;
             }
 
-            await Task.Delay(50);
+            await Task.Delay(10, CancellationToken.None);
         }
 
         throw new TimeoutException("Timed out waiting for ProCursor jobs to complete.");

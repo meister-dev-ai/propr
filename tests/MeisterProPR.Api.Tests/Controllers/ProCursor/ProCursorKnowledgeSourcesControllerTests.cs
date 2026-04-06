@@ -476,6 +476,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("DB_CONNECTION_STRING", string.Empty);
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
             builder.UseSetting("PROCURSOR_REFRESH_POLL_SECONDS", "17");

@@ -40,7 +40,7 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console()
-    .CreateBootstrapLogger();
+    .CreateLogger();
 
 try
 {
@@ -55,6 +55,7 @@ try
 
     var hasDatabaseConnectionString = builder.Configuration.HasDatabaseConnectionString();
     var isTesting = builder.Environment.IsEnvironment("Testing");
+    var disableHostedServices = builder.Configuration.GetValue<bool>("MEISTER_DISABLE_HOSTED_SERVICES");
 
     builder.Host.UseSerilog((context, services, configuration) =>
     {
@@ -149,25 +150,32 @@ try
     // Register ReviewJobWorker as singleton so WorkerHealthCheck can inject it by concrete type,
     // then forward the same instance as IHostedService.
     builder.Services.AddSingleton<ReviewJobWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewJobWorker>());
+    if (!disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewJobWorker>());
+    }
 
     // AdoPrCrawlerWorker needs persistent crawl-configuration storage.
-    // Register it unconditionally for DI/health consumers, but do not start it in test hosts.
+    // Register it unconditionally for DI/health consumers, but do not start it in test hosts
+    // or in hosts that explicitly suppress background workers.
     builder.Services.AddSingleton<AdoPrCrawlerWorker>();
-    if (!isTesting)
+    if (!isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
     }
 
     // ProCursor indexing uses a dedicated durable worker and exposes live state via health checks.
-    // Keep the hosted-service registration active for DI/health/registration tests; the worker
-    // tolerates incomplete ProCursor graphs in non-DB test hosts and idles when it cannot resolve them.
+    // Keep the worker registered for DI/health consumers, but allow tests to suppress its hosted
+    // startup when they only need an HTTP pipeline or service graph.
     builder.Services.AddSingleton<ProCursorIndexWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorIndexWorker>());
+    if (!disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorIndexWorker>());
+    }
 
     // ProCursor usage reporting uses a dedicated rollup worker so reads can rely on refreshed aggregates.
     builder.Services.AddSingleton<ProCursorTokenUsageRollupWorker>();
-    if (!isTesting)
+    if (!isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorTokenUsageRollupWorker>());
     }
@@ -186,13 +194,13 @@ try
     builder.Services.AddSingleton(mentionChannel.Writer);
 
     builder.Services.AddSingleton<MentionScanWorker>();
-    if (!isTesting)
+    if (!isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
     }
 
     builder.Services.AddSingleton<MentionReplyWorker>();
-    if (!isTesting)
+    if (!isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
     }

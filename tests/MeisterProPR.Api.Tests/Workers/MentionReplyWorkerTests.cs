@@ -22,7 +22,7 @@ public sealed class MentionReplyWorkerTests
         var serviceProvider = Substitute.For<IServiceProvider>();
 
         ((IServiceScope)scope).ServiceProvider.Returns(serviceProvider);
-        scopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope((IServiceScope)scope));
+        scopeFactory.CreateScope().Returns((IServiceScope)scope);
         serviceProvider.GetService(typeof(IMentionReplyJobRepository)).Returns((object?)null);
 
         var worker = new MentionReplyWorker(channel.Reader, channel.Writer, scopeFactory, NullLogger<MentionReplyWorker>.Instance);
@@ -40,9 +40,20 @@ public sealed class MentionReplyWorkerTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IAsyncDisposable, IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
+        var processingAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scopeCreationCount = 0;
 
         ((IServiceScope)scope).ServiceProvider.Returns(serviceProvider);
-        scopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope((IServiceScope)scope));
+        scopeFactory.CreateScope().Returns(_ =>
+        {
+            scopeCreationCount++;
+            if (scopeCreationCount >= 2)
+            {
+                processingAttempted.TrySetResult();
+            }
+
+            return (IServiceScope)scope;
+        });
 
         var repo = Substitute.For<IMentionReplyJobRepository>();
         repo.GetPendingAsync(Arg.Any<CancellationToken>()).Returns([]);
@@ -53,7 +64,7 @@ public sealed class MentionReplyWorkerTests
 
         await worker.StartAsync(CancellationToken.None);
         await channel.Writer.WriteAsync(new MentionReplyJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 7, 3, 11, "@bot please help"));
-        await Task.Delay(100, CancellationToken.None);
+        await processingAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
         await worker.StopAsync(CancellationToken.None);
     }
 }

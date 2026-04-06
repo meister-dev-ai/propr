@@ -56,13 +56,6 @@ public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory) : ICl
 
     public sealed class HealthCheckFactory : WebApplicationFactory<Program>
     {
-        public HealthCheckFactory()
-        {
-            Environment.SetEnvironmentVariable("MEISTER_CLIENT_KEYS", "test-key-123");
-            Environment.SetEnvironmentVariable("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
-            Environment.SetEnvironmentVariable("AI_DEPLOYMENT", "gpt-4o");
-        }
-
         private static void ReplaceService<T>(IServiceCollection services, T implementation) where T : class
         {
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
@@ -77,6 +70,10 @@ public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory) : ICl
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("MEISTER_CLIENT_KEYS", "test-key-123");
+            builder.UseSetting("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
 
             builder.ConfigureServices(services =>
             {

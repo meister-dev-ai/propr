@@ -28,7 +28,12 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
     public async Task ExecuteAsync_RefreshesRecentRollupsAndRunsRetention()
     {
         var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
-        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(4));
+        var refreshInvoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            refreshInvoked.TrySetResult();
+            return Task.FromResult(4);
+        });
 
         var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
         retentionService.PurgeExpiredAsync(Arg.Any<CancellationToken>())
@@ -39,7 +44,7 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
 
         using var cts = new CancellationTokenSource();
         await worker.StartAsync(cts.Token);
-        await Task.Delay(200, CancellationToken.None);
+        await refreshInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.True(worker.IsRunning);
         await aggregationService.Received().RefreshRecentAsync(Arg.Any<CancellationToken>());
@@ -55,8 +60,13 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
     public async Task ExecuteAsync_WhenRefreshThrows_WorkerStaysRunning()
     {
         var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
+        var refreshAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>())
-            .Returns<Task<int>>(_ => throw new InvalidOperationException("rollup failed"));
+            .Returns<Task<int>>(_ =>
+            {
+                refreshAttempted.TrySetResult();
+                throw new InvalidOperationException("rollup failed");
+            });
 
         var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
         var scopeFactory = CreateScopeFactory(aggregationService, retentionService);
@@ -64,7 +74,7 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
 
         using var cts = new CancellationTokenSource();
         await worker.StartAsync(cts.Token);
-        await Task.Delay(200, CancellationToken.None);
+        await refreshAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.True(worker.IsRunning);
 

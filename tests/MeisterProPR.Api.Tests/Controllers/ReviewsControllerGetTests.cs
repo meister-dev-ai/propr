@@ -174,6 +174,8 @@ public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetRevie
         {
             builder.UseEnvironment("Testing");
 
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+
             var dbName = this._dbName;
             var dbRoot = this._dbRoot;
             builder.ConfigureServices(services =>

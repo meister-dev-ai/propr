@@ -266,6 +266,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
             builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
             builder.UseSetting("MEISTER_CLIENT_KEYS", "test-key-123");

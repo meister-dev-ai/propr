@@ -15,12 +15,15 @@ namespace MeisterProPR.Api.Tests.Workers;
 
 public class ReviewJobWorkerTests
 {
+    private static IOptions<WorkerOptions> CreateWorkerOptions(int pollIntervalMilliseconds = 25)
+    {
+        return Options.Create(new WorkerOptions { PollIntervalMilliseconds = pollIntervalMilliseconds });
+    }
+
     private static ReviewJob CreateJob(int prId = 1)
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, 1);
     }
-
-    private static IOptions<WorkerOptions> DefaultWorkerOptions => Options.Create(new WorkerOptions());
 
     private static IServiceScopeFactory CreateScopeFactory(IReviewJobExecutionStore? repo = null)
     {
@@ -33,10 +36,28 @@ public class ReviewJobWorkerTests
 
         var effectiveRepo = repo ?? Substitute.For<IReviewJobExecutionStore>();
         effectiveRepo.GetPendingJobs().Returns(Array.Empty<ReviewJob>());
+        effectiveRepo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
         serviceProvider.GetService(typeof(IReviewJobExecutionStore)).Returns(effectiveRepo);
         serviceProvider.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
 
         return scopeFactory;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(10, CancellationToken.None);
+        }
+
+        Assert.True(condition(), failureMessage);
     }
 
     [Fact]
@@ -44,12 +65,12 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
 
         using var cts = new CancellationTokenSource();
 
         var workerTask = worker.StartAsync(cts.Token);
-        await Task.Delay(100, cts.Token); // Give worker time to start
+        await WaitUntilAsync(() => worker.IsRunning, TimeSpan.FromSeconds(1), "Worker never entered the running state.");
 
         Assert.True(worker.IsRunning);
 
@@ -70,7 +91,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
 
         Assert.False(worker.IsRunning);
     }
@@ -80,9 +101,16 @@ public class ReviewJobWorkerTests
     {
         var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(101);
+        var claimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
         repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
-            .Returns(true);
+            .Returns(_ =>
+            {
+                claimed.TrySetResult();
+                return true;
+            });
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
 
@@ -97,11 +125,11 @@ public class ReviewJobWorkerTests
         // causing SetFailed to be called on the job.
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
-        await Task.Delay(3000, CancellationToken.None); // Wait for worker to pick up job
+        await claimed.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
@@ -115,19 +143,16 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
 
         using var cts = new CancellationTokenSource();
         _ = worker.StartAsync(cts.Token);
-        await Task.Delay(200);
+        await WaitUntilAsync(() => worker.IsRunning, TimeSpan.FromSeconds(1), "Worker never entered the running state.");
 
         Assert.True(worker.IsRunning);
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
-
-        // Give time for cleanup
-        await Task.Delay(200);
         Assert.False(worker.IsRunning);
     }
 
@@ -136,9 +161,18 @@ public class ReviewJobWorkerTests
     {
         var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(777);
+        var jobFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
         repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
             .Returns(true);
+        repo.SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                jobFailed.TrySetResult();
+                return Task.CompletedTask;
+            });
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -151,12 +185,12 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         _ = worker.StartAsync(cts.Token);
 
-        await Task.Delay(3000, CancellationToken.None);
+        await jobFailed.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         // Worker should still be running despite the exception
         Assert.True(worker.IsRunning);
@@ -170,9 +204,18 @@ public class ReviewJobWorkerTests
     {
         var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(909);
+        var jobFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
         repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
             .Returns(true);
+        repo.SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                jobFailed.TrySetResult();
+                return Task.CompletedTask;
+            });
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -183,11 +226,11 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
         sp.GetService(typeof(IReviewJobProcessor)).Returns((object?)null);
 
-        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, Substitute.For<ILogger<ReviewJobWorker>>());
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), Substitute.For<ILogger<ReviewJobWorker>>());
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
         _ = worker.StartAsync(cts.Token);
-        await Task.Delay(3000, CancellationToken.None);
+        await jobFailed.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         await repo.Received().SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
 

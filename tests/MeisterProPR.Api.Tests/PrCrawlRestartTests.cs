@@ -114,6 +114,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
                 builder.UseSetting("DB_CONNECTION_STRING", connectionString);
                 builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
                 builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");

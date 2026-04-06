@@ -18,48 +18,38 @@ public sealed partial class ReviewJobWorker(
 {
     private readonly ConcurrentDictionary<Guid, Task> _inflight = new();
     private DateTimeOffset _lastCleanupAt = DateTimeOffset.MinValue;
+    private TaskCompletionSource _startedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>True while the worker loop is active.</summary>
     public bool IsRunning { get; private set; }
+
+    /// <inheritdoc />
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        this._startedSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await base.StartAsync(cancellationToken);
+        await this._startedSignal.Task.WaitAsync(cancellationToken);
+    }
 
     /// <summary>Main loop that polls for pending jobs and schedules processing.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         this.IsRunning = true;
         LogWorkerStarted(logger);
+        this._startedSignal.TrySetResult();
 
         // Clean up any jobs left stuck in Processing from a previous run before entering the main loop.
         await this.CleanUpStuckJobsAsync(CancellationToken.None);
 
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(workerOptions.Value.PollIntervalMilliseconds));
 
         try
         {
+            await this.RunCycleAsync(stoppingToken);
+
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                // Periodic stuck-job cleanup every 10 minutes.
-                if (DateTimeOffset.UtcNow - this._lastCleanupAt >= TimeSpan.FromMinutes(10))
-                {
-                    await this.CleanUpStuckJobsAsync(stoppingToken);
-                }
-
-                using var tickScope = scopeFactory.CreateScope();
-                var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
-
-                foreach (var job in jobRepository.GetPendingJobs())
-                {
-                    if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
-                    {
-                        continue;
-                    }
-
-                    var capturedJob = job;
-                    var task = this.ProcessJobSafeAsync(capturedJob, stoppingToken);
-                    this._inflight[capturedJob.Id] = task;
-                    _ = task.ContinueWith(
-                        t => this._inflight.TryRemove(capturedJob.Id, out _),
-                        TaskScheduler.Default);
-                }
+                await this.RunCycleAsync(stoppingToken);
             }
         }
         catch (OperationCanceledException)
@@ -81,6 +71,33 @@ public sealed partial class ReviewJobWorker(
             }
 
             LogWorkerStopped(logger);
+        }
+    }
+
+    private async Task RunCycleAsync(CancellationToken stoppingToken)
+    {
+        // Periodic stuck-job cleanup every 10 minutes.
+        if (DateTimeOffset.UtcNow - this._lastCleanupAt >= TimeSpan.FromMinutes(10))
+        {
+            await this.CleanUpStuckJobsAsync(stoppingToken);
+        }
+
+        using var tickScope = scopeFactory.CreateScope();
+        var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
+
+        foreach (var job in jobRepository.GetPendingJobs())
+        {
+            if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
+            {
+                continue;
+            }
+
+            var capturedJob = job;
+            var task = this.ProcessJobSafeAsync(capturedJob, stoppingToken);
+            this._inflight[capturedJob.Id] = task;
+            _ = task.ContinueWith(
+                t => this._inflight.TryRemove(capturedJob.Id, out _),
+                TaskScheduler.Default);
         }
     }
 

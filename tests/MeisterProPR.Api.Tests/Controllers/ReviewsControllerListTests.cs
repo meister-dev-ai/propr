@@ -159,6 +159,7 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
 
             var dbName = this._dbName;
