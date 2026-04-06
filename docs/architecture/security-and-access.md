@@ -46,7 +46,7 @@ flowchart TD
     B2{"X-User-Pat header?"} -- PAT found & BCrypt match --> SET_PAT["Set UserId + IsAdmin from user record<br/>Load ClientRoles from DB"]
     B2 -- no/invalid --> DEFAULT["Anonymous request<br/>IsAdmin = false"]
 
-    SET_JWT --> NEXT([next()])
+    SET_JWT --> NEXT["Continue request pipeline"]
     SET_PAT --> NEXT
     DEFAULT --> NEXT
 ```
