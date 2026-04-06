@@ -12,12 +12,19 @@ using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Validators;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Clients;
+using MeisterProPR.Infrastructure.Features.Crawling;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterProPR.Infrastructure.Features.Mentions;
+using MeisterProPR.Infrastructure.Features.PromptCustomization;
+using MeisterProPR.Infrastructure.Features.Reviewing;
+using MeisterProPR.Infrastructure.Features.UsageReporting;
+using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -46,7 +53,8 @@ try
         builder.Configuration.AddUserSecrets<Program>(true);
     }
 
-    var dbConnectionString = builder.Configuration["DB_CONNECTION_STRING"];
+    var isDbMode = builder.Configuration.IsDatabaseModeEnabled(builder.Environment);
+    var isTesting = builder.Environment.IsEnvironment("Testing");
 
     builder.Host.UseSerilog((context, services, configuration) =>
     {
@@ -110,8 +118,15 @@ try
     builder.Services.Configure<HostOptions>(opts =>
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
 
-    builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddProCursorModule(builder.Configuration);
+    builder.Services.AddInfrastructureSupport(builder.Configuration, builder.Environment);
+    builder.Services.AddReviewingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddCrawlingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddClientsModule(builder.Configuration, builder.Environment);
+    builder.Services.AddIdentityAndAccessModule(builder.Configuration, builder.Environment);
+    builder.Services.AddMentionsModule(builder.Configuration, builder.Environment);
+    builder.Services.AddPromptCustomizationModule(builder.Configuration, builder.Environment);
+    builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddProCursorModule(builder.Configuration, builder.Environment);
 
     // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret).
     var dataProtectionBuilder = builder.Services.AddDataProtection()
@@ -122,8 +137,6 @@ try
         Directory.CreateDirectory(dataProtectionKeysPath);
         dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
     }
-    builder.Services.AddTransient<ReviewOrchestrationService>();
-
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
@@ -133,27 +146,31 @@ try
     builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
 
-    builder.Services.AddScoped<IPrCrawlService, PrCrawlService>();
-    builder.Services.AddScoped<IMentionScanService, MentionScanService>();
-    builder.Services.AddScoped<IMentionReplyService, MentionReplyService>();
-
     // Register ReviewJobWorker as singleton so WorkerHealthCheck can inject it by concrete type,
     // then forward the same instance as IHostedService.
     builder.Services.AddSingleton<ReviewJobWorker>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewJobWorker>());
 
     // AdoPrCrawlerWorker is only useful in DB mode (needs ICrawlConfigurationRepository).
-    // Register it unconditionally — it will gracefully handle missing DI dependencies.
+    // Register it unconditionally for DI/health consumers, but do not start it in test hosts.
     builder.Services.AddSingleton<AdoPrCrawlerWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
+    if (!isTesting)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
+    }
 
     // ProCursor indexing uses a dedicated durable worker and exposes live state via health checks.
+    // Keep the hosted-service registration active for DI/health/registration tests; the worker
+    // tolerates incomplete ProCursor graphs in non-DB test hosts and idles when it cannot resolve them.
     builder.Services.AddSingleton<ProCursorIndexWorker>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorIndexWorker>());
 
     // ProCursor usage reporting uses a dedicated rollup worker so reads can rely on refreshed aggregates.
     builder.Services.AddSingleton<ProCursorTokenUsageRollupWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorTokenUsageRollupWorker>());
+    if (!isTesting)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorTokenUsageRollupWorker>());
+    }
 
     // MentionScanWorker (producer) and MentionReplyWorker (consumer) share a single bounded
     // Channel<MentionReplyJob>. Channel capacity is 1000; writer blocks when full (Wait mode).
@@ -169,10 +186,16 @@ try
     builder.Services.AddSingleton(mentionChannel.Writer);
 
     builder.Services.AddSingleton<MentionScanWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
+    if (!isTesting)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionScanWorker>());
+    }
 
     builder.Services.AddSingleton<MentionReplyWorker>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
+    if (!isTesting)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
+    }
 
     // Fixed origins: testbed (localhost:3000) and Azure DevOps.
     // Additional origins can be added via CORS_ORIGINS (comma-separated).
@@ -245,7 +268,7 @@ try
         .AddCheck<ProCursorIndexWorkerHealthCheck>("procursor-index-worker")
         .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
 
-    if (!string.IsNullOrWhiteSpace(dbConnectionString))
+    if (isDbMode)
     {
         healthChecksBuilder.AddCheck<DatabaseHealthCheck>("database");
     }
@@ -270,7 +293,7 @@ try
     }
 
     // DB migration + bootstrap + startup recovery (DB mode only)
-    if (!string.IsNullOrWhiteSpace(dbConnectionString))
+    if (isDbMode)
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();

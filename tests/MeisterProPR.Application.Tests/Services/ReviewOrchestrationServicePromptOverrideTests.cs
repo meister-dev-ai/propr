@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -24,7 +26,7 @@ namespace MeisterProPR.Application.Tests.Services;
 public class ReviewOrchestrationServicePromptOverrideTests
 {
     private static ReviewOrchestrationService CreateService(
-        IJobRepository jobs,
+        IReviewJobExecutionStore jobs,
         IPullRequestFetcher prFetcher,
         IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
@@ -72,7 +74,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             threadClient,
             threadReplier,
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,
@@ -137,7 +139,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IJobRepository>(), prFetcher, orchestrator,
+            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
             Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
             promptOverrideService);
 
@@ -171,7 +173,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IJobRepository>(), prFetcher, orchestrator,
+            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
             Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
             promptOverrideService);
 
@@ -200,7 +202,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IJobRepository>(), prFetcher, orchestrator,
+            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
             Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
             promptOverrideService);
 
@@ -236,7 +238,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IJobRepository>(), prFetcher, orchestrator,
+            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
             Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
             promptOverrideService);
 

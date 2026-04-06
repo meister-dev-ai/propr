@@ -34,7 +34,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     public async Task GetJobs_DefaultPagination_Returns200WithTotalAndItems()
     {
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs?limit=10&offset=0");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs?limit=10&offset=0");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -51,7 +51,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     {
         // S1 fix: ensure the raw client key string is never in the response
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -78,7 +78,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         await repo.SetResultAsync(completedJob.Id, new ReviewResult("done", []));
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs?status=Completed");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs?status=Completed");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -95,7 +95,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
 
 
     /// <summary>
-    ///     Verifies GET /jobs?limit=100 responds in under 2 seconds even with 10,000 seeded jobs.
+    ///     Verifies GET /reviewing/jobs?limit=100 responds in under 2 seconds even with 10,000 seeded jobs.
     ///     The test bulk-seeds through the EF Core in-memory provider so the timing covers the read path,
     ///     not 10,000 individual repository writes.
     /// </summary>
@@ -123,7 +123,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         await dbContext.SaveChangesAsync();
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs?limit=100&offset=0");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs?limit=100&offset=0");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var sw = Stopwatch.StartNew();
@@ -133,14 +133,14 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(
             sw.Elapsed < TimeSpan.FromSeconds(2),
-            $"GET /jobs?limit=100 took {sw.Elapsed.TotalMilliseconds:F0}ms — expected < 2000ms");
+            $"GET /reviewing/jobs?limit=100 took {sw.Elapsed.TotalMilliseconds:F0}ms — expected < 2000ms");
     }
 
     [Fact]
     public async Task GetJobs_WithoutAdminKey_Returns401()
     {
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs");
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -151,7 +151,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     public async Task GetJobs_WithValidAdminKey_Returns200()
     {
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -162,7 +162,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     public async Task GetJobs_WithWrongAdminKey_Returns401()
     {
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/jobs");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs");
         request.Headers.Add("X-Admin-Key", "wrong-key-here");
 
         var response = await client.SendAsync(request);
@@ -174,7 +174,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     {
         var client = factory.CreateClient();
         var jobId = Guid.NewGuid();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{jobId}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{jobId}/protocol");
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -185,7 +185,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     {
         var client = factory.CreateClient();
         var jobId = Guid.NewGuid();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{jobId}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{jobId}/protocol");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -202,7 +202,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -234,7 +234,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -311,7 +311,7 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
 
 /// <summary>
 ///     T021 [US2]: ClientUser can access review jobs for their assigned client.
-///     Ensures non-admin JWT users with a ClientUser role get 200 on GET /jobs.
+///     Ensures non-admin JWT users with a ClientUser role get 200 on GET /reviewing/jobs.
 /// </summary>
 public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     : IClassFixture<JobsJwtTests.JobsJwtApiFactory>
@@ -325,7 +325,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs?clientId={factory.AssignedClientId}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs?clientId={factory.AssignedClientId}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -343,7 +343,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -363,7 +363,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/result");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/result");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -391,7 +391,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -411,7 +411,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/clients/{factory.AssignedClientId}/pr-view?organizationUrl=https://dev.azure.com/org&projectId=proj&repositoryId=repo&pullRequestId=126");
+            $"/clients/{factory.AssignedClientId}/reviewing/pr-view?organizationUrl=https://dev.azure.com/org&projectId=proj&repositoryId=repo&pullRequestId=126");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -439,7 +439,7 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);

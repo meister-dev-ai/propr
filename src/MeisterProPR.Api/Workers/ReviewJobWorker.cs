@@ -2,9 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Concurrent;
-using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Options;
@@ -45,7 +44,7 @@ public sealed partial class ReviewJobWorker(
                 }
 
                 using var tickScope = scopeFactory.CreateScope();
-                var jobRepository = tickScope.ServiceProvider.GetRequiredService<IJobRepository>();
+                var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
 
                 foreach (var job in jobRepository.GetPendingJobs())
                 {
@@ -89,11 +88,11 @@ public sealed partial class ReviewJobWorker(
     private async Task ProcessJobSafeAsync(ReviewJob job, CancellationToken stoppingToken)
     {
         using var scope = scopeFactory.CreateScope();
-        var jobRepository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var jobRepository = scope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
 
         try
         {
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ReviewOrchestrationService>();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IReviewJobProcessor>();
             await orchestrator.ProcessAsync(job, stoppingToken);
         }
         catch (OperationCanceledException)
@@ -130,7 +129,7 @@ public sealed partial class ReviewJobWorker(
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var jobRepository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+            var jobRepository = scope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
             var stuckJobs = await jobRepository.GetStuckProcessingJobsAsync(timeout, ct);
             foreach (var job in stuckJobs)
             {

@@ -8,24 +8,24 @@ using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.AI.ProCursor;
 using MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 using MeisterProPR.Infrastructure.CodeAnalysis.ProCursor;
+using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-namespace MeisterProPR.Infrastructure.DependencyInjection;
+namespace MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
 
 /// <summary>
 ///     Extension methods for registering the ProCursor bounded module.
 /// </summary>
-public static class ProCursorServiceCollectionExtensions
+public static class ProCursorModuleServiceCollectionExtensions
 {
     /// <summary>
     ///     Registers ProCursor options and future module services.
     /// </summary>
-    public static IServiceCollection AddProCursorModule(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddProCursorModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        var dbConnectionString = configuration["DB_CONNECTION_STRING"];
-
         services.AddOptions<ProCursorOptions>()
             .Configure(opts =>
             {
@@ -51,7 +51,7 @@ public static class ProCursorServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        if (!string.IsNullOrWhiteSpace(dbConnectionString))
+        if (configuration.IsDatabaseModeEnabled(environment))
         {
             services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
             services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();

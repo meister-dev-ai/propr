@@ -3,6 +3,8 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -20,7 +22,7 @@ namespace MeisterProPR.Application.Tests.Services;
 public class ReviewOrchestrationServiceTests
 {
     private static (
-        IJobRepository jobs,
+        IReviewJobExecutionStore jobs,
         IPullRequestFetcher prFetcher,
         IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
@@ -48,7 +50,7 @@ public class ReviewOrchestrationServiceTests
             .EvaluateRelevanceAsync(Arg.Any<IReadOnlyList<RepositoryInstruction>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
         return (
-            Substitute.For<IJobRepository>(),
+            Substitute.For<IReviewJobExecutionStore>(),
             Substitute.For<IPullRequestFetcher>(),
             Substitute.For<IFileByFileReviewOrchestrator>(),
             CreateCommentPoster(),
@@ -112,7 +114,7 @@ public class ReviewOrchestrationServiceTests
     }
 
     private static ReviewOrchestrationService CreateService(
-        IJobRepository jobs,
+        IReviewJobExecutionStore jobs,
         IPullRequestFetcher prFetcher,
         IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
@@ -125,7 +127,7 @@ public class ReviewOrchestrationServiceTests
         IRepositoryExclusionFetcher? exclusionFetcher = null,
         IAiConnectionRepository? aiRepo = null,
         IAiChatClientFactory? chatFactory = null,
-        IProtocolRecorder? protocolRecorder = null)
+        IReviewProtocolRecorder? protocolRecorder = null)
     {
         var threadClient = Substitute.For<IAdoThreadClient>();
         var threadReplier = Substitute.For<IAdoThreadReplier>();
@@ -153,7 +155,7 @@ public class ReviewOrchestrationServiceTests
             threadClient,
             threadReplier,
             resolutionCore,
-            protocolRecorder ?? Substitute.For<IProtocolRecorder>(),
+            protocolRecorder ?? Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
             fetcher,
             exclusionFetcherResolved,
@@ -481,7 +483,7 @@ public class ReviewOrchestrationServiceTests
             threadClient,
             threadReplier,
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             CreateDefaultExclusionFetcher(),
@@ -567,7 +569,7 @@ public class ReviewOrchestrationServiceTests
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
-        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var protocolRecorder = Substitute.For<IReviewProtocolRecorder>();
         var protocolId = Guid.NewGuid();
         protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(protocolId);
@@ -794,7 +796,7 @@ public class ReviewOrchestrationServiceTests
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
-        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var protocolRecorder = Substitute.For<IReviewProtocolRecorder>();
         protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
 
@@ -1178,7 +1180,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),
@@ -1275,7 +1277,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),
@@ -1369,7 +1371,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory2,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),
@@ -1468,7 +1470,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),
@@ -1848,7 +1850,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),
@@ -1921,7 +1923,7 @@ public class ReviewOrchestrationServiceTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             stubToolsFactory,
             CreateDefaultInstructionFetcher(),
             CreateDefaultExclusionFetcher(),

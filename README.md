@@ -18,14 +18,6 @@ back as threaded comments — anchored to the relevant file and line number.
 
 ---
 
-## AI Dev Days Hackathon
-
-The project was built for
-the [AI Dev Days Hackathon](https://github.com/Azure/AI-Dev-Days-Hackathon/blob/main/README.md).
-
-The submission state is available with tag `ai-dev-days-submission` commit
-`db1683a` [here](https://github.com/meister-dev-ai/propr/releases/tag/ai-dev-days-submission).
-
 ## Features
 
 <p align="center">
@@ -83,7 +75,7 @@ client ADO secrets and AI connection API keys remain decryptable.
 
 > **DB-only mode**: Configure AI connections per client via the admin UI or
 > `/api/clients/{clientId}/ai-connections`. Review triggers use
-> `/api/clients/{clientId}/reviews` with `X-User-Pat` plus `X-Ado-Token`; client keys and
+> `/api/clients/{clientId}/reviewing/jobs` with `X-User-Pat` plus `X-Ado-Token`; client keys and
 > global AI endpoint env vars are no longer part of the runtime.
 
 > **Secret rollout note**: On startup the API upgrades legacy plaintext ADO client secrets and AI

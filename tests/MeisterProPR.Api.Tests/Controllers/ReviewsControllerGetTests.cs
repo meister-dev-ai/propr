@@ -24,7 +24,7 @@ public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetRevie
 {
     private static HttpRequestMessage CreateGetRequest(Guid jobId, string? adoToken = "valid-ado-token")
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/reviews/{jobId}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{jobId}/status");
         if (!string.IsNullOrWhiteSpace(adoToken))
         {
             request.Headers.Add("X-Ado-Token", adoToken);

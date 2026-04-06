@@ -4,6 +4,8 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -147,7 +149,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         IFileByFileReviewOrchestrator orchestrator,
         IProCursorGateway proCursorGateway)
     {
-        var jobs = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
         jobs.GetById(job.Id).Returns(job);
 
         var prFetcher = Substitute.For<IPullRequestFetcher>();
@@ -221,7 +223,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             Substitute.For<IAdoThreadClient>(),
             Substitute.For<IAdoThreadReplier>(),
             Substitute.For<IAiCommentResolutionCore>(),
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,

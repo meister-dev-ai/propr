@@ -4,6 +4,8 @@
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -20,7 +22,7 @@ namespace MeisterProPR.Application.Services;
 ///     Orchestrates the end-to-end process of handling a review job.
 /// </summary>
 public sealed partial class ReviewOrchestrationService(
-    IJobRepository jobs,
+    IReviewJobExecutionStore jobs,
     IPullRequestFetcher prFetcher,
     IFileByFileReviewOrchestrator fileByFileOrchestrator,
     IAdoCommentPoster commentPoster,
@@ -30,7 +32,7 @@ public sealed partial class ReviewOrchestrationService(
     IAdoThreadClient threadClient,
     IAdoThreadReplier threadReplier,
     IAiCommentResolutionCore resolutionCore,
-    IProtocolRecorder protocolRecorder,
+    IReviewProtocolRecorder protocolRecorder,
     IReviewContextToolsFactory reviewContextToolsFactory,
     IRepositoryInstructionFetcher instructionFetcher,
     IRepositoryExclusionFetcher exclusionFetcher,
@@ -39,7 +41,7 @@ public sealed partial class ReviewOrchestrationService(
     ILogger<ReviewOrchestrationService> logger,
     IAiConnectionRepository aiConnectionRepository,
     IAiChatClientFactory aiChatClientFactory,
-    IPromptOverrideService? promptOverrideService = null)
+    IPromptOverrideService? promptOverrideService = null) : IReviewJobProcessor
 {
     private readonly AiReviewOptions _opts = options.Value;
 

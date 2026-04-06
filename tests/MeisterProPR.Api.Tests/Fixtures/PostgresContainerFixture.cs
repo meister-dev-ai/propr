@@ -5,6 +5,7 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Pgvector.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -38,7 +39,17 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        this._connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")?.Trim();
+        var externalConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")?.Trim();
+        if (!string.IsNullOrWhiteSpace(externalConnectionString))
+        {
+            this._connectionString = externalConnectionString;
+            if (await this.TryMigrateAsync())
+            {
+                return;
+            }
+
+            this._connectionString = null;
+        }
 
         if (string.IsNullOrWhiteSpace(this._connectionString))
         {
@@ -69,12 +80,30 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
             }
         }
 
-        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseNpgsql(this.ConnectionString, o => o.UseVector())
-            .Options;
+        await this.TryMigrateAsync(throwOnFailure: true);
+    }
 
-        await using var ctx = new MeisterProPRDbContext(options);
-        await ctx.Database.MigrateAsync();
+    private async Task<bool> TryMigrateAsync(bool throwOnFailure = false)
+    {
+        if (string.IsNullOrWhiteSpace(this._connectionString))
+        {
+            return false;
+        }
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+                .UseNpgsql(this.ConnectionString, o => o.UseVector())
+                .Options;
+
+            await using var ctx = new MeisterProPRDbContext(options);
+            await ctx.Database.MigrateAsync();
+            return true;
+        }
+        catch (NpgsqlException) when (!throwOnFailure)
+        {
+            return false;
+        }
     }
 
     public async Task DisposeAsync()

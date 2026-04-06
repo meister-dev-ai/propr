@@ -1123,7 +1123,7 @@ The status endpoint uses only `X-Ado-Token` (and optionally `X-Ado-Org-Url` for 
 
 ```bash
 # organizationUrl, projectId, repositoryId, pullRequestId, iterationId are all required
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviews \
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs \
   -H "X-User-Pat: <client-administrator-pat>" \
   -H "X-Ado-Token: <your-ado-pat>" \
   -H "Content-Type: application/json" \
@@ -1149,7 +1149,7 @@ existing job ID and its current status.
 
 ```bash
 # Replace the UUID with the jobId from the 202 response
-curl -k https://localhost:5443/api/reviews/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
+curl -k https://localhost:5443/api/reviewing/jobs/3fa85f64-5717-4562-b3fc-2c963f66afa6/status \
   -H "X-Ado-Token: <your-ado-pat>"
 ```
 

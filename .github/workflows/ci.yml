@@ -46,10 +46,56 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+  architecture-gates:
+    name: Architecture Gates
+    runs-on: ubuntu-latest
+    needs: [ format, build ]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5.2.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Run architecture dependency tests
+        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "VerticalSliceDependencyTests"
+
+      - name: Run startup registration safety tests
+        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ModuleRegistrationTests|WaveRegistrationSafetyTests"
+
+  reviewing-slice-gates:
+    name: Reviewing Slice Gates
+    runs-on: ubuntu-latest
+    needs: [ architecture-gates ]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5.2.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Run Reviewing application slice tests
+        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleTests|SubmitReviewJobHandlerTests|GetReviewJobStatusHandlerTests"
+
+      - name: Run Reviewing API slice tests
+        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleIntegrationTests|ReviewJobsControllerTests|ReviewJobIntakeIntegrationTests|JobsControllerProtocolTests|ReviewJobWorkerTests"
+
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [ format, build ]
+    needs: [ architecture-gates, reviewing-slice-gates ]
     permissions:
       contents: read
     steps:

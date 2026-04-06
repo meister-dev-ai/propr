@@ -112,6 +112,28 @@ public sealed class ProCursorIndexWorkerTests
         Assert.Equal(ProCursorIndexJobStatus.Completed, jobs.Single(job => job.Id == thirdJobId).Status);
     }
 
+    [Fact]
+    public async Task Worker_WithIncompleteProCursorGraph_StartsAndCompletesCycleWithoutThrowing()
+    {
+        using var provider = BuildIncompleteGraphServiceProvider();
+        var worker = provider.GetRequiredService<ProCursorIndexWorker>();
+
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await Task.Delay(100);
+
+            Assert.True(worker.IsRunning);
+            Assert.NotNull(worker.LastCycleStartedAt);
+            Assert.NotNull(worker.LastCycleCompletedAt);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static ServiceProvider BuildServiceProvider(IProCursorMaterializer materializer, ProCursorOptions options)
     {
         var services = new ServiceCollection();
@@ -134,6 +156,23 @@ public sealed class ProCursorIndexWorkerTests
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
         services.AddSingleton<IOptions<ProCursorOptions>>(Options.Create(options));
+        services.AddSingleton<ProCursorIndexWorker>();
+
+        return services.BuildServiceProvider(validateScopes: true);
+    }
+
+    private static ServiceProvider BuildIncompleteGraphServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<ProCursorRefreshScheduler>();
+        services.AddScoped<ProCursorIndexCoordinator>();
+        services.AddSingleton<IOptions<ProCursorOptions>>(Options.Create(new ProCursorOptions
+        {
+            MaxIndexConcurrency = 1,
+            RefreshPollSeconds = 1,
+            ChunkTargetLines = 50,
+        }));
         services.AddSingleton<ProCursorIndexWorker>();
 
         return services.BuildServiceProvider(validateScopes: true);

@@ -21,16 +21,27 @@ public sealed partial class ProCursorIndexWorker(
     private readonly ProCursorOptions _options = options.Value;
     private readonly Dictionary<Guid, Task> _activeJobsBySource = [];
     private readonly Lock _activeJobsLock = new();
+    private bool _schedulerResolutionFailureLogged;
+    private bool _coordinatorResolutionFailureLogged;
 
     /// <summary>
     ///     Whether the worker loop has entered its running state.
     /// </summary>
     public bool IsRunning { get; private set; }
 
+    /// <summary>
+    ///     When the current or most recent worker cycle started.
+    /// </summary>
     public DateTimeOffset? LastCycleStartedAt { get; private set; }
 
+    /// <summary>
+    ///     When the most recent worker cycle completed.
+    /// </summary>
     public DateTimeOffset? LastCycleCompletedAt { get; private set; }
 
+    /// <summary>
+    ///     Number of source-scoped indexing jobs currently running.
+    /// </summary>
     public int ActiveJobCount
     {
         get
@@ -80,7 +91,7 @@ public sealed partial class ProCursorIndexWorker(
 
             using (var scheduleScope = scopeFactory.CreateScope())
             {
-                var scheduler = scheduleScope.ServiceProvider.GetService<ProCursorRefreshScheduler>();
+                var scheduler = this.TryResolveScheduler(scheduleScope.ServiceProvider);
                 if (scheduler is not null)
                 {
                     await scheduler.ScheduleRefreshesAsync(ct);
@@ -101,7 +112,7 @@ public sealed partial class ProCursorIndexWorker(
         while (this.ActiveJobCount < Math.Max(1, this._options.MaxIndexConcurrency))
         {
             using var scope = scopeFactory.CreateScope();
-            var coordinator = scope.ServiceProvider.GetService<ProCursorIndexCoordinator>();
+            var coordinator = this.TryResolveCoordinator(scope.ServiceProvider);
             if (coordinator is null)
             {
                 return;
@@ -134,6 +145,54 @@ public sealed partial class ProCursorIndexWorker(
         finally
         {
             this.UntrackActiveJob(sourceId);
+        }
+    }
+
+    private ProCursorRefreshScheduler? TryResolveScheduler(IServiceProvider serviceProvider)
+    {
+        try
+        {
+            var scheduler = serviceProvider.GetService<ProCursorRefreshScheduler>();
+            if (scheduler is not null)
+            {
+                this._schedulerResolutionFailureLogged = false;
+            }
+
+            return scheduler;
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (!this._schedulerResolutionFailureLogged)
+            {
+                LogServiceGraphUnavailable(logger, nameof(ProCursorRefreshScheduler), ex);
+                this._schedulerResolutionFailureLogged = true;
+            }
+
+            return null;
+        }
+    }
+
+    private ProCursorIndexCoordinator? TryResolveCoordinator(IServiceProvider serviceProvider)
+    {
+        try
+        {
+            var coordinator = serviceProvider.GetService<ProCursorIndexCoordinator>();
+            if (coordinator is not null)
+            {
+                this._coordinatorResolutionFailureLogged = false;
+            }
+
+            return coordinator;
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (!this._coordinatorResolutionFailureLogged)
+            {
+                LogServiceGraphUnavailable(logger, nameof(ProCursorIndexCoordinator), ex);
+                this._coordinatorResolutionFailureLogged = true;
+            }
+
+            return null;
         }
     }
 

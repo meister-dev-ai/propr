@@ -30,7 +30,7 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
 {
     private HttpRequestMessage CreateListRequest(Guid clientId, string? token)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}/reviews");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}/reviewing/jobs");
         if (!string.IsNullOrWhiteSpace(token))
         {
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);

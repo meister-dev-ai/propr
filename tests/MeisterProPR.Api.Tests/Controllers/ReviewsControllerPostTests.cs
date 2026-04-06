@@ -32,7 +32,7 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
 {
     private HttpRequestMessage CreateValidRequest(Guid clientId, string? token, string adoToken = "valid-ado-token")
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{clientId}/reviews");
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{clientId}/reviewing/jobs");
         if (!string.IsNullOrWhiteSpace(token))
         {
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);

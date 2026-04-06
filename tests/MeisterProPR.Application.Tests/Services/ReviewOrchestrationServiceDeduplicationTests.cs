@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -23,7 +25,7 @@ namespace MeisterProPR.Application.Tests.Services;
 public class ReviewOrchestrationServiceDeduplicationTests
 {
     private static ReviewOrchestrationService CreateService(
-        IJobRepository jobs,
+        IReviewJobExecutionStore jobs,
         IPullRequestFetcher prFetcher,
         IFileByFileReviewOrchestrator orchestrator,
         IAdoCommentPoster commentPoster,
@@ -70,7 +72,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             threadClient,
             threadReplier,
             resolutionCore,
-            Substitute.For<IProtocolRecorder>(),
+            Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,
@@ -87,7 +89,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
     public async Task ProcessAsync_PassesOrchestratorResultToCommentPosterUnmodified()
     {
         // Arrange
-        var jobs = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
         var prFetcher = Substitute.For<IPullRequestFetcher>();
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var commentPoster = Substitute.For<IAdoCommentPoster>();
@@ -154,7 +156,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
     [Fact]
     public async Task ProcessAsync_CarriedForwardCandidatesRemainSuppressedDuringPublication()
     {
-        var jobs = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
         var prFetcher = Substitute.For<IPullRequestFetcher>();
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var commentPoster = Substitute.For<IAdoCommentPoster>();

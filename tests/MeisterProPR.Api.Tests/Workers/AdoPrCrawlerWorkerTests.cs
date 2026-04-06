@@ -131,4 +131,25 @@ public sealed class AdoPrCrawlerWorkerTests
 
         Assert.Null(ex);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_MissingCrawlService_DoesNotThrow()
+    {
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.GetService(typeof(IPrCrawlService)).Returns((object?)null);
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var worker = BuildWorker(scopeFactory);
+
+        var ex = await Record.ExceptionAsync(async () =>
+        {
+            await worker.StartAsync(CancellationToken.None);
+            await Task.Delay(100, CancellationToken.None);
+            await worker.StopAsync(CancellationToken.None);
+        });
+
+        Assert.Null(ex);
+    }
 }

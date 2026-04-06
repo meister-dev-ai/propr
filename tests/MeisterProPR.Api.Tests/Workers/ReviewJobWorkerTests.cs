@@ -2,9 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Api.Workers;
-using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +22,7 @@ public class ReviewJobWorkerTests
 
     private static IOptions<WorkerOptions> DefaultWorkerOptions => Options.Create(new WorkerOptions());
 
-    private static IServiceScopeFactory CreateScopeFactory(IJobRepository? repo = null)
+    private static IServiceScopeFactory CreateScopeFactory(IReviewJobExecutionStore? repo = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -32,9 +31,10 @@ public class ReviewJobWorkerTests
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
 
-        var effectiveRepo = repo ?? Substitute.For<IJobRepository>();
+        var effectiveRepo = repo ?? Substitute.For<IReviewJobExecutionStore>();
         effectiveRepo.GetPendingJobs().Returns(Array.Empty<ReviewJob>());
-        serviceProvider.GetService(typeof(IJobRepository)).Returns(effectiveRepo);
+        serviceProvider.GetService(typeof(IReviewJobExecutionStore)).Returns(effectiveRepo);
+        serviceProvider.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
 
         return scopeFactory;
     }
@@ -78,7 +78,7 @@ public class ReviewJobWorkerTests
     [Fact]
     public async Task Worker_ClaimsPendingJobAndTransitionsToProcessing()
     {
-        var repo = Substitute.For<IJobRepository>();
+        var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(101);
         repo.GetPendingJobs().Returns(new[] { job });
         repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
@@ -92,10 +92,10 @@ public class ReviewJobWorkerTests
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(sp);
 
-        sp.GetService(typeof(IJobRepository)).Returns(repo);
-        // Make the orchestration service return null — GetRequiredService will throw,
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        // Make the Reviewing processor return null — GetRequiredService will throw,
         // causing SetFailed to be called on the job.
-        sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
         var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -134,7 +134,7 @@ public class ReviewJobWorkerTests
     [Fact]
     public async Task Worker_UnhandledException_DoesNotCrashWorker()
     {
-        var repo = Substitute.For<IJobRepository>();
+        var repo = Substitute.For<IReviewJobExecutionStore>();
         var job = CreateJob(777);
         repo.GetPendingJobs().Returns(new[] { job });
         repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
@@ -146,9 +146,9 @@ public class ReviewJobWorkerTests
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(sp);
 
-        sp.GetService(typeof(IJobRepository)).Returns(repo);
-        // GetRequiredService throws — simulating unhandled exception in orchestration
-        sp.GetService(typeof(ReviewOrchestrationService)).Returns(null);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        // GetRequiredService throws — simulating unhandled exception in the Reviewing processor.
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
         var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, logger);
@@ -160,6 +160,36 @@ public class ReviewJobWorkerTests
 
         // Worker should still be running despite the exception
         Assert.True(worker.IsRunning);
+
+        cts.Cancel();
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Worker_WhenProcessorMissing_MarksClaimedJobFailed()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(909);
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns((object?)null);
+
+        var worker = new ReviewJobWorker(scopeFactory, DefaultWorkerOptions, Substitute.For<ILogger<ReviewJobWorker>>());
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+
+        _ = worker.StartAsync(cts.Token);
+        await Task.Delay(3000, CancellationToken.None);
+
+        await repo.Received().SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);

@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [System Context](#system-context)
+- [Vertical Slice Composition](#vertical-slice-composition)
 - [Review Trigger Flow](#review-trigger-flow)
 - [Review Dedup Flow](#review-dedup-flow)
 - [Authentication Flow](#authentication-flow)
@@ -38,7 +39,7 @@ flowchart TD
         PROCURSOR["ProCursor Module\n(Gateway + Index Worker)"]
     end
 
-    EXT -- "POST /clients/{clientId}/reviews X-User-Pat + X-Ado-Token" --> API
+    EXT -- "POST /clients/{clientId}/reviewing/jobs X-User-Pat + X-Ado-Token" --> API
     ADMINUI -- "Admin API / JWT" --> API
     API -- "persist job" --> PG
     WORKER -- "poll every 2 s" --> PG
@@ -54,8 +55,28 @@ flowchart TD
 ```
 
 > **Authentication note:** Review submission uses a user credential (`Authorization: Bearer ...`
-> or `X-User-Pat`) plus `X-Ado-Token`; status polling on `/reviews/{jobId}` uses `X-Ado-Token`.
+> or `X-User-Pat`) plus `X-Ado-Token`; status polling on `/reviewing/jobs/{jobId}/status` uses `X-Ado-Token`.
 > See the [Authentication Flow](#authentication-flow) section for how JWTs and PATs are resolved.
+
+## Vertical Slice Composition
+
+The backend startup path now separates shared support from feature-owned module registration. `Program.cs` composes the application through one shared support entry point plus explicit module entry points so feature ownership is visible at the composition root.
+
+| Entry Point | Responsibility |
+|-------------|----------------|
+| `AddInfrastructureSupport()` | Shared EF Core setup, Azure credential resolution, ADO transport, AI client plumbing, options binding, and secret protection |
+| `AddReviewingModule()` | Review intake, orchestration, diagnostics, and thread-memory infrastructure |
+| `AddCrawlingModule()` | Crawl configuration, discovery, and PR scan execution infrastructure |
+| `AddClientsModule()` | Client administration and AI connection persistence |
+| `AddIdentityAndAccessModule()` | User auth, PATs, refresh tokens, password hashing, and bootstrap services |
+| `AddMentionsModule()` | Mention scan, reply, and AI answer composition |
+| `AddPromptCustomizationModule()` | Prompt override persistence and application services |
+| `AddUsageReportingModule()` | Client and ProCursor usage reporting services |
+| `AddProCursorModule()` | ProCursor indexing, graph extraction, and query composition |
+
+This composition model is the enforcement point for the vertical-slice migration: feature-owned registrations should move into their module roots while shared support stays cross-cutting and feature-agnostic.
+
+DB-backed registrations are enabled only when the effective DB mode is on. In `Testing`, that requires `TEST_ENABLE_DB_MODE=true` even if `DB_CONNECTION_STRING` is present, which keeps in-memory test hosts from accidentally pulling in PostgreSQL-only services.
 
 ---
 
@@ -67,14 +88,14 @@ The full lifecycle of a review request — from HTTP call to ADO comment.
 sequenceDiagram
     actor Caller
     participant MW as AuthMiddleware
-    participant RC as ReviewsController
+    participant RC as ReviewJobsController
     participant JR as JobRepository
     participant WK as ReviewJobWorker
     participant PF as AdoPullRequestFetcher
     participant AI as AgentAiReviewCore
     participant CP as AdoCommentPoster
 
-    Caller->>MW: POST /clients/{clientId}/reviews (JWT or X-User-Pat, X-Ado-Token)
+    Caller->>MW: POST /clients/{clientId}/reviewing/jobs (JWT or X-User-Pat, X-Ado-Token)
     MW->>MW: resolve UserId, IsAdmin, ClientRoles
     MW->>RC: forward request
     RC->>RC: require ClientAdministrator for {clientId}

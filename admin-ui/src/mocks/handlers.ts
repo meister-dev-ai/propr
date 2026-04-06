@@ -297,6 +297,336 @@ let proCursorSourcesByClient: Record<string, any[]> = {
   '2': [],
 }
 
+  function hoursAgoIso(hours: number) {
+    return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  }
+
+  function daysAgoIso(days: number, hour = 8) {
+    const date = new Date()
+    date.setUTCDate(date.getUTCDate() - days)
+    date.setUTCHours(hour, 0, 0, 0)
+    return date.toISOString()
+  }
+
+  const proCursorTopSourcesByClient: Record<string, any[]> = {
+    '1': [
+      {
+        rank: 1,
+        sourceId: 'src-1',
+        sourceDisplayName: 'Meister ProPR Docs',
+        totalTokens: 10420,
+        estimatedCostUsd: 0.84,
+        estimatedEventCount: 2,
+      },
+      {
+        rank: 2,
+        sourceId: 'src-2',
+        sourceDisplayName: 'Architecture Wiki',
+        totalTokens: 4820,
+        estimatedCostUsd: 0.31,
+        estimatedEventCount: 1,
+      },
+    ],
+    '2': [],
+  }
+
+  const proCursorClientUsageByClient: Record<string, any> = {
+    '1': {
+      clientId: '1',
+      from: daysAgoIso(29),
+      to: daysAgoIso(0),
+      granularity: 'daily',
+      groupBy: 'source',
+      totals: {
+        promptTokens: 11640,
+        completionTokens: 3600,
+        totalTokens: 15240,
+        estimatedCostUsd: 1.15,
+        eventCount: 41,
+        estimatedEventCount: 5,
+      },
+      includesEstimatedUsage: true,
+      includesGapFilledEvents: true,
+      lastRollupCompletedAtUtc: hoursAgoIso(2),
+      topSources: [],
+      series: [
+        {
+          bucketStart: daysAgoIso(5),
+          promptTokens: 1320,
+          completionTokens: 360,
+          totalTokens: 1680,
+          estimatedCostUsd: 0.13,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'text-embedding-3-large', totalTokens: 980 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'gpt-4o-mini', totalTokens: 700 },
+          ],
+        },
+        {
+          bucketStart: daysAgoIso(4),
+          promptTokens: 1760,
+          completionTokens: 520,
+          totalTokens: 2280,
+          estimatedCostUsd: 0.18,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'text-embedding-3-large', totalTokens: 1460 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'gpt-4o-mini', totalTokens: 820 },
+          ],
+        },
+        {
+          bucketStart: daysAgoIso(3),
+          promptTokens: 2050,
+          completionTokens: 710,
+          totalTokens: 2760,
+          estimatedCostUsd: 0.21,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'text-embedding-3-large', totalTokens: 1880 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'gpt-4o-mini', totalTokens: 880 },
+          ],
+        },
+        {
+          bucketStart: daysAgoIso(2),
+          promptTokens: 2410,
+          completionTokens: 760,
+          totalTokens: 3170,
+          estimatedCostUsd: 0.24,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'text-embedding-3-large', totalTokens: 2190 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'gpt-4o-mini', totalTokens: 980 },
+          ],
+        },
+        {
+          bucketStart: daysAgoIso(1),
+          promptTokens: 2360,
+          completionTokens: 740,
+          totalTokens: 3100,
+          estimatedCostUsd: 0.23,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'text-embedding-3-large', totalTokens: 2450 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'gpt-4o-mini', totalTokens: 650 },
+          ],
+        },
+        {
+          bucketStart: daysAgoIso(0),
+          promptTokens: 1740,
+          completionTokens: 510,
+          totalTokens: 2250,
+          estimatedCostUsd: 0.16,
+          breakdown: [
+            { sourceId: 'src-1', sourceDisplayName: 'Meister ProPR Docs', modelName: 'gpt-4o-mini', totalTokens: 1460 },
+            { sourceId: 'src-2', sourceDisplayName: 'Architecture Wiki', modelName: 'text-embedding-3-large', totalTokens: 790 },
+          ],
+        },
+      ],
+    },
+    '2': {
+      clientId: '2',
+      from: daysAgoIso(29),
+      to: daysAgoIso(0),
+      granularity: 'daily',
+      groupBy: 'source',
+      totals: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+        eventCount: 0,
+        estimatedEventCount: 0,
+      },
+      includesEstimatedUsage: false,
+      includesGapFilledEvents: false,
+      lastRollupCompletedAtUtc: null,
+      topSources: [],
+      series: [],
+    },
+  }
+
+  const proCursorSourceUsageBySource: Record<string, any> = {
+    'src-1': {
+      sourceId: 'src-1',
+      period: '30d',
+      totals: {
+        promptTokens: 7820,
+        completionTokens: 2600,
+        totalTokens: 10420,
+        estimatedCostUsd: 0.84,
+        eventCount: 28,
+        estimatedEventCount: 2,
+      },
+      includesEstimatedUsage: true,
+      includesGapFilledEvents: true,
+      lastRollupCompletedAtUtc: hoursAgoIso(2),
+      byModel: [
+        { modelName: 'text-embedding-3-large', totalTokens: 6120, estimatedCostUsd: 0.34, eventCount: 17 },
+        { modelName: 'gpt-4o-mini', totalTokens: 4300, estimatedCostUsd: 0.5, eventCount: 11 },
+      ],
+      series: [
+        { bucketStart: daysAgoIso(5), promptTokens: 880, completionTokens: 280, totalTokens: 1160, estimatedCostUsd: 0.08 },
+        { bucketStart: daysAgoIso(4), promptTokens: 1260, completionTokens: 390, totalTokens: 1650, estimatedCostUsd: 0.12 },
+        { bucketStart: daysAgoIso(3), promptTokens: 1520, completionTokens: 520, totalTokens: 2040, estimatedCostUsd: 0.16 },
+        { bucketStart: daysAgoIso(2), promptTokens: 1700, completionTokens: 610, totalTokens: 2310, estimatedCostUsd: 0.18 },
+        { bucketStart: daysAgoIso(1), promptTokens: 1580, completionTokens: 510, totalTokens: 2090, estimatedCostUsd: 0.17 },
+        { bucketStart: daysAgoIso(0), promptTokens: 880, completionTokens: 290, totalTokens: 1170, estimatedCostUsd: 0.13 },
+      ],
+    },
+    'src-2': {
+      sourceId: 'src-2',
+      period: '30d',
+      totals: {
+        promptTokens: 3820,
+        completionTokens: 1000,
+        totalTokens: 4820,
+        estimatedCostUsd: 0.31,
+        eventCount: 13,
+        estimatedEventCount: 1,
+      },
+      includesEstimatedUsage: true,
+      includesGapFilledEvents: false,
+      lastRollupCompletedAtUtc: hoursAgoIso(5),
+      byModel: [
+        { modelName: 'text-embedding-3-large', totalTokens: 2780, estimatedCostUsd: 0.14, eventCount: 8 },
+        { modelName: 'gpt-4o-mini', totalTokens: 2040, estimatedCostUsd: 0.17, eventCount: 5 },
+      ],
+      series: [
+        { bucketStart: daysAgoIso(5), promptTokens: 440, completionTokens: 140, totalTokens: 580, estimatedCostUsd: 0.04 },
+        { bucketStart: daysAgoIso(4), promptTokens: 500, completionTokens: 170, totalTokens: 670, estimatedCostUsd: 0.05 },
+        { bucketStart: daysAgoIso(3), promptTokens: 530, completionTokens: 190, totalTokens: 720, estimatedCostUsd: 0.05 },
+        { bucketStart: daysAgoIso(2), promptTokens: 710, completionTokens: 150, totalTokens: 860, estimatedCostUsd: 0.06 },
+        { bucketStart: daysAgoIso(1), promptTokens: 840, completionTokens: 110, totalTokens: 950, estimatedCostUsd: 0.06 },
+        { bucketStart: daysAgoIso(0), promptTokens: 800, completionTokens: 240, totalTokens: 1040, estimatedCostUsd: 0.05 },
+      ],
+    },
+    'src-3': {
+      sourceId: 'src-3',
+      period: '30d',
+      totals: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+        eventCount: 0,
+        estimatedEventCount: 0,
+      },
+      includesEstimatedUsage: false,
+      includesGapFilledEvents: false,
+      lastRollupCompletedAtUtc: null,
+      byModel: [],
+      series: [],
+    },
+  }
+
+  const proCursorRecentEventsBySource: Record<string, any[]> = {
+    'src-1': [
+      {
+        occurredAtUtc: hoursAgoIso(1),
+        callType: 'semantic_search',
+        modelName: 'gpt-4o-mini',
+        deploymentName: 'knowledge-reasoning',
+        totalTokens: 420,
+        promptTokens: 320,
+        completionTokens: 100,
+        estimatedCostUsd: 0.05,
+        sourcePath: '/docs/architecture/review-memory.md',
+        resourceId: 'docs-review-memory',
+        requestId: 'req-pc-1a2b3c4d5e6f',
+        tokensEstimated: false,
+        costEstimated: false,
+      },
+      {
+        occurredAtUtc: hoursAgoIso(3),
+        callType: 'embedding_index',
+        modelName: 'text-embedding-3-large',
+        deploymentName: 'knowledge-embeddings',
+        totalTokens: 1180,
+        promptTokens: 1180,
+        completionTokens: 0,
+        estimatedCostUsd: 0.06,
+        sourcePath: '/docs/admin/token-governance.md',
+        resourceId: 'docs-token-governance',
+        requestId: 'req-pc-7f8e9d0c1b2a',
+        tokensEstimated: false,
+        costEstimated: false,
+      },
+      {
+        occurredAtUtc: hoursAgoIso(6),
+        callType: 'symbol_lookup',
+        modelName: 'gpt-4o-mini',
+        deploymentName: 'knowledge-reasoning',
+        totalTokens: 290,
+        promptTokens: 210,
+        completionTokens: 80,
+        estimatedCostUsd: 0.03,
+        sourcePath: '/docs/runtime/procursor-sources.md',
+        resourceId: 'docs-procursor-sources',
+        requestId: 'req-pc-9a8b7c6d5e4f',
+        tokensEstimated: true,
+        costEstimated: true,
+      },
+      {
+        occurredAtUtc: hoursAgoIso(10),
+        callType: 'semantic_search',
+        modelName: 'gpt-4o-mini',
+        deploymentName: 'knowledge-reasoning',
+        totalTokens: 360,
+        promptTokens: 260,
+        completionTokens: 100,
+        estimatedCostUsd: 0.04,
+        sourcePath: '/docs/runbooks/source-refresh.md',
+        resourceId: 'docs-source-refresh',
+        requestId: 'req-pc-112233445566',
+        tokensEstimated: false,
+        costEstimated: false,
+      },
+      {
+        occurredAtUtc: hoursAgoIso(15),
+        callType: 'embedding_index',
+        modelName: 'text-embedding-3-large',
+        deploymentName: 'knowledge-embeddings',
+        totalTokens: 940,
+        promptTokens: 940,
+        completionTokens: 0,
+        estimatedCostUsd: 0.04,
+        sourcePath: '/docs/security/secret-storage.md',
+        resourceId: 'docs-secret-storage',
+        requestId: 'req-pc-abcdef123456',
+        tokensEstimated: false,
+        costEstimated: false,
+      },
+    ],
+    'src-2': [
+      {
+        occurredAtUtc: hoursAgoIso(8),
+        callType: 'semantic_search',
+        modelName: 'gpt-4o-mini',
+        deploymentName: 'knowledge-reasoning',
+        totalTokens: 240,
+        promptTokens: 180,
+        completionTokens: 60,
+        estimatedCostUsd: 0.02,
+        sourcePath: '/wiki/architecture/review-pipeline',
+        resourceId: 'wiki-review-pipeline',
+        requestId: 'req-pc-fedcba654321',
+        tokensEstimated: false,
+        costEstimated: false,
+      },
+      {
+        occurredAtUtc: hoursAgoIso(20),
+        callType: 'embedding_index',
+        modelName: 'text-embedding-3-large',
+        deploymentName: 'knowledge-embeddings',
+        totalTokens: 720,
+        promptTokens: 720,
+        completionTokens: 0,
+        estimatedCostUsd: 0.03,
+        sourcePath: '/wiki/admin/protocol-audit',
+        resourceId: 'wiki-protocol-audit',
+        requestId: 'req-pc-334455667788',
+        tokensEstimated: true,
+        costEstimated: true,
+      },
+    ],
+    'src-3': [],
+  }
+
 function getScope(clientId: string, scopeId: string | null | undefined) {
   if (!scopeId) {
     return null
@@ -395,7 +725,7 @@ let threadMemoryRecords = [
     threadId: 1024,
     repositoryId: 'meister-propr',
     pullRequestId: 450,
-    filePath: 'src/MeisterProPR.Api/Controllers/JobsController.cs',
+    filePath: 'src/MeisterProPR.Api/Features/Reviewing/Diagnostics/Controllers/JobsController.cs',
     resolutionSummary: 'The user requested to add a new endpoint for fetching job protocols. The developer implemented it by adding the `GetProtocol` method to the `JobsController`.',
     createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     updatedAt: new Date(Date.now() - 86400000 * 5).toISOString()
@@ -726,6 +1056,48 @@ export const handlers = [
   http.delete(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/branches/:branchId`, async () => {
     await delay(250)
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/token-usage`, async ({ params }) => {
+    await delay(250)
+    const clientId = String(params.clientId)
+    const usage = proCursorClientUsageByClient[clientId]
+
+    if (!usage) {
+      return HttpResponse.json({ error: 'Failed to load ProCursor usage.' }, { status: 404 })
+    }
+
+    return HttpResponse.json({
+      ...usage,
+      topSources: proCursorTopSourcesByClient[clientId] ?? usage.topSources ?? [],
+    })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/token-usage/top-sources`, async ({ params }) => {
+    await delay(180)
+    const clientId = String(params.clientId)
+    return HttpResponse.json({ items: proCursorTopSourcesByClient[clientId] ?? [] })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/token-usage`, async ({ params }) => {
+    await delay(220)
+    const sourceId = String(params.sourceId)
+    const usage = proCursorSourceUsageBySource[sourceId]
+
+    if (!usage) {
+      return HttpResponse.json({ error: 'Failed to load source-level ProCursor usage.' }, { status: 404 })
+    }
+
+    return HttpResponse.json(usage)
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/procursor/sources/:sourceId/token-usage/events`, async ({ params, request }) => {
+    await delay(220)
+    const sourceId = String(params.sourceId)
+    const url = new URL(request.url)
+    const limit = Number(url.searchParams.get('limit') ?? '10')
+    const items = proCursorRecentEventsBySource[sourceId] ?? []
+    return HttpResponse.json({ items: items.slice(0, limit) })
   }),
 
   http.get(`${base}/clients/:clientId/ai-connections`, async ({ params }) => {

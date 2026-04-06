@@ -32,7 +32,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
 {
     private const string ValidAdminKey = "admin-key-min-16-chars-ok";
 
-    // T037 — /jobs/{id}/protocol returns an array (not a single object)
+    // T037 — /reviewing/jobs/{id}/protocol returns an array (not a single object)
     [Fact]
     public async Task GetJobProtocol_ReturnsArrayNotObject()
     {
@@ -56,7 +56,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
@@ -92,7 +92,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -132,7 +132,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
@@ -171,7 +171,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
@@ -221,7 +221,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{job.Id}/protocol");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 

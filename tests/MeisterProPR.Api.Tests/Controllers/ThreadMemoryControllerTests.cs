@@ -32,7 +32,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/admin/thread-memory?clientId={factory.ClientId}&page=1&pageSize=50");
+            $"/admin/reviewing/thread-memory?clientId={factory.ClientId}&page=1&pageSize=50");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -46,7 +46,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/admin/thread-memory/activity-log?clientId={factory.ClientId}&page=1&pageSize=50");
+            $"/admin/reviewing/thread-memory/activity-log?clientId={factory.ClientId}&page=1&pageSize=50");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
@@ -60,7 +60,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/admin/thread-memory?clientId={factory.ClientId}&page=1&pageSize=50");
+            $"/admin/reviewing/thread-memory?clientId={factory.ClientId}&page=1&pageSize=50");
 
         var response = await client.SendAsync(request);
 
