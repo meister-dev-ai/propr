@@ -141,7 +141,7 @@ See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup v
 |---|---|
 | [docs/getting-started.md](docs/getting-started.md) | Admin UI setup guide: deploy, bootstrap, and configure clients |
 | [docs/api.md](docs/api.md) | Technical API reference and curl examples |
-| [docs/architecture.md](docs/architecture.md) | Mermaid diagrams: request flow, data model, job states |
+| [docs/architecture.md](docs/architecture.md) | Architecture overview and links to focused subsystem docs |
 
 ---
 
