@@ -21,7 +21,7 @@ public static class PromptCustomizationModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddPromptCustomizationModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IPromptOverrideRepository, PromptOverrideRepository>();
         }

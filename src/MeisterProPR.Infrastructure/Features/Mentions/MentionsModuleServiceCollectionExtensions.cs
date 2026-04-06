@@ -23,7 +23,7 @@ public static class MentionsModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddMentionsModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();

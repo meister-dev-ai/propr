@@ -22,7 +22,7 @@ public static class CrawlingModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddCrawlingModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<ICrawlConfigurationRepository, CrawlConfigurationRepository>();
             services.AddScoped<IClientAdoCredentialRepository, ClientAdoCredentialRepository>();

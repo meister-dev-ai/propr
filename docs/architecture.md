@@ -76,7 +76,7 @@ The backend startup path now separates shared support from feature-owned module 
 
 This composition model is the enforcement point for the vertical-slice migration: feature-owned registrations should move into their module roots while shared support stays cross-cutting and feature-agnostic.
 
-DB-backed registrations are enabled only when the effective DB mode is on. In `Testing`, that requires `TEST_ENABLE_DB_MODE=true` even if `DB_CONNECTION_STRING` is present, which keeps in-memory test hosts from accidentally pulling in PostgreSQL-only services.
+DB-backed registrations are enabled whenever `DB_CONNECTION_STRING` is configured, including in `Testing`. Test hosts that need an isolated service graph should avoid inheriting a PostgreSQL connection string or override the affected services explicitly.
 
 ---
 

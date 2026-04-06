@@ -70,7 +70,6 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
                 {
                     builder.UseEnvironment("Testing");
                     builder.UseSetting("DB_CONNECTION_STRING", fixture.ConnectionString);
-                    builder.UseSetting("TEST_ENABLE_DB_MODE", "true");
                     builder.UseSetting("MEISTER_DATA_PROTECTION_KEYS_PATH", keysDirectory);
                     builder.UseSetting("MEISTER_JWT_SECRET", "test-jwt-secret-at-least-32-chars-ok!!");
                     builder.UseSetting("MEISTER_BOOTSTRAP_ADMIN_USER", "testadmin");

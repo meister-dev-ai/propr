@@ -115,7 +115,6 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             {
                 builder.UseEnvironment("Testing");
                 builder.UseSetting("DB_CONNECTION_STRING", connectionString);
-                builder.UseSetting("TEST_ENABLE_DB_MODE", "true");
                 builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
                 builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
                 builder.UseSetting("MEISTER_ADMIN_KEY", "admin-key-min-16-chars-ok");

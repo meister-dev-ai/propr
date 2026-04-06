@@ -20,7 +20,7 @@ public static class ClientsModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddClientsModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IClientRegistry, DbClientRegistry>();
             services.AddScoped<IClientAdminService, ClientAdminService>();

@@ -20,7 +20,7 @@ public static class UsageReportingModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddUsageReportingModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
             services.AddSingleton<IProCursorTokenUsageRecorder, EfProCursorTokenUsageRecorder>();

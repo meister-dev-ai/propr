@@ -35,7 +35,7 @@ These concerns remain shared support because they provide technical capabilities
 - Module roots may depend on shared support services and public contracts from other modules.
 - Shared support must not absorb feature-owned repositories, stores, or orchestration services.
 - Cross-module calls should use public interfaces or DTOs rather than implementation types.
-- In `Testing`, DB-backed module registrations stay disabled unless `TEST_ENABLE_DB_MODE=true` is set explicitly, even if `DB_CONNECTION_STRING` is inherited from the shell.
+- DB-backed module registrations now key directly off `DB_CONNECTION_STRING`, including in `Testing`; test hosts that need an isolated graph should avoid inheriting a PostgreSQL connection string or override the affected services explicitly.
 - Future feature work should continue to land under matching `Features/` paths without changing the module catalog unless the docs and guardrail tests are updated together.
 
 ## Review Checklist Alignment

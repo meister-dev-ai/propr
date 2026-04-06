@@ -16,10 +16,10 @@ namespace MeisterProPR.Api.Tests.Startup;
 public sealed class WaveRegistrationSafetyTests
 {
     [Fact]
-    public void ReviewingModule_NonDbMode_StillRegistersFeatureBoundaries()
+    public void ReviewingModule_WithoutDatabaseConnectionString_StillRegistersFeatureBoundaries()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(dbMode: false);
+        var configuration = CreateConfiguration(withDatabaseConnectionString: false);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -33,10 +33,10 @@ public sealed class WaveRegistrationSafetyTests
     }
 
     [Fact]
-    public void ReviewingModule_DbMode_RegistersLegacyAndFeatureReviewingContractsTogether()
+    public void ReviewingModule_WithDatabaseConnectionString_RegistersLegacyAndFeatureReviewingContractsTogether()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(dbMode: true);
+        var configuration = CreateConfiguration(withDatabaseConnectionString: true);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -50,14 +50,14 @@ public sealed class WaveRegistrationSafetyTests
         Assert.NotNull(FindService<IReviewThreadMemoryService>(services));
     }
 
-    private static IConfiguration CreateConfiguration(bool dbMode)
+    private static IConfiguration CreateConfiguration(bool withDatabaseConnectionString)
     {
         var values = new Dictionary<string, string?>
         {
             ["ADO_SKIP_TOKEN_VALIDATION"] = "true",
             ["ADO_STUB_PR"] = "true",
             ["MEISTER_JWT_SECRET"] = "test-wave-registration-jwt-secret-32!",
-            ["DB_CONNECTION_STRING"] = dbMode ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
+            ["DB_CONNECTION_STRING"] = withDatabaseConnectionString ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
         };
 
         return new ConfigurationBuilder()

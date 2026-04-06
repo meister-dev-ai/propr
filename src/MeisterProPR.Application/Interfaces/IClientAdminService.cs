@@ -6,7 +6,7 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
 
-/// <summary>Admin CRUD operations for managing clients. Only available in DB mode.</summary>
+/// <summary>Admin CRUD operations for managing clients.</summary>
 public interface IClientAdminService
 {
     /// <summary>Returns all clients ordered by creation date descending.</summary>

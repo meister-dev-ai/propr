@@ -20,7 +20,7 @@ public sealed class ProCursorModuleTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddProCursorModule(BuildConfiguration(dbMode: false, stubMode: true));
+        services.AddProCursorModule(BuildConfiguration(withDatabaseConnectionString: false, stubMode: true));
 
         Assert.NotNull(FindService<IProCursorGateway>(services));
 
@@ -32,12 +32,12 @@ public sealed class ProCursorModuleTests
     }
 
     [Fact]
-    public void AddProCursorModule_WhenDbModeEnabled_RegistersPersistenceContracts()
+    public void AddProCursorModule_WhenDatabaseConnectionStringIsConfigured_RegistersPersistenceContracts()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddProCursorModule(BuildConfiguration(dbMode: true, stubMode: true));
+        services.AddProCursorModule(BuildConfiguration(withDatabaseConnectionString: true, stubMode: true));
 
         Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
         Assert.NotNull(FindService<IProCursorIndexJobRepository>(services));
@@ -77,12 +77,12 @@ public sealed class ProCursorModuleTests
         Assert.Equal("{\"traceId\":\"abc\"}", request.SafeMetadataJson);
     }
 
-    private static IConfiguration BuildConfiguration(bool dbMode, bool stubMode)
+    private static IConfiguration BuildConfiguration(bool withDatabaseConnectionString, bool stubMode)
     {
         return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["DB_CONNECTION_STRING"] = dbMode ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
+                ["DB_CONNECTION_STRING"] = withDatabaseConnectionString ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
                 ["ADO_STUB_PR"] = stubMode ? "true" : "false",
                 ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "7",
                 ["PROCURSOR_MAX_QUERY_RESULTS"] = "20",

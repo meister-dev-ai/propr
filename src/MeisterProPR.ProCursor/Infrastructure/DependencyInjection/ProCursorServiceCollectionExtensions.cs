@@ -51,7 +51,7 @@ public static class ProCursorModuleServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
             services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();

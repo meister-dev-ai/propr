@@ -21,7 +21,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddIdentityAndAccessModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IUserRepository, AppUserRepository>();
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

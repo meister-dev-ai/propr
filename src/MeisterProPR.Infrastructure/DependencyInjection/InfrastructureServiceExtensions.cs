@@ -40,24 +40,20 @@ namespace MeisterProPR.Infrastructure.DependencyInjection;
 /// </summary>
 public static class InfrastructureServiceExtensions
 {
-    public static bool IsDatabaseModeEnabled(this IConfiguration configuration, IHostEnvironment? environment = null)
+    /// <summary>
+    ///     Returns <see langword="true" /> when a database connection string is configured.
+    /// </summary>
+    public static bool HasDatabaseConnectionString(this IConfiguration configuration)
     {
-        var dbConnectionString = configuration["DB_CONNECTION_STRING"];
-        var environmentName = environment?.EnvironmentName
-            ?? configuration["ASPNETCORE_ENVIRONMENT"]
-            ?? configuration["DOTNET_ENVIRONMENT"];
-        var isTestingEnvironment = string.Equals(environmentName, "Testing", StringComparison.OrdinalIgnoreCase);
-
-        return !string.IsNullOrWhiteSpace(dbConnectionString)
-            && (!isTestingEnvironment || configuration.GetValue<bool>("TEST_ENABLE_DB_MODE"));
+        return !string.IsNullOrWhiteSpace(configuration["DB_CONNECTION_STRING"]);
     }
 
     public static IServiceCollection AddInfrastructureSupport(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
         var dbConnectionString = configuration["DB_CONNECTION_STRING"];
-        var isDbMode = configuration.IsDatabaseModeEnabled(environment);
+        var hasDatabaseConnectionString = configuration.HasDatabaseConnectionString();
 
-        if (isDbMode)
+        if (hasDatabaseConnectionString)
         {
             // PostgreSQL mode: EF Core + Npgsql
             services.AddDbContext<MeisterProPRDbContext>(

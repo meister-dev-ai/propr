@@ -37,7 +37,7 @@ public static class ReviewingModuleServiceCollectionExtensions
     {
         services.AddReviewingIntake(configuration);
 
-        if (configuration.IsDatabaseModeEnabled(environment))
+        if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();

@@ -53,7 +53,7 @@ try
         builder.Configuration.AddUserSecrets<Program>(true);
     }
 
-    var isDbMode = builder.Configuration.IsDatabaseModeEnabled(builder.Environment);
+    var hasDatabaseConnectionString = builder.Configuration.HasDatabaseConnectionString();
     var isTesting = builder.Environment.IsEnvironment("Testing");
 
     builder.Host.UseSerilog((context, services, configuration) =>
@@ -151,7 +151,7 @@ try
     builder.Services.AddSingleton<ReviewJobWorker>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewJobWorker>());
 
-    // AdoPrCrawlerWorker is only useful in DB mode (needs ICrawlConfigurationRepository).
+    // AdoPrCrawlerWorker needs persistent crawl-configuration storage.
     // Register it unconditionally for DI/health consumers, but do not start it in test hosts.
     builder.Services.AddSingleton<AdoPrCrawlerWorker>();
     if (!isTesting)
@@ -268,7 +268,7 @@ try
         .AddCheck<ProCursorIndexWorkerHealthCheck>("procursor-index-worker")
         .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
 
-    if (isDbMode)
+    if (hasDatabaseConnectionString)
     {
         healthChecksBuilder.AddCheck<DatabaseHealthCheck>("database");
     }
@@ -292,8 +292,8 @@ try
         return;
     }
 
-    // DB migration + bootstrap + startup recovery (DB mode only)
-    if (isDbMode)
+    // Apply migrations, secret backfill, and startup recovery when a database is configured.
+    if (hasDatabaseConnectionString)
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();

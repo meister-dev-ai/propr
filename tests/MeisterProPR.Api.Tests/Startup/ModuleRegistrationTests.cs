@@ -44,7 +44,7 @@ public sealed class ModuleRegistrationTests
     {
         var services = new ServiceCollection();
 
-        services.AddInfrastructureSupport(CreateConfiguration(dbMode: false));
+        services.AddInfrastructureSupport(CreateConfiguration(withDatabaseConnectionString: false));
 
         Assert.NotNull(FindService<IAdoTokenValidator>(services));
         Assert.NotNull(FindService<IAiChatClientFactory>(services));
@@ -63,7 +63,7 @@ public sealed class ModuleRegistrationTests
     public void ComposedModules_RegisterFeatureOwnedServices()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(dbMode: true);
+        var configuration = CreateConfiguration(withDatabaseConnectionString: true);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -89,10 +89,10 @@ public sealed class ModuleRegistrationTests
     }
 
     [Fact]
-    public void ComposedModules_TestingEnvironment_SuppressesDbRegistrationsUntilExplicitlyEnabled()
+    public void ComposedModules_TestingEnvironment_WithDatabaseConnectionString_StillRegistersDbServices()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(dbMode: true);
+        var configuration = CreateConfiguration(withDatabaseConnectionString: true);
         var environment = new TestHostEnvironment("Testing");
 
         services.AddInfrastructureSupport(configuration, environment);
@@ -105,30 +105,29 @@ public sealed class ModuleRegistrationTests
         services.AddUsageReportingModule(configuration, environment);
         services.AddProCursorModule(configuration, environment);
 
-        Assert.Null(FindService<IJobRepository>(services));
-        Assert.Null(FindService<ICrawlConfigurationRepository>(services));
-        Assert.Null(FindService<IClientRegistry>(services));
-        Assert.Null(FindService<IUserRepository>(services));
-        Assert.Null(FindService<IMentionScanRepository>(services));
-        Assert.Null(FindService<IPromptOverrideRepository>(services));
-        Assert.Null(FindService<IClientTokenUsageRepository>(services));
-        Assert.Null(FindService<IProCursorTokenUsageRecorder>(services));
-        Assert.Null(FindService<IProCursorKnowledgeSourceRepository>(services));
+        Assert.NotNull(FindService<IJobRepository>(services));
+        Assert.NotNull(FindService<ICrawlConfigurationRepository>(services));
+        Assert.NotNull(FindService<IClientRegistry>(services));
+        Assert.NotNull(FindService<IUserRepository>(services));
+        Assert.NotNull(FindService<IMentionScanRepository>(services));
+        Assert.NotNull(FindService<IPromptOverrideRepository>(services));
+        Assert.NotNull(FindService<IClientTokenUsageRepository>(services));
+        Assert.NotNull(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IProCursorGateway>(services));
     }
 
-    private static IConfiguration CreateConfiguration(bool dbMode, bool testEnableDbMode = false)
+    private static IConfiguration CreateConfiguration(bool withDatabaseConnectionString)
     {
         var values = new Dictionary<string, string?>
         {
             ["ADO_SKIP_TOKEN_VALIDATION"] = "true",
             ["ADO_STUB_PR"] = "true",
             ["MEISTER_JWT_SECRET"] = "test-module-registration-jwt-secret-32!",
-            ["DB_CONNECTION_STRING"] = dbMode ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
-            ["TEST_ENABLE_DB_MODE"] = testEnableDbMode ? "true" : null,
+            ["DB_CONNECTION_STRING"] = withDatabaseConnectionString ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
         };
 
         return new ConfigurationBuilder()
