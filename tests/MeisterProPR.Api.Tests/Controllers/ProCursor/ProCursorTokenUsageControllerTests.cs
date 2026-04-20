@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
@@ -17,18 +18,26 @@ namespace MeisterProPR.Api.Tests.Controllers.ProCursor;
 /// <summary>
 ///     Integration tests for <see cref="MeisterProPR.Api.Controllers.ProCursorTokenUsageController" />.
 /// </summary>
-public sealed class ProCursorTokenUsageControllerTests(
-    ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory factory)
+public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory factory)
     : IClassFixture<ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory>, IAsyncLifetime
 {
-    public Task InitializeAsync() => factory.ResetAsync();
+    public Task InitializeAsync()
+    {
+        return factory.ResetAsync();
+    }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public Task DisposeAsync()
+    {
+        return Task.CompletedTask;
+    }
 
     [Fact]
     public async Task GetClientUsage_ClientAdministrator_ReturnsAggregatedUsage()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-a", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-a",
+            defaultBranch: "wikiMain");
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
@@ -48,7 +57,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04&granularity=daily&groupBy=source");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -71,7 +82,7 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await client.SendAsync(request);
 
@@ -91,8 +102,8 @@ public sealed class ProCursorTokenUsageControllerTests(
     [Fact]
     public async Task GetTopSources_ClientAdministrator_ReturnsRankedSources()
     {
-        var dominantSourceId = await factory.SeedSourceAsync(displayName: "Dominant Source", repositoryId: "repo-dominant");
-        var otherSourceId = await factory.SeedSourceAsync(displayName: "Smaller Source", repositoryId: "repo-smaller");
+        var dominantSourceId = await factory.SeedSourceAsync("Dominant Source", repositoryId: "repo-dominant");
+        var otherSourceId = await factory.SeedSourceAsync("Smaller Source", repositoryId: "repo-smaller");
         var today = DateTimeOffset.UtcNow;
 
         await this.SeedUsageEventAsync(dominantSourceId, "Dominant Source", today, 300, 0, 0.0003m);
@@ -102,7 +113,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/top-sources?period=30d&limit=2");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -111,7 +124,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         var items = body.GetProperty("items");
         Assert.Equal(2, items.GetArrayLength());
         Assert.Equal("Dominant Source", items[0].GetProperty("sourceDisplayName").GetString());
-        Assert.Equal(400, items[0].GetProperty("totalTokens").GetInt64() + items[1].GetProperty("totalTokens").GetInt64());
+        Assert.Equal(
+            400,
+            items[0].GetProperty("totalTokens").GetInt64() + items[1].GetProperty("totalTokens").GetInt64());
     }
 
     [Fact]
@@ -121,7 +136,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/top-sources?period=30d&limit=1001");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -131,7 +148,10 @@ public sealed class ProCursorTokenUsageControllerTests(
     [Fact]
     public async Task Export_ClientAdministrator_ReturnsCsv()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-export", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-export",
+            defaultBranch: "wikiMain");
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
@@ -139,13 +159,15 @@ public sealed class ProCursorTokenUsageControllerTests(
             90,
             0,
             0.00009m,
-            sourcePath: "/docs/intro.md");
+            "/docs/intro.md");
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/export?from=2026-04-04&to=2026-04-04");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -160,7 +182,10 @@ public sealed class ProCursorTokenUsageControllerTests(
     [Fact]
     public async Task GetSourceUsage_ClientAdministrator_ReturnsSourceAggregate()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-source", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-source",
+            defaultBranch: "wikiMain");
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
@@ -182,7 +207,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/sources/{sourceId}/token-usage?period=30d&granularity=daily");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -192,19 +219,25 @@ public sealed class ProCursorTokenUsageControllerTests(
         Assert.Equal("Platform Wiki", body.GetProperty("sourceDisplayName").GetString());
         Assert.Equal(240, body.GetProperty("totals").GetProperty("totalTokens").GetInt64());
         Assert.Equal(2, body.GetProperty("byModel").GetArrayLength());
-        Assert.Contains("/token-usage/events", body.GetProperty("recentEventsHref").GetString(), StringComparison.Ordinal);
+        Assert.Contains(
+            "/token-usage/events",
+            body.GetProperty("recentEventsHref").GetString(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task GetSourceUsage_ClientUser_Returns403()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-forbidden", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-forbidden",
+            defaultBranch: "wikiMain");
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/sources/{sourceId}/token-usage?period=30d");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await client.SendAsync(request);
 
@@ -214,7 +247,10 @@ public sealed class ProCursorTokenUsageControllerTests(
     [Fact]
     public async Task GetRecentEvents_ClientAdministrator_ReturnsSafeEvents()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-events", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-events",
+            defaultBranch: "wikiMain");
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
@@ -222,7 +258,7 @@ public sealed class ProCursorTokenUsageControllerTests(
             120,
             0,
             0.00012m,
-            sourcePath: "/docs/intro.md",
+            "/docs/intro.md",
             resourceId: "ado://wiki/intro");
         await this.SeedUsageEventAsync(
             sourceId,
@@ -231,14 +267,16 @@ public sealed class ProCursorTokenUsageControllerTests(
             60,
             10,
             0.00007m,
-            sourcePath: "/docs/setup.md",
+            "/docs/setup.md",
             resourceId: "ado://wiki/setup");
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/sources/{sourceId}/token-usage/events?limit=10");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -254,7 +292,10 @@ public sealed class ProCursorTokenUsageControllerTests(
     [Fact]
     public async Task GetRecentEvents_ClientAdministrator_DoesNotExposeSafeMetadataJson()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-safe-metadata", defaultBranch: "wikiMain");
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-safe-metadata",
+            defaultBranch: "wikiMain");
         const string safeMetadataMarker = "private-safe-metadata-marker";
         await this.SeedUsageEventAsync(
             sourceId,
@@ -269,7 +310,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/sources/{sourceId}/token-usage/events?limit=10");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -288,7 +331,9 @@ public sealed class ProCursorTokenUsageControllerTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/freshness");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -308,11 +353,12 @@ public sealed class ProCursorTokenUsageControllerTests(
                     factory.ClientId,
                     Arg.Any<ProCursorTokenUsageRebuildRequest>(),
                     Arg.Any<CancellationToken>())
-                .Returns(new ProCursorTokenUsageRebuildResponse(
-                    new DateOnly(2026, 4, 1),
-                    new DateOnly(2026, 4, 30),
-                    12,
-                    new DateTimeOffset(2026, 4, 30, 12, 0, 0, TimeSpan.Zero)));
+                .Returns(
+                    new ProCursorTokenUsageRebuildResponse(
+                        new DateOnly(2026, 4, 1),
+                        new DateOnly(2026, 4, 30),
+                        12,
+                        new DateTimeOffset(2026, 4, 30, 12, 0, 0, TimeSpan.Zero)));
         }
 
         var client = factory.CreateClient();
@@ -320,14 +366,17 @@ public sealed class ProCursorTokenUsageControllerTests(
             HttpMethod.Post,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/rebuild")
         {
-            Content = JsonContent.Create(new
-            {
-                from = "2026-04-01",
-                to = "2026-04-30",
-                includeMonthly = true,
-            }),
+            Content = JsonContent.Create(
+                new
+                {
+                    from = "2026-04-01",
+                    to = "2026-04-30",
+                    includeMonthly = true,
+                }),
         };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await client.SendAsync(request);
 
@@ -346,14 +395,15 @@ public sealed class ProCursorTokenUsageControllerTests(
             HttpMethod.Post,
             $"/admin/clients/{factory.ClientId}/procursor/token-usage/rebuild")
         {
-            Content = JsonContent.Create(new
-            {
-                from = "2026-04-01",
-                to = "2026-04-30",
-                includeMonthly = true,
-            }),
+            Content = JsonContent.Create(
+                new
+                {
+                    from = "2026-04-01",
+                    to = "2026-04-30",
+                    includeMonthly = true,
+                }),
         };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await client.SendAsync(request);
 
@@ -374,25 +424,26 @@ public sealed class ProCursorTokenUsageControllerTests(
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        db.ProCursorTokenUsageEvents.Add(new ProCursorTokenUsageEvent(
-            Guid.NewGuid(),
-            factory.ClientId,
-            sourceId,
-            sourceDisplayName,
-            $"test:{sourceId:N}:{occurredAtUtc:yyyyMMddHHmmssfff}:{Guid.NewGuid():N}",
-            occurredAtUtc,
-            ProCursorTokenUsageCallType.Embedding,
-            modelName,
-            modelName,
-            "cl100k_base",
-            promptTokens,
-            completionTokens,
-            true,
-            estimatedCostUsd,
-            true,
-            resourceId: resourceId,
-            sourcePath: sourcePath,
-            safeMetadataJson: safeMetadataJson));
+        db.ProCursorTokenUsageEvents.Add(
+            new ProCursorTokenUsageEvent(
+                Guid.NewGuid(),
+                factory.ClientId,
+                sourceId,
+                sourceDisplayName,
+                $"test:{sourceId:N}:{occurredAtUtc:yyyyMMddHHmmssfff}:{Guid.NewGuid():N}",
+                occurredAtUtc,
+                ProCursorTokenUsageCallType.Embedding,
+                modelName,
+                modelName,
+                "cl100k_base",
+                promptTokens,
+                completionTokens,
+                true,
+                estimatedCostUsd,
+                true,
+                resourceId: resourceId,
+                sourcePath: sourcePath,
+                safeMetadataJson: safeMetadataJson));
         await db.SaveChangesAsync();
     }
 
@@ -400,20 +451,21 @@ public sealed class ProCursorTokenUsageControllerTests(
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        db.ProCursorTokenUsageRollups.Add(new ProCursorTokenUsageRollup(
-            Guid.NewGuid(),
-            factory.ClientId,
-            null,
-            null,
-            bucketStartDate,
-            ProCursorTokenUsageGranularity.Daily,
-            "text-embedding-3-small",
-            120,
-            0,
-            0.00012m,
-            1,
-            0,
-            recomputedAtUtc));
+        db.ProCursorTokenUsageRollups.Add(
+            new ProCursorTokenUsageRollup(
+                Guid.NewGuid(),
+                factory.ClientId,
+                null,
+                null,
+                bucketStartDate,
+                ProCursorTokenUsageGranularity.Daily,
+                "text-embedding-3-small",
+                120,
+                0,
+                0.00012m,
+                1,
+                0,
+                recomputedAtUtc));
         await db.SaveChangesAsync();
     }
 }

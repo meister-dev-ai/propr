@@ -67,7 +67,10 @@ public sealed class ProCursorSymbolGraphRepository(MeisterProPRDbContext db) : I
     /// <summary>
     ///     Returns one persisted symbol record by its snapshot-local key.
     /// </summary>
-    public Task<ProCursorSymbolRecord?> GetBySymbolKeyAsync(Guid snapshotId, string symbolKey, CancellationToken ct = default)
+    public Task<ProCursorSymbolRecord?> GetBySymbolKeyAsync(
+        Guid snapshotId,
+        string symbolKey,
+        CancellationToken ct = default)
     {
         return db.ProCursorSymbolRecords
             .FirstOrDefaultAsync(symbol => symbol.SnapshotId == snapshotId && symbol.SymbolKey == symbolKey, ct);
@@ -108,7 +111,8 @@ public sealed class ProCursorSymbolGraphRepository(MeisterProPRDbContext db) : I
         CancellationToken ct = default)
     {
         return await db.ProCursorSymbolEdges
-            .Where(edge => edge.SnapshotId == snapshotId && (edge.FromSymbolKey == symbolKey || edge.ToSymbolKey == symbolKey))
+            .Where(edge =>
+                edge.SnapshotId == snapshotId && (edge.FromSymbolKey == symbolKey || edge.ToSymbolKey == symbolKey))
             .OrderBy(edge => edge.FilePath)
             .ThenBy(edge => edge.LineStart)
             .Take(maxRelations)

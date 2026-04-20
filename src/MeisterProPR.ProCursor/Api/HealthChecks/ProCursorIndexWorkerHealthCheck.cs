@@ -15,10 +15,13 @@ public sealed class ProCursorIndexWorkerHealthCheck(
     ProCursorIndexWorker worker,
     IOptions<ProCursorOptions> options) : IHealthCheck
 {
-    private readonly TimeSpan _staleCycleThreshold = TimeSpan.FromSeconds(Math.Max(1, options.Value.RefreshPollSeconds) * 2);
+    private readonly TimeSpan _staleCycleThreshold =
+        TimeSpan.FromSeconds(Math.Max(1, options.Value.RefreshPollSeconds) * 2);
 
     /// <summary>Checks worker health and returns a HealthCheckResult.</summary>
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
     {
         var data = new Dictionary<string, object>
         {
@@ -49,6 +52,6 @@ public sealed class ProCursorIndexWorkerHealthCheck(
             return Task.FromResult(HealthCheckResult.Degraded("ProCursor index worker has not completed a recent cycle.", data: data));
         }
 
-        return Task.FromResult(HealthCheckResult.Healthy("ProCursor index worker is running.", data: data));
+        return Task.FromResult(HealthCheckResult.Healthy("ProCursor index worker is running.", data));
     }
 }

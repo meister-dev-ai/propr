@@ -3,6 +3,7 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Validators;
 
@@ -28,13 +29,14 @@ public sealed class PatchAdminCrawlConfigRequestValidator : AbstractValidator<Pa
                     .Must(f =>
                         !string.IsNullOrWhiteSpace(f.RepositoryName) ||
                         !string.IsNullOrWhiteSpace(f.DisplayName) ||
-                        (!string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Provider) && !string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Value)))
+                        (!string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Provider) &&
+                         !string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Value)))
                     .WithMessage("Each repo filter requires a repository name, display name, or canonical source reference.");
             });
 
         this.RuleFor(r => r.ProCursorSourceIds)
             .Must(ids => ids is not null && ids.Any())
             .WithMessage("At least one ProCursor source is required when ProCursorSourceScopeMode is SelectedSources.")
-            .When(r => r.ProCursorSourceScopeMode == MeisterProPR.Domain.Enums.ProCursorSourceScopeMode.SelectedSources);
+            .When(r => r.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources);
     }
 }

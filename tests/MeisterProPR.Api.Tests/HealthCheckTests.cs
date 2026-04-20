@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -10,7 +11,8 @@ using NSubstitute;
 
 namespace MeisterProPR.Api.Tests;
 
-public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory) : IClassFixture<HealthCheckTests.HealthCheckFactory>
+public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory)
+    : IClassFixture<HealthCheckTests.HealthCheckFactory>
 {
     [Fact]
     public async Task GetHealthz_DoesNotRequireClientKey()
@@ -32,9 +34,15 @@ public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory) : ICl
         var response = await client.GetAsync("/healthz");
         var body = await response.Content.ReadAsStringAsync();
 
-        // Health check should return some JSON-like body
         Assert.NotNull(body);
         Assert.NotEmpty(body);
+
+        using var document = JsonDocument.Parse(body);
+        Assert.True(document.RootElement.TryGetProperty("status", out _));
+        Assert.True(document.RootElement.TryGetProperty("entries", out var entries));
+        Assert.True(entries.TryGetProperty("worker", out var worker));
+        Assert.True(worker.TryGetProperty("data", out var data));
+        Assert.False(data.GetProperty("databaseConfigured").GetBoolean());
     }
 
     [Fact]
@@ -77,11 +85,6 @@ public class HealthCheckTests(HealthCheckTests.HealthCheckFactory factory) : ICl
 
             builder.ConfigureServices(services =>
             {
-                var adoValidator = Substitute.For<IAdoTokenValidator>();
-                adoValidator.IsValidAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-                    .Returns(true);
-
-                ReplaceService(services, adoValidator);
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
                 services.AddSingleton(Substitute.For<IJobRepository>());

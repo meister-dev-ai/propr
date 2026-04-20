@@ -8,7 +8,6 @@ using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Application.Tests.Services.ProCursor;
@@ -45,30 +44,36 @@ public sealed class ProCursorIndexCoordinatorTests
         var trackedBranch = source.AddTrackedBranch(Guid.NewGuid(), "main", ProCursorRefreshTriggerMode.Manual, true);
         var job = new ProCursorIndexJob(Guid.NewGuid(), source.Id, trackedBranch.Id, null, "refresh", "dedup-key");
 
-        var rootDirectory = Path.Combine(Path.GetTempPath(), "meisterpropr-procursor-tests", Guid.NewGuid().ToString("N"));
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-tests",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootDirectory);
 
         materializer.SourceKind.Returns(ProCursorSourceKind.Repository);
         materializer.MaterializeAsync(source, trackedBranch, null, Arg.Any<CancellationToken>())
-            .Returns(new ProCursorMaterializedSource(
-                source.Id,
-                trackedBranch.Id,
-                trackedBranch.BranchName,
-                "commit-1",
-                rootDirectory,
-                ["/src/Program.cs"]));
+            .Returns(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    "commit-1",
+                    rootDirectory,
+                    ["/src/Program.cs"]));
         chunkExtractor.ExtractAsync(source, Arg.Any<ProCursorMaterializedSource>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<ProCursorExtractedChunk>>([
-                new ProCursorExtractedChunk(
-                    "/src/Program.cs",
-                    "code_file",
-                    "Program.cs",
-                    0,
-                    1,
-                    3,
-                    "hash-1",
-                    "Token caching keeps Azure DevOps calls bounded.")
-            ]));
+            .Returns(
+                Task.FromResult<IReadOnlyList<ProCursorExtractedChunk>>(
+                [
+                    new ProCursorExtractedChunk(
+                        "/src/Program.cs",
+                        "code_file",
+                        "Program.cs",
+                        0,
+                        1,
+                        3,
+                        "hash-1",
+                        "Token caching keeps Azure DevOps calls bounded."),
+                ]));
         embeddingService.EnsureConfigurationAsync(source.ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         embeddingService.NormalizeChunksAsync(
@@ -77,9 +82,16 @@ public sealed class ProCursorIndexCoordinatorTests
                 Arg.Any<CancellationToken>())
             .Returns(callInfo =>
                 Task.FromResult(callInfo.ArgAt<IReadOnlyList<ProCursorExtractedChunk>>(1)));
-        embeddingService.GenerateEmbeddingsAsync(source.ClientId, Arg.Any<IReadOnlyList<string>>(), Arg.Any<ProCursorEmbeddingUsageContext?>(), Arg.Any<CancellationToken>())
+        embeddingService.GenerateEmbeddingsAsync(
+                source.ClientId,
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<ProCursorEmbeddingUsageContext?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<float[]>>([[1f, 0f]]));
-        symbolExtractor.ExtractAsync(Arg.Any<ProCursorMaterializedSource>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        symbolExtractor.ExtractAsync(
+                Arg.Any<ProCursorMaterializedSource>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProCursorSymbolExtractionResult([], [], false, "symbol_extraction_not_configured")));
 
         jobRepository.GetNextPendingAsync(Arg.Any<CancellationToken>())
@@ -109,30 +121,33 @@ public sealed class ProCursorIndexCoordinatorTests
         Assert.Equal(ProCursorIndexJobStatus.Completed, job.Status);
         Assert.Equal("commit-1", trackedBranch.LastIndexedCommitSha);
         Assert.False(Directory.Exists(rootDirectory));
-        await snapshotRepository.Received(1).AddAsync(
-            Arg.Is<ProCursorIndexSnapshot>(snapshot =>
-                snapshot.KnowledgeSourceId == source.Id &&
-                snapshot.TrackedBranchId == trackedBranch.Id &&
-                snapshot.CommitSha == "commit-1"),
-            Arg.Any<CancellationToken>());
-        await snapshotRepository.Received(1).ReplaceKnowledgeChunksAsync(
-            Arg.Any<Guid>(),
-            Arg.Is<IReadOnlyList<ProCursorKnowledgeChunk>>(chunks =>
-                chunks.Count == 1 &&
-                chunks[0].SourcePath == "/src/Program.cs" &&
-                chunks[0].ContentText.Contains("Token caching", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
-        await embeddingService.Received(1).GenerateEmbeddingsAsync(
-            source.ClientId,
-            Arg.Any<IReadOnlyList<string>>(),
-            Arg.Is<ProCursorEmbeddingUsageContext?>(context =>
-                context != null &&
-                context.ProCursorSourceId == source.Id &&
-                context.IndexJobId == job.Id &&
-                context.RequestIdPrefix == $"pcidx:{job.Id:N}" &&
-                context.InputContexts != null &&
-                context.InputContexts.Count == 1 &&
-                context.InputContexts[0].SourcePath == "/src/Program.cs"),
-            Arg.Any<CancellationToken>());
+        await snapshotRepository.Received(1)
+            .AddAsync(
+                Arg.Is<ProCursorIndexSnapshot>(snapshot =>
+                    snapshot.KnowledgeSourceId == source.Id &&
+                    snapshot.TrackedBranchId == trackedBranch.Id &&
+                    snapshot.CommitSha == "commit-1"),
+                Arg.Any<CancellationToken>());
+        await snapshotRepository.Received(1)
+            .ReplaceKnowledgeChunksAsync(
+                Arg.Any<Guid>(),
+                Arg.Is<IReadOnlyList<ProCursorKnowledgeChunk>>(chunks =>
+                    chunks.Count == 1 &&
+                    chunks[0].SourcePath == "/src/Program.cs" &&
+                    chunks[0].ContentText.Contains("Token caching", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
+        await embeddingService.Received(1)
+            .GenerateEmbeddingsAsync(
+                source.ClientId,
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Is<ProCursorEmbeddingUsageContext?>(context =>
+                    context != null &&
+                    context.ProCursorSourceId == source.Id &&
+                    context.IndexJobId == job.Id &&
+                    context.RequestIdPrefix == $"pcidx:{job.Id:N}" &&
+                    context.InputContexts != null &&
+                    context.InputContexts.Count == 1 &&
+                    context.InputContexts[0].SourcePath == "/src/Program.cs"),
+                Arg.Any<CancellationToken>());
     }
 }

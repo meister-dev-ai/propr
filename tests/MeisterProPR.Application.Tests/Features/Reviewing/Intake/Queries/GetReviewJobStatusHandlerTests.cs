@@ -31,7 +31,9 @@ public sealed class GetReviewJobStatusHandlerTests
         {
             Status = JobStatus.Completed,
             CompletedAt = DateTimeOffset.UtcNow,
-            Result = new ReviewResult("Looks good", [new ReviewComment("file.cs", 12, CommentSeverity.Warning, "Double check null handling")]),
+            Result = new ReviewResult(
+                "Looks good",
+                [new ReviewComment("file.cs", 12, CommentSeverity.Warning, "Double check null handling")]),
         };
 
         var store = Substitute.For<IReviewJobIntakeStore>();

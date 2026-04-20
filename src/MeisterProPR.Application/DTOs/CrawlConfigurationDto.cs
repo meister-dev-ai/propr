@@ -9,10 +9,11 @@ namespace MeisterProPR.Application.DTOs;
 /// <summary>Data transfer object for a crawl configuration.</summary>
 /// <param name="Id">Unique identifier.</param>
 /// <param name="ClientId">Owning client ID.</param>
-/// <param name="OrganizationUrl">ADO organisation URL.</param>
-/// <param name="ProjectId">ADO project ID.</param>
+/// <param name="Provider">Source control management provider.</param>
+/// <param name="ProviderScopePath">Provider-specific scope path or URL used to enumerate crawl targets.</param>
+/// <param name="ProviderProjectKey">Provider-specific project, workspace, or namespace key within the selected scope.</param>
 /// <param name="ReviewerId">
-///     ADO identity GUID of the service account reviewer; null if not configured on the owning
+///     Reviewer identity GUID of the configured service account when available; null if not configured on the owning
 ///     client.
 /// </param>
 /// <param name="CrawlIntervalSeconds">Polling interval in seconds.</param>
@@ -28,8 +29,9 @@ namespace MeisterProPR.Application.DTOs;
 public sealed record CrawlConfigurationDto(
     Guid Id,
     Guid ClientId,
-    string OrganizationUrl,
-    string ProjectId,
+    ScmProvider Provider,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     Guid? ReviewerId,
     int CrawlIntervalSeconds,
     bool IsActive,
@@ -42,7 +44,7 @@ public sealed record CrawlConfigurationDto(
 
 /// <summary>Data transfer object for a crawl repository filter entry.</summary>
 /// <param name="Id">Unique identifier.</param>
-/// <param name="RepositoryName">Plain ADO repository display name (case-insensitive match).</param>
+/// <param name="RepositoryName">Provider repository display name snapshot used for case-insensitive matching.</param>
 /// <param name="TargetBranchPatterns">Glob patterns for target branch matching. Empty = all branches.</param>
 /// <param name="CanonicalSourceRef">Provider-aware canonical source reference for the selected repository, when available.</param>
 /// <param name="DisplayName">Human-readable repository display snapshot used by guided configuration.</param>

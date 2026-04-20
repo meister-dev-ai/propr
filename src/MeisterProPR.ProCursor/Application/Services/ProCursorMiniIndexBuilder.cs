@@ -98,7 +98,9 @@ public sealed class ProCursorMiniIndexBuilder(
         }
     }
 
-    private async Task<ProCursorKnowledgeSource?> ResolveSourceAsync(ProCursorSymbolQueryRequest request, CancellationToken ct)
+    private async Task<ProCursorKnowledgeSource?> ResolveSourceAsync(
+        ProCursorSymbolQueryRequest request,
+        CancellationToken ct)
     {
         var sources = await knowledgeSourceRepository.ListByClientAsync(request.ClientId, ct);
         return sources
@@ -106,7 +108,10 @@ public sealed class ProCursorMiniIndexBuilder(
             .Where(source => source.SourceKind == ProCursorSourceKind.Repository)
             .Where(source => !request.SourceId.HasValue || source.Id == request.SourceId.Value)
             .FirstOrDefault(source =>
-                string.Equals(source.RepositoryId, request.ReviewContext!.RepositoryId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(
+                    source.RepositoryId,
+                    request.ReviewContext!.RepositoryId,
+                    StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ShouldExtractSymbols(ProCursorKnowledgeSource source)

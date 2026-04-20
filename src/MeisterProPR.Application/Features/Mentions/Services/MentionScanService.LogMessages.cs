@@ -14,7 +14,8 @@ public sealed partial class MentionScanService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "MentionScanService: skipping config {ConfigId} for client {ClientId} — reviewer identity not configured")]
+        Message =
+            "MentionScanService: skipping config {ConfigId} for client {ClientId} — reviewer identity not configured")]
     private static partial void LogSkippedNoReviewerId(ILogger logger, Guid configId, Guid clientId);
 
     [LoggerMessage(
@@ -39,12 +40,18 @@ public sealed partial class MentionScanService
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "MentionScanService: PR #{PullRequestId} thread {ThreadId} comment {CommentId} already has a job — skipping")]
-    private static partial void LogDuplicateMentionSkipped(ILogger logger, int pullRequestId, int threadId, int commentId);
+        Message =
+            "MentionScanService: PR #{PullRequestId} thread {ThreadId} comment {CommentId} already has a job — skipping")]
+    private static partial void LogDuplicateMentionSkipped(
+        ILogger logger,
+        int pullRequestId,
+        int threadId,
+        int commentId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "MentionScanService: enqueued mention reply job for PR #{PullRequestId} thread {ThreadId} comment {CommentId}")]
+        Message =
+            "MentionScanService: enqueued mention reply job for PR #{PullRequestId} thread {ThreadId} comment {CommentId}")]
     private static partial void LogMentionEnqueued(ILogger logger, int pullRequestId, int threadId, int commentId);
 
     [LoggerMessage(

@@ -10,7 +10,6 @@ using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
-using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -77,13 +76,14 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         var sourceA = Guid.NewGuid();
         var sourceB = Guid.NewGuid();
         var job = MakeJob();
-        this._dbContext.Clients.Add(new ClientRecord
-        {
-            Id = job.ClientId,
-            DisplayName = "Test Client",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = job.ClientId,
+                DisplayName = "Test Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         this._dbContext.ProCursorKnowledgeSources.AddRange(
             new ProCursorKnowledgeSource(
                 sourceA,
@@ -151,7 +151,13 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
         await Task.Delay(10);
 
-        var job2 = MakeJob(job1.ClientId, job1.OrganizationUrl, job1.ProjectId, job1.RepositoryId, job1.PullRequestId, job1.IterationId);
+        var job2 = MakeJob(
+            job1.ClientId,
+            job1.OrganizationUrl,
+            job1.ProjectId,
+            job1.RepositoryId,
+            job1.PullRequestId,
+            job1.IterationId);
         await this._repo.AddAsync(job2);
         await this._repo.TryTransitionAsync(job2.Id, JobStatus.Pending, JobStatus.Processing);
         await this._repo.SetResultAsync(job2.Id, new ReviewResult("summary 2", []));

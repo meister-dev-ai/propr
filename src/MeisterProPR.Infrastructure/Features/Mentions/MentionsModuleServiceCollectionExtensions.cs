@@ -21,7 +21,10 @@ public static class MentionsModuleServiceCollectionExtensions
     /// <summary>
     ///     Registers mention scan, reply, and AI answer services.
     /// </summary>
-    public static IServiceCollection AddMentionsModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
+    public static IServiceCollection AddMentionsModule(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         if (configuration.HasDatabaseConnectionString())
         {

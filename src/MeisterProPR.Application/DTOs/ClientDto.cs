@@ -14,9 +14,6 @@ public sealed record ClientDto(
     string DisplayName,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    bool HasAdoCredentials,
-    string? AdoTenantId,
-    string? AdoClientId,
     Guid? ReviewerId,
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage);

@@ -3,15 +3,16 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -38,11 +39,13 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         await factory.SeedUserAsync("alice", "CorrectPassword1!");
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/auth/login", new
-        {
-            username = "alice",
-            password = "CorrectPassword1!",
-        });
+        var response = await client.PostAsJsonAsync(
+            "/auth/login",
+            new
+            {
+                username = "alice",
+                password = "CorrectPassword1!",
+            });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
@@ -64,10 +67,12 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         await factory.SeedRefreshTokenAsync(user.Id, rawRefreshToken);
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/auth/refresh", new
-        {
-            refreshToken = rawRefreshToken,
-        });
+        var response = await client.PostAsJsonAsync(
+            "/auth/refresh",
+            new
+            {
+                refreshToken = rawRefreshToken,
+            });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
@@ -85,7 +90,9 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(user.Id, AppUserRole.User));
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(user.Id, AppUserRole.User));
 
         var response = await client.SendAsync(request);
 
@@ -105,12 +112,15 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         var client = factory.CreateClient();
 
         using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/users/me/pats");
-        createRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(user.Id, AppUserRole.User));
-        createRequest.Content = JsonContent.Create(new
-        {
-            label = "Integration PAT",
-            expiresAt = (DateTimeOffset?)null,
-        });
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(user.Id, AppUserRole.User));
+        createRequest.Content = JsonContent.Create(
+            new
+            {
+                label = "Integration PAT",
+                expiresAt = (DateTimeOffset?)null,
+            });
 
         var createResponse = await client.SendAsync(createRequest);
         Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
@@ -121,20 +131,28 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         Assert.StartsWith("mpr_", token, StringComparison.Ordinal);
 
         using var listRequest = new HttpRequestMessage(HttpMethod.Get, "/users/me/pats");
-        listRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(user.Id, AppUserRole.User));
+        listRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(user.Id, AppUserRole.User));
         var listResponse = await client.SendAsync(listRequest);
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var listed = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync()).RootElement.EnumerateArray().ToList();
+        var listed = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .ToList();
         Assert.Single(listed);
         Assert.Equal("Integration PAT", listed[0].GetProperty("label").GetString());
 
         using var revokeRequest = new HttpRequestMessage(HttpMethod.Delete, $"/users/me/pats/{patId}");
-        revokeRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(user.Id, AppUserRole.User));
+        revokeRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(user.Id, AppUserRole.User));
         var revokeResponse = await client.SendAsync(revokeRequest);
         Assert.Equal(HttpStatusCode.NoContent, revokeResponse.StatusCode);
 
         using var secondListRequest = new HttpRequestMessage(HttpMethod.Get, "/users/me/pats");
-        secondListRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(user.Id, AppUserRole.User));
+        secondListRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(user.Id, AppUserRole.User));
         var secondListResponse = await client.SendAsync(secondListRequest);
         var secondListed = JsonDocument.Parse(await secondListResponse.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(0, secondListed.GetArrayLength());
@@ -148,25 +166,34 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         var client = factory.CreateClient();
 
         using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/admin/identity/users");
-        createRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
-        createRequest.Content = JsonContent.Create(new
-        {
-            username = "erin",
-            password = "CorrectPassword1!",
-        });
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
+        createRequest.Content = JsonContent.Create(
+            new
+            {
+                username = "erin",
+                password = "CorrectPassword1!",
+            });
 
         var createResponse = await client.SendAsync(createRequest);
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
 
         using var listRequest = new HttpRequestMessage(HttpMethod.Get, "/admin/identity/users");
-        listRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
+        listRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
 
         var listResponse = await client.SendAsync(listRequest);
 
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var listed = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync()).RootElement.EnumerateArray().ToList();
-        Assert.Contains(listed, item => string.Equals(item.GetProperty("username").GetString(), "erin", StringComparison.Ordinal));
+        var listed = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .ToList();
+        Assert.Contains(
+            listed,
+            item => string.Equals(item.GetProperty("username").GetString(), "erin", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -180,19 +207,24 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         var client = factory.CreateClient();
 
         using var assignRequest = new HttpRequestMessage(HttpMethod.Post, $"/admin/identity/users/{user.Id}/clients");
-        assignRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
-        assignRequest.Content = JsonContent.Create(new
-        {
-            clientId,
-            role = (int)ClientRole.ClientAdministrator,
-        });
+        assignRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
+        assignRequest.Content = JsonContent.Create(
+            new
+            {
+                clientId,
+                role = (int)ClientRole.ClientAdministrator,
+            });
 
         var assignResponse = await client.SendAsync(assignRequest);
 
         Assert.Equal(HttpStatusCode.NoContent, assignResponse.StatusCode);
 
         using var detailRequest = new HttpRequestMessage(HttpMethod.Get, $"/admin/identity/users/{user.Id}");
-        detailRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
+        detailRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), AppUserRole.Admin));
 
         var detailResponse = await client.SendAsync(detailRequest);
 
@@ -214,7 +246,8 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", role.ToString()),
                     new Claim(JwtRegisteredClaimNames.UniqueName, "test-user"),
@@ -267,14 +300,15 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
             using var scope = this.Services.CreateScope();
             var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
 
-            await userRepository.AddClientAssignmentAsync(new UserClientRole
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                ClientId = clientId,
-                Role = role,
-                AssignedAt = DateTimeOffset.UtcNow,
-            });
+            await userRepository.AddClientAssignmentAsync(
+                new UserClientRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    ClientId = clientId,
+                    Role = role,
+                    AssignedAt = DateTimeOffset.UtcNow,
+                });
         }
 
         public async Task SeedClientAsync(Guid clientId)
@@ -286,13 +320,14 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
                 return;
             }
 
-            db.Clients.Add(new ClientRecord
-            {
-                Id = clientId,
-                DisplayName = "Identity Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    DisplayName = "Identity Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             await db.SaveChangesAsync();
         }
 
@@ -300,14 +335,15 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         {
             using var scope = this.Services.CreateScope();
             var refreshTokens = scope.ServiceProvider.GetRequiredService<IRefreshTokenRepository>();
-            await refreshTokens.AddAsync(new RefreshToken
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                TokenHash = ComputeSha256(rawRefreshToken),
-                ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            await refreshTokens.AddAsync(
+                new RefreshToken
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TokenHash = ComputeSha256(rawRefreshToken),
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -328,23 +364,21 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
                 services.AddSingleton<IPasswordHashService, PasswordHashService>();
 
                 services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
-                services.AddDbContextFactory<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
 
                 services.AddScoped<IUserRepository, AppUserRepository>();
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
                 services.AddScoped<IUserPatRepository, UserPatRepository>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IPrStatusFetcher>());
                 services.AddSingleton(Substitute.For<IThreadMemoryService>());
-                services.AddSingleton(Substitute.For<IClientAdoCredentialRepository>());
-
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
                 services.AddSingleton(Substitute.For<IJobRepository>());

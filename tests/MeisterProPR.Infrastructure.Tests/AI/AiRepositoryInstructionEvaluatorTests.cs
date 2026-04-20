@@ -7,7 +7,6 @@ using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -19,7 +18,11 @@ public class AiRepositoryInstructionEvaluatorTests
 {
     private static RepositoryInstruction CreateInstruction(string fileName, string description, string whenToUse)
     {
-        return new RepositoryInstruction(fileName, description, whenToUse, $"\"\"\"\ndescription: {description}\nwhen-to-use: {whenToUse}\n\"\"\"\nBody text.");
+        return new RepositoryInstruction(
+            fileName,
+            description,
+            whenToUse,
+            $"\"\"\"\ndescription: {description}\nwhen-to-use: {whenToUse}\n\"\"\"\nBody text.");
     }
 
     private static ChatResponse CreateRelevantResponse(IReadOnlyList<string> relevantFileNames)
@@ -62,10 +65,16 @@ public class AiRepositoryInstructionEvaluatorTests
     {
         // Arrange
         var mockClient = Substitute.For<IChatClient>();
-        var instruction = CreateInstruction("instructions-csharp.md", "C# coding standards", "When reviewing .cs files");
+        var instruction = CreateInstruction(
+            "instructions-csharp.md",
+            "C# coding standards",
+            "When reviewing .cs files");
 
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateRelevantResponse(["instructions-csharp.md"]));
 
         var sut = new AiRepositoryInstructionEvaluator(
@@ -89,10 +98,16 @@ public class AiRepositoryInstructionEvaluatorTests
     {
         // Arrange — LLM says no instructions are relevant
         var mockClient = Substitute.For<IChatClient>();
-        var instruction = CreateInstruction("instructions-database.md", "Database migration rules", "When reviewing SQL or migration files");
+        var instruction = CreateInstruction(
+            "instructions-database.md",
+            "Database migration rules",
+            "When reviewing SQL or migration files");
 
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateRelevantResponse([])); // empty relevant list
 
         var sut = new AiRepositoryInstructionEvaluator(
@@ -121,7 +136,10 @@ public class AiRepositoryInstructionEvaluatorTests
 
         // LLM returns only csharp and security as relevant
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateRelevantResponse(["instructions-csharp.md", "instructions-security.md"]));
 
         var sut = new AiRepositoryInstructionEvaluator(
@@ -148,7 +166,10 @@ public class AiRepositoryInstructionEvaluatorTests
         // Arrange — LLM returns unexpected/malformed JSON
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "this is not valid json")));
 
         var instruction = CreateInstruction("instructions-test.md", "Test rules", "For test files");

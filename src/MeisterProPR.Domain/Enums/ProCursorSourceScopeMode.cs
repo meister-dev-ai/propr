@@ -8,6 +8,13 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum ProCursorSourceScopeMode
 {
+    /// <summary>
+    ///     All sources available to the client are included in the crawl configuration.
+    /// </summary>
     AllClientSources = 0,
+
+    /// <summary>
+    ///     Only selected sources are included in the crawl configuration.
+    /// </summary>
     SelectedSources = 1,
 }

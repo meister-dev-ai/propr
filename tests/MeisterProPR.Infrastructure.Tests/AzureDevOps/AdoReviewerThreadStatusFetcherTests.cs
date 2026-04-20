@@ -4,7 +4,7 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
@@ -18,20 +18,28 @@ public sealed class AdoReviewerThreadStatusFetcherTests
     private static AdoReviewerThreadStatusFetcher BuildSut(GitHttpClient gitClient, Guid? authorizedIdentityId)
     {
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var credRepo = Substitute.For<IClientAdoCredentialRepository>();
-        credRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(null));
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
 
-        var fetcher = new AdoReviewerThreadStatusFetcher(factory, credRepo, NullLogger<AdoReviewerThreadStatusFetcher>.Instance);
+        var fetcher = new AdoReviewerThreadStatusFetcher(
+            factory,
+            connectionRepository,
+            NullLogger<AdoReviewerThreadStatusFetcher>.Instance);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
         fetcher.AuthorizedIdentityResolver = (_, _) => Task.FromResult(authorizedIdentityId);
         return fetcher;
     }
 
-    private static GitHttpClient MakeGitClient() =>
-        Substitute.For<GitHttpClient>(
+    private static GitHttpClient MakeGitClient()
+    {
+        return Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
             new VssCredentials());
+    }
 
     private static Comment CreateComment(
         string authorName,
@@ -136,18 +144,20 @@ public sealed class AdoReviewerThreadStatusFetcherTests
                 Arg.Any<int?>(),
                 Arg.Any<object>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new List<GitPullRequestCommentThread>
-            {
-                new()
-                {
-                    Id = 7,
-                    Status = CommentThreadStatus.Active,
-                    Comments = new List<Comment>
+            .Returns(
+                Task.FromResult(
+                    new List<GitPullRequestCommentThread>
                     {
-                        CreateComment("Bot", servicePrincipalId, "Please fix this."),
-                    },
-                },
-            }));
+                        new()
+                        {
+                            Id = 7,
+                            Status = CommentThreadStatus.Active,
+                            Comments = new List<Comment>
+                            {
+                                CreateComment("Bot", servicePrincipalId, "Please fix this."),
+                            },
+                        },
+                    }));
 
         var sut = BuildSut(gitClient, null);
 

@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MeisterProPR.Infrastructure.Data.Configurations;
 
-internal sealed class AiConnectionModelCapabilityEntityTypeConfiguration : IEntityTypeConfiguration<AiConnectionModelCapabilityRecord>
+internal sealed class
+    AiConnectionModelCapabilityEntityTypeConfiguration : IEntityTypeConfiguration<AiConnectionModelCapabilityRecord>
 {
     public void Configure(EntityTypeBuilder<AiConnectionModelCapabilityRecord> builder)
     {

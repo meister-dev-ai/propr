@@ -24,17 +24,36 @@ public sealed class MentionReplyServiceTests
     private readonly IMentionReplyJobRepository _jobRepository = Substitute.For<IMentionReplyJobRepository>();
 
     private readonly IPullRequestFetcher _prFetcher = Substitute.For<IPullRequestFetcher>();
+
+    private readonly IProviderActivationService _providerActivationService =
+        Substitute.For<IProviderActivationService>();
+
+    private readonly IScmProviderRegistry _providerRegistry = Substitute.For<IScmProviderRegistry>();
     private readonly MentionReplyService _sut;
-    private readonly IAdoThreadReplier _threadReplier = Substitute.For<IAdoThreadReplier>();
+    private readonly IReviewThreadReplyPublisher _threadReplier = Substitute.For<IReviewThreadReplyPublisher>();
 
     public MentionReplyServiceTests()
     {
+        this._threadReplier.Provider.Returns(ScmProvider.AzureDevOps);
+        this._threadReplier.ReplyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        this._providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>())
+            .Returns(this._threadReplier);
+
         this._sut = new MentionReplyService(
             this._prFetcher,
             this._jobRepository,
             this._answerService,
-            this._threadReplier,
-            NullLogger<MentionReplyService>.Instance);
+            this._providerRegistry,
+            NullLogger<MentionReplyService>.Instance,
+            this._providerActivationService);
+
+        this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     private static MentionReplyJob MakeJob(
@@ -88,7 +107,12 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
 
         // Act
@@ -97,13 +121,9 @@ public sealed class MentionReplyServiceTests
         // Assert: reply was posted and job marked completed
         await this._threadReplier.Received(1)
             .ReplyAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                job.ThreadId,
-                answer,
                 job.ClientId,
+                job.ReviewThreadReference,
+                answer,
                 Arg.Any<CancellationToken>());
         await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
     }
@@ -121,7 +141,7 @@ public sealed class MentionReplyServiceTests
 
         // Assert: no PR fetch, no reply, no state change
         await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(null!, null!, null!, 0, 0, null!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
     }
 
     [Fact]
@@ -143,7 +163,12 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<InvalidOperationException>();
 
         // Act
@@ -155,7 +180,7 @@ public sealed class MentionReplyServiceTests
                 job.Id,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>());
-        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(null!, null!, null!, 0, 0, null!);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
     }
 
     [Fact]
@@ -178,16 +203,17 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pr);
-        this._answerService.AnswerAsync(Arg.Any<PullRequest>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._answerService.AnswerAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
         this._threadReplier.ReplyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<string>(),
-                Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<HttpRequestException>();
 
@@ -199,6 +225,27 @@ public sealed class MentionReplyServiceTests
             .SetFailedAsync(
                 job.Id,
                 Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DisabledProvider_MarksJobFailedWithoutFetchingPullRequest()
+    {
+        var job = MakeJob();
+
+        this._jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing)
+            .Returns(true);
+        this._providerActivationService.IsEnabledAsync(job.Provider, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        await this._sut.ProcessAsync(job);
+
+        await this._prFetcher.DidNotReceiveWithAnyArgs().FetchAsync(null!, null!, null!, 0, 0);
+        await this._threadReplier.DidNotReceiveWithAnyArgs().ReplyAsync(default, default!, default!);
+        await this._jobRepository.Received(1)
+            .SetFailedAsync(
+                job.Id,
+                Arg.Is<string>(message => message.Contains("disabled", StringComparison.OrdinalIgnoreCase)),
                 Arg.Any<CancellationToken>());
     }
 }

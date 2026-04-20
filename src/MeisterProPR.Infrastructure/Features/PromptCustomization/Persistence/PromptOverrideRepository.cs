@@ -8,28 +8,13 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MeisterProPR.Infrastructure.Features.PromptCustomization.Persistence;
 
 /// <summary>Database-backed repository for per-client and per-crawl-config AI prompt overrides.</summary>
 public sealed class PromptOverrideRepository(MeisterProPRDbContext dbContext) : IPromptOverrideRepository
 {
-    private static PromptOverride ToEntity(PromptOverrideRecord record) =>
-        new(record.Id, record.ClientId, record.CrawlConfigId, record.Scope, record.PromptKey, record.OverrideText);
-
-    private static PromptOverrideRecord ToRecord(PromptOverride entity) =>
-        new()
-        {
-            Id = entity.Id,
-            ClientId = entity.ClientId,
-            CrawlConfigId = entity.CrawlConfigId,
-            Scope = entity.Scope,
-            PromptKey = entity.PromptKey,
-            OverrideText = entity.OverrideText,
-            CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt,
-        };
-
     /// <inheritdoc />
     public async Task<PromptOverride?> GetByScopeAsync(
         Guid clientId,
@@ -67,7 +52,13 @@ public sealed class PromptOverrideRepository(MeisterProPRDbContext dbContext) : 
             .Where(current => current.ClientId == clientId)
             .OrderBy(current => current.CreatedAt)
             .AsNoTracking()
-            .Select(record => new PromptOverride(record.Id, record.ClientId, record.CrawlConfigId, record.Scope, record.PromptKey, record.OverrideText))
+            .Select(record => new PromptOverride(
+                record.Id,
+                record.ClientId,
+                record.CrawlConfigId,
+                record.Scope,
+                record.PromptKey,
+                record.OverrideText))
             .ToListAsync(ct);
     }
 
@@ -79,7 +70,7 @@ public sealed class PromptOverrideRepository(MeisterProPRDbContext dbContext) : 
         {
             await dbContext.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
             throw new DuplicatePromptOverrideException();
         }
@@ -111,5 +102,31 @@ public sealed class PromptOverrideRepository(MeisterProPRDbContext dbContext) : 
         dbContext.PromptOverrides.Remove(record);
         await dbContext.SaveChangesAsync(ct);
         return true;
+    }
+
+    private static PromptOverride ToEntity(PromptOverrideRecord record)
+    {
+        return new PromptOverride(
+            record.Id,
+            record.ClientId,
+            record.CrawlConfigId,
+            record.Scope,
+            record.PromptKey,
+            record.OverrideText);
+    }
+
+    private static PromptOverrideRecord ToRecord(PromptOverride entity)
+    {
+        return new PromptOverrideRecord
+        {
+            Id = entity.Id,
+            ClientId = entity.ClientId,
+            CrawlConfigId = entity.CrawlConfigId,
+            Scope = entity.Scope,
+            PromptKey = entity.PromptKey,
+            OverrideText = entity.OverrideText,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+        };
     }
 }

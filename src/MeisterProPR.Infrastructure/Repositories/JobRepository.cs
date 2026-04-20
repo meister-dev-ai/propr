@@ -173,12 +173,13 @@ public sealed class JobRepository(
         {
             foreach (var sourceId in job.ProCursorSourceIds)
             {
-                dbContext.ReviewJobProCursorSourceScopes.Add(new ReviewJobProCursorSourceScopeRecord
-                {
-                    ReviewJobId = job.Id,
-                    ProCursorSourceId = sourceId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
+                dbContext.ReviewJobProCursorSourceScopes.Add(
+                    new ReviewJobProCursorSourceScopeRecord
+                    {
+                        ReviewJobId = job.Id,
+                        ProCursorSourceId = sourceId,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
             }
         }
 
@@ -297,7 +298,9 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
+        TimeSpan threshold,
+        CancellationToken ct = default)
     {
         var staleBeforeUtc = DateTimeOffset.UtcNow - threshold;
         var jobs = await dbContext.ReviewJobs
@@ -331,7 +334,9 @@ public sealed class JobRepository(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
-        string organizationUrl, string projectId, CancellationToken ct = default)
+        string organizationUrl,
+        string projectId,
+        CancellationToken ct = default)
     {
         var jobs = await dbContext.ReviewJobs
             .Where(j => j.OrganizationUrl == organizationUrl &&
@@ -385,7 +390,13 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task UpdatePrContextAsync(Guid id, string? prTitle, string? prRepositoryName, string? prSourceBranch, string? prTargetBranch, CancellationToken ct = default)
+    public async Task UpdatePrContextAsync(
+        Guid id,
+        string? prTitle,
+        string? prRepositoryName,
+        string? prSourceBranch,
+        string? prTargetBranch,
+        CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
         if (job is null)
@@ -449,7 +460,9 @@ public sealed class JobRepository(
             .AsNoTracking()
             .ToList()
             .GroupBy(scope => scope.ReviewJobId)
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<Guid>)group.Select(scope => scope.ProCursorSourceId).ToList().AsReadOnly());
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<Guid>)group.Select(scope => scope.ProCursorSourceId).ToList().AsReadOnly());
 
         foreach (var job in jobs)
         {
@@ -475,7 +488,9 @@ public sealed class JobRepository(
 
         var groupedSourceIds = sourceIdsByJob
             .GroupBy(scope => scope.ReviewJobId)
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<Guid>)group.Select(scope => scope.ProCursorSourceId).ToList().AsReadOnly());
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<Guid>)group.Select(scope => scope.ProCursorSourceId).ToList().AsReadOnly());
 
         foreach (var job in jobs)
         {

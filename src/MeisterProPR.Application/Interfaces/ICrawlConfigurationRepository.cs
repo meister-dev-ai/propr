@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
 
@@ -11,6 +12,7 @@ public interface ICrawlConfigurationRepository
     /// <summary>Adds a new crawl configuration for the given client.</summary>
     Task<CrawlConfigurationDto> AddAsync(
         Guid clientId,
+        ScmProvider provider,
         string organizationUrl,
         string projectId,
         int crawlIntervalSeconds,
@@ -21,7 +23,13 @@ public interface ICrawlConfigurationRepository
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
 
     /// <summary>Returns true if a configuration with the same org/project/repo/branch already exists for the client.</summary>
-    Task<bool> ExistsAsync(Guid clientId, string organizationUrl, string projectId, string? repositoryId, string? branchFilter, CancellationToken ct = default);
+    Task<bool> ExistsAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string? repositoryId,
+        string? branchFilter,
+        CancellationToken ct = default);
 
     /// <summary>Returns all active crawl configurations across all clients.</summary>
     Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default);
@@ -34,7 +42,8 @@ public interface ICrawlConfigurationRepository
 
     /// <summary>Returns crawl configurations for all specified clients.</summary>
     Task<IReadOnlyList<CrawlConfigurationDto>> GetByClientIdsAsync(
-        IEnumerable<Guid> clientIds, CancellationToken ct = default);
+        IEnumerable<Guid> clientIds,
+        CancellationToken ct = default);
 
     /// <summary>Returns a single crawl configuration by its own primary-key ID, or <see langword="null" /> if not found.</summary>
     Task<CrawlConfigurationDto?> GetByIdAsync(Guid configId, CancellationToken ct = default);
@@ -65,7 +74,7 @@ public interface ICrawlConfigurationRepository
     /// </summary>
     Task<bool> UpdateSourceScopeAsync(
         Guid configId,
-        Domain.Enums.ProCursorSourceScopeMode scopeMode,
+        ProCursorSourceScopeMode scopeMode,
         IReadOnlyList<Guid> proCursorSourceIds,
         CancellationToken ct = default);
 }

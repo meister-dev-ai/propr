@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Workers;
 
@@ -66,7 +67,7 @@ public sealed partial class AdoPrCrawlerWorker(
         finally
         {
             sw.Stop();
-            metrics.CrawlDuration.Record(sw.Elapsed.TotalSeconds);
+            metrics.RecordCrawlDuration(ScmProvider.AzureDevOps, sw.Elapsed.TotalSeconds);
         }
     }
 
@@ -76,6 +77,8 @@ public sealed partial class AdoPrCrawlerWorker(
     [LoggerMessage(Level = LogLevel.Information, Message = "AdoPrCrawlerWorker stopped")]
     private static partial void LogWorkerStopped(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "AdoPrCrawlerWorker: unhandled exception in crawl cycle — worker continues")]
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "AdoPrCrawlerWorker: unhandled exception in crawl cycle — worker continues")]
     private static partial void LogCrawlCycleError(ILogger logger, Exception ex);
 }

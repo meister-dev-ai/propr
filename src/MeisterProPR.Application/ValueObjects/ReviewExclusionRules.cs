@@ -81,8 +81,10 @@ public sealed class ReviewExclusionRules
     ///     Creates a <see cref="ReviewExclusionRules" /> instance from a list of glob patterns
     ///     parsed from a repository's <c>.meister-propr/exclude</c> file.
     /// </summary>
-    public static ReviewExclusionRules FromPatterns(IReadOnlyList<string> patterns) =>
-        new(patterns, false);
+    public static ReviewExclusionRules FromPatterns(IReadOnlyList<string> patterns)
+    {
+        return new ReviewExclusionRules(patterns, false);
+    }
 
     /// <summary>
     ///     Returns <see langword="true" /> if <paramref name="filePath" /> matches any exclusion pattern.
@@ -105,8 +107,8 @@ public sealed class ReviewExclusionRules
     }
 
     /// <summary>
-    ///     Returns a human-readable description of the first matching pattern, or <see langword="null"/>
-    ///     when <paramref name="filePath"/> does not match any pattern.
+    ///     Returns a human-readable description of the first matching pattern, or <see langword="null" />
+    ///     when <paramref name="filePath" /> does not match any pattern.
     /// </summary>
     public string? GetMatchingPattern(string filePath)
     {

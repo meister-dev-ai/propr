@@ -3,9 +3,11 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
@@ -43,7 +45,7 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
     {
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
 
@@ -82,7 +84,8 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -110,10 +113,9 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 services.RemoveAll<IHostedService>();
 
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
@@ -121,7 +123,7 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
@@ -131,8 +133,6 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
 
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                services.AddSingleton(adoCredRepo);
                 services.AddSingleton(Substitute.For<IClientAdoOrganizationScopeRepository>());
                 services.AddSingleton(Substitute.For<IJobRepository>());
             });

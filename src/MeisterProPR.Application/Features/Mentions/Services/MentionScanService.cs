@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -19,10 +20,12 @@ public sealed partial class MentionScanService(
     ICrawlConfigurationRepository crawlConfigs,
     IActivePrFetcher activePrFetcher,
     IPullRequestFetcher pullRequestFetcher,
+    IClientRegistry clientRegistry,
     IMentionScanRepository scanRepository,
     IMentionReplyJobRepository jobRepository,
     ChannelWriter<MentionReplyJob> channelWriter,
-    ILogger<MentionScanService> logger) : IMentionScanService
+    ILogger<MentionScanService> logger,
+    IProviderActivationService? providerActivationService = null) : IMentionScanService
 {
     // Default look-back window for the first scan when no watermark exists.
     private static readonly TimeSpan InitialLookBack = TimeSpan.FromHours(1);
@@ -40,6 +43,12 @@ public sealed partial class MentionScanService(
                 break;
             }
 
+            if (providerActivationService is not null &&
+                !await providerActivationService.IsEnabledAsync(config.Provider, cancellationToken))
+            {
+                continue;
+            }
+
             await this.ScanConfigAsync(config, cancellationToken);
         }
     }
@@ -48,23 +57,35 @@ public sealed partial class MentionScanService(
     {
         if (config.ReviewerId is null)
         {
-            LogSkippedNoReviewerId(logger, config.Id, config.ClientId);
-            return;
+            var fallbackHost = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+            var fallbackReviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, fallbackHost, ct);
+            if (fallbackReviewer is null)
+            {
+                LogSkippedNoReviewerId(logger, config.Id, config.ClientId);
+                return;
+            }
         }
 
         try
         {
+            var reviewer = await this.ResolveReviewerIdentityAsync(config, ct);
+            if (reviewer is null)
+            {
+                LogSkippedNoReviewerId(logger, config.Id, config.ClientId);
+                return;
+            }
+
             var projectScan = await scanRepository.GetProjectScanAsync(config.Id, ct);
             var updatedAfter = projectScan?.LastScannedAt ?? DateTimeOffset.UtcNow.Subtract(InitialLookBack);
 
             var recentPrs = await activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
-                config.OrganizationUrl,
-                config.ProjectId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
                 updatedAfter,
                 config.ClientId,
                 ct);
 
-            LogPrsFound(logger, config.OrganizationUrl, config.ProjectId, recentPrs.Count);
+            LogPrsFound(logger, config.ProviderScopePath, config.ProviderProjectKey, recentPrs.Count);
 
             foreach (var pr in recentPrs)
             {
@@ -73,11 +94,14 @@ public sealed partial class MentionScanService(
                     break;
                 }
 
-                await this.ScanPrAsync(config, pr.RepositoryId, pr.PullRequestId, pr.LastUpdatedAt, config.ReviewerId.Value, ct);
+                await this.ScanPrAsync(config, reviewer, pr.RepositoryId, pr.PullRequestId, pr.LastUpdatedAt, ct);
             }
 
             // Advance the project-level watermark.
-            var updatedProjectScan = projectScan ?? new MentionProjectScan(Guid.NewGuid(), config.Id, DateTimeOffset.UtcNow);
+            var updatedProjectScan = projectScan ?? new MentionProjectScan(
+                Guid.NewGuid(),
+                config.Id,
+                DateTimeOffset.UtcNow);
 
             updatedProjectScan.LastScannedAt = DateTimeOffset.UtcNow;
             await scanRepository.UpsertProjectScanAsync(updatedProjectScan, ct);
@@ -90,10 +114,10 @@ public sealed partial class MentionScanService(
 
     private async Task ScanPrAsync(
         CrawlConfigurationDto config,
+        ReviewerIdentity reviewer,
         string repositoryId,
         int pullRequestId,
         DateTimeOffset prLastUpdatedAt,
-        Guid reviewerGuid,
         CancellationToken ct)
     {
         var prScan = await scanRepository.GetPrScanAsync(config.Id, repositoryId, pullRequestId, ct);
@@ -110,8 +134,8 @@ public sealed partial class MentionScanService(
         try
         {
             pullRequest = await pullRequestFetcher.FetchAsync(
-                config.OrganizationUrl,
-                config.ProjectId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
                 repositoryId,
                 pullRequestId,
                 1,
@@ -156,13 +180,19 @@ public sealed partial class MentionScanService(
                 // Log the raw content so we can see what ADO actually stores (helps detect format changes).
                 LogCommentContent(logger, thread.ThreadId, comment.CommentId, comment.Content);
 
-                if (!MentionDetector.IsMentioned(comment.Content, reviewerGuid))
+                if (!MentionDetector.IsMentioned(comment.Content, reviewer))
                 {
                     continue;
                 }
 
                 // Check for duplicate — unique constraint is the authoritative guard.
-                var alreadyExists = await jobRepository.ExistsForCommentAsync(config.ClientId, pullRequestId, thread.ThreadId, comment.CommentId, ct);
+                var alreadyExists = await jobRepository.ExistsForCommentAsync(
+                    config.ClientId,
+                    repositoryId,
+                    pullRequestId,
+                    thread.ThreadId,
+                    comment.CommentId,
+                    ct);
 
                 if (alreadyExists)
                 {
@@ -173,13 +203,51 @@ public sealed partial class MentionScanService(
                 var job = new MentionReplyJob(
                     Guid.NewGuid(),
                     config.ClientId,
-                    config.OrganizationUrl,
-                    config.ProjectId,
+                    config.ProviderScopePath,
+                    config.ProviderProjectKey,
                     repositoryId,
                     pullRequestId,
                     thread.ThreadId,
                     comment.CommentId,
-                    comment.Content);
+                    comment.Content,
+                    thread.FilePath,
+                    thread.LineNumber,
+                    comment.AuthorId,
+                    comment.AuthorName,
+                    comment.PublishedAt);
+
+                var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+                var repository = new RepositoryRef(
+                    host,
+                    repositoryId,
+                    config.ProviderProjectKey,
+                    ResolveRepositoryProjectPath(config, repositoryId, pullRequest));
+                var review = new CodeReviewRef(
+                    repository,
+                    CodeReviewPlatformKind.PullRequest,
+                    pullRequestId.ToString(),
+                    pullRequestId);
+                var threadRef = new ReviewThreadRef(
+                    review,
+                    thread.ThreadId.ToString(),
+                    thread.FilePath,
+                    thread.LineNumber,
+                    false);
+                var commentAuthorExternalUserId = comment.AuthorId?.ToString("D") ?? comment.AuthorName;
+                var commentRef = new ReviewCommentRef(
+                    threadRef,
+                    comment.CommentId.ToString(),
+                    new ReviewerIdentity(
+                        host,
+                        commentAuthorExternalUserId ?? reviewer.ExternalUserId,
+                        comment.AuthorName,
+                        comment.AuthorName,
+                        false),
+                    comment.PublishedAt);
+
+                job.SetProviderReviewContext(review);
+                job.SetReviewThreadContext(threadRef);
+                job.SetReviewCommentContext(commentRef);
 
                 await jobRepository.AddAsync(job, ct);
                 await channelWriter.WriteAsync(job, ct);
@@ -189,7 +257,12 @@ public sealed partial class MentionScanService(
         }
 
         // Update the PR-level watermark.
-        var updatedPrScan = prScan ?? new MentionPrScan(Guid.NewGuid(), config.Id, repositoryId, pullRequestId, latestCommentTimestamp);
+        var updatedPrScan = prScan ?? new MentionPrScan(
+            Guid.NewGuid(),
+            config.Id,
+            repositoryId,
+            pullRequestId,
+            latestCommentTimestamp);
 
         if (latestCommentTimestamp > DateTimeOffset.MinValue)
         {
@@ -205,5 +278,46 @@ public sealed partial class MentionScanService(
         {
             LogPrScanCompletedWithMentions(logger, pullRequestId, newMentionsEnqueued);
         }
+    }
+
+    private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(
+        CrawlConfigurationDto config,
+        CancellationToken ct)
+    {
+        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+        var reviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
+        if (reviewer is not null)
+        {
+            return reviewer;
+        }
+
+        if (config.Provider != ScmProvider.AzureDevOps || !config.ReviewerId.HasValue)
+        {
+            return null;
+        }
+
+        var reviewerId = config.ReviewerId.Value.ToString("D");
+        return new ReviewerIdentity(host, reviewerId, reviewerId, reviewerId, false);
+    }
+
+    private static string ResolveRepositoryProjectPath(
+        CrawlConfigurationDto config,
+        string repositoryId,
+        PullRequest pullRequest)
+    {
+        if (config.Provider == ScmProvider.AzureDevOps)
+        {
+            return config.ProviderProjectKey;
+        }
+
+        if (!string.IsNullOrWhiteSpace(pullRequest.RepositoryName) &&
+            pullRequest.RepositoryName.Contains('/', StringComparison.Ordinal))
+        {
+            return pullRequest.RepositoryName;
+        }
+
+        return string.IsNullOrWhiteSpace(config.ProviderProjectKey)
+            ? repositoryId
+            : $"{config.ProviderProjectKey.TrimEnd('/')}/{repositoryId}";
     }
 }

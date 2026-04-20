@@ -11,13 +11,13 @@ async function importClientTable() {
 }
 
 const sampleClients = [
-  { id: '1', displayName: 'Acme Corp', isActive: true, hasAdoCredentials: true, createdAt: '2024-01-01T00:00:00Z' },
-  { id: '2', displayName: 'Beta Ltd', isActive: false, hasAdoCredentials: false, createdAt: '2024-02-01T00:00:00Z' },
-  { id: '3', displayName: 'Gamma Inc', isActive: true, hasAdoCredentials: true, createdAt: '2024-03-01T00:00:00Z' },
+  { id: '1', displayName: 'Acme Corp', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
+  { id: '2', displayName: 'Beta Ltd', isActive: false, createdAt: '2024-02-01T00:00:00Z' },
+  { id: '3', displayName: 'Gamma Inc', isActive: true, createdAt: '2024-03-01T00:00:00Z' },
 ]
 
 describe('ClientTable', () => {
-  it('renders a row per client with displayName, status badge, and ADO badge', async () => {
+  it('renders a row per client with displayName and status badge', async () => {
     const ClientTable = await importClientTable()
     const wrapper = mount(ClientTable, {
       props: { clients: sampleClients, filter: '' },
@@ -27,7 +27,6 @@ describe('ClientTable', () => {
     expect(wrapper.text()).toContain('Gamma Inc')
     expect(wrapper.text()).toContain('Active')
     expect(wrapper.text()).toContain('Inactive')
-    expect(wrapper.text()).toContain('Configured')
   })
 
   it('filters rows by displayName matching the filter prop', async () => {

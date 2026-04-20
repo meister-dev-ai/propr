@@ -37,5 +37,7 @@ public sealed class SecretProtectionCodec(IDataProtectionProvider dataProtection
 
     /// <inheritdoc />
     public bool IsProtected(string value)
-        => !string.IsNullOrEmpty(value) && value.StartsWith(ProtectedPrefix, StringComparison.Ordinal);
+    {
+        return !string.IsNullOrEmpty(value) && value.StartsWith(ProtectedPrefix, StringComparison.Ordinal);
+    }
 }

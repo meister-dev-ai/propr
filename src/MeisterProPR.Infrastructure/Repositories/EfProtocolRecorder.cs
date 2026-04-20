@@ -23,7 +23,14 @@ public sealed class EfProtocolRecorder(
     ILogger<EfProtocolRecorder> logger) : IProtocolRecorder
 {
     /// <inheritdoc />
-    public async Task<Guid> BeginAsync(Guid jobId, int attemptNumber, string? label = null, Guid? fileResultId = null, AiConnectionModelCategory? connectionCategory = null, string? modelId = null, CancellationToken ct = default)
+    public async Task<Guid> BeginAsync(
+        Guid jobId,
+        int attemptNumber,
+        string? label = null,
+        Guid? fileResultId = null,
+        AiConnectionModelCategory? connectionCategory = null,
+        string? modelId = null,
+        CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var protocol = new ReviewJobProtocol
@@ -90,7 +97,8 @@ public sealed class EfProtocolRecorder(
         {
             await using var db = await contextFactory.CreateDbContextAsync(ct);
             var sample = $"args={arguments}";
-            var effectiveResult = iteration > 3 && !string.IsNullOrEmpty(result) && result.Length > ProtocolLimits.ToolResultExcerptMaxLength
+            var effectiveResult = iteration > 3 && !string.IsNullOrEmpty(result) &&
+                                  result.Length > ProtocolLimits.ToolResultExcerptMaxLength
                 ? string.Concat(result.AsSpan(0, ProtocolLimits.ToolResultExcerptMaxLength), " [TRUNCATED]")
                 : result;
             var ev = new ProtocolEvent
@@ -108,7 +116,11 @@ public sealed class EfProtocolRecorder(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to record tool call event for protocol {ProtocolId} tool {ToolName}", protocolId, toolName);
+            logger.LogWarning(
+                ex,
+                "Failed to record tool call event for protocol {ProtocolId} tool {ToolName}",
+                protocolId,
+                toolName);
         }
     }
 
@@ -258,7 +270,12 @@ public sealed class EfProtocolRecorder(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to record {EventCategory} event {EventName} for protocol {ProtocolId}", eventCategory, eventName, protocolId);
+            logger.LogWarning(
+                ex,
+                "Failed to record {EventCategory} event {EventName} for protocol {ProtocolId}",
+                eventCategory,
+                eventName,
+                protocolId);
         }
     }
 

@@ -16,7 +16,8 @@ public sealed partial class EfProCursorTokenUsageRecorder
     [LoggerMessage(
         EventId = 4101,
         Level = LogLevel.Debug,
-        Message = "Ignoring duplicate ProCursor token usage event detected during save for client {ClientId} request {RequestId}")]
+        Message =
+            "Ignoring duplicate ProCursor token usage event detected during save for client {ClientId} request {RequestId}")]
     private static partial void LogDuplicateCommittedIgnored(ILogger logger, Guid clientId, string requestId);
 
     [LoggerMessage(

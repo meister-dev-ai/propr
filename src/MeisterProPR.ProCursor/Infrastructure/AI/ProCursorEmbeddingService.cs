@@ -7,7 +7,6 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -30,7 +29,7 @@ public sealed class ProCursorEmbeddingService(
         _ = await embeddingDeploymentResolver.ResolveForClientAsync(
             clientId,
             this._options.EmbeddingDimensions,
-            allowDefaultFallback: true,
+            true,
             ct);
     }
 
@@ -49,7 +48,7 @@ public sealed class ProCursorEmbeddingService(
         var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
             clientId,
             this._options.EmbeddingDimensions,
-            allowDefaultFallback: true,
+            true,
             ct);
 
         var normalizedChunks = new List<ProCursorExtractedChunk>(chunks.Count);
@@ -87,7 +86,7 @@ public sealed class ProCursorEmbeddingService(
         var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
             clientId,
             this._options.EmbeddingDimensions,
-            allowDefaultFallback: true,
+            true,
             ct);
 
         var generator = embeddingGeneratorFactory.CreateGenerator(
@@ -133,9 +132,10 @@ public sealed class ProCursorEmbeddingService(
             }
 
             currentBatch.Add(input);
-            currentBatchContexts.Add(usageContext?.InputContexts is not null && usageContext.InputContexts.Count > index
-                ? usageContext.InputContexts[index]
-                : null);
+            currentBatchContexts.Add(
+                usageContext?.InputContexts is not null && usageContext.InputContexts.Count > index
+                    ? usageContext.InputContexts[index]
+                    : null);
             currentBatchTokenCount += tokenCount;
         }
 
@@ -175,8 +175,7 @@ public sealed class ProCursorEmbeddingService(
         var result = await generator.GenerateAsync(batch, cancellationToken: ct);
         if (result.Count != batch.Count)
         {
-            throw new InvalidOperationException(
-                $"Expected {batch.Count} embedding vectors but received {result.Count}.");
+            throw new InvalidOperationException($"Expected {batch.Count} embedding vectors but received {result.Count}.");
         }
 
         embeddings.AddRange(result.Select(item => item.Vector.ToArray()));
@@ -200,7 +199,10 @@ public sealed class ProCursorEmbeddingService(
                     capturedUsage.CompletionTokens,
                     capturedUsage.TotalTokens,
                     capturedUsage.TokensEstimated,
-                    CalculateEstimatedCost(capturedUsage.PromptTokens, capturedUsage.CompletionTokens, deployment.Capability),
+                    CalculateEstimatedCost(
+                        capturedUsage.PromptTokens,
+                        capturedUsage.CompletionTokens,
+                        deployment.Capability),
                     true,
                     deployment.Connection.Id,
                     usageContext.IndexJobId,
@@ -233,10 +235,10 @@ public sealed class ProCursorEmbeddingService(
         }
 
         var resolvedPromptTokens = inputTokens
-            ?? totalTokens
-            ?? estimatedPromptTokenCount;
+                                   ?? totalTokens
+                                   ?? estimatedPromptTokenCount;
         var resolvedCompletionTokens = outputTokens ?? 0;
-        var resolvedTotalTokens = totalTokens ?? (resolvedPromptTokens + resolvedCompletionTokens);
+        var resolvedTotalTokens = totalTokens ?? resolvedPromptTokens + resolvedCompletionTokens;
 
         if (resolvedTotalTokens < resolvedPromptTokens + resolvedCompletionTokens)
         {
@@ -260,12 +262,6 @@ public sealed class ProCursorEmbeddingService(
         var completionCost = capability.OutputCostPer1MUsd.GetValueOrDefault() * completionTokens / 1_000_000m;
         return promptCost + completionCost;
     }
-
-    private readonly record struct CapturedUsage(
-        long PromptTokens,
-        long CompletionTokens,
-        long TotalTokens,
-        bool TokensEstimated);
 
     private static IReadOnlyList<ProCursorExtractedChunk> SplitChunkToFitBudget(
         ProCursorExtractedChunk chunk,
@@ -395,7 +391,7 @@ public sealed class ProCursorEmbeddingService(
 
         while (low <= high)
         {
-            var mid = low + ((high - low) / 2);
+            var mid = low + (high - low) / 2;
             var tokenCount = EmbeddingTokenizerRegistry.CountTokens(tokenizerName, text[..mid]);
             if (tokenCount <= maxInputTokens)
             {
@@ -450,4 +446,10 @@ public sealed class ProCursorEmbeddingService(
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    private readonly record struct CapturedUsage(
+        long PromptTokens,
+        long CompletionTokens,
+        long TotalTokens,
+        bool TokensEstimated);
 }

@@ -12,13 +12,19 @@ namespace MeisterProPR.Application.Interfaces;
 public interface IClientAdoOrganizationScopeRepository
 {
     /// <summary>Returns all organization scopes for the given client.</summary>
-    Task<IReadOnlyList<ClientAdoOrganizationScopeDto>> GetByClientIdAsync(Guid clientId, CancellationToken ct = default);
+    Task<IReadOnlyList<ClientAdoOrganizationScopeDto>> GetByClientIdAsync(
+        Guid clientId,
+        CancellationToken ct = default);
 
     /// <summary>Returns one organization scope for the given client, or <see langword="null" /> if not found.</summary>
     Task<ClientAdoOrganizationScopeDto?> GetByIdAsync(Guid clientId, Guid scopeId, CancellationToken ct = default);
 
     /// <summary>Adds a new organization scope for the given client.</summary>
-    Task<ClientAdoOrganizationScopeDto?> AddAsync(Guid clientId, string organizationUrl, string? displayName, CancellationToken ct = default);
+    Task<ClientAdoOrganizationScopeDto?> AddAsync(
+        Guid clientId,
+        string organizationUrl,
+        string? displayName,
+        CancellationToken ct = default);
 
     /// <summary>Updates the URL, display name, or enabled state for an existing scope.</summary>
     Task<ClientAdoOrganizationScopeDto?> UpdateAsync(

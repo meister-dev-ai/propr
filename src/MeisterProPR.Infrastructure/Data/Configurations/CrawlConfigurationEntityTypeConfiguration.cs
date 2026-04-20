@@ -21,6 +21,11 @@ internal sealed class CrawlConfigurationEntityTypeConfiguration : IEntityTypeCon
             .HasColumnName("client_id")
             .IsRequired();
 
+        builder.Property(c => c.Provider)
+            .HasColumnName("provider")
+            .HasConversion<int>()
+            .HasDefaultValue(ScmProvider.AzureDevOps);
+
         builder.Property(c => c.OrganizationUrl)
             .HasColumnName("organization_url")
             .IsRequired();

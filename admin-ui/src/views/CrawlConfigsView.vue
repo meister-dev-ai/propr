@@ -60,8 +60,8 @@
                 {{ config.isActive ? 'Active' : 'Paused' }}
               </span>
             </td>
-            <td class="bold-cell">{{ config.projectId }}</td>
-            <td class="muted-cell">{{ config.organizationUrl }}</td>
+            <td class="bold-cell">{{ config.providerProjectKey }}</td>
+            <td class="muted-cell">{{ config.providerScopePath }}</td>
             <td>
               <div class="scope-stack">
                 <div class="scope-pill">
@@ -100,7 +100,7 @@
 
     <ConfirmDialog
       :open="!!deletingConfig"
-      :message="`Delete crawl configuration for ${deletingConfig?.projectId ?? 'this project'}? This cannot be undone.`"
+      :message="`Delete crawl configuration for ${deletingConfig?.providerProjectKey ?? 'this project'}? This cannot be undone.`"
       @confirm="confirmDelete"
       @cancel="deletingConfig = null"
     />

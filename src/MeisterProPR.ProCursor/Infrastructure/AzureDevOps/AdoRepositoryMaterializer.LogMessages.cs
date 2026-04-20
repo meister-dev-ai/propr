@@ -7,6 +7,14 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 
 public partial class AdoRepositoryMaterializer
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Materialized ProCursor repository source {SourceId} branch {BranchName} at commit {CommitSha} with {FileCount} files.")]
-    private static partial void LogMaterializedRepositorySource(ILogger logger, Guid sourceId, string branchName, string commitSha, int fileCount);
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message =
+            "Materialized ProCursor repository source {SourceId} branch {BranchName} at commit {CommitSha} with {FileCount} files.")]
+    private static partial void LogMaterializedRepositorySource(
+        ILogger logger,
+        Guid sourceId,
+        string branchName,
+        string commitSha,
+        int fileCount);
 }

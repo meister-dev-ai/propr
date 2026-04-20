@@ -6,6 +6,9 @@ endpoints below for automation and scripting.
 
 > NOTE: This file intentionally contains low-level `curl` examples. For UI-guided steps,
 > use the Admin UI (https://localhost:5443/) after first login.
+>
+> The `curl -k` examples below are for local development against the self-signed
+> `https://localhost:5443` endpoint only.
 
 ## Admin Authentication
 
@@ -56,7 +59,7 @@ curl -k -X DELETE https://localhost:5443/api/clients/<client-id>/ado-credentials
 Resolve and store a reviewer identity (VSS identity GUID):
 
 ```bash
-curl -k "https://localhost:5443/api/identities/resolve?orgUrl=https://dev.azure.com/my-org&displayName=My%20Service%20Principal" \
+curl -k "https://localhost:5443/api/identities/resolve?clientId=<client-id>&orgUrl=https://dev.azure.com/my-org&displayName=My%20Service%20Principal" \
   -H "Authorization: Bearer <accessToken>"
 
 # Store the chosen identity on the client
@@ -161,6 +164,124 @@ curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
 ```
 
 When `selectedSources` is used the chosen source IDs are snapshotted onto queued review jobs.
+
+## Webhook Configurations
+
+Webhook configurations are managed per client and can coexist with crawl configurations for the
+same repositories. The create response returns the listener URL and a one-time secret that must be
+copied into the Azure DevOps service-hook registration.
+
+For a user-focused walkthrough and configuration checklist, see [docs/webhooks.md](webhooks.md).
+
+```bash
+# List webhook configurations visible to the caller
+curl -k https://localhost:5443/admin/webhook-configurations \
+  -H "Authorization: Bearer <accessToken>"
+
+# Create a webhook configuration
+curl -k -X POST https://localhost:5443/admin/webhook-configurations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "clientId": "<client-id>",
+    "provider": "azureDevOps",
+    "organizationScopeId": "<scope-id>",
+    "projectId": "my-project",
+    "enabledEvents": [
+      "pullRequestCreated",
+      "pullRequestUpdated",
+      "pullRequestCommented"
+    ],
+    "repoFilters": [
+      {
+        "displayName": "platform-docs",
+        "canonicalSourceRef": {
+          "provider": "azureDevOps",
+          "value": "repo-1"
+        },
+        "targetBranchPatterns": ["main", "release/*"]
+      }
+    ]
+  }'
+```
+
+Expected create response highlights:
+
+- `listenerUrl`: public HTTPS path under `/webhooks/v1/providers/ado/{pathKey}`
+- `generatedSecret`: returned once at creation time
+- `repoFilters`: server-owned persisted repository and branch scope
+
+Inspect recent delivery history for one webhook configuration:
+
+```bash
+curl -k "https://localhost:5443/admin/webhook-configurations/<config-id>/deliveries?take=20" \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Each delivery-history entry records the sanitized incoming event summary, final outcome, response
+status, and the downstream actions that were invoked. Outcomes are:
+
+- `accepted`: the delivery triggered normal downstream routing
+- `ignored`: the delivery was valid but intentionally treated as a no-op
+- `rejected`: auth, path, scope, or payload validation failed
+- `failed`: validation succeeded but downstream activation or lifecycle sync failed after intake
+
+Update or delete an existing webhook configuration:
+
+```bash
+curl -k -X PATCH https://localhost:5443/admin/webhook-configurations/<config-id> \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "isActive": false,
+    "enabledEvents": ["pullRequestUpdated"],
+    "repoFilters": []
+  }'
+
+curl -k -X DELETE https://localhost:5443/admin/webhook-configurations/<config-id> \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+## Public Webhook Receiver
+
+Azure DevOps Web Hooks should target the one-time `listenerUrl` returned by webhook configuration
+creation and use Basic auth with the generated secret as the password.
+
+```bash
+curl -k -X POST https://localhost:5443/webhooks/v1/providers/ado/<path-key> \
+  -H "Authorization: Basic <base64(username:generated-secret)>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "eventType": "git.pullrequest.updated",
+    "resource": {
+      "pullRequestId": 42,
+      "repository": { "id": "repo-1" },
+      "sourceRefName": "refs/heads/feature/webhooks",
+      "targetRefName": "refs/heads/main",
+      "status": "active"
+    }
+  }'
+```
+
+The webhook receiver returns a compact acknowledgement payload when delivery validation succeeds,
+even if the event is intentionally ignored:
+
+```json
+{ "status": "accepted" }
+```
+
+```json
+{ "status": "ignored" }
+```
+
+After acknowledgement, the delivery history for the matching configuration records the sanitized
+event summary, final outcome, and shared synchronization actions. Webhook-triggered and
+crawler-triggered PR activity now converge on the same pull-request synchronization path before any
+review job is queued or cancelled.
+
+The receiver acknowledges authenticated deliveries quickly and returns a small status payload.
+Typical values are `accepted`, `ignored`, or `failed`. Repository and branch scope are always
+enforced from the saved webhook configuration, not from caller intent.
 
 ## Observability
 

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers;
 using MeisterProPR.Application.Interfaces;
@@ -35,7 +36,7 @@ public sealed class ReviewingModuleIntegrationTests(JobsControllerProtocolTests.
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
 
@@ -50,7 +51,7 @@ public sealed class ReviewingModuleIntegrationTests(JobsControllerProtocolTests.
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{Guid.NewGuid()}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
 

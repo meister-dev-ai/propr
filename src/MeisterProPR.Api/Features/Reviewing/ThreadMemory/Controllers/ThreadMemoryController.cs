@@ -104,21 +104,28 @@ public sealed partial class ThreadMemoryController(
 
         if (deleted && existing is not null)
         {
-            await this.ResetLastSeenStatusAsync(clientId, existing.RepositoryId, existing.PullRequestId, existing.ThreadId, ct);
+            await this.ResetLastSeenStatusAsync(
+                clientId,
+                existing.RepositoryId,
+                existing.PullRequestId,
+                existing.ThreadId,
+                ct);
 
-            await activityLog.AppendAsync(new MemoryActivityLogEntry
-            {
-                Id = Guid.NewGuid(),
-                ClientId = clientId,
-                ThreadId = existing.ThreadId,
-                RepositoryId = existing.RepositoryId,
-                PullRequestId = existing.PullRequestId,
-                Action = MemoryActivityAction.Removed,
-                PreviousStatus = "resolved",
-                CurrentStatus = "reset",
-                Reason = "admin_deleted",
-                OccurredAt = DateTimeOffset.UtcNow,
-            }, ct);
+            await activityLog.AppendAsync(
+                new MemoryActivityLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = clientId,
+                    ThreadId = existing.ThreadId,
+                    RepositoryId = existing.RepositoryId,
+                    PullRequestId = existing.PullRequestId,
+                    Action = MemoryActivityAction.Removed,
+                    PreviousStatus = "resolved",
+                    CurrentStatus = "reset",
+                    Reason = "admin_deleted",
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                ct);
 
             LogEmbeddingDeleted(logger, id, clientId);
         }
@@ -172,7 +179,8 @@ public sealed partial class ThreadMemoryController(
     }
 
     /// <summary>
-    ///     Returns a paginated list of memory activity log entries for the given client.</summary>
+    ///     Returns a paginated list of memory activity log entries for the given client.
+    /// </summary>
     /// <param name="clientId">Owning client ID. Required.</param>
     /// <param name="threadId">Optional: filter by thread ID.</param>
     /// <param name="pullRequestId">Optional: filter by pull request ID.</param>
@@ -216,20 +224,25 @@ public sealed partial class ThreadMemoryController(
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         var query = new MemoryActivityLogQuery(
-            ThreadId: threadId,
-            PullRequestId: pullRequestId,
-            RepositoryId: repositoryId,
-            Action: action,
-            FromDate: from,
-            ToDate: to,
-            Page: page,
-            PageSize: pageSize);
+            threadId,
+            pullRequestId,
+            repositoryId,
+            action,
+            from,
+            to,
+            page,
+            pageSize);
 
         var result = await activityLog.QueryAsync(clientId, query, ct);
         return this.Ok(result);
     }
 
-    private async Task ResetLastSeenStatusAsync(Guid clientId, string repositoryId, int pullRequestId, int threadId, CancellationToken ct)
+    private async Task ResetLastSeenStatusAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        int threadId,
+        CancellationToken ct)
     {
         try
         {
@@ -245,18 +258,23 @@ public sealed partial class ThreadMemoryController(
                 return;
             }
 
-            var updatedScan = new Domain.Entities.ReviewPrScan(
-                scan.Id, scan.ClientId, scan.RepositoryId, scan.PullRequestId, scan.LastProcessedCommitId);
+            var updatedScan = new ReviewPrScan(
+                scan.Id,
+                scan.ClientId,
+                scan.RepositoryId,
+                scan.PullRequestId,
+                scan.LastProcessedCommitId);
 
             foreach (var t in scan.Threads)
             {
-                updatedScan.Threads.Add(new Domain.Entities.ReviewPrScanThread
-                {
-                    ReviewPrScanId = scan.Id,
-                    ThreadId = t.ThreadId,
-                    LastSeenReplyCount = t.LastSeenReplyCount,
-                    LastSeenStatus = t.ThreadId == threadId ? null : t.LastSeenStatus,
-                });
+                updatedScan.Threads.Add(
+                    new ReviewPrScanThread
+                    {
+                        ReviewPrScanId = scan.Id,
+                        ThreadId = t.ThreadId,
+                        LastSeenReplyCount = t.LastSeenReplyCount,
+                        LastSeenStatus = t.ThreadId == threadId ? null : t.LastSeenStatus,
+                    });
             }
 
             await scanRepository.UpsertAsync(updatedScan, ct);
@@ -267,17 +285,31 @@ public sealed partial class ThreadMemoryController(
         }
     }
 
-    private static ThreadMemoryRecordDto ToDto(ThreadMemoryRecord r) =>
-        new(r.Id, r.ClientId, r.ThreadId, r.RepositoryId, r.PullRequestId,
-            r.FilePath, r.ResolutionSummary, r.CreatedAt, r.UpdatedAt);
+    private static ThreadMemoryRecordDto ToDto(ThreadMemoryRecord r)
+    {
+        return new ThreadMemoryRecordDto(
+            r.Id,
+            r.ClientId,
+            r.ThreadId,
+            r.RepositoryId,
+            r.PullRequestId,
+            r.FilePath,
+            r.ResolutionSummary,
+            r.CreatedAt,
+            r.UpdatedAt);
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Embedding {Id} deleted by admin for client {ClientId}")]
     private static partial void LogEmbeddingDeleted(ILogger logger, Guid id, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Finding dismissal memory record {Id} created for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Finding dismissal memory record {Id} created for client {ClientId}")]
     private static partial void LogDismissalCreated(ILogger logger, Guid id, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to reset last_seen_status for thread {ThreadId} after admin deletion")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to reset last_seen_status for thread {ThreadId} after admin deletion")]
     private static partial void LogResetLastSeenStatusFailed(ILogger logger, int threadId, Exception ex);
 }
 

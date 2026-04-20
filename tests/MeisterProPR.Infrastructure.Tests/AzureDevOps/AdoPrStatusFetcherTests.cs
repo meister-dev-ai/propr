@@ -5,7 +5,7 @@ using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
@@ -19,18 +19,23 @@ public sealed class AdoPrStatusFetcherTests
     private static AdoPrStatusFetcher BuildSut(GitHttpClient gitClient)
     {
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var credRepo = Substitute.For<IClientAdoCredentialRepository>();
-        credRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-        var fetcher = new AdoPrStatusFetcher(factory, credRepo, NullLogger<AdoPrStatusFetcher>.Instance);
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+        var fetcher = new AdoPrStatusFetcher(factory, connectionRepository, NullLogger<AdoPrStatusFetcher>.Instance);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
         return fetcher;
     }
 
-    private static GitHttpClient MakeGitClient() =>
-        Substitute.For<GitHttpClient>(
+    private static GitHttpClient MakeGitClient()
+    {
+        return Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
             new VssCredentials());
+    }
 
     [Fact]
     public async Task GetStatusAsync_ActiveAdoStatus_ReturnsPrStatusActive()
@@ -38,10 +43,16 @@ public sealed class AdoPrStatusFetcherTests
         // Arrange
         var gitClient = MakeGitClient();
         gitClient.GetPullRequestAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
-                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(),
-                Arg.Any<bool?>(), Arg.Any<bool?>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new GitPullRequest { Status = PullRequestStatus.Active }));
 
         var sut = BuildSut(gitClient);
@@ -59,10 +70,16 @@ public sealed class AdoPrStatusFetcherTests
         // Arrange
         var gitClient = MakeGitClient();
         gitClient.GetPullRequestAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
-                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(),
-                Arg.Any<bool?>(), Arg.Any<bool?>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new GitPullRequest { Status = PullRequestStatus.Abandoned }));
 
         var sut = BuildSut(gitClient);
@@ -80,10 +97,16 @@ public sealed class AdoPrStatusFetcherTests
         // Arrange
         var gitClient = MakeGitClient();
         gitClient.GetPullRequestAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
-                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(),
-                Arg.Any<bool?>(), Arg.Any<bool?>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new GitPullRequest { Status = PullRequestStatus.Completed }));
 
         var sut = BuildSut(gitClient);
@@ -101,10 +124,16 @@ public sealed class AdoPrStatusFetcherTests
         // Arrange: fail-safe contract — any exception must be swallowed and Active returned
         var gitClient = MakeGitClient();
         gitClient.GetPullRequestAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
-                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(),
-                Arg.Any<bool?>(), Arg.Any<bool?>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
             .Returns<GitPullRequest>(_ => throw new Exception("ADO rate limit exceeded"));
 
         var sut = BuildSut(gitClient);
@@ -122,10 +151,16 @@ public sealed class AdoPrStatusFetcherTests
         // Arrange: ADO SDK may return null/NotSet for edge cases
         var gitClient = MakeGitClient();
         gitClient.GetPullRequestAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
-                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(),
-                Arg.Any<bool?>(), Arg.Any<bool?>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new GitPullRequest { Status = PullRequestStatus.NotSet }));
 
         var sut = BuildSut(gitClient);

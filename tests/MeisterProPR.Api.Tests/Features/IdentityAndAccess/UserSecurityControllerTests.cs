@@ -3,9 +3,11 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -30,23 +32,25 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
     public async Task ChangePassword_WithValidCurrentPassword_Returns204_UpdatesHashAndRevokesRefreshTokens()
     {
         var userId = await this.SeedUserAsync("alice", "OldPassword1!");
-        await factory.RefreshTokens.AddAsync(new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            TokenHash = "token-hash-1",
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        await factory.RefreshTokens.AddAsync(
+            new RefreshToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                TokenHash = "token-hash-1",
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
 
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/identity/users/me/password");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
-        request.Content = JsonContent.Create(new
-        {
-            currentPassword = "OldPassword1!",
-            newPassword = "NewPassword2!",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                currentPassword = "OldPassword1!",
+                newPassword = "NewPassword2!",
+            });
 
         var response = await http.SendAsync(request);
 
@@ -69,12 +73,13 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
 
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/identity/users/me/password");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
-        request.Content = JsonContent.Create(new
-        {
-            currentPassword = "WrongPassword1!",
-            newPassword = "NewPassword2!",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                currentPassword = "WrongPassword1!",
+                newPassword = "NewPassword2!",
+            });
 
         var response = await http.SendAsync(request);
 
@@ -88,12 +93,13 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
 
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/identity/users/me/password");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
-        request.Content = JsonContent.Create(new
-        {
-            currentPassword = "CorrectPassword1!",
-            newPassword = "short",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                currentPassword = "CorrectPassword1!",
+                newPassword = "short",
+            });
 
         var response = await http.SendAsync(request);
 
@@ -105,11 +111,12 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
     {
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/identity/users/me/password");
-        request.Content = JsonContent.Create(new
-        {
-            currentPassword = "CorrectPassword1!",
-            newPassword = "NewPassword2!",
-        });
+        request.Content = JsonContent.Create(
+            new
+            {
+                currentPassword = "CorrectPassword1!",
+                newPassword = "NewPassword2!",
+            });
 
         var response = await http.SendAsync(request);
 
@@ -148,7 +155,8 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", "User"),
                     new Claim(JwtRegisteredClaimNames.UniqueName, "test-user"),
@@ -177,14 +185,11 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
                 services.AddSingleton<IPasswordHashService, PasswordHashService>();
                 services.AddSingleton<IRefreshTokenRepository>(this.RefreshTokens);
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IPrStatusFetcher>());
                 services.AddSingleton(Substitute.For<IThreadMemoryService>());
-                services.AddSingleton(Substitute.For<IClientAdoCredentialRepository>());
-
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
 
@@ -192,7 +197,7 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
                 services.AddSingleton(Substitute.For<IJobRepository>());
@@ -226,10 +231,11 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
         public Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default)
         {
             var now = DateTimeOffset.UtcNow;
-            return Task.FromResult(this._tokens.FirstOrDefault(t =>
-                t.TokenHash == tokenHash &&
-                t.RevokedAt is null &&
-                t.ExpiresAt > now));
+            return Task.FromResult(
+                this._tokens.FirstOrDefault(t =>
+                    t.TokenHash == tokenHash &&
+                    t.RevokedAt is null &&
+                    t.ExpiresAt > now));
         }
 
         public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)

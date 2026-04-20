@@ -15,7 +15,6 @@ internal static class HtmlSanitizer
     ///     Sanitizes the given text by escaping HTML metacharacters that could be interpreted
     ///     as HTML tags. This prevents tags like &lt;style&gt;, &lt;script&gt;, and other
     ///     HTML elements from being rendered in Azure DevOps comments.
-    ///
     ///     Markdown formatting (bold, italic, code fences, etc.) is preserved since
     ///     they do not use angle brackets. Content inside markdown code blocks is also protected.
     /// </summary>

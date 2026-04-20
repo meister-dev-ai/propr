@@ -194,9 +194,40 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
 
+                    b.Property<int>("CodeReviewPlatformKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("code_review_platform_kind");
+
+                    b.Property<string>("CommentAuthorDisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("comment_author_display_name");
+
+                    b.Property<string>("CommentAuthorExternalUserId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("comment_author_external_user_id");
+
+                    b.Property<bool>("CommentAuthorIsBot")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("comment_author_is_bot");
+
+                    b.Property<string>("CommentAuthorLogin")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("comment_author_login");
+
                     b.Property<int>("CommentId")
                         .HasColumnType("integer")
                         .HasColumnName("comment_id");
+
+                    b.Property<DateTimeOffset?>("CommentPublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("comment_published_at");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
@@ -209,6 +240,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
+
+                    b.Property<string>("ExternalCodeReviewId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_code_review_id");
+
+                    b.Property<string>("HostBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
 
                     b.Property<string>("MentionText")
                         .IsRequired()
@@ -229,6 +270,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("project_id");
 
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider");
+
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
                         .HasColumnName("pull_request_id");
@@ -238,14 +285,33 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("repository_id");
 
+                    b.Property<string>("RepositoryOwnerOrNamespace")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("repository_owner_or_namespace");
+
+                    b.Property<string>("RepositoryProjectPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_project_path");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
 
+                    b.Property<string>("ThreadFilePath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("thread_file_path");
+
                     b.Property<int>("ThreadId")
                         .HasColumnType("integer")
                         .HasColumnName("thread_id");
+
+                    b.Property<int?>("ThreadLineNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("thread_line_number");
 
                     b.HasKey("Id");
 
@@ -536,17 +602,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("organization_scope_id");
 
-                    b.Property<string>("OrganizationUrl")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("organization_url");
-
-                    b.Property<string>("ProjectId")
+                    b.Property<string>("ProviderProjectKey")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("project_id");
+
+                    b.Property<string>("ProviderScopePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("organization_url");
 
                     b.Property<string>("RepositoryId")
                         .IsRequired()
@@ -586,7 +652,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasIndex("ClientId", "IsEnabled")
                         .HasDatabaseName("ix_procursor_knowledge_sources_client_enabled");
 
-                    b.HasIndex("ClientId", "SourceKind", "OrganizationUrl", "ProjectId", "RepositoryId", "RootPath")
+                    b.HasIndex("ClientId", "SourceKind", "ProviderScopePath", "ProviderProjectKey", "RepositoryId", "RootPath")
                         .HasDatabaseName("ix_procursor_knowledge_sources_coordinates");
 
                     b.ToTable("procursor_knowledge_sources", (string)null);
@@ -1122,6 +1188,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
 
+                    b.Property<int>("CodeReviewPlatformKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("code_review_platform_kind");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -1129,6 +1201,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
+
+                    b.Property<string>("ExternalCodeReviewId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_code_review_id");
+
+                    b.Property<string>("HostBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
 
                     b.Property<int>("IterationId")
                         .HasColumnType("integer")
@@ -1174,6 +1256,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("project_id");
 
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ProviderRevisionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_revision_id");
+
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
                         .HasColumnName("pull_request_id");
@@ -1182,6 +1275,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("repository_id");
+
+                    b.Property<string>("RepositoryOwnerOrNamespace")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("repository_owner_or_namespace");
+
+                    b.Property<string>("RepositoryProjectPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_project_path");
 
                     b.Property<string>("Result")
                         .HasColumnType("jsonb")
@@ -1192,6 +1295,26 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("retry_count");
+
+                    b.Property<string>("ReviewPatchIdentity")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("review_patch_identity");
+
+                    b.Property<string>("RevisionBaseSha")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("revision_base_sha");
+
+                    b.Property<string>("RevisionHeadSha")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("revision_head_sha");
+
+                    b.Property<string>("RevisionStartSha")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("revision_start_sha");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1227,6 +1350,9 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.HasIndex("ClientId", "PullRequestId")
                         .HasDatabaseName("ix_review_jobs_client_pr");
+
+                    b.HasIndex("ClientId", "Provider", "RepositoryId", "ExternalCodeReviewId")
+                        .HasDatabaseName("ix_review_jobs_client_provider_review");
 
                     b.HasIndex("OrganizationUrl", "ProjectId", "RepositoryId", "PullRequestId", "IterationId")
                         .HasDatabaseName("ix_review_jobs_pr_identity");
@@ -1609,79 +1735,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("app_users", (string)null);
                 });
 
-            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientAdoOrganizationScopeRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("DisplayName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("display_name");
-
-                    b.Property<bool>("IsEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_enabled");
-
-                    b.Property<string>("LastVerificationError")
-                        .HasColumnType("text")
-                        .HasColumnName("last_verification_error");
-
-                    b.Property<DateTimeOffset?>("LastVerifiedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_verified_at");
-
-                    b.Property<string>("OrganizationUrl")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("organization_url");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<int>("VerificationStatus")
-                        .HasColumnType("integer")
-                        .HasColumnName("verification_status");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "OrganizationUrl")
-                        .IsUnique()
-                        .HasDatabaseName("ix_client_ado_organization_scopes_client_url");
-
-                    b.ToTable("client_ado_organization_scopes", (string)null);
-                });
-
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<string>("AdoClientId")
-                        .HasColumnType("text")
-                        .HasColumnName("ado_client_id");
-
-                    b.Property<string>("AdoClientSecret")
-                        .HasColumnType("text")
-                        .HasColumnName("ado_client_secret");
-
-                    b.Property<string>("AdoTenantId")
-                        .HasColumnType("text")
-                        .HasColumnName("ado_tenant_id");
 
                     b.Property<int>("CommentResolutionBehavior")
                         .ValueGeneratedOnAdd()
@@ -1715,6 +1773,230 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("clients", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewerIdentityRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("ExternalUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("external_user_id");
+
+                    b.Property<bool>("IsBot")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_bot");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("login");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("ConnectionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_client_reviewer_identities_connection_id");
+
+                    b.ToTable("client_reviewer_identities", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmConnectionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AuthenticationKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("authentication_kind");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("EncryptedSecretMaterial")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_secret_material");
+
+                    b.Property<string>("HostBaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("LastVerificationError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_verification_error");
+
+                    b.Property<string>("LastVerificationFailureCategory")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("last_verification_failure_category");
+
+                    b.Property<DateTimeOffset?>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified_at");
+
+                    b.Property<string>("OAuthClientId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("oauth_client_id");
+
+                    b.Property<string>("OAuthTenantId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("oauth_tenant_id");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("unknown")
+                        .HasColumnName("verification_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "Provider", "HostBaseUrl")
+                        .HasDatabaseName("ix_client_scm_connections_client_provider_host");
+
+                    b.ToTable("client_scm_connections", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("ExternalScopeId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("external_scope_id");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("LastVerificationError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_verification_error");
+
+                    b.Property<DateTimeOffset?>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified_at");
+
+                    b.Property<string>("ScopePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("scope_path");
+
+                    b.Property<string>("ScopeType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("scope_type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("unknown")
+                        .HasColumnName("verification_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("ConnectionId", "ExternalScopeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_client_scm_scopes_connection_external_scope_id");
+
+                    b.ToTable("client_scm_scopes", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationProCursorSourceRecord", b =>
@@ -1789,6 +2071,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("project_id");
+
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider");
 
                     b.Property<string>("RepositoryId")
                         .HasMaxLength(512)
@@ -1910,6 +2198,102 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_prompt_overrides_client_id_scope_key");
 
                     b.ToTable("prompt_overrides", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ProviderActivationRecord", b =>
+                {
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Provider");
+
+                    b.ToTable("provider_activations", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ProviderConnectionAuditEntryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("detail");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FailureCategory")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("failure_category");
+
+                    b.Property<string>("HostBaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("summary");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_provider_connection_audit_entries_client_occurred_at");
+
+                    b.HasIndex("ConnectionId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_provider_connection_audit_entries_connection_occurred_at");
+
+                    b.ToTable("provider_connection_audit_entries", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
@@ -2052,6 +2436,201 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("user_pats", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.PrimitiveCollection<string>("EnabledEvents")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("enabled_events");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid?>("OrganizationScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_scope_id");
+
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("organization_url");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("ProviderType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider_type");
+
+                    b.Property<string>("PublicPathKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("public_path_key");
+
+                    b.Property<string>("SecretCiphertext")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret_ciphertext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_webhook_configurations_client_id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_webhook_configurations_active")
+                        .HasFilter("is_active = true");
+
+                    b.HasIndex("OrganizationScopeId")
+                        .HasDatabaseName("ix_webhook_configurations_organization_scope_id");
+
+                    b.HasIndex("PublicPathKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_webhook_configurations_public_path_key");
+
+                    b.ToTable("webhook_configurations", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookDeliveryLogEntryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string>("ActionSummaries")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("action_summaries");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DeliveryOutcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_outcome");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FailureCategory")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("failure_category");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<int>("HttpStatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("http_status_code");
+
+                    b.Property<int?>("PullRequestId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pull_request_id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("RepositoryId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("SourceBranch")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source_branch");
+
+                    b.Property<string>("TargetBranch")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("target_branch");
+
+                    b.Property<Guid>("WebhookConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("webhook_configuration_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WebhookConfigurationId", "ReceivedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_webhook_delivery_log_entries_config_received_at");
+
+                    b.ToTable("webhook_delivery_log_entries", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookRepoFilterRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CanonicalSourceRef")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("canonical_source_ref");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("RepositoryName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("repository_name");
+
+                    b.Property<string>("SourceProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_provider");
+
+                    b.PrimitiveCollection<string>("TargetBranchPatterns")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_branch_patterns");
+
+                    b.Property<Guid>("WebhookConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("webhook_configuration_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WebhookConfigurationId", "SourceProvider", "CanonicalSourceRef")
+                        .IsUnique()
+                        .HasDatabaseName("ix_webhook_repo_filters_config_source_ref");
+
+                    b.ToTable("webhook_repo_filters", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ClientTokenUsageSample", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
@@ -2140,7 +2719,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientAdoOrganizationScopeRecord", null)
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", null)
                         .WithMany()
                         .HasForeignKey("OrganizationScopeId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -2256,15 +2835,53 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("Client");
                 });
 
-            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientAdoOrganizationScopeRecord", b =>
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewerIdentityRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
-                        .WithMany("AdoOrganizationScopes")
+                        .WithMany("ReviewerIdentities")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientScmConnectionRecord", "Connection")
+                        .WithMany("ReviewerIdentities")
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Connection");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmConnectionRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany("ScmConnections")
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientScmConnectionRecord", "Connection")
+                        .WithMany("Scopes")
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Connection");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationProCursorSourceRecord", b =>
@@ -2294,7 +2911,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientAdoOrganizationScopeRecord", "OrganizationScope")
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", "OrganizationScope")
                         .WithMany("CrawlConfigurations")
                         .HasForeignKey("OrganizationScopeId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -2331,6 +2948,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("CrawlConfig");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ProviderConnectionAuditEntryRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany("ProviderConnectionAuditEntries")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.RefreshTokenRecord", b =>
@@ -2385,6 +3013,46 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", "OrganizationScope")
+                        .WithMany()
+                        .HasForeignKey("OrganizationScopeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("OrganizationScope");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookDeliveryLogEntryRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", "WebhookConfiguration")
+                        .WithMany("DeliveryLogs")
+                        .HasForeignKey("WebhookConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WebhookConfiguration");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookRepoFilterRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", "WebhookConfiguration")
+                        .WithMany("RepoFilters")
+                        .HasForeignKey("WebhookConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WebhookConfiguration");
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
                 {
                     b.Navigation("TrackedBranches");
@@ -2421,21 +3089,39 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("RefreshTokens");
                 });
 
-            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientAdoOrganizationScopeRecord", b =>
-                {
-                    b.Navigation("CrawlConfigurations");
-                });
-
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
                 {
-                    b.Navigation("AdoOrganizationScopes");
+                    b.Navigation("CrawlConfigurations");
 
+                    b.Navigation("ProviderConnectionAuditEntries");
+
+                    b.Navigation("ReviewerIdentities");
+
+                    b.Navigation("ScmConnections");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmConnectionRecord", b =>
+                {
+                    b.Navigation("ReviewerIdentities");
+
+                    b.Navigation("Scopes");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientScmScopeRecord", b =>
+                {
                     b.Navigation("CrawlConfigurations");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.CrawlConfigurationRecord", b =>
                 {
                     b.Navigation("ProCursorSources");
+
+                    b.Navigation("RepoFilters");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", b =>
+                {
+                    b.Navigation("DeliveryLogs");
 
                     b.Navigation("RepoFilters");
                 });

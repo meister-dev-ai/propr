@@ -3,11 +3,14 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Auth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -24,7 +27,9 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
     public async Task ResolveIdentity_WithoutCredentials_Returns401()
     {
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
 
         var response = await http.SendAsync(request);
 
@@ -35,8 +40,10 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
     public async Task ResolveIdentity_ClientUserWithoutAdministratorRole_Returns403()
     {
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await http.SendAsync(request);
 
@@ -47,8 +54,12 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
     public async Task ResolveIdentity_ClientAdministrator_Returns200()
     {
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await http.SendAsync(request);
 
@@ -56,11 +67,53 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
     }
 
     [Fact]
+    public async Task ResolveIdentity_ClientAdministrator_ForOtherClient_Returns403()
+    {
+        var http = factory.CreateClient();
+        var otherClientId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={otherClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_WithClientId_ForwardsClientIdToResolver()
+    {
+        var http = factory.CreateClient();
+        var clientId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={clientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.ReviewerIdentityService.Received(1)
+            .ResolveCandidatesAsync(
+                clientId,
+                Arg.Is<ProviderHostRef>(host =>
+                    host.Provider == ScmProvider.AzureDevOps &&
+                    host.HostBaseUrl == "https://dev.azure.com"),
+                "Reviewer",
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ResolveIdentity_Admin_Returns200()
     {
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
 
@@ -70,6 +123,9 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
     public sealed class IdentitiesApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-identities-jwt-secret-32chars";
+
+        public IReviewerIdentityService ReviewerIdentityService { get; } = Substitute.For<IReviewerIdentityService>();
+        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
 
         public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
         public Guid ClientUserUserId { get; } = Guid.NewGuid();
@@ -106,39 +162,55 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                ReplaceService(services, Substitute.For<IAdoTokenValidator>());
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
-                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
                 ReplaceService(services, Substitute.For<IClientRegistry>());
                 ReplaceService(services, Substitute.For<IJobRepository>());
                 ReplaceService(services, Substitute.For<IThreadMemoryRepository>());
+                ReplaceService(services, this.ProviderRegistry);
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 ReplaceService(services, crawlRepo);
 
-                var identityResolver = Substitute.For<IIdentityResolver>();
-                identityResolver.ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<ResolvedIdentity>>([
-                        new ResolvedIdentity(Guid.NewGuid(), "Reviewer"),
-                    ]));
-                ReplaceService(services, identityResolver);
+                this.ReviewerIdentityService.Provider.Returns(ScmProvider.AzureDevOps);
+                this.ReviewerIdentityService.ResolveCandidatesAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<ProviderHostRef>(),
+                        Arg.Any<string>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<ReviewerIdentity>>(
+                        [
+                            new ReviewerIdentity(
+                                new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org"),
+                                Guid.NewGuid().ToString("D"),
+                                "reviewer",
+                                "Reviewer",
+                                false),
+                        ]));
+                this.ProviderRegistry.GetReviewerIdentityService(ScmProvider.AzureDevOps)
+                    .Returns(this.ReviewerIdentityService);
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { assignedClientId, ClientRole.ClientAdministrator },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { assignedClientId, ClientRole.ClientAdministrator },
+                            }));
                 userRepo.GetUserClientRolesAsync(clientUserUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { assignedClientId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { assignedClientId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != clientAdministratorUserId && id != clientUserUserId),
                         Arg.Any<CancellationToken>())
@@ -153,7 +225,8 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", globalRole.ToString()),
                 ]),

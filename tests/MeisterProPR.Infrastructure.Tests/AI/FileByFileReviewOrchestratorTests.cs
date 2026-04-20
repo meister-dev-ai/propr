@@ -22,7 +22,8 @@ public class FileByFileReviewOrchestratorTests
 {
     private static IOptions<AiReviewOptions> DefaultOptions()
     {
-        return Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" });
+        return Microsoft.Extensions.Options.Options.Create(
+            new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" });
     }
 
     private static ReviewJob CreateJob()
@@ -96,7 +97,14 @@ public class FileByFileReviewOrchestratorTests
     private static IProtocolRecorder CreateProtocolRecorder()
     {
         var recorder = Substitute.For<IProtocolRecorder>();
-        recorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        recorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Guid.NewGuid()));
         recorder.SetCompletedAsync(
                 Arg.Any<Guid>(),
@@ -140,13 +148,17 @@ public class FileByFileReviewOrchestratorTests
 
         // Setup synthesis chatclient to return something
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
         var sut2 = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
 
         await sut2.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
-        await aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+        await aiCore.Received(3)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
     }
 
     // T033 — A failed file does not stop remaining files
@@ -178,7 +190,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(job);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
@@ -187,7 +202,8 @@ public class FileByFileReviewOrchestratorTests
             sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None));
 
         // All 3 files were attempted despite 1 failure (concurrency = 1 processes sequentially but all run)
-        await aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+        await aiCore.Received(3)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
     }
 
     // T033 — Retry-resume skips completed files
@@ -219,15 +235,26 @@ public class FileByFileReviewOrchestratorTests
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
-                var mockJob = new ReviewJob(job.Id, job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.IterationId);
+                var mockJob = new ReviewJob(
+                    job.Id,
+                    job.ClientId,
+                    job.OrganizationUrl,
+                    job.ProjectId,
+                    job.RepositoryId,
+                    job.PullRequestId,
+                    job.IterationId);
                 mockJob.FileReviewResults.Add(completedResult);
                 return Task.FromResult<ReviewJob?>(mockJob);
             });
         repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
@@ -235,7 +262,8 @@ public class FileByFileReviewOrchestratorTests
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
         // Only b.cs and c.cs should be reviewed (a.cs is already complete)
-        await aiCore.Received(2).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+        await aiCore.Received(2)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
     }
 
     // T034 — All file comments appear in aggregated result
@@ -275,7 +303,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
 
         var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
@@ -321,7 +352,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
 
         var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
@@ -364,7 +398,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("synthesis service unavailable"));
 
         var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
@@ -419,12 +456,15 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var pr = CreatePr(
-            CreateFile("src/Migrations/20260101_Init.Designer.cs"),   // will be excluded
-            CreateFile("src/Application/Service.cs"));                // will be reviewed
+            CreateFile("src/Migrations/20260101_Init.Designer.cs"), // will be excluded
+            CreateFile("src/Application/Service.cs")); // will be reviewed
 
         var context = new ReviewSystemContext(null, [], null)
         {
@@ -435,14 +475,16 @@ public class FileByFileReviewOrchestratorTests
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
         // Only Service.cs should be sent to the AI; Designer.cs is excluded
-        await aiCore.Received(1).ReviewAsync(
-            Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path == "src/Application/Service.cs")),
-            Arg.Any<ReviewSystemContext>(),
-            Arg.Any<CancellationToken>());
-        await aiCore.DidNotReceive().ReviewAsync(
-            Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path.EndsWith(".Designer.cs"))),
-            Arg.Any<ReviewSystemContext>(),
-            Arg.Any<CancellationToken>());
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path == "src/Application/Service.cs")),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await aiCore.DidNotReceive()
+            .ReviewAsync(
+                Arg.Is<PullRequest>(p => p.ChangedFiles.Any(f => f.Path.EndsWith(".Designer.cs"))),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
     }
 
     // T013 — Excluded files result in a protocol entry with zero tokens
@@ -470,7 +512,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var pr = CreatePr(CreateFile("src/Migrations/20260101_Init.Designer.cs"));
@@ -483,15 +528,16 @@ public class FileByFileReviewOrchestratorTests
         var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
-        await protocolRecorder.Received(1).SetCompletedAsync(
-            Arg.Any<Guid>(),
-            "Excluded",
-            0,
-            0,
-            0,
-            0,
-            null,
-            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received(1)
+            .SetCompletedAsync(
+                Arg.Any<Guid>(),
+                "Excluded",
+                0,
+                0,
+                0,
+                0,
+                null,
+                Arg.Any<CancellationToken>());
     }
 
     // ─── T043: tier client resolution ────────────────────────────────────────────
@@ -501,40 +547,68 @@ public class FileByFileReviewOrchestratorTests
     {
         // Arrange
         var job = CreateJob();
-        var pr = CreatePr(new ChangedFile("src/BigService.cs", ChangeType.Edit, "content", string.Concat(Enumerable.Repeat("+line\n", 200)))); // >150 lines → High tier
+        var pr = CreatePr(
+            new ChangedFile(
+                "src/BigService.cs",
+                ChangeType.Edit,
+                "content",
+                string.Concat(Enumerable.Repeat("+line\n", 200)))); // >150 lines → High tier
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(CreateResult());
 
         var defaultChatClient = Substitute.For<IChatClient>();
-        defaultChatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var tierClient = Substitute.For<IChatClient>();
         var aiClientFactory = Substitute.For<IAiChatClientFactory>();
         aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
 
-        var tierDto = new AiConnectionDto(Guid.NewGuid(), job.ClientId, "Tier High", "https://high.openai.azure.com/", ["gpt-4o-high"], true, "gpt-4o-high", DateTimeOffset.UtcNow, AiConnectionModelCategory.HighEffort);
+        var tierDto = new AiConnectionDto(
+            Guid.NewGuid(),
+            job.ClientId,
+            "Tier High",
+            "https://high.openai.azure.com/",
+            ["gpt-4o-high"],
+            true,
+            "gpt-4o-high",
+            DateTimeOffset.UtcNow,
+            AiConnectionModelCategory.HighEffort);
         var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepo.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>())
+        aiConnectionRepo.GetForTierAsync(
+                job.ClientId,
+                AiConnectionModelCategory.HighEffort,
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
 
         var jobRepo = CreateJobRepo();
         jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
 
-        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, defaultChatClient, aiConnectionRepository: aiConnectionRepo, aiClientFactory: aiClientFactory);
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            jobRepo,
+            defaultChatClient,
+            aiConnectionRepository: aiConnectionRepo,
+            aiClientFactory: aiClientFactory);
 
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
         // Assert: GetForTierAsync was called for the High tier (once per-file and once for synthesis)
-        await aiConnectionRepo.Received(2).GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
+        await aiConnectionRepo.Received(2)
+            .GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, Arg.Any<CancellationToken>());
 
         // Assert: aiCore.ReviewAsync received a context with TierChatClient set to the tier client
-        await aiCore.Received(1).ReviewAsync(
-            Arg.Any<PullRequest>(),
-            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == tierClient && ctx.ModelId == "gpt-4o-high"),
-            Arg.Any<CancellationToken>());
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == tierClient && ctx.ModelId == "gpt-4o-high"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -542,33 +616,50 @@ public class FileByFileReviewOrchestratorTests
     {
         // Arrange — repo returns null for tier lookup
         var job = CreateJob();
-        var pr = CreatePr(new ChangedFile("src/Simple.cs", ChangeType.Edit, "content", string.Concat(Enumerable.Repeat("+line\n", 5)))); // Low tier
+        var pr = CreatePr(
+            new ChangedFile(
+                "src/Simple.cs",
+                ChangeType.Edit,
+                "content",
+                string.Concat(Enumerable.Repeat("+line\n", 5)))); // Low tier
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(CreateResult());
 
         var defaultChatClient = Substitute.For<IChatClient>();
-        defaultChatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
 
         var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnectionRepo.GetForTierAsync(Arg.Any<Guid>(), Arg.Any<AiConnectionModelCategory>(), Arg.Any<CancellationToken>())
+        aiConnectionRepo.GetForTierAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<AiConnectionModelCategory>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(null));
 
         var jobRepo = CreateJobRepo();
         jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
 
-        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, defaultChatClient,
-            aiConnectionRepository: aiConnectionRepo, aiClientFactory: Substitute.For<IAiChatClientFactory>());
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            jobRepo,
+            defaultChatClient,
+            aiConnectionRepository: aiConnectionRepo,
+            aiClientFactory: Substitute.For<IAiChatClientFactory>());
 
         // Act
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
         // Assert: context TierChatClient is set to the injected default (no tier → falls back to effectiveClient)
-        await aiCore.Received(1).ReviewAsync(
-            Arg.Any<PullRequest>(),
-            Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == defaultChatClient),
-            Arg.Any<CancellationToken>());
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == defaultChatClient),
+                Arg.Any<CancellationToken>());
     }
 
     // ─── T049: synthesis JSON cross_cutting_concerns ──────────────────────────────
@@ -587,7 +678,10 @@ public class FileByFileReviewOrchestratorTests
 
         var chatClient = Substitute.For<IChatClient>();
         // synthesis call returns JSON with cross_cutting_concerns
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
 
         var jobRepo = CreateJobRepo();
@@ -618,7 +712,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(CreateResult());
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
 
         var jobRepo = CreateJobRepo();
@@ -663,7 +760,10 @@ public class FileByFileReviewOrchestratorTests
             .Returns(Task.CompletedTask);
 
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, malformedJson)),
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, repairedJson)));
@@ -673,6 +773,7 @@ public class FileByFileReviewOrchestratorTests
         var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
         Assert.Equal("This mentions v-for=\"tag in post.tags\" without escaping.", result.Summary);
-        await chatClient.Received(2).GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+        await chatClient.Received(2)
+            .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
     }
 }

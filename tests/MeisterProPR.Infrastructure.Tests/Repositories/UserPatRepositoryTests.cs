@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
@@ -9,13 +8,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
-/// <summary>Unit tests for <see cref="UserPatRepository"/> using EF Core in-memory database.</summary>
+/// <summary>Unit tests for <see cref="UserPatRepository" /> using EF Core in-memory database.</summary>
 public sealed class UserPatRepositoryTests
 {
     private static MeisterProPRDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new MeisterProPRDbContext(options);
     }
@@ -69,15 +68,16 @@ public sealed class UserPatRepositoryTests
         var now = DateTimeOffset.UtcNow;
         var patId = Guid.NewGuid();
 
-        db.UserPats.Add(new UserPatRecord
-        {
-            Id = patId,
-            UserId = userId,
-            TokenHash = "some-hash",
-            Label = "My PAT",
-            IsRevoked = false,
-            CreatedAt = now,
-        });
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = patId,
+                UserId = userId,
+                TokenHash = "some-hash",
+                Label = "My PAT",
+                IsRevoked = false,
+                CreatedAt = now,
+            });
         await db.SaveChangesAsync();
 
         // Simulate revocation
@@ -102,15 +102,16 @@ public sealed class UserPatRepositoryTests
         var userId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        db.UserPats.Add(new UserPatRecord
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            TokenHash = "hash",
-            Label = "Old PAT",
-            IsRevoked = true,
-            CreatedAt = now,
-        });
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                TokenHash = "hash",
+                Label = "Old PAT",
+                IsRevoked = true,
+                CreatedAt = now,
+            });
         await db.SaveChangesAsync();
 
         var repo = new UserPatRepository(db);

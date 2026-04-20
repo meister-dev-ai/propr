@@ -7,7 +7,7 @@
       <div class="crawl-header-left">
         <h3>Crawl Configurations</h3>
         <span v-if="!loading" class="chip chip-muted">{{ configs.length }} config{{ configs.length === 1 ? '' : 's' }}</span>
-        <p class="crawl-subtitle">Schedules and scope rules for automated Azure DevOps scans on this client.</p>
+        <p class="crawl-subtitle">Schedules, provider context, and repository scope rules for automated review discovery on this client.</p>
       </div>
       <div class="section-card-header-actions">
         <button class="btn-primary" @click="openCreateForm">
@@ -43,8 +43,9 @@
       <thead>
         <tr>
           <th style="width: 120px">Status</th>
+          <th style="width: 140px">Provider</th>
           <th>Project</th>
-          <th>Azure Organization</th>
+          <th>Host / Scope</th>
           <th>Filters</th>
           <th>Interval</th>
           <th></th>
@@ -57,8 +58,11 @@
               {{ config.isActive ? 'Active' : 'Paused' }}
             </span>
           </td>
-          <td class="bold-cell">{{ config.projectId || 'Unnamed project' }}</td>
-          <td class="muted-cell">{{ config.organizationUrl || '—' }}</td>
+          <td>
+            <span class="chip chip-muted">{{ formatProvider(config.provider) }}</span>
+          </td>
+          <td class="bold-cell">{{ config.providerProjectKey || 'Unnamed project' }}</td>
+          <td class="muted-cell">{{ config.providerScopePath || '—' }}</td>
           <td>
             <div class="scope-stack">
               <span class="scope-pill">
@@ -96,7 +100,7 @@
 
     <ConfirmDialog
       :open="!!deletingConfig"
-      :message="`Delete crawl configuration for ${deletingConfig?.projectId ?? 'this project'}? This cannot be undone.`"
+      :message="`Delete crawl configuration for ${deletingConfig?.providerProjectKey ?? 'this project'}? This cannot be undone.`"
       @confirm="confirmDelete"
       @cancel="deletingConfig = null"
     />
@@ -113,7 +117,8 @@ import { useNotification } from '@/composables/useNotification'
 import { createAdminClient } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
-type CrawlConfigResponse = components['schemas']['CrawlConfigResponse']
+type ScmProvider = components['schemas']['ScmProvider']
+type CrawlConfigResponse = components['schemas']['CrawlConfigResponse'] & { provider?: ScmProvider }
 type CrawlRepoFilterResponse = components['schemas']['CrawlRepoFilterResponse']
 
 const props = defineProps<{
@@ -155,6 +160,19 @@ function formatInterval(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
   return `${Math.floor(seconds / 3600)}h`
+}
+
+function formatProvider(provider?: ScmProvider): string {
+  switch (provider) {
+    case 'gitLab':
+      return 'GitLab'
+    case 'forgejo':
+      return 'Forgejo'
+    case 'github':
+      return 'GitHub'
+    default:
+      return 'Azure DevOps'
+  }
 }
 
 function describeFilters(filters: CrawlRepoFilterResponse[] | undefined): string {

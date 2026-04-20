@@ -23,6 +23,12 @@
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'crawl-configs' }" @click="activeTab = 'crawl-configs'">
                         <i class="fi fi-rr-spider"></i> Crawl Configs
                     </button>
+                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'webhooks' }" @click="activeTab = 'webhooks'">
+                        <i class="fi fi-rr-link-alt"></i> Webhooks
+                    </button>
+                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'providers' }" @click="activeTab = 'providers'">
+                        <i class="fi fi-rr-plug-connection"></i> Providers
+                    </button>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'procursor' }" @click="activeTab = 'procursor'">
                         <i class="fi fi-rr-books"></i> ProCursor
                     </button>
@@ -93,90 +99,14 @@
                     </div>
                 </div>
 
-                <!-- Section 2: ADO Credentials (prerequisite) -->
                 <div class="section-card">
                     <div class="section-card-header">
-                        <h3>ADO Credentials</h3>
-                        <span :class="client.hasAdoCredentials ? 'chip chip-success' : 'chip chip-muted'">
-                            <i :class="client.hasAdoCredentials ? 'fi fi-rr-plug-connection' : 'fi fi-rr-minus-circle'"></i>
-                            {{ client.hasAdoCredentials ? 'Configured' : 'Not configured' }}
-                        </span>
+                        <h3>Provider Access</h3>
                     </div>
                     <div class="section-card-body section-card-body--compact">
-                        <AdoCredentialsForm
-                            :clientId="client.id"
-                            :hasCredentials="client.hasAdoCredentials"
-                            @credentials-updated="handleCredentialsUpdated"
-                            @credentials-cleared="handleCredentialsCleared"
-                        />
-                    </div>
-                </div>
-
-                <!-- Section 3: AI Reviewer Identity (gated on ADO credentials) -->
-                <div class="section-card" :class="{ 'section-card--locked': !client.hasAdoCredentials }">
-                    <div class="section-card-header">
-                        <h3>AI Reviewer Identity</h3>
-                        <div class="section-card-header-actions">
-                            <template v-if="!client.hasAdoCredentials">
-                                <span class="chip chip-muted">
-                                    <i class="fi fi-rr-lock"></i> Requires ADO credentials
-                                </span>
-                            </template>
-                            <template v-else>
-                                <code v-if="client.reviewerId" class="reviewer-id-pill" :title="client.reviewerId">
-                                    {{ client.reviewerId }}
-                                </code>
-                                <span v-else class="chip chip-muted">
-                                    <i class="fi fi-rr-minus-circle"></i> Not configured
-                                </span>
-                            </template>
-                        </div>
-                    </div>
-
-                    <!-- Locked notice -->
-                    <div v-if="!client.hasAdoCredentials" class="section-locked-notice">
-                        <i class="fi fi-rr-lock"></i>
-                        <p>Configure ADO Credentials above before setting up the AI Reviewer Identity.</p>
-                    </div>
-
-                    <!-- Form (only when ADO is configured) -->
-                    <div v-else class="section-card-body section-card-body--compact">
-                        <div class="reviewer-fields-grid">
-                            <div class="form-field">
-                                <label for="reviewerOrgUrl">ADO Organisation URL</label>
-                                <input id="reviewerOrgUrl" v-model="reviewerOrgUrl" name="reviewerOrgUrl" placeholder="https://dev.azure.com/my-org" type="text" />
-                            </div>
-                            <div class="form-field">
-                                <label for="reviewerDisplayName">Identity Display Name</label>
-                                <input id="reviewerDisplayName" v-model="reviewerDisplayName" name="reviewerDisplayName" placeholder="My AI Service Account" type="text" />
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button :disabled="resolving" class="btn-secondary" @click="resolveIdentity">
-                                <i class="fi fi-rr-search"></i> {{ resolving ? 'Resolving…' : 'Resolve Identity' }}
-                            </button>
-                            <span v-if="resolveError" class="error">{{ resolveError }}</span>
-                        </div>
-
-                        <ul v-if="resolvedIdentities.length" class="identity-list">
-                            <li
-                                v-for="identity in resolvedIdentities"
-                                :key="identity.id"
-                                :class="{ selected: selectedIdentityId === identity.id }"
-                                @click="selectedIdentityId = identity.id"
-                            >
-                                <strong>{{ identity.displayName }}</strong>
-                                <span class="guid">{{ identity.id }}</span>
-                            </li>
-                        </ul>
-
-                        <div v-if="selectedIdentityId" class="form-actions identity-save-actions">
-                            <button :disabled="saving" class="btn-primary" @click="saveReviewerId">
-                                <i class="fi fi-rr-check"></i> Save Reviewer Identity
-                            </button>
-                            <span v-if="reviewerSaveError" class="error">{{ reviewerSaveError }}</span>
-                            <span v-if="reviewerSaveSuccess" class="success">Reviewer identity saved.</span>
-                        </div>
+                        <p class="muted">
+                            Provider connections, organization scopes, and reviewer identities are managed in the Providers tab.
+                        </p>
                     </div>
                 </div>
 
@@ -203,6 +133,19 @@
 
             <div v-show="activeTab === 'crawl-configs'">
                 <ClientCrawlConfigsTab :clientId="client.id" />
+            </div>
+
+            <div v-show="activeTab === 'webhooks'">
+                <ClientWebhookConfigsTab :clientId="client.id" />
+            </div>
+
+            <div v-show="activeTab === 'providers'" class="provider-operations-tab">
+                <ClientProviderConnectionsTab :clientId="client.id" />
+
+                <div v-if="activeTab === 'providers'" class="provider-operations-stack">
+                    <ProviderConnectionStatusList :clientId="client.id" />
+                    <ProviderConnectionAuditTrail :clientId="client.id" />
+                </div>
             </div>
 
             <div v-show="activeTab === 'procursor'">
@@ -671,8 +614,11 @@
 <script lang="ts" setup>
 import {onMounted, ref, reactive, computed, watch} from 'vue'
 import {RouterLink, useRoute, useRouter} from 'vue-router'
-import AdoCredentialsForm from '@/components/AdoCredentialsForm.vue'
 import ClientCrawlConfigsTab from '@/components/ClientCrawlConfigsTab.vue'
+import ClientWebhookConfigsTab from '@/components/ClientWebhookConfigsTab.vue'
+import ClientProviderConnectionsTab from '@/components/ClientProviderConnectionsTab.vue'
+import ProviderConnectionStatusList from '@/components/ProviderConnectionStatusList.vue'
+import ProviderConnectionAuditTrail from '@/components/ProviderConnectionAuditTrail.vue'
 import ClientProCursorTab from '@/components/ClientProCursorTab.vue'
 import UsageDashboard from '@/components/UsageDashboard.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -706,14 +652,8 @@ interface Client {
     id: string
     displayName: string
     isActive: boolean
-    hasAdoCredentials: boolean
     reviewerId?: string | null
     createdAt: string
-}
-
-interface IdentityMatch {
-    id: string
-    displayName: string
 }
 
 const router = useRouter()
@@ -727,23 +667,13 @@ const saving = ref(false)
 const saveError = ref('')
 const showDeleteDialog = ref(false)
 const editedDisplayName = ref('')
-const activeTab = ref<'config' | 'crawl-configs' | 'procursor' | 'ai' | 'history' | 'dismissals' | 'prompt-overrides' | 'usage'>('config')
+const activeTab = ref<'config' | 'crawl-configs' | 'webhooks' | 'providers' | 'procursor' | 'ai' | 'history' | 'dismissals' | 'prompt-overrides' | 'usage'>('config')
 const isProCursorTokenUsageReportingEnabled = import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false'
 
 // Text Viewer Modal
 const isTextViewerOpen = ref(false)
 const textViewerTitle = ref('')
 const textViewerContent = ref('')
-
-// Reviewer identity resolution
-const reviewerOrgUrl = ref('')
-const reviewerDisplayName = ref('')
-const resolving = ref(false)
-const resolveError = ref('')
-const resolvedIdentities = ref<IdentityMatch[]>([])
-const selectedIdentityId = ref<string | null>(null)
-const reviewerSaveError = ref('')
-const reviewerSaveSuccess = ref(false)
 
 // AI Connections tab
 const aiConnections = ref<AiConnectionDto[]>([])
@@ -900,76 +830,6 @@ async function toggleStatus() {
         client.value = data as Client
     } catch {
         saveError.value = 'Failed to update status.'
-    } finally {
-        saving.value = false
-    }
-}
-
-function handleCredentialsUpdated() {
-    if (!client.value) return
-    client.value.hasAdoCredentials = true
-}
-
-function handleCredentialsCleared() {
-    if (!client.value) return
-
-    client.value.hasAdoCredentials = false
-    resolvedIdentities.value = []
-    selectedIdentityId.value = null
-    reviewerSaveError.value = ''
-    reviewerSaveSuccess.value = false
-}
-
-async function resolveIdentity() {
-    resolveError.value = ''
-    resolvedIdentities.value = []
-    selectedIdentityId.value = null
-
-    const orgUrl = reviewerOrgUrl.value.trim()
-    const name = reviewerDisplayName.value.trim()
-
-    if (!orgUrl || !name) {
-        resolveError.value = 'Both Organisation URL and Display Name are required.'
-        return
-    }
-
-    resolving.value = true
-    try {
-        const {data, response} = await createAdminClient().GET('/identities/resolve', {
-            params: {query: {orgUrl, displayName: name}},
-        })
-        if ((response as Response).status === 404) {
-            resolveError.value = `No identity found for "${name}".`
-            return
-        }
-        const matches = data as IdentityMatch[]
-        resolvedIdentities.value = matches
-        if (matches.length === 1) {
-            selectedIdentityId.value = matches[0].id
-        }
-    } catch {
-        resolveError.value = 'Failed to resolve identity.'
-    } finally {
-        resolving.value = false
-    }
-}
-
-async function saveReviewerId() {
-    if (!client.value || !selectedIdentityId.value) return
-    saving.value = true
-    reviewerSaveError.value = ''
-    reviewerSaveSuccess.value = false
-    try {
-        await createAdminClient().PUT('/clients/{clientId}/reviewer-identity', {
-            params: {path: {clientId}},
-            body: {reviewerId: selectedIdentityId.value},
-        })
-        client.value.reviewerId = selectedIdentityId.value
-        reviewerSaveSuccess.value = true
-        resolvedIdentities.value = []
-        selectedIdentityId.value = null
-    } catch {
-        reviewerSaveError.value = 'Failed to save reviewer identity.'
     } finally {
         saving.value = false
     }
@@ -1179,7 +1039,7 @@ function hasAnyCapabilityValue(capability: EditableModelCapability): boolean {
     )
 }
 
-function isValidEmbeddingDimensions(value: string): boolean {
+function isValidEmbeddingDimensions(value: string | number): boolean {
     const parsed = parsePositiveInteger(value)
     return parsed !== null && parsed >= 64 && parsed <= 4096
 }
@@ -1912,7 +1772,23 @@ async function handleDeleteOverride(id: string) {
     color: var(--color-accent);
 }
 
+.provider-operations-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.provider-operations-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 @media (max-width: 960px) {
+    .provider-operations-stack {
+        grid-template-columns: 1fr;
+    }
+
     .ai-capability-row {
         grid-template-columns: 1fr 1fr;
     }

@@ -6,7 +6,16 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
+using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Services;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.TeamFoundation.Core.WebApi;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Wiki.WebApi;
@@ -21,6 +30,7 @@ namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public sealed class AdoDiscoveryServiceTests
 {
+    private const string SecretPurpose = "ClientScmConnectionSecret";
     private static readonly Guid ClientId = Guid.Parse("10000000-0000-0000-0000-000000000001");
     private static readonly Guid ScopeId = Guid.Parse("10000000-0000-0000-0000-000000000002");
 
@@ -241,23 +251,211 @@ public sealed class AdoDiscoveryServiceTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public async Task ListProjectsAsync_UsesProviderBackedConnectionAndScopeResolution()
+    {
+        await using var db = CreateContext();
+        var codec = CreateCodec();
+        var clientId = await SeedClientAsync(db);
+        var connectionId = await SeedAzureConnectionAsync(db, clientId, codec, "contoso", "secret-abc");
+        var scopeId = await SeedAzureOrganizationScopeAsync(db, clientId, connectionId, "https://dev.azure.com/org");
+        var service = new TestableAdoDiscoveryService(
+            new ClientScmConnectionRepository(db, codec),
+            new ClientScmScopeRepository(db));
+
+        service.SetProjects(
+            new TeamProjectReference
+            {
+                Id = Guid.Parse("10000000-0000-0000-0000-000000000091"),
+                Name = "Provider-backed Project",
+            });
+
+        var result = await service.ListProjectsAsync(clientId, scopeId, CancellationToken.None);
+
+        var project = Assert.Single(result);
+        Assert.Equal(scopeId, project.OrganizationScopeId);
+        Assert.Equal(scopeId, service.LastResolvedScope!.Id);
+        Assert.Equal("https://dev.azure.com/org", service.LastResolvedScope.OrganizationUrl);
+        Assert.NotNull(service.LastResolvedCredentials);
+        Assert.Equal("contoso-tenant", service.LastResolvedCredentials!.TenantId);
+        Assert.Equal("contoso-client", service.LastResolvedCredentials.ClientId);
+        Assert.Equal("secret-abc", service.LastResolvedCredentials.Secret);
+    }
+
+    [Fact]
+    public void CrawlingServices_RegisterAzureDevOpsDiscoveryUnderProviderNeutralInterface()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["DB_CONNECTION_STRING"] = "Host=localhost;Database=meister;Username=test;Password=test",
+                })
+            .Build();
+
+        services.AddSingleton(new VssConnectionFactory(Substitute.For<TokenCredential>()));
+        services.AddSingleton(Substitute.For<IClientScmConnectionRepository>());
+        services.AddSingleton(Substitute.For<IClientScmScopeRepository>());
+
+        services.AddAzureDevOpsCrawlingServices(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var discoveryService = scope.ServiceProvider
+            .GetServices<IProviderAdminDiscoveryService>()
+            .Single(service => service.Provider == ScmProvider.AzureDevOps);
+
+        Assert.IsType<AdoDiscoveryService>(discoveryService);
+        Assert.DoesNotContain(
+            services,
+            descriptor => string.Equals(descriptor.ServiceType.Name, "IAdoDiscoveryService", StringComparison.Ordinal));
+    }
+
+    private static ISecretProtectionCodec CreateCodec()
+    {
+        var keysDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"MeisterProPR.AdoDiscoveryServiceTests.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(keysDirectory);
+
+        var services = new ServiceCollection();
+        services.AddDataProtection()
+            .SetApplicationName("MeisterProPR.Tests")
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+
+        var provider = services.BuildServiceProvider();
+        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+    }
+
+    private static MeisterProPRDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"TestDb_AdoDiscovery_{Guid.NewGuid()}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        return new MeisterProPRDbContext(options);
+    }
+
+    private static async Task<Guid> SeedClientAsync(MeisterProPRDbContext db)
+    {
+        var id = Guid.NewGuid();
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = id,
+                DisplayName = "Test Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    private static async Task<Guid> SeedAzureConnectionAsync(
+        MeisterProPRDbContext db,
+        Guid clientId,
+        ISecretProtectionCodec codec,
+        string displayName,
+        string secret)
+    {
+        var connectionId = Guid.NewGuid();
+        db.ClientScmConnections.Add(
+            new ClientScmConnectionRecord
+            {
+                Id = connectionId,
+                ClientId = clientId,
+                Provider = ScmProvider.AzureDevOps,
+                HostBaseUrl = "https://dev.azure.com",
+                AuthenticationKind = ScmAuthenticationKind.OAuthClientCredentials,
+                OAuthTenantId = $"{displayName}-tenant",
+                OAuthClientId = $"{displayName}-client",
+                DisplayName = displayName,
+                EncryptedSecretMaterial = codec.Protect(secret, SecretPurpose),
+                VerificationStatus = "verified",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        return connectionId;
+    }
+
+    private static async Task<Guid> SeedAzureOrganizationScopeAsync(
+        MeisterProPRDbContext db,
+        Guid clientId,
+        Guid connectionId,
+        string organizationUrl)
+    {
+        var scopeId = Guid.NewGuid();
+        db.ClientScmScopes.Add(
+            new ClientScmScopeRecord
+            {
+                Id = scopeId,
+                ClientId = clientId,
+                ConnectionId = connectionId,
+                ScopeType = "organization",
+                ExternalScopeId = "org",
+                ScopePath = organizationUrl,
+                DisplayName = "Org",
+                VerificationStatus = "verified",
+                IsEnabled = true,
+                LastVerifiedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        return scopeId;
+    }
+
     private sealed class TestableAdoDiscoveryService : AdoDiscoveryService
     {
-        private IReadOnlyList<TeamProjectReference> _projects = [];
-        private readonly Dictionary<string, IReadOnlyList<GitRepository>> _repositoriesByProject = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<(string ProjectId, string RepositoryId), IReadOnlyList<GitBranchStats>>
+            _branchesByRepository = [];
+
+        private readonly IClientScmConnectionRepository _connectionRepository;
+
+        private readonly Dictionary<string, IReadOnlyList<GitRepository>> _repositoriesByProject =
+            new(StringComparer.OrdinalIgnoreCase);
+
         private readonly Dictionary<(string ProjectId, string RepositoryId), GitRepository> _repositoryById = [];
-        private readonly Dictionary<(string ProjectId, string RepositoryId), IReadOnlyList<GitBranchStats>> _branchesByRepository = [];
-        private readonly Dictionary<string, IReadOnlyList<WikiV2>> _wikisByProject = new(StringComparer.OrdinalIgnoreCase);
-        private bool _scopeExists = true;
+        private readonly IClientScmScopeRepository _scopeRepository;
+        private readonly bool _useRepositoryResolution;
+
+        private readonly Dictionary<string, IReadOnlyList<WikiV2>> _wikisByProject =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private IReadOnlyList<TeamProjectReference> _projects = [];
         private bool _scopeEnabled = true;
+        private bool _scopeExists = true;
 
         public TestableAdoDiscoveryService()
-            : base(
-                new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
-                Substitute.For<IClientAdoOrganizationScopeRepository>())
+            : this(
+                Substitute.For<IClientScmConnectionRepository>(),
+                Substitute.For<IClientScmScopeRepository>(),
+                false)
         {
         }
+
+        public TestableAdoDiscoveryService(
+            IClientScmConnectionRepository connectionRepository,
+            IClientScmScopeRepository scopeRepository,
+            bool useRepositoryResolution = true)
+            : base(
+                new VssConnectionFactory(Substitute.For<TokenCredential>()),
+                connectionRepository,
+                scopeRepository)
+        {
+            this._connectionRepository = connectionRepository;
+            this._scopeRepository = scopeRepository;
+            this._useRepositoryResolution = useRepositoryResolution;
+        }
+
+        public ClientAdoOrganizationScopeDto? LastResolvedScope { get; private set; }
+
+        public AdoServicePrincipalCredentials? LastResolvedCredentials { get; private set; }
 
         public void SetProjects(params TeamProjectReference[] projects)
         {
@@ -295,11 +493,38 @@ public sealed class AdoDiscoveryServiceTests
             this._scopeEnabled = isEnabled;
         }
 
-        protected internal override Task<(ClientAdoOrganizationScopeDto Scope, ClientAdoCredentials? Credentials, VssConnection Connection)> ResolveScopeAsync(
-            Guid clientId,
-            Guid organizationScopeId,
-            CancellationToken ct)
+        protected internal override async
+            Task<(ClientAdoOrganizationScopeDto Scope, AdoServicePrincipalCredentials? Credentials, VssConnection
+                Connection)> ResolveScopeAsync(
+                Guid clientId,
+                Guid organizationScopeId,
+                CancellationToken ct)
         {
+            if (this._useRepositoryResolution)
+            {
+                var resolvedScope = await AdoProviderAdapterHelpers.ResolveOrganizationScopeByIdAsync(
+                                        this._connectionRepository,
+                                        this._scopeRepository,
+                                        clientId,
+                                        organizationScopeId,
+                                        ct)
+                                    ?? throw new KeyNotFoundException($"Organization scope {organizationScopeId} was not found for client {clientId}.");
+
+                if (!resolvedScope.IsEnabled)
+                {
+                    throw new InvalidOperationException("The selected organization scope is disabled.");
+                }
+
+                var resolvedCredentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+                    this._connectionRepository,
+                    clientId,
+                    resolvedScope.ScopePath,
+                    ct);
+                this.LastResolvedScope = AdoProviderAdapterHelpers.ToAdoOrganizationScopeDto(resolvedScope);
+                this.LastResolvedCredentials = resolvedCredentials;
+                return (this.LastResolvedScope, resolvedCredentials, null!);
+            }
+
             if (!this._scopeExists)
             {
                 throw new KeyNotFoundException($"Organization scope {organizationScopeId} was not found for client {clientId}.");
@@ -322,7 +547,9 @@ public sealed class AdoDiscoveryServiceTests
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow);
 
-            return Task.FromResult((scope, (ClientAdoCredentials?)null, (VssConnection)null!));
+            this.LastResolvedScope = scope;
+            this.LastResolvedCredentials = null;
+            return (scope, null, null!);
         }
 
         protected internal override Task<IReadOnlyList<TeamProjectReference>> GetProjectsAsync(

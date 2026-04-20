@@ -13,5 +13,8 @@ namespace MeisterProPR.Api.Tests.Fixtures;
 internal sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)
     : IDbContextFactory<MeisterProPRDbContext>
 {
-    public MeisterProPRDbContext CreateDbContext() => new(options);
+    public MeisterProPRDbContext CreateDbContext()
+    {
+        return new MeisterProPRDbContext(options);
+    }
 }

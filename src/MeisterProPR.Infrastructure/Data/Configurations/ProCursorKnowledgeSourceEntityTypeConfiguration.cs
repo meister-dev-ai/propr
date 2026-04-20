@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MeisterProPR.Infrastructure.Data.Configurations;
 
-internal sealed class ProCursorKnowledgeSourceEntityTypeConfiguration : IEntityTypeConfiguration<ProCursorKnowledgeSource>
+internal sealed class
+    ProCursorKnowledgeSourceEntityTypeConfiguration : IEntityTypeConfiguration<ProCursorKnowledgeSource>
 {
     public void Configure(EntityTypeBuilder<ProCursorKnowledgeSource> builder)
     {
@@ -31,12 +32,12 @@ internal sealed class ProCursorKnowledgeSourceEntityTypeConfiguration : IEntityT
             .HasConversion<short>()
             .IsRequired();
 
-        builder.Property(source => source.OrganizationUrl)
+        builder.Property(source => source.ProviderScopePath)
             .HasColumnName("organization_url")
             .HasMaxLength(512)
             .IsRequired();
 
-        builder.Property(source => source.ProjectId)
+        builder.Property(source => source.ProviderProjectKey)
             .HasColumnName("project_id")
             .HasMaxLength(256)
             .IsRequired();
@@ -96,8 +97,8 @@ internal sealed class ProCursorKnowledgeSourceEntityTypeConfiguration : IEntityT
         {
             source.ClientId,
             source.SourceKind,
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             source.RepositoryId,
             source.RootPath,
         })
@@ -114,7 +115,7 @@ internal sealed class ProCursorKnowledgeSourceEntityTypeConfiguration : IEntityT
             .HasForeignKey(source => source.ClientId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne<ClientAdoOrganizationScopeRecord>()
+        builder.HasOne<ClientScmScopeRecord>()
             .WithMany()
             .HasForeignKey(source => source.OrganizationScopeId)
             .OnDelete(DeleteBehavior.SetNull);

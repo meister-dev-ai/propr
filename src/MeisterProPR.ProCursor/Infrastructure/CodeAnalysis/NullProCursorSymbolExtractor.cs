@@ -17,10 +17,11 @@ public sealed class NullProCursorSymbolExtractor : IProCursorSymbolExtractor
         Guid snapshotId,
         CancellationToken ct = default)
     {
-        return Task.FromResult(new ProCursorSymbolExtractionResult(
-            [],
-            [],
-            false,
-            "symbol_extraction_not_configured"));
+        return Task.FromResult(
+            new ProCursorSymbolExtractionResult(
+                [],
+                [],
+                false,
+                "symbol_extraction_not_configured"));
     }
 }

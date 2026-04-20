@@ -25,7 +25,9 @@ public sealed class ProCursorKnowledgeSourceRepository(MeisterProPRDbContext db)
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ProCursorKnowledgeSource>> ListByClientAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorKnowledgeSource>> ListByClientAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
         return await db.ProCursorKnowledgeSources
             .Include(source => source.TrackedBranches)
@@ -43,7 +45,10 @@ public sealed class ProCursorKnowledgeSourceRepository(MeisterProPRDbContext db)
     }
 
     /// <inheritdoc />
-    public async Task<ProCursorKnowledgeSource?> GetByIdAsync(Guid clientId, Guid sourceId, CancellationToken ct = default)
+    public async Task<ProCursorKnowledgeSource?> GetByIdAsync(
+        Guid clientId,
+        Guid sourceId,
+        CancellationToken ct = default)
     {
         return await db.ProCursorKnowledgeSources
             .Include(source => source.TrackedBranches)
@@ -60,11 +65,12 @@ public sealed class ProCursorKnowledgeSourceRepository(MeisterProPRDbContext db)
     {
         return await db.ProCursorKnowledgeSources
             .Include(source => source.TrackedBranches)
-            .FirstOrDefaultAsync(source =>
-                source.ClientId == clientId &&
-                source.OrganizationUrl == organizationUrl &&
-                source.ProjectId == projectId &&
-                source.RepositoryId == repositoryId,
+            .FirstOrDefaultAsync(
+                source =>
+                    source.ClientId == clientId &&
+                    source.ProviderScopePath == organizationUrl &&
+                    source.ProviderProjectKey == projectId &&
+                    source.RepositoryId == repositoryId,
                 ct);
     }
 
@@ -80,13 +86,14 @@ public sealed class ProCursorKnowledgeSourceRepository(MeisterProPRDbContext db)
     {
         var normalizedRootPath = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath.Trim();
 
-        return await db.ProCursorKnowledgeSources.AnyAsync(source =>
-            source.ClientId == clientId &&
-            source.SourceKind == sourceKind &&
-            source.OrganizationUrl == organizationUrl &&
-            source.ProjectId == projectId &&
-            source.RepositoryId == repositoryId &&
-            source.RootPath == normalizedRootPath,
+        return await db.ProCursorKnowledgeSources.AnyAsync(
+            source =>
+                source.ClientId == clientId &&
+                source.SourceKind == sourceKind &&
+                source.ProviderScopePath == organizationUrl &&
+                source.ProviderProjectKey == projectId &&
+                source.RepositoryId == repositoryId &&
+                source.RootPath == normalizedRootPath,
             ct);
     }
 

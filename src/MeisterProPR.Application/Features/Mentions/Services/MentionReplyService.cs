@@ -17,14 +17,19 @@ public sealed partial class MentionReplyService(
     IPullRequestFetcher pullRequestFetcher,
     IMentionReplyJobRepository jobRepository,
     IMentionAnswerService answerService,
-    IAdoThreadReplier threadReplier,
-    ILogger<MentionReplyService> logger) : IMentionReplyService
+    IScmProviderRegistry providerRegistry,
+    ILogger<MentionReplyService> logger,
+    IProviderActivationService? providerActivationService = null) : IMentionReplyService
 {
     /// <inheritdoc />
     public async Task ProcessAsync(MentionReplyJob job, CancellationToken cancellationToken = default)
     {
         // Atomic claim: transition Pending → Processing before doing expensive work.
-        var claimed = await jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing, cancellationToken);
+        var claimed = await jobRepository.TryTransitionAsync(
+            job.Id,
+            MentionJobStatus.Pending,
+            MentionJobStatus.Processing,
+            cancellationToken);
 
         if (!claimed)
         {
@@ -34,6 +39,16 @@ public sealed partial class MentionReplyService(
 
         try
         {
+            if (providerActivationService is not null &&
+                !await providerActivationService.IsEnabledAsync(job.Provider, cancellationToken))
+            {
+                await jobRepository.SetFailedAsync(
+                    job.Id,
+                    "The provider family is currently disabled by system administration.",
+                    cancellationToken);
+                return;
+            }
+
             // Fetch full PR context (iterationId = 1 is sufficient for existing threads).
             var pullRequest = await pullRequestFetcher.FetchAsync(
                 job.OrganizationUrl,
@@ -54,15 +69,8 @@ public sealed partial class MentionReplyService(
                 cancellationToken);
 
             // Post the reply to the ADO thread.
-            await threadReplier.ReplyAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                job.ThreadId,
-                answer,
-                job.ClientId,
-                cancellationToken);
+            await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
+                .ReplyAsync(job.ClientId, job.ReviewThreadReference, answer, cancellationToken);
 
             await jobRepository.SetCompletedAsync(job.Id, cancellationToken);
             LogJobCompleted(logger, job.Id);

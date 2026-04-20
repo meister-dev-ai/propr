@@ -22,7 +22,8 @@ public sealed class JobsController(
 {
     /// <summary>
     ///     Returns all review jobs across all clients, newest first.
-    ///     Requires an Admin JWT or <c>X-User-Pat</c> for unrestricted access, or valid user authentication for scoped client access.
+    ///     Requires an Admin JWT or <c>X-User-Pat</c> for unrestricted access, or valid user authentication for scoped client
+    ///     access.
     /// </summary>
     /// <param name="limit">Maximum number of items to return (1–1000, default 100).</param>
     /// <param name="offset">Number of items to skip for pagination (default 0).</param>
@@ -80,7 +81,13 @@ public sealed class JobsController(
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Max(offset, 0);
 
-        var (total, items) = await jobRepository.GetAllJobsAsync(limit, offset, status, clientId, pullRequestId, cancellationToken);
+        var (total, items) = await jobRepository.GetAllJobsAsync(
+            limit,
+            offset,
+            status,
+            clientId,
+            pullRequestId,
+            cancellationToken);
 
         return this.Ok(
             new JobListResponse(
@@ -99,8 +106,8 @@ public sealed class JobsController(
                         j.CompletedAt,
                         j.Result?.Summary,
                         j.ErrorMessage,
-                        j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalInputTokens),
-                        j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalOutputTokens),
+                        j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
+                        j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
                         j.PrTitle,
                         j.PrSourceBranch,
                         j.PrTargetBranch,
@@ -147,21 +154,22 @@ public sealed class JobsController(
             var breakdownInput = breakdown.Sum(e => e.TotalInputTokens);
             var breakdownOutput = breakdown.Sum(e => e.TotalOutputTokens);
             breakdownConsistent = breakdownInput == (job.TotalInputTokensAggregated ?? 0)
-                && breakdownOutput == (job.TotalOutputTokensAggregated ?? 0);
+                                  && breakdownOutput == (job.TotalOutputTokensAggregated ?? 0);
         }
 
-        return this.Ok(new JobDetailResponse(
-            job.Id,
-            job.ClientId,
-            job.Status,
-            job.SubmittedAt,
-            job.ProcessingStartedAt,
-            job.CompletedAt,
-            job.TotalInputTokensAggregated,
-            job.TotalOutputTokensAggregated,
-            job.ErrorMessage,
-            breakdown,
-            breakdownConsistent));
+        return this.Ok(
+            new JobDetailResponse(
+                job.Id,
+                job.ClientId,
+                job.Status,
+                job.SubmittedAt,
+                job.ProcessingStartedAt,
+                job.CompletedAt,
+                job.TotalInputTokensAggregated,
+                job.TotalOutputTokensAggregated,
+                job.ErrorMessage,
+                breakdown,
+                breakdownConsistent));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -201,17 +209,18 @@ public sealed class JobsController(
             return this.NotFound();
         }
 
-        return this.Ok(new ReviewJobResultDto(
-            job.Id,
-            job.ClientId,
-            job.Status,
-            job.SubmittedAt,
-            job.CompletedAt,
-            new ReviewResultDto(
-                job.Result.Summary,
-                job.Result.Comments
-                    .Select(c => new ReviewCommentDto(c.FilePath, c.LineNumber, c.Severity, c.Message))
-                    .ToArray())));
+        return this.Ok(
+            new ReviewJobResultDto(
+                job.Id,
+                job.ClientId,
+                job.Status,
+                job.SubmittedAt,
+                job.CompletedAt,
+                new ReviewResultDto(
+                    job.Result.Summary,
+                    job.Result.Comments
+                        .Select(c => new ReviewCommentDto(c.FilePath, c.LineNumber, c.Severity, c.Message))
+                        .ToArray())));
     }
 
     /// <summary>
@@ -236,7 +245,9 @@ public sealed class JobsController(
             return auth;
         }
 
-        var protocolResult = await getReviewJobProtocolHandler.HandleAsync(new GetReviewJobProtocolQuery(id), cancellationToken);
+        var protocolResult = await getReviewJobProtocolHandler.HandleAsync(
+            new GetReviewJobProtocolQuery(id),
+            cancellationToken);
         if (protocolResult is null)
         {
             return this.NotFound();
@@ -261,8 +272,8 @@ public sealed class JobsController(
     ///     Requires valid user authentication and access to the specified client.
     /// </summary>
     /// <param name="clientId">Owning client identifier.</param>
-    /// <param name="organizationUrl">ADO organization base URL.</param>
-    /// <param name="projectId">ADO project identifier.</param>
+    /// <param name="providerScopePath">Provider scope path or host-qualified namespace for the repository.</param>
+    /// <param name="providerProjectKey">Provider project, owner, or namespace key for the repository.</param>
     /// <param name="repositoryId">ADO repository identifier.</param>
     /// <param name="pullRequestId">Pull request number.</param>
     /// <param name="page">Page number (1-based, default 1).</param>
@@ -278,8 +289,8 @@ public sealed class JobsController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPrView(
         Guid clientId,
-        [FromQuery] string? organizationUrl,
-        [FromQuery] string? projectId,
+        [FromQuery] string? providerScopePath,
+        [FromQuery] string? providerProjectKey,
         [FromQuery] string? repositoryId,
         [FromQuery] int? pullRequestId,
         [FromQuery] int page = 1,
@@ -298,38 +309,47 @@ public sealed class JobsController(
             return roleCheck;
         }
 
-        if (string.IsNullOrWhiteSpace(organizationUrl) ||
-            string.IsNullOrWhiteSpace(projectId) ||
+        if (string.IsNullOrWhiteSpace(providerScopePath) ||
+            string.IsNullOrWhiteSpace(providerProjectKey) ||
             string.IsNullOrWhiteSpace(repositoryId) ||
             pullRequestId is null or < 1)
         {
-            return this.BadRequest(new { error = "organizationUrl, projectId, repositoryId and pullRequestId are required." });
+            return this.BadRequest(new { error = "providerScopePath, providerProjectKey, repositoryId and pullRequestId are required." });
         }
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var jobs = await jobRepository.GetByPrAsync(
-            clientId, organizationUrl, projectId, repositoryId, pullRequestId.Value, page, pageSize, cancellationToken);
+            clientId,
+            providerScopePath,
+            providerProjectKey,
+            repositoryId,
+            pullRequestId.Value,
+            page,
+            pageSize,
+            cancellationToken);
 
         var breakdown = new List<TokenBreakdownEntry>();
         long totalInput = 0;
         long totalOutput = 0;
         foreach (var job in jobs)
         {
-            totalInput += job.TotalInputTokensAggregated ?? job.Protocols.Sum(p => (long?)p.TotalInputTokens) ?? 0;
-            totalOutput += job.TotalOutputTokensAggregated ?? job.Protocols.Sum(p => (long?)p.TotalOutputTokens) ?? 0;
+            totalInput += job.TotalInputTokensAggregated ?? job.Protocols.Sum(p => p.TotalInputTokens) ?? 0;
+            totalOutput += job.TotalOutputTokensAggregated ?? job.Protocols.Sum(p => p.TotalOutputTokens) ?? 0;
             foreach (var entry in job.TokenBreakdown)
             {
-                var existing = breakdown.Find(e => e.ConnectionCategory == entry.ConnectionCategory && e.ModelId == entry.ModelId);
+                var existing = breakdown.Find(e =>
+                    e.ConnectionCategory == entry.ConnectionCategory && e.ModelId == entry.ModelId);
                 if (existing is not null)
                 {
                     breakdown.Remove(existing);
-                    breakdown.Add(existing with
-                    {
-                        TotalInputTokens = existing.TotalInputTokens + entry.TotalInputTokens,
-                        TotalOutputTokens = existing.TotalOutputTokens + entry.TotalOutputTokens,
-                    });
+                    breakdown.Add(
+                        existing with
+                        {
+                            TotalInputTokens = existing.TotalInputTokens + entry.TotalInputTokens,
+                            TotalOutputTokens = existing.TotalOutputTokens + entry.TotalOutputTokens,
+                        });
                 }
                 else
                 {
@@ -341,14 +361,17 @@ public sealed class JobsController(
         var breakdownInput = breakdown.Sum(e => e.TotalInputTokens);
         var breakdownOutput = breakdown.Sum(e => e.TotalOutputTokens);
         var breakdownConsistent = breakdown.Count == 0 ||
-            (breakdownInput == totalInput && breakdownOutput == totalOutput);
+                                  (breakdownInput == totalInput && breakdownOutput == totalOutput);
 
         var originatedPaged = await memoryRepository.GetPagedAsync(
-            clientId, null, 1, 50,
-            source: MemorySource.ThreadResolved,
-            repositoryId: repositoryId,
-            pullRequestId: pullRequestId.Value,
-            ct: cancellationToken);
+            clientId,
+            null,
+            1,
+            50,
+            MemorySource.ThreadResolved,
+            repositoryId,
+            pullRequestId.Value,
+            cancellationToken);
         var originatedMemories = originatedPaged.Items
             .Select(r => new ThreadMemorySummaryDto(
                 r.Id,
@@ -365,7 +388,8 @@ public sealed class JobsController(
         {
             foreach (var protocol in job.Protocols)
             {
-                foreach (var ev in protocol.Events.Where(e => e.Name == "memory_reconsideration_completed" && e.InputTextSample != null))
+                foreach (var ev in protocol.Events.Where(e =>
+                             e.Name == "memory_reconsideration_completed" && e.InputTextSample != null))
                 {
                     try
                     {
@@ -404,19 +428,24 @@ public sealed class JobsController(
             while (remainingIds.Count > 0)
             {
                 var batch = await memoryRepository.GetPagedAsync(
-                    clientId, null, fetchPage, fetchPageSize, ct: cancellationToken);
+                    clientId,
+                    null,
+                    fetchPage,
+                    fetchPageSize,
+                    ct: cancellationToken);
                 foreach (var r in batch.Items)
                 {
                     if (remainingIds.Remove(r.Id))
                     {
-                        contributingMemories.Add(new ContributingMemorySummaryDto(
-                            r.Id,
-                            r.MemorySource,
-                            r.RepositoryId,
-                            r.PullRequestId > 0 ? r.PullRequestId : null,
-                            r.FilePath,
-                            r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
-                            null));
+                        contributingMemories.Add(
+                            new ContributingMemorySummaryDto(
+                                r.Id,
+                                r.MemorySource,
+                                r.RepositoryId,
+                                r.PullRequestId > 0 ? r.PullRequestId : null,
+                                r.FilePath,
+                                r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
+                                null));
                     }
                 }
 
@@ -430,18 +459,20 @@ public sealed class JobsController(
         }
 
         var jobSummaries = jobs.Select(j => new PrJobSummaryDto(
-            j.Id,
-            j.Status,
-            j.SubmittedAt,
-            j.CompletedAt,
-            j.Result?.Comments.Count,
-            j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalInputTokens),
-            j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => (long?)p.TotalOutputTokens),
-            j.TokenBreakdown)).ToList().AsReadOnly();
+                j.Id,
+                j.Status,
+                j.SubmittedAt,
+                j.CompletedAt,
+                j.Result?.Comments.Count,
+                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
+                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
+                j.TokenBreakdown))
+            .ToList()
+            .AsReadOnly();
 
         var dto = new PrReviewViewDto(
-            organizationUrl,
-            projectId,
+            providerScopePath,
+            providerProjectKey,
             repositoryId,
             pullRequestId.Value,
             jobs.Count,
@@ -462,8 +493,8 @@ public sealed class JobsController(
     public sealed record JobListItem(
         Guid Id,
         Guid? ClientId,
-        string OrganizationUrl,
-        string ProjectId,
+        string ProviderScopePath,
+        string ProviderProjectKey,
         string RepositoryId,
         int PullRequestId,
         int IterationId,

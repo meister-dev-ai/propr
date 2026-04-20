@@ -20,7 +20,10 @@ public sealed class RoslynProCursorSymbolExtractorTests
 
         try
         {
-            await WriteFileAsync(rootDirectory, "/src/Greeter.cs", """
+            await WriteFileAsync(
+                rootDirectory,
+                "/src/Greeter.cs",
+                """
                 namespace Demo;
 
                 public interface IMessageSink
@@ -55,31 +58,46 @@ public sealed class RoslynProCursorSymbolExtractorTests
 
             Assert.True(result.SupportsSymbolQueries);
             Assert.Null(result.UnsupportedReason);
-            Assert.Contains(result.Symbols, symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "IMessageSink");
-            Assert.Contains(result.Symbols, symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "Greeter");
+            Assert.Contains(
+                result.Symbols,
+                symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "IMessageSink");
+            Assert.Contains(
+                result.Symbols,
+                symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "Greeter");
             Assert.Contains(result.Symbols, symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "Write");
             Assert.Contains(result.Symbols, symbol => symbol.SnapshotId == snapshotId && symbol.DisplayName == "Run");
 
-            var greeterType = result.Symbols.Single(symbol => symbol.DisplayName == "Greeter" && symbol.SymbolKind == "type");
-            var sinkType = result.Symbols.Single(symbol => symbol.DisplayName == "IMessageSink" && symbol.SymbolKind == "type");
-            var runMethod = result.Symbols.Single(symbol => symbol.DisplayName == "Run" && symbol.SymbolKind == "method");
-            var writeMethod = result.Symbols.Single(symbol => symbol.DisplayName == "Write" && symbol.SymbolKind == "method" && symbol.ContainingSymbolKey == greeterType.SymbolKey);
+            var greeterType =
+                result.Symbols.Single(symbol => symbol.DisplayName == "Greeter" && symbol.SymbolKind == "type");
+            var sinkType = result.Symbols.Single(symbol =>
+                symbol.DisplayName == "IMessageSink" && symbol.SymbolKind == "type");
+            var runMethod =
+                result.Symbols.Single(symbol => symbol.DisplayName == "Run" && symbol.SymbolKind == "method");
+            var writeMethod = result.Symbols.Single(symbol =>
+                symbol.DisplayName == "Write" && symbol.SymbolKind == "method" &&
+                symbol.ContainingSymbolKey == greeterType.SymbolKey);
 
-            Assert.Contains(result.Edges, edge =>
-                edge.SnapshotId == snapshotId &&
-                edge.FromSymbolKey == greeterType.SymbolKey &&
-                edge.ToSymbolKey == sinkType.SymbolKey &&
-                edge.EdgeKind == "implementation");
-            Assert.Contains(result.Edges, edge =>
-                edge.SnapshotId == snapshotId &&
-                edge.FromSymbolKey == greeterType.SymbolKey &&
-                edge.ToSymbolKey == runMethod.SymbolKey &&
-                edge.EdgeKind == "containment");
-            Assert.Contains(result.Edges, edge =>
-                edge.SnapshotId == snapshotId &&
-                edge.FromSymbolKey == runMethod.SymbolKey &&
-                edge.ToSymbolKey == writeMethod.SymbolKey &&
-                edge.EdgeKind == "call");
+            Assert.Contains(
+                result.Edges,
+                edge =>
+                    edge.SnapshotId == snapshotId &&
+                    edge.FromSymbolKey == greeterType.SymbolKey &&
+                    edge.ToSymbolKey == sinkType.SymbolKey &&
+                    edge.EdgeKind == "implementation");
+            Assert.Contains(
+                result.Edges,
+                edge =>
+                    edge.SnapshotId == snapshotId &&
+                    edge.FromSymbolKey == greeterType.SymbolKey &&
+                    edge.ToSymbolKey == runMethod.SymbolKey &&
+                    edge.EdgeKind == "containment");
+            Assert.Contains(
+                result.Edges,
+                edge =>
+                    edge.SnapshotId == snapshotId &&
+                    edge.FromSymbolKey == runMethod.SymbolKey &&
+                    edge.ToSymbolKey == writeMethod.SymbolKey &&
+                    edge.EdgeKind == "call");
         }
         finally
         {
@@ -121,14 +139,19 @@ public sealed class RoslynProCursorSymbolExtractorTests
 
     private static string CreateRootDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), "meisterpropr-procursor-symbol-tests", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-symbol-tests",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
 
     private static async Task WriteFileAsync(string rootDirectory, string relativePath, string content)
     {
-        var filePath = Path.Combine(rootDirectory, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        var filePath = Path.Combine(
+            rootDirectory,
+            relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
         var directory = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrWhiteSpace(directory))
         {

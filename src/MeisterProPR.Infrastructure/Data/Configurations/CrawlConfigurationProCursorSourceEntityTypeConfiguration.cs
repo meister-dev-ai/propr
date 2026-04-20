@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MeisterProPR.Infrastructure.Data.Configurations;
 
-internal sealed class CrawlConfigurationProCursorSourceEntityTypeConfiguration : IEntityTypeConfiguration<CrawlConfigurationProCursorSourceRecord>
+internal sealed class
+    CrawlConfigurationProCursorSourceEntityTypeConfiguration : IEntityTypeConfiguration<
+    CrawlConfigurationProCursorSourceRecord>
 {
     public void Configure(EntityTypeBuilder<CrawlConfigurationProCursorSourceRecord> builder)
     {

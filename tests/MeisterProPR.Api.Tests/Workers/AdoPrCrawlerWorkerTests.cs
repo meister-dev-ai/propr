@@ -142,11 +142,12 @@ public sealed class AdoPrCrawlerWorkerTests
         scope.ServiceProvider.GetService(typeof(IPrCrawlService)).Returns((object?)null);
 
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(_ =>
-        {
-            crawlAttempted.TrySetResult();
-            return scope;
-        });
+        scopeFactory.CreateScope()
+            .Returns(_ =>
+            {
+                crawlAttempted.TrySetResult();
+                return scope;
+            });
 
         var worker = BuildWorker(scopeFactory);
 

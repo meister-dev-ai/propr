@@ -3,7 +3,6 @@
 
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AzureDevOps;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 

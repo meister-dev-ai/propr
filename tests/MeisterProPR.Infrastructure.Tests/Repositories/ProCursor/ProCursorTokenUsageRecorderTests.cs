@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -23,8 +24,10 @@ public sealed class ProCursorTokenUsageRecorderTests
     {
         var options = CreateOptions();
         await using var db = new MeisterProPRDbContext(options);
-        var recorder = new EfProCursorTokenUsageRecorder(new TestDbContextFactory(options), NullLogger<EfProCursorTokenUsageRecorder>.Instance);
-        var request = CreateRequest(requestId: "pcidx:test:embedding:0");
+        var recorder = new EfProCursorTokenUsageRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProCursorTokenUsageRecorder>.Instance);
+        var request = CreateRequest("pcidx:test:embedding:0");
 
         await recorder.RecordAsync(request);
         await recorder.RecordAsync(request);
@@ -37,15 +40,18 @@ public sealed class ProCursorTokenUsageRecorderTests
     {
         var options = CreateOptions();
         await using var db = new MeisterProPRDbContext(options);
-        var recorder = new EfProCursorTokenUsageRecorder(new TestDbContextFactory(options), NullLogger<EfProCursorTokenUsageRecorder>.Instance);
+        var recorder = new EfProCursorTokenUsageRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProCursorTokenUsageRecorder>.Instance);
 
-        await recorder.RecordAsync(CreateRequest(
-            requestId: "pcidx:test:embedding:1",
-            safeMetadataJson: "{\u0000\"source\":\"wiki\"}",
-            tokensEstimated: true,
-            costEstimated: true,
-            promptTokens: 144,
-            estimatedCostUsd: 0.00014m));
+        await recorder.RecordAsync(
+            CreateRequest(
+                "pcidx:test:embedding:1",
+                "{\u0000\"source\":\"wiki\"}",
+                true,
+                true,
+                144,
+                0.00014m));
 
         var recorded = await db.ProCursorTokenUsageEvents.SingleAsync();
         Assert.True(recorded.TokensEstimated);
@@ -68,7 +74,7 @@ public sealed class ProCursorTokenUsageRecorderTests
             "Platform Wiki",
             requestId,
             DateTimeOffset.UtcNow,
-            MeisterProPR.Domain.Enums.ProCursorTokenUsageCallType.Embedding,
+            ProCursorTokenUsageCallType.Embedding,
             "text-embedding-3-small",
             "text-embedding-3-small",
             "cl100k_base",
@@ -81,11 +87,17 @@ public sealed class ProCursorTokenUsageRecorderTests
             SafeMetadataJson: safeMetadataJson);
     }
 
-    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options) : IDbContextFactory<MeisterProPRDbContext>
+    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)
+        : IDbContextFactory<MeisterProPRDbContext>
     {
-        public MeisterProPRDbContext CreateDbContext() => new(options);
+        public MeisterProPRDbContext CreateDbContext()
+        {
+            return new MeisterProPRDbContext(options);
+        }
 
-        public Task<MeisterProPRDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MeisterProPRDbContext(options));
+        public Task<MeisterProPRDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new MeisterProPRDbContext(options));
+        }
     }
 }

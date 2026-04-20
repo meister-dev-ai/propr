@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -26,14 +27,41 @@ public sealed class SubmitReviewJobHandlerTests
             3);
     }
 
+    private static SubmitReviewJobRequestDto CreateGitHubRequest()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.example.com");
+        var repository = new RepositoryRef(host, "repo-gh-1", "acme", "acme/propr");
+
+        return new SubmitReviewJobRequestDto(
+            host.HostBaseUrl,
+            repository.OwnerOrNamespace,
+            repository.ExternalRepositoryId,
+            42,
+            1)
+        {
+            Provider = ScmProvider.GitHub,
+            Host = host,
+            Repository = repository,
+            CodeReview = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42),
+            ReviewRevision = new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"),
+        };
+    }
+
     [Fact]
     public async Task HandleAsync_ExistingActiveJob_ReturnsDuplicateWithoutQueueing()
     {
         var request = CreateRequest();
         var store = Substitute.For<IReviewJobIntakeStore>();
         var queue = Substitute.For<IReviewExecutionQueue>();
-        var existingJob = new ReviewJob(Guid.NewGuid(), ClientId, request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId);
-        store.FindActiveJobAsync(request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId, Arg.Any<CancellationToken>())
+        var existingJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            request.IterationId);
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns(existingJob);
 
         var sut = new SubmitReviewJobHandler(store, queue, NullLogger<SubmitReviewJobHandler>.Instance);
@@ -42,7 +70,8 @@ public sealed class SubmitReviewJobHandlerTests
 
         Assert.True(result.IsDuplicate);
         Assert.Equal(existingJob.Id, result.JobId);
-        await store.DidNotReceive().CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive()
+            .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
         await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -50,38 +79,50 @@ public sealed class SubmitReviewJobHandlerTests
     public async Task HandleAsync_NewJob_CreatesQueuesAndUpdatesPrContext()
     {
         var request = CreateRequest();
-        var createdJob = new ReviewJob(Guid.NewGuid(), ClientId, request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId);
+        var createdJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            request.IterationId);
         var store = Substitute.For<IReviewJobIntakeStore>();
         var queue = Substitute.For<IReviewExecutionQueue>();
         var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
 
-        store.FindActiveJobAsync(request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId, Arg.Any<CancellationToken>())
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns((ReviewJob?)null);
         store.CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns(createdJob);
         pullRequestFetcher.FetchAsync(
-                request.OrganizationUrl,
-                request.ProjectId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
                 request.IterationId,
                 null,
                 ClientId,
                 Arg.Any<CancellationToken>())
-            .Returns(new PullRequest(
-                request.OrganizationUrl,
-                request.ProjectId,
-                request.RepositoryId,
-                "repo-display",
-                request.PullRequestId,
-                request.IterationId,
-                "Add feature",
-                null,
-                "refs/heads/feature/x",
-                "refs/heads/main",
-                []));
+            .Returns(
+                new PullRequest(
+                    request.ProviderScopePath,
+                    request.ProviderProjectKey,
+                    request.RepositoryId,
+                    "repo-display",
+                    request.PullRequestId,
+                    request.IterationId,
+                    "Add feature",
+                    null,
+                    "refs/heads/feature/x",
+                    "refs/heads/main",
+                    []));
 
-        var sut = new SubmitReviewJobHandler(store, queue, NullLogger<SubmitReviewJobHandler>.Instance, pullRequestFetcher);
+        var sut = new SubmitReviewJobHandler(
+            store,
+            queue,
+            NullLogger<SubmitReviewJobHandler>.Instance,
+            pullRequestFetcher);
 
         var result = await sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request));
 
@@ -89,19 +130,33 @@ public sealed class SubmitReviewJobHandlerTests
         Assert.Equal(createdJob.Id, result.JobId);
         await store.Received(1).CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>());
         await queue.Received(1).EnqueueAsync(createdJob.Id, Arg.Any<CancellationToken>());
-        await store.Received(1).UpdatePrContextAsync(createdJob.Id, "Add feature", "repo-display", "refs/heads/feature/x", "refs/heads/main", Arg.Any<CancellationToken>());
+        await store.Received(1)
+            .UpdatePrContextAsync(
+                createdJob.Id,
+                "Add feature",
+                "repo-display",
+                "refs/heads/feature/x",
+                "refs/heads/main",
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task HandleAsync_PullRequestContextFailure_StillReturnsAcceptedResult()
     {
         var request = CreateRequest();
-        var createdJob = new ReviewJob(Guid.NewGuid(), ClientId, request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId);
+        var createdJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            request.IterationId);
         var store = Substitute.For<IReviewJobIntakeStore>();
         var queue = Substitute.For<IReviewExecutionQueue>();
         var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
 
-        store.FindActiveJobAsync(request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId, Arg.Any<CancellationToken>())
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns((ReviewJob?)null);
         store.CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns(createdJob);
@@ -116,13 +171,52 @@ public sealed class SubmitReviewJobHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns<Task<PullRequest>>(_ => throw new InvalidOperationException("ADO unavailable"));
 
-        var sut = new SubmitReviewJobHandler(store, queue, NullLogger<SubmitReviewJobHandler>.Instance, pullRequestFetcher);
+        var sut = new SubmitReviewJobHandler(
+            store,
+            queue,
+            NullLogger<SubmitReviewJobHandler>.Instance,
+            pullRequestFetcher);
 
         var result = await sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request));
 
         Assert.False(result.IsDuplicate);
         Assert.Equal(createdJob.Id, result.JobId);
         await queue.Received(1).EnqueueAsync(createdJob.Id, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().UpdatePrContextAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive()
+            .UpdatePrContextAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ProviderNeutralRequest_DeduplicatesUsingNormalizedReviewContext()
+    {
+        var request = CreateGitHubRequest();
+        var existingJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            request.IterationId);
+        existingJob.SetProviderReviewContext(request.CodeReview!);
+        existingJob.SetReviewRevision(request.ReviewRevision);
+
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>()).Returns(existingJob);
+
+        var sut = new SubmitReviewJobHandler(store, queue, NullLogger<SubmitReviewJobHandler>.Instance);
+
+        var result = await sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request));
+
+        Assert.True(result.IsDuplicate);
+        Assert.Equal(existingJob.Id, result.JobId);
+        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 }

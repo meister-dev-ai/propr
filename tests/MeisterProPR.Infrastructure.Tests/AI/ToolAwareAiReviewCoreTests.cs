@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
@@ -73,7 +74,10 @@ public class ToolAwareAiReviewCoreTests
 
     private static ChatResponse CreateFunctionCallResponse(string callId, string functionName, string argsJson)
     {
-        var funcCallContent = new FunctionCallContent(callId, functionName, JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson));
+        var funcCallContent = new FunctionCallContent(
+            callId,
+            functionName,
+            JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson));
         var message = new ChatMessage(ChatRole.Assistant, [funcCallContent]);
         return new ChatResponse(message);
     }
@@ -84,12 +88,15 @@ public class ToolAwareAiReviewCoreTests
         // Arrange
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateFinalReviewResponse("Looks good."));
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 10),
+            DefaultOptions(10),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
@@ -111,7 +118,10 @@ public class ToolAwareAiReviewCoreTests
         string? observedModelId = null;
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 observedModelId = callInfo.Arg<ChatOptions?>()?.ModelId;
@@ -151,7 +161,10 @@ public class ToolAwareAiReviewCoreTests
                 loop_complete = false, // not setting loop_complete, but threshold met
             });
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
         var sut = new ToolAwareAiReviewCore(
@@ -188,7 +201,10 @@ public class ToolAwareAiReviewCoreTests
                 loop_complete = false,
             });
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson)));
 
         var sut = new ToolAwareAiReviewCore(
@@ -221,7 +237,10 @@ public class ToolAwareAiReviewCoreTests
         // First response: function call to get_changed_files
         // Second response: final review
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 callCount++;
@@ -239,7 +258,7 @@ public class ToolAwareAiReviewCoreTests
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 5),
+            DefaultOptions(),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
@@ -267,7 +286,10 @@ public class ToolAwareAiReviewCoreTests
                 loop_complete = true,
             });
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
         var sut = new ToolAwareAiReviewCore(
@@ -293,12 +315,15 @@ public class ToolAwareAiReviewCoreTests
         var mockClient = Substitute.For<IChatClient>();
         var json = """{"summary":"Simple review.","comments":[]}""";
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 10),
+            DefaultOptions(10),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
@@ -320,7 +345,10 @@ public class ToolAwareAiReviewCoreTests
         var mockClient = Substitute.For<IChatClient>();
         var json = """{"summary":"All good.","comments":[]}""";
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
         var sut = new ToolAwareAiReviewCore(
@@ -371,7 +399,10 @@ public class ToolAwareAiReviewCoreTests
         var finalResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, finalJson));
 
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(toolCallResponse, finalResponse);
 
         var sut = new ToolAwareAiReviewCore(
@@ -410,7 +441,10 @@ public class ToolAwareAiReviewCoreTests
         var usage = new UsageDetails { InputTokenCount = 100, OutputTokenCount = 50 };
         var chatResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, json)) { Usage = usage };
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(chatResponse);
 
         var sut = new ToolAwareAiReviewCore(
@@ -450,8 +484,18 @@ public class ToolAwareAiReviewCoreTests
         var mockTools = Substitute.For<IReviewContextTools>();
         mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
 
-        var file = new ChangedFile("src/Foo.cs", MeisterProPR.Domain.Enums.ChangeType.Edit, "code", "+code");
-        var pr = new PullRequest("https://dev.azure.com/org", "proj", "repo", "repo", 1, 1, "PR", null, "feature/x", "main",
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "code", "+code");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
             new List<ChangedFile> { file }.AsReadOnly());
 
         var context = new ReviewSystemContext(null, [], mockTools)
@@ -459,7 +503,10 @@ public class ToolAwareAiReviewCoreTests
             PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, pr.AllPrFileSummaries),
         };
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(maxIterations: 10), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
         await sut.ReviewAsync(pr, context);
@@ -489,14 +536,27 @@ public class ToolAwareAiReviewCoreTests
 
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(toolCallResponse, finalResponse);
 
         var mockTools = Substitute.For<IReviewContextTools>();
         mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
 
-        var file = new ChangedFile("src/Foo.cs", MeisterProPR.Domain.Enums.ChangeType.Edit, "code", "+code");
-        var pr = new PullRequest("https://dev.azure.com/org", "proj", "repo", "repo", 1, 1, "PR", null, "feature/x", "main",
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "code", "+code");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
             new List<ChangedFile> { file }.AsReadOnly());
 
         var protocolId = Guid.NewGuid();
@@ -508,19 +568,23 @@ public class ToolAwareAiReviewCoreTests
             ProtocolRecorder = recorder,
         };
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(maxIterations: 10), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
         await sut.ReviewAsync(pr, context);
 
         // Assert — tool call was on iteration 1
-        await recorder.Received(1).RecordToolCallAsync(
-            protocolId,
-            "get_changed_files",
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            1,
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "get_changed_files",
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                1,
+                Arg.Any<CancellationToken>());
     }
 
     // T019 — Two per-file reviews of the same PR share a byte-for-byte identical first System message
@@ -534,10 +598,7 @@ public class ToolAwareAiReviewCoreTests
         var mockClient1 = Substitute.For<IChatClient>();
         mockClient1
             .GetResponseAsync(
-                Arg.Do<IEnumerable<ChatMessage>>(msgs =>
-                {
-                    capturedSystem1 ??= msgs.FirstOrDefault(m => m.Role == ChatRole.System)?.Text;
-                }),
+                Arg.Do<IEnumerable<ChatMessage>>(msgs => { capturedSystem1 ??= msgs.FirstOrDefault(m => m.Role == ChatRole.System)?.Text; }),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(CreateFinalReviewResponse("Done 1."));
@@ -545,34 +606,54 @@ public class ToolAwareAiReviewCoreTests
         var mockClient2 = Substitute.For<IChatClient>();
         mockClient2
             .GetResponseAsync(
-                Arg.Do<IEnumerable<ChatMessage>>(msgs =>
-                {
-                    capturedSystem2 ??= msgs.FirstOrDefault(m => m.Role == ChatRole.System)?.Text;
-                }),
+                Arg.Do<IEnumerable<ChatMessage>>(msgs => { capturedSystem2 ??= msgs.FirstOrDefault(m => m.Role == ChatRole.System)?.Text; }),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(CreateFinalReviewResponse("Done 2."));
 
         var files = new List<ChangedFile>
         {
-            new("src/Foo.cs", MeisterProPR.Domain.Enums.ChangeType.Edit, "code1", "+code1"),
-            new("src/Bar.cs", MeisterProPR.Domain.Enums.ChangeType.Edit, "code2", "+code2"),
+            new("src/Foo.cs", ChangeType.Edit, "code1", "+code1"),
+            new("src/Bar.cs", ChangeType.Edit, "code2", "+code2"),
         }.AsReadOnly();
-        var pr = new PullRequest("https://dev.azure.com/org", "proj", "repo", "repo", 1, 1, "PR", null, "feature/x", "main", files);
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
+            files);
 
         var sharedContext = new ReviewSystemContext("Custom system message for client", [], null);
 
-        var context1 = new ReviewSystemContext(sharedContext.ClientSystemMessage, sharedContext.RepositoryInstructions, null)
+        var context1 = new ReviewSystemContext(
+            sharedContext.ClientSystemMessage,
+            sharedContext.RepositoryInstructions,
+            null)
         {
             PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 2, pr.AllPrFileSummaries),
         };
-        var context2 = new ReviewSystemContext(sharedContext.ClientSystemMessage, sharedContext.RepositoryInstructions, null)
+        var context2 = new ReviewSystemContext(
+            sharedContext.ClientSystemMessage,
+            sharedContext.RepositoryInstructions,
+            null)
         {
             PerFileHint = new PerFileReviewHint("src/Bar.cs", 2, 2, pr.AllPrFileSummaries),
         };
 
-        var sut1 = new ToolAwareAiReviewCore(mockClient1, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
-        var sut2 = new ToolAwareAiReviewCore(mockClient2, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut1 = new ToolAwareAiReviewCore(
+            mockClient1,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut2 = new ToolAwareAiReviewCore(
+            mockClient2,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — simulate two parallel reviews of the same PR
         await Task.WhenAll(
@@ -601,10 +682,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -628,10 +715,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -655,10 +748,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -680,10 +779,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -709,10 +814,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw; string element skipped, valid object element processed
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -734,10 +845,16 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -774,16 +891,24 @@ public class ToolAwareAiReviewCoreTests
 
         var callCount = 0;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 callCount++;
                 return Task.FromResult(
-                    new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                        callCount == 1 ? wrongSchemaJson : correctSchemaJson)));
+                    new ChatResponse(
+                        new ChatMessage(
+                            ChatRole.Assistant,
+                            callCount == 1 ? wrongSchemaJson : correctSchemaJson)));
             });
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -811,17 +936,26 @@ public class ToolAwareAiReviewCoreTests
                    }
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
 
         // Assert — exactly one AI call; empty comments array is valid, no correction needed
         await mockClient.Received(1)
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
         Assert.Equal("No issues found.", result.Summary);
         Assert.Empty(result.Comments);
     }
@@ -837,10 +971,16 @@ public class ToolAwareAiReviewCoreTests
                    ```
                    """;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
 
-        var sut = new ToolAwareAiReviewCore(mockClient, DefaultOptions(), Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // Act — must not throw
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
@@ -867,22 +1007,25 @@ public class ToolAwareAiReviewCoreTests
                 loop_complete = false,
             });
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson)));
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 10), // global max = 10
+            DefaultOptions(10), // global max = 10
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         // PerFileHint.MaxIterationsOverride = 3 → loop must stop at 3, not 10
         var context = new ReviewSystemContext(null, [], null)
         {
-            PerFileHint = new MeisterProPR.Application.ValueObjects.PerFileReviewHint(
-                FilePath: "src/BigService.cs",
-                FileIndex: 1,
-                TotalFiles: 1,
-                AllChangedFileSummaries: [])
+            PerFileHint = new PerFileReviewHint(
+                "src/BigService.cs",
+                1,
+                1,
+                [])
             {
                 MaxIterationsOverride = 3,
             },

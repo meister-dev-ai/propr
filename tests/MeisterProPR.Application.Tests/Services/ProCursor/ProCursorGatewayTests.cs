@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
@@ -22,14 +23,21 @@ public sealed class ProCursorGatewayTests
     {
         var clientId = Guid.NewGuid();
         var clientAdminService = Substitute.For<IClientAdminService>();
-        var organizationScopeRepository = Substitute.For<IClientAdoOrganizationScopeRepository>();
-        var adoDiscoveryService = Substitute.For<IAdoDiscoveryService>();
+        var providerRegistry = CreateProviderRegistry(Substitute.For<IProviderAdminDiscoveryService>());
         var knowledgeSourceRepository = Substitute.For<IProCursorKnowledgeSourceRepository>();
 
         var firstSource = CreateSource(clientId, "Repo A", "repo-a");
         var secondSource = CreateSource(clientId, "Repo B", "repo-b");
-        var firstBranch = firstSource.AddTrackedBranch(Guid.NewGuid(), "main", ProCursorRefreshTriggerMode.BranchUpdate, true);
-        var secondBranch = secondSource.AddTrackedBranch(Guid.NewGuid(), "main", ProCursorRefreshTriggerMode.BranchUpdate, true);
+        var firstBranch = firstSource.AddTrackedBranch(
+            Guid.NewGuid(),
+            "main",
+            ProCursorRefreshTriggerMode.BranchUpdate,
+            true);
+        var secondBranch = secondSource.AddTrackedBranch(
+            Guid.NewGuid(),
+            "main",
+            ProCursorRefreshTriggerMode.BranchUpdate,
+            true);
         var firstSnapshot = CreateReadySnapshot(firstSource.Id, firstBranch.Id, "commit-a");
         var secondSnapshot = CreateReadySnapshot(secondSource.Id, secondBranch.Id, "commit-b");
 
@@ -38,16 +46,16 @@ public sealed class ProCursorGatewayTests
         knowledgeSourceRepository.ListByClientAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([firstSource, secondSource]));
 
-        var snapshotRepository = new ConcurrencyDetectingSnapshotRepository(new Dictionary<Guid, IReadOnlyList<ProCursorIndexSnapshot>>
-        {
-            [firstSource.Id] = [firstSnapshot],
-            [secondSource.Id] = [secondSnapshot],
-        });
+        var snapshotRepository = new ConcurrencyDetectingSnapshotRepository(
+            new Dictionary<Guid, IReadOnlyList<ProCursorIndexSnapshot>>
+            {
+                [firstSource.Id] = [firstSnapshot],
+                [secondSource.Id] = [secondSnapshot],
+            });
 
         var gateway = new ProCursorGateway(
             clientAdminService,
-            organizationScopeRepository,
-            adoDiscoveryService,
+            providerRegistry,
             knowledgeSourceRepository,
             snapshotRepository,
             null!,
@@ -83,30 +91,42 @@ public sealed class ProCursorGatewayTests
         var scopeId = Guid.NewGuid();
         var request = CreateGuidedRequest(scopeId);
         var clientAdminService = Substitute.For<IClientAdminService>();
-        var organizationScopeRepository = Substitute.For<IClientAdoOrganizationScopeRepository>();
-        var adoDiscoveryService = Substitute.For<IAdoDiscoveryService>();
+        var adminDiscoveryService = Substitute.For<IProviderAdminDiscoveryService>();
         var knowledgeSourceRepository = Substitute.For<IProCursorKnowledgeSourceRepository>();
 
         clientAdminService.ExistsAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
-        organizationScopeRepository.GetByIdAsync(clientId, scopeId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoOrganizationScopeDto?>(CreateOrganizationScope(clientId, scopeId)));
-        adoDiscoveryService.ListSourcesAsync(clientId, scopeId, "project-a", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
+        adminDiscoveryService.Provider.Returns(ScmProvider.AzureDevOps);
+        adminDiscoveryService.GetScopeAsync(clientId, scopeId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmScopeDto?>(CreateOrganizationScope(clientId, scopeId)));
+        adminDiscoveryService.ListSourcesAsync(
+                clientId,
+                scopeId,
+                "project-a",
+                ProCursorSourceKind.Repository,
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([]));
-        knowledgeSourceRepository.ExistsAsync(Arg.Any<Guid>(), Arg.Any<ProCursorSourceKind>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        knowledgeSourceRepository.ExistsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProCursorSourceKind>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
         var gateway = CreateGateway(
             clientAdminService,
-            organizationScopeRepository,
-            adoDiscoveryService,
+            CreateProviderRegistry(adminDiscoveryService),
             knowledgeSourceRepository);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.CreateSourceAsync(clientId, request, CancellationToken.None));
 
         Assert.Contains("no longer available", ex.Message, StringComparison.OrdinalIgnoreCase);
-        await knowledgeSourceRepository.DidNotReceive().AddAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
+        await knowledgeSourceRepository.DidNotReceive()
+            .AddAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -116,46 +136,62 @@ public sealed class ProCursorGatewayTests
         var scopeId = Guid.NewGuid();
         var request = CreateGuidedRequest(scopeId);
         var clientAdminService = Substitute.For<IClientAdminService>();
-        var organizationScopeRepository = Substitute.For<IClientAdoOrganizationScopeRepository>();
-        var adoDiscoveryService = Substitute.For<IAdoDiscoveryService>();
+        var adminDiscoveryService = Substitute.For<IProviderAdminDiscoveryService>();
         var knowledgeSourceRepository = Substitute.For<IProCursorKnowledgeSourceRepository>();
 
         clientAdminService.ExistsAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
-        organizationScopeRepository.GetByIdAsync(clientId, scopeId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoOrganizationScopeDto?>(CreateOrganizationScope(clientId, scopeId)));
-        adoDiscoveryService.ListSourcesAsync(clientId, scopeId, "project-a", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([
-                new AdoSourceOptionDto(
-                    ProCursorSourceKind.Repository.ToString("G"),
-                    new CanonicalSourceReferenceDto("azureDevOps", "repo-guided"),
-                    "Guided Repo",
-                    "main"),
-            ]));
-        adoDiscoveryService.ListBranchesAsync(
+        adminDiscoveryService.Provider.Returns(ScmProvider.AzureDevOps);
+        adminDiscoveryService.GetScopeAsync(clientId, scopeId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmScopeDto?>(CreateOrganizationScope(clientId, scopeId)));
+        adminDiscoveryService.ListSourcesAsync(
+                clientId,
+                scopeId,
+                "project-a",
+                ProCursorSourceKind.Repository,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>(
+                [
+                    new AdoSourceOptionDto(
+                        ProCursorSourceKind.Repository.ToString("G"),
+                        new CanonicalSourceReferenceDto("azureDevOps", "repo-guided"),
+                        "Guided Repo",
+                        "main"),
+                ]));
+        adminDiscoveryService.ListBranchesAsync(
                 clientId,
                 scopeId,
                 "project-a",
                 ProCursorSourceKind.Repository,
                 Arg.Any<CanonicalSourceReferenceDto>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>([
-                new AdoBranchOptionDto("develop", true),
-            ]));
-        knowledgeSourceRepository.ExistsAsync(Arg.Any<Guid>(), Arg.Any<ProCursorSourceKind>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>(
+                [
+                    new AdoBranchOptionDto("develop", true),
+                ]));
+        knowledgeSourceRepository.ExistsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProCursorSourceKind>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
         var gateway = CreateGateway(
             clientAdminService,
-            organizationScopeRepository,
-            adoDiscoveryService,
+            CreateProviderRegistry(adminDiscoveryService),
             knowledgeSourceRepository);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.CreateSourceAsync(clientId, request, CancellationToken.None));
 
         Assert.Contains("default branch", ex.Message, StringComparison.OrdinalIgnoreCase);
-        await knowledgeSourceRepository.DidNotReceive().AddAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
+        await knowledgeSourceRepository.DidNotReceive()
+            .AddAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
     }
 
     private static ProCursorKnowledgeSource CreateSource(Guid clientId, string displayName, string repositoryId)
@@ -174,15 +210,18 @@ public sealed class ProCursorGatewayTests
             "auto");
     }
 
-    private static ClientAdoOrganizationScopeDto CreateOrganizationScope(Guid clientId, Guid scopeId)
+    private static ClientScmScopeDto CreateOrganizationScope(Guid clientId, Guid scopeId)
     {
-        return new ClientAdoOrganizationScopeDto(
+        return new ClientScmScopeDto(
             scopeId,
             clientId,
+            Guid.NewGuid(),
+            "organization",
+            "test-org",
             "https://dev.azure.com/test-org",
             "Test Org",
+            "verified",
             true,
-            AdoOrganizationVerificationStatus.Verified,
             null,
             null,
             DateTimeOffset.UtcNow,
@@ -200,22 +239,28 @@ public sealed class ProCursorGatewayTests
             "main",
             null,
             "auto",
-            [new ProCursorTrackedBranchCreateRequest("main", ProCursorRefreshTriggerMode.BranchUpdate, true)],
+            [new ProCursorTrackedBranchCreateRequest("main", ProCursorRefreshTriggerMode.BranchUpdate)],
             scopeId,
             new CanonicalSourceReferenceDto("azureDevOps", "repo-guided"),
             "Guided Repo");
     }
 
+    private static IScmProviderRegistry CreateProviderRegistry(IProviderAdminDiscoveryService adminDiscoveryService)
+    {
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+            .Returns(adminDiscoveryService);
+        return providerRegistry;
+    }
+
     private static ProCursorGateway CreateGateway(
         IClientAdminService clientAdminService,
-        IClientAdoOrganizationScopeRepository organizationScopeRepository,
-        IAdoDiscoveryService adoDiscoveryService,
+        IScmProviderRegistry providerRegistry,
         IProCursorKnowledgeSourceRepository knowledgeSourceRepository)
     {
         return new ProCursorGateway(
             clientAdminService,
-            organizationScopeRepository,
-            adoDiscoveryService,
+            providerRegistry,
             knowledgeSourceRepository,
             Substitute.For<IProCursorIndexSnapshotRepository>(),
             null!,
@@ -236,17 +281,20 @@ public sealed class ProCursorGatewayTests
         return snapshot;
     }
 
-    private sealed class ConcurrencyDetectingSnapshotRepository(
-        IReadOnlyDictionary<Guid, IReadOnlyList<ProCursorIndexSnapshot>> snapshotsBySource)
+    private sealed class ConcurrencyDetectingSnapshotRepository(IReadOnlyDictionary<Guid, IReadOnlyList<ProCursorIndexSnapshot>> snapshotsBySource)
         : IProCursorIndexSnapshotRepository
     {
         private int _activeOperations;
 
-        public Task AddAsync(ProCursorIndexSnapshot snapshot, CancellationToken ct = default) =>
+        public Task AddAsync(ProCursorIndexSnapshot snapshot, CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<ProCursorIndexSnapshot?> GetByIdAsync(Guid snapshotId, CancellationToken ct = default) =>
+        public Task<ProCursorIndexSnapshot?> GetByIdAsync(Guid snapshotId, CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<ProCursorIndexSnapshot?> GetLatestAsync(
             Guid knowledgeSourceId,
@@ -269,15 +317,21 @@ public sealed class ProCursorGatewayTests
         public Task<ProCursorIndexSnapshot?> GetLatestReadyAsync(
             Guid knowledgeSourceId,
             Guid? trackedBranchId = null,
-            CancellationToken ct = default) =>
+            CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<IReadOnlyList<ProCursorKnowledgeChunk>> ListKnowledgeChunksAsync(
             Guid snapshotId,
-            CancellationToken ct = default) =>
+            CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(Guid knowledgeSourceId, CancellationToken ct = default)
+        public Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(
+            Guid knowledgeSourceId,
+            CancellationToken ct = default)
         {
             return this.RunWithoutOverlapAsync(() => this.GetSnapshots(knowledgeSourceId));
         }
@@ -285,18 +339,24 @@ public sealed class ProCursorGatewayTests
         public Task ReplaceKnowledgeChunksAsync(
             Guid snapshotId,
             IReadOnlyList<ProCursorKnowledgeChunk> chunks,
-            CancellationToken ct = default) =>
+            CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
         public Task ReplaceSymbolGraphAsync(
             Guid snapshotId,
             IReadOnlyList<ProCursorSymbolRecord> symbols,
             IReadOnlyList<ProCursorSymbolEdge> edges,
-            CancellationToken ct = default) =>
+            CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task UpdateAsync(ProCursorIndexSnapshot snapshot, CancellationToken ct = default) =>
+        public Task UpdateAsync(ProCursorIndexSnapshot snapshot, CancellationToken ct = default)
+        {
             throw new NotSupportedException();
+        }
 
         private IReadOnlyList<ProCursorIndexSnapshot> GetSnapshots(Guid knowledgeSourceId)
         {

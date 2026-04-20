@@ -8,7 +8,6 @@ using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Application.Tests.Services.ProCursor;
@@ -28,8 +27,11 @@ public sealed class ProCursorMiniIndexBuilderTests
         var materializer = Substitute.For<IProCursorMaterializer>();
         var symbolExtractor = Substitute.For<IProCursorSymbolExtractor>();
         var source = CreateSource();
-        var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", supportsSymbolQueries: true);
-        var rootDirectory = Path.Combine(Path.GetTempPath(), "meisterpropr-procursor-overlay-tests", Guid.NewGuid().ToString("N"));
+        var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", true);
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-overlay-tests",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootDirectory);
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
@@ -38,34 +40,39 @@ public sealed class ProCursorMiniIndexBuilderTests
             .Returns(baseSnapshot);
         materializer.SourceKind.Returns(ProCursorSourceKind.Repository);
         materializer.MaterializeAsync(source, Arg.Any<ProCursorTrackedBranch>(), null, Arg.Any<CancellationToken>())
-            .Returns(new ProCursorMaterializedSource(
-                source.Id,
-                Guid.NewGuid(),
-                "feature/branch",
-                "commit-overlay",
-                rootDirectory,
-                ["/src/Greeter.cs"]));
-        symbolExtractor.ExtractAsync(Arg.Any<ProCursorMaterializedSource>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    Guid.NewGuid(),
+                    "feature/branch",
+                    "commit-overlay",
+                    rootDirectory,
+                    ["/src/Greeter.cs"]));
+        symbolExtractor.ExtractAsync(
+                Arg.Any<ProCursorMaterializedSource>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var snapshotId = call.ArgAt<Guid>(1);
                 return new ProCursorSymbolExtractionResult(
-                    [new ProCursorSymbolRecord(
-                        Guid.NewGuid(),
-                        snapshotId,
-                        "csharp",
-                        "T:Demo.Greeter",
-                        "Greeter",
-                        "type",
-                        null,
-                        "src/Greeter.cs",
-                        3,
-                        12,
-                        "Demo.Greeter",
-                        "Greeter Demo.Greeter")],
+                    [
+                        new ProCursorSymbolRecord(
+                            Guid.NewGuid(),
+                            snapshotId,
+                            "csharp",
+                            "T:Demo.Greeter",
+                            "Greeter",
+                            "type",
+                            null,
+                            "src/Greeter.cs",
+                            3,
+                            12,
+                            "Demo.Greeter",
+                            "Greeter Demo.Greeter"),
+                    ],
                     [],
-                    true,
-                    null);
+                    true);
             });
 
         var builder = new ProCursorMiniIndexBuilder(

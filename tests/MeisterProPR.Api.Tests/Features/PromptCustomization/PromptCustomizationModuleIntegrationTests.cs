@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -53,7 +54,9 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
         Assert.Equal("SystemPrompt", createdBody.GetProperty("promptKey").GetString());
         Assert.Equal("Use the customized system prompt.", createdBody.GetProperty("overrideText").GetString());
 
-        using var listRequest = factory.CreateAuthorizedRequest(HttpMethod.Get, $"/clients/{factory.ClientId}/prompt-overrides");
+        using var listRequest = factory.CreateAuthorizedRequest(
+            HttpMethod.Get,
+            $"/clients/{factory.ClientId}/prompt-overrides");
         var listResponse = await client.SendAsync(listRequest);
 
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
@@ -119,7 +122,9 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
         public HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string uri, object? body = null)
         {
             var request = new HttpRequestMessage(method, uri);
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", this.GenerateUserToken(this.ClientAdministratorUserId));
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer",
+                this.GenerateUserToken(this.ClientAdministratorUserId));
 
             if (body is not null)
             {
@@ -143,16 +148,17 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
 
             using var scope = this.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.PromptOverrides.Add(new PromptOverrideRecord
-            {
-                Id = id,
-                ClientId = this.ClientId,
-                Scope = PromptOverrideScope.ClientScope,
-                PromptKey = promptKey,
-                OverrideText = overrideText,
-                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
-                UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
-            });
+            db.PromptOverrides.Add(
+                new PromptOverrideRecord
+                {
+                    Id = id,
+                    ClientId = this.ClientId,
+                    Scope = PromptOverrideScope.ClientScope,
+                    PromptKey = promptKey,
+                    OverrideText = overrideText,
+                    CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                    UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+                });
             await db.SaveChangesAsync();
 
             return id;
@@ -171,7 +177,8 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", AppUserRole.User.ToString()),
                 ]),
@@ -204,13 +211,13 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
 
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
                 services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
-                services.AddDbContextFactory<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContextFactory<MeisterProPRDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IPromptOverrideRepository, PromptOverrideRepository>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
                 services.AddSingleton(Substitute.For<IClientAdoOrganizationScopeRepository>());
                 services.AddSingleton(Substitute.For<IJobRepository>());
@@ -220,7 +227,9 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(adminUserId, Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole> { [clientId] = ClientRole.ClientAdministrator }));
-                userRepo.GetUserClientRolesAsync(Arg.Is<Guid>(value => value != adminUserId), Arg.Any<CancellationToken>())
+                userRepo.GetUserClientRolesAsync(
+                        Arg.Is<Guid>(value => value != adminUserId),
+                        Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
@@ -228,11 +237,6 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
-
-                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredentialRepository);
             });
         }
 
@@ -246,13 +250,14 @@ public sealed class PromptCustomizationModuleIntegrationTests(PromptCustomizatio
 
             if (!db.Clients.Any(record => record.Id == this.ClientId))
             {
-                db.Clients.Add(new ClientRecord
-                {
-                    Id = this.ClientId,
-                    DisplayName = "Prompt Customization Client",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
+                db.Clients.Add(
+                    new ClientRecord
+                    {
+                        Id = this.ClientId,
+                        DisplayName = "Prompt Customization Client",
+                        IsActive = true,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
                 db.SaveChanges();
             }
 

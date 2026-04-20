@@ -23,7 +23,9 @@ public sealed class VerticalSliceDependencyTests
 
         foreach (var relativePath in moduleFiles)
         {
-            Assert.True(File.Exists(Path.Combine(RepoRoot, relativePath)), $"Expected module root file '{relativePath}' to exist.");
+            Assert.True(
+                File.Exists(Path.Combine(RepoRoot, relativePath)),
+                $"Expected module root file '{relativePath}' to exist.");
         }
     }
 
@@ -62,31 +64,52 @@ public sealed class VerticalSliceDependencyTests
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/Reviewing/ReviewingModuleServiceCollectionExtensions.cs",
                 ["IJobRepository", "IProtocolRecorder", "ReviewOrchestrationService"],
-                ["IClientAdminService", "ICrawlConfigurationRepository", "IUserRepository", "IMentionScanRepository", "IPromptOverrideRepository", "IClientTokenUsageRepository"]),
+                [
+                    "IClientAdminService", "ICrawlConfigurationRepository", "IUserRepository", "IMentionScanRepository",
+                    "IPromptOverrideRepository", "IClientTokenUsageRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/Crawling/CrawlingModuleServiceCollectionExtensions.cs",
                 ["ICrawlConfigurationRepository", "IReviewPrScanRepository", "IPrCrawlService"],
-                ["IClientAdminService", "IUserRepository", "IMentionScanRepository", "IPromptOverrideRepository", "IClientTokenUsageRepository"]),
+                [
+                    "IClientAdminService", "IUserRepository", "IMentionScanRepository", "IPromptOverrideRepository",
+                    "IClientTokenUsageRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/Clients/ClientsModuleServiceCollectionExtensions.cs",
                 ["IClientRegistry", "IClientAdminService", "IAiConnectionRepository"],
-                ["IJobRepository", "ICrawlConfigurationRepository", "IUserRepository", "IMentionScanRepository", "IPromptOverrideRepository"]),
+                [
+                    "IJobRepository", "ICrawlConfigurationRepository", "IUserRepository", "IMentionScanRepository",
+                    "IPromptOverrideRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/IdentityAndAccess/IdentityAndAccessModuleServiceCollectionExtensions.cs",
                 ["IUserRepository", "IRefreshTokenRepository", "IUserPatRepository", "IJwtTokenService"],
-                ["IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IMentionScanRepository", "IPromptOverrideRepository"]),
+                [
+                    "IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IMentionScanRepository",
+                    "IPromptOverrideRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/Mentions/MentionsModuleServiceCollectionExtensions.cs",
                 ["IMentionReplyJobRepository", "IMentionScanRepository", "IMentionScanService"],
-                ["IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository", "IPromptOverrideRepository"]),
+                [
+                    "IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository",
+                    "IPromptOverrideRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/PromptCustomization/PromptCustomizationModuleServiceCollectionExtensions.cs",
                 ["IPromptOverrideRepository", "IPromptOverrideService"],
-                ["IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository", "IMentionScanRepository"]),
+                [
+                    "IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository",
+                    "IMentionScanRepository",
+                ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/UsageReporting/UsageReportingModuleServiceCollectionExtensions.cs",
                 ["IClientTokenUsageRepository", "IProCursorTokenUsageRecorder", "IProCursorTokenUsageReadRepository"],
-                ["IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository", "IMentionScanRepository", "IPromptOverrideRepository"]),
+                [
+                    "IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository",
+                    "IMentionScanRepository", "IPromptOverrideRepository",
+                ]),
         };
 
         foreach (var boundary in moduleBoundaries)

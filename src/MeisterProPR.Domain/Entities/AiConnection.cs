@@ -8,7 +8,7 @@ namespace MeisterProPR.Domain.Entities;
 /// <summary>Per-client AI endpoint configuration. Exactly one connection per client may be active at a time.</summary>
 public sealed class AiConnection
 {
-    /// <summary>Creates a new <see cref="AiConnection"/>.</summary>
+    /// <summary>Creates a new <see cref="AiConnection" />.</summary>
     public AiConnection(Guid id, Guid clientId, string displayName, string endpointUrl, IReadOnlyList<string> models)
     {
         if (id == Guid.Empty)

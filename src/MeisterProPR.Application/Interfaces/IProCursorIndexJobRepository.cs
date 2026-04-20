@@ -20,7 +20,9 @@ public interface IProCursorIndexJobRepository
     Task<ProCursorIndexJob?> GetNextPendingAsync(CancellationToken ct = default);
 
     /// <summary>Returns the next pending job whose source is not in the excluded set.</summary>
-    Task<ProCursorIndexJob?> GetNextPendingAsync(IReadOnlyCollection<Guid> excludedSourceIds, CancellationToken ct = default);
+    Task<ProCursorIndexJob?> GetNextPendingAsync(
+        IReadOnlyCollection<Guid> excludedSourceIds,
+        CancellationToken ct = default);
 
     /// <summary>Returns active jobs for one knowledge source.</summary>
     Task<IReadOnlyList<ProCursorIndexJob>> ListActiveAsync(Guid knowledgeSourceId, CancellationToken ct = default);

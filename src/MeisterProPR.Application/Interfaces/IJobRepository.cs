@@ -108,7 +108,9 @@ public interface IJobRepository
 
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
-        string organizationUrl, string projectId, CancellationToken ct = default);
+        string organizationUrl,
+        string projectId,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Returns jobs for a specific pull request, newest first, with pagination.
@@ -140,5 +142,11 @@ public interface IJobRepository
     Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default);
 
     /// <summary>Persists the PR context snapshot captured after job creation.</summary>
-    Task UpdatePrContextAsync(Guid id, string? prTitle, string? prRepositoryName, string? prSourceBranch, string? prTargetBranch, CancellationToken ct = default);
+    Task UpdatePrContextAsync(
+        Guid id,
+        string? prTitle,
+        string? prRepositoryName,
+        string? prSourceBranch,
+        string? prTargetBranch,
+        CancellationToken ct = default);
 }

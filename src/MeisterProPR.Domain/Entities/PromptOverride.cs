@@ -43,7 +43,9 @@ public sealed class PromptOverride
 
         if (scope == PromptOverrideScope.CrawlConfigScope && crawlConfigId is null)
         {
-            throw new ArgumentException("CrawlConfigId is required when scope is CrawlConfigScope.", nameof(crawlConfigId));
+            throw new ArgumentException(
+                "CrawlConfigId is required when scope is CrawlConfigScope.",
+                nameof(crawlConfigId));
         }
 
         if (scope == PromptOverrideScope.ClientScope && crawlConfigId is not null)
@@ -79,7 +81,10 @@ public sealed class PromptOverride
     /// <summary>Owning client.</summary>
     public Guid ClientId { get; private set; }
 
-    /// <summary>Crawl configuration this override is scoped to. Null when <see cref="Scope" /> is <see cref="PromptOverrideScope.ClientScope" />.</summary>
+    /// <summary>
+    ///     Crawl configuration this override is scoped to. Null when <see cref="Scope" /> is
+    ///     <see cref="PromptOverrideScope.ClientScope" />.
+    /// </summary>
     public Guid? CrawlConfigId { get; private set; }
 
     /// <summary>Whether this override is client-scoped or crawl-config-scoped.</summary>
@@ -87,7 +92,8 @@ public sealed class PromptOverride
 
     /// <summary>
     ///     Named prompt segment this override replaces.
-    ///     Valid values: SystemPrompt, AgenticLoopGuidance, SynthesisSystemPrompt, QualityFilterSystemPrompt, PerFileContextPrompt.
+    ///     Valid values: SystemPrompt, AgenticLoopGuidance, SynthesisSystemPrompt, QualityFilterSystemPrompt,
+    ///     PerFileContextPrompt.
     /// </summary>
     public string PromptKey { get; private set; }
 

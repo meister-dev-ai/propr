@@ -25,7 +25,11 @@ public sealed class MentionReplyWorkerTests
         scopeFactory.CreateScope().Returns((IServiceScope)scope);
         serviceProvider.GetService(typeof(IMentionReplyJobRepository)).Returns((object?)null);
 
-        var worker = new MentionReplyWorker(channel.Reader, channel.Writer, scopeFactory, NullLogger<MentionReplyWorker>.Instance);
+        var worker = new MentionReplyWorker(
+            channel.Reader,
+            channel.Writer,
+            scopeFactory,
+            NullLogger<MentionReplyWorker>.Instance);
 
         var ex = await Record.ExceptionAsync(() => worker.StartAsync(CancellationToken.None));
 
@@ -44,26 +48,41 @@ public sealed class MentionReplyWorkerTests
         var scopeCreationCount = 0;
 
         ((IServiceScope)scope).ServiceProvider.Returns(serviceProvider);
-        scopeFactory.CreateScope().Returns(_ =>
-        {
-            scopeCreationCount++;
-            if (scopeCreationCount >= 2)
+        scopeFactory.CreateScope()
+            .Returns(_ =>
             {
-                processingAttempted.TrySetResult();
-            }
+                scopeCreationCount++;
+                if (scopeCreationCount >= 2)
+                {
+                    processingAttempted.TrySetResult();
+                }
 
-            return (IServiceScope)scope;
-        });
+                return (IServiceScope)scope;
+            });
 
         var repo = Substitute.For<IMentionReplyJobRepository>();
         repo.GetPendingAsync(Arg.Any<CancellationToken>()).Returns([]);
         serviceProvider.GetService(typeof(IMentionReplyJobRepository)).Returns(repo);
         serviceProvider.GetService(typeof(IMentionReplyService)).Returns((object?)null);
 
-        var worker = new MentionReplyWorker(channel.Reader, channel.Writer, scopeFactory, NullLogger<MentionReplyWorker>.Instance);
+        var worker = new MentionReplyWorker(
+            channel.Reader,
+            channel.Writer,
+            scopeFactory,
+            NullLogger<MentionReplyWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
-        await channel.Writer.WriteAsync(new MentionReplyJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 7, 3, 11, "@bot please help"));
+        await channel.Writer.WriteAsync(
+            new MentionReplyJob(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "https://dev.azure.com/org",
+                "proj",
+                "repo",
+                7,
+                3,
+                11,
+                "@bot please help"));
         await processingAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
         await worker.StopAsync(CancellationToken.None);
     }

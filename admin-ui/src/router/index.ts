@@ -66,6 +66,12 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/provider-settings',
+      name: 'provider-settings',
+      component: () => import('@/views/ProviderSettingsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/pr-review',
       name: 'pr-review',
       component: () => import('@/views/PrReviewView.vue'),

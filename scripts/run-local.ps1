@@ -12,9 +12,25 @@ $ApiProject = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
 $ApiFolder  = Join-Path $RepoRoot 'src\MeisterProPR.Api'
 $UiFolder   = Join-Path $RepoRoot 'admin-ui'
 $EnvFile    = Join-Path $RepoRoot '.env'
+$LogDir     = if ($env:RUN_LOCAL_LOG_DIR) { $env:RUN_LOCAL_LOG_DIR } else { Join-Path $RepoRoot 'logs\local' }
+$LogFile    = if ($env:RUN_LOCAL_LOG_FILE) { $env:RUN_LOCAL_LOG_FILE } else { Join-Path $LogDir ("run-local-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
+Set-Content -Path $LogFile -Value $null -Encoding utf8
+
+function Write-RunLocalMessage {
+    param(
+        [string]$Message,
+        [ConsoleColor]$Color = [ConsoleColor]::Gray
+    )
+
+    $formatted = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Add-Content -Path $script:LogFile -Value $formatted -Encoding utf8
+    Write-Host $formatted -ForegroundColor $Color
+}
 
 if (-not $DbConnectionString) {
-    Write-Host "DB connection string not provided; checking dotnet user-secrets..." -ForegroundColor Cyan
+    Write-RunLocalMessage -Message "DB connection string not provided; checking dotnet user-secrets..." -Color Cyan
     try {
         if (Get-Command dotnet -ErrorAction SilentlyContinue) {
             $secretList = dotnet user-secrets list --project $ApiProject 2>$null
@@ -48,7 +64,7 @@ if (-not $DbConnectionString) {
     }
 
     if (-not $DbConnectionString) {
-        Write-Host "Provide -DbConnectionString or set DB_CONNECTION_STRING env var." -ForegroundColor Yellow
+        Write-RunLocalMessage -Message "Provide -DbConnectionString or set DB_CONNECTION_STRING env var." -Color Yellow
         exit 1
     }
 }
@@ -86,7 +102,7 @@ function Flush-ChildOutput {
         }
 
         if ($line -ne '') {
-            Write-Host "[$($Child.Label)] $line"
+            Write-RunLocalMessage -Message "[$($Child.Label)] $line"
         }
 
         $Child.OutputTask = $Child.Process.StandardOutput.ReadLineAsync()
@@ -100,7 +116,7 @@ function Flush-ChildOutput {
         }
 
         if ($line -ne '') {
-            Write-Host "[$($Child.Label)] $line" -ForegroundColor Red
+            Write-RunLocalMessage -Message "[$($Child.Label)] $line" -Color Red
         }
 
         $Child.ErrorTask = $Child.Process.StandardError.ReadLineAsync()
@@ -187,7 +203,7 @@ function Start-ChildProcess {
     $proc.StartInfo = $psi
 
     # Log the start command so failures are visible immediately
-    Write-Host "Starting $($Label): $($psi.FileName) $($psi.Arguments) (cwd=$WorkingDirectory)"
+    Write-RunLocalMessage -Message "Starting $($Label): $($psi.FileName) $($psi.Arguments) (cwd=$WorkingDirectory)"
 
     if (-not $proc.Start()) { throw "Failed to start $Label ($psi.FileName $psi.Arguments)" }
 
@@ -213,12 +229,12 @@ function Start-ChildProcess {
 # Optionally install admin-ui deps (npm ci)
 if (-not $SkipUiInstall) {
     if (-not (Test-Path (Join-Path $UiFolder 'node_modules'))) {
-        Write-Host "Installing admin-ui dependencies (npm ci)..." -ForegroundColor Cyan
+        Write-RunLocalMessage -Message "Installing admin-ui dependencies (npm ci)..." -Color Cyan
         $ciEnv = @{}
         foreach ($k in $dotenv.Keys) { $ciEnv[$k] = $dotenv[$k] }
         $ci = Start-ChildProcess -FileName 'npm' -Arguments 'ci' -WorkingDirectory $UiFolder -Env $ciEnv -Label 'npm-ci'
         Wait-ForChildren -Children @($ci)
-        if ($ci.Process.ExitCode -ne 0) { Write-Host 'npm ci failed' -ForegroundColor Red; exit 1 }
+        if ($ci.Process.ExitCode -ne 0) { Write-RunLocalMessage -Message 'npm ci failed' -Color Red; exit 1 }
     }
 }
 
@@ -229,7 +245,8 @@ foreach ($k in $dotenv.Keys) { if (-not $apiEnv.ContainsKey($k)) { $apiEnv[$k] =
 $uiEnv = @{}
 foreach ($k in $dotenv.Keys) { $uiEnv[$k] = $dotenv[$k] }
 
-Write-Host "Starting backend and admin UI in this terminal. Press Ctrl+C to stop both." -ForegroundColor Green
+Write-RunLocalMessage -Message "Starting backend and admin UI in this terminal. Press Ctrl+C to stop both." -Color Green
+Write-RunLocalMessage -Message "Local run log: $LogFile" -Color DarkGray
 
 $apiArgs = "run --project `"$ApiProject`" --no-launch-profile"
 $api = Start-ChildProcess -FileName 'dotnet' -Arguments $apiArgs -WorkingDirectory $ApiFolder -Env $apiEnv -Label 'API'
@@ -238,8 +255,8 @@ $ui  = Start-ChildProcess -FileName 'npm'   -Arguments 'run dev'            -Wor
 $children = @($api, $ui)
 
 try {
-    Write-Host "API PID: $($api.Process.Id)" -ForegroundColor DarkGray
-    Write-Host "UI  PID: $($ui.Process.Id)" -ForegroundColor DarkGray
+    Write-RunLocalMessage -Message "API PID: $($api.Process.Id)" -Color DarkGray
+    Write-RunLocalMessage -Message "UI  PID: $($ui.Process.Id)" -Color DarkGray
 
     Wait-ForChildren -Children $children
 
@@ -252,7 +269,7 @@ try {
     }
 }
 finally {
-    Write-Host "`nShutting down child processes..." -ForegroundColor Yellow
+    Write-RunLocalMessage -Message "Shutting down child processes..." -Color Yellow
     foreach ($c in $children) {
         $p = $c.Process
         if ($p -and -not $p.HasExited) {

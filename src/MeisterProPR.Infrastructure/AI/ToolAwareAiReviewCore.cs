@@ -50,7 +50,14 @@ public sealed partial class ToolAwareAiReviewCore(
             // Per-file review path (US4): two System messages — global persona (S1) + per-file context (S2).
             // S1 is dropped from history on iterations 2+ to reduce retransmitted token overhead.
             state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildGlobalSystemPrompt(systemContext)));
-            state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildPerFileContextPrompt(systemContext, hint.FilePath, hint.FileIndex, hint.TotalFiles)));
+            state.Messages.Add(
+                new ChatMessage(
+                    ChatRole.System,
+                    ReviewPrompts.BuildPerFileContextPrompt(
+                        systemContext,
+                        hint.FilePath,
+                        hint.FileIndex,
+                        hint.TotalFiles)));
             userMessage = pullRequest.ChangedFiles.Count == 1
                 ? ReviewPrompts.BuildPerFileUserMessage(
                     pullRequest.ChangedFiles[0],
@@ -87,7 +94,11 @@ public sealed partial class ToolAwareAiReviewCore(
         var effectiveMaxIterations = systemContext.PerFileHint?.MaxIterationsOverride ?? opts.MaxIterations;
         if (systemContext.PerFileHint?.MaxIterationsOverride is { } overrideVal)
         {
-            LogMaxIterationsOverride(logger, overrideVal, systemContext.PerFileHint.FilePath, pullRequest.PullRequestId);
+            LogMaxIterationsOverride(
+                logger,
+                overrideVal,
+                systemContext.PerFileHint.FilePath,
+                pullRequest.PullRequestId);
         }
 
         // T044: use tier-specific client when configured; fall back to injected default
@@ -219,8 +230,12 @@ public sealed partial class ToolAwareAiReviewCore(
                         "summary, comments, confidence_evaluations, loop_complete (set to true), investigation_complete (set to true). " +
                         "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
                         "The response must start with '{' and end with '}'."));
-                var finalOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
-                var finalResponse = await effectiveClient.GetResponseAsync(state.Messages, finalOptions, cancellationToken);
+                var finalOptions = new ChatOptions
+                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
+                var finalResponse = await effectiveClient.GetResponseAsync(
+                    state.Messages,
+                    finalOptions,
+                    cancellationToken);
                 state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
                 lastTextResponse = finalResponse.Text ?? "";
 
@@ -241,19 +256,26 @@ public sealed partial class ToolAwareAiReviewCore(
             {
                 LogForcingSchemaCorrection(logger, pullRequest.PullRequestId, state.Iteration);
                 state.Messages.Add(new ChatMessage(ChatRole.Assistant, lastTextResponse));
-                state.Messages.Add(new ChatMessage(
-                    ChatRole.User,
-                    "Your previous response used the wrong output schema. You MUST reformat it now. " +
-                    "Output a single raw JSON object with EXACTLY these keys: " +
-                    "\"summary\" (plain string), " +
-                    "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}), " +
-                    "\"confidence_evaluations\" (array), " +
-                    "\"investigation_complete\": true, " +
-                    "\"loop_complete\": true. " +
-                    "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
-                var correctionOptions = new ChatOptions { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
-                var correctionResponse = await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
-                state.AccumulateTokens(correctionResponse.Usage?.InputTokenCount, correctionResponse.Usage?.OutputTokenCount);
+                state.Messages.Add(
+                    new ChatMessage(
+                        ChatRole.User,
+                        "Your previous response used the wrong output schema. You MUST reformat it now. " +
+                        "Output a single raw JSON object with EXACTLY these keys: " +
+                        "\"summary\" (plain string), " +
+                        "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}), " +
+                        "\"confidence_evaluations\" (array), " +
+                        "\"investigation_complete\": true, " +
+                        "\"loop_complete\": true. " +
+                        "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
+                var correctionOptions = new ChatOptions
+                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
+                var correctionResponse = await effectiveClient.GetResponseAsync(
+                    state.Messages,
+                    correctionOptions,
+                    cancellationToken);
+                state.AccumulateTokens(
+                    correctionResponse.Usage?.InputTokenCount,
+                    correctionResponse.Usage?.OutputTokenCount);
                 var corrected = correctionResponse.Text ?? "";
                 if (!string.IsNullOrWhiteSpace(corrected))
                 {
@@ -289,7 +311,8 @@ public sealed partial class ToolAwareAiReviewCore(
             new AIFunctionFactoryOptions
             {
                 Name = "get_changed_files",
-                Description = "Get the list of all files changed in this pull request, including their paths and change types.",
+                Description =
+                    "Get the list of all files changed in this pull request, including their paths and change types.",
             });
 
         var getFileTree = AIFunctionFactory.Create(
@@ -578,26 +601,35 @@ public sealed partial class ToolAwareAiReviewCore(
             state.Iteration);
     }
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Agentic review loop started for PR#{PrId} iteration {IterationId} (max iterations: {MaxIterations})")]
+    [LoggerMessage(
+        Level = LogLevel.Trace,
+        Message =
+            "Agentic review loop started for PR#{PrId} iteration {IterationId} (max iterations: {MaxIterations})")]
     private static partial void LogReviewLoopStarted(ILogger logger, int prId, int iterationId, int maxIterations);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Review loop iteration {Iteration}/{MaxIterations}")]
     private static partial void LogIterationStarted(ILogger logger, int iteration, int maxIterations);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AI requested {ToolCallCount} tool call(s) at iteration {Iteration}")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "AI requested {ToolCallCount} tool call(s) at iteration {Iteration}")]
     private static partial void LogToolCallsReceived(ILogger logger, int toolCallCount, int iteration);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Confidence snapshot recorded at iteration {Iteration} with {ScoreCount} score(s)")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Confidence snapshot recorded at iteration {Iteration} with {ScoreCount} score(s)")]
     private static partial void LogConfidenceSnapshot(ILogger logger, int iteration, int scoreCount);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Review loop complete at iteration {Iteration} (threshold met: {ThresholdMet}, loop_complete flag: {LoopComplete})")]
+        Message =
+            "Review loop complete at iteration {Iteration} (threshold met: {ThresholdMet}, loop_complete flag: {LoopComplete})")]
     private static partial void LogLoopComplete(ILogger logger, int iteration, bool thresholdMet, bool loopComplete);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Agentic review loop finished for PR#{PrId} after {Iterations} iteration(s) and {ToolCallCount} tool call(s)")]
+        Message =
+            "Agentic review loop finished for PR#{PrId} after {Iterations} iteration(s) and {ToolCallCount} tool call(s)")]
     private static partial void LogReviewLoopFinished(ILogger logger, int prId, int iterations, int toolCallCount);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tool invocation failed for tool '{ToolName}'")]
@@ -605,29 +637,40 @@ public sealed partial class ToolAwareAiReviewCore(
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Agentic review loop for PR#{PrId} hit iteration limit at {Iteration} without a text response — forcing final review call")]
+        Message =
+            "Agentic review loop for PR#{PrId} hit iteration limit at {Iteration} without a text response — forcing final review call")]
     private static partial void LogForcingFinalReview(ILogger logger, int prId, int iteration);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Agentic review for PR#{PrId} at iteration {Iteration} returned wrong schema (comments key absent) — injecting schema-correction call")]
+        Message =
+            "Agentic review for PR#{PrId} at iteration {Iteration} returned wrong schema (comments key absent) — injecting schema-correction call")]
     private static partial void LogForcingSchemaCorrection(ILogger logger, int prId, int iteration);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Using MaxIterationsOverride={MaxIterationsOverride} for file {FilePath} (PR#{PrId})")]
-    private static partial void LogMaxIterationsOverride(ILogger logger, int maxIterationsOverride, string filePath, int prId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Using MaxIterationsOverride={MaxIterationsOverride} for file {FilePath} (PR#{PrId})")]
+    private static partial void LogMaxIterationsOverride(
+        ILogger logger,
+        int maxIterationsOverride,
+        string filePath,
+        int prId);
 
     private sealed record AgenticResponseDto(
-        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Summary,
+        [property: JsonConverter(typeof(FlexibleStringConverter))]
+        string? Summary,
         List<ReviewCommentDto>? Comments,
-        [property: JsonConverter(typeof(LenientConfidenceListConverter))] List<ConfidenceEvaluationDto>? ConfidenceEvaluations,
+        [property: JsonConverter(typeof(LenientConfidenceListConverter))]
+        List<ConfidenceEvaluationDto>? ConfidenceEvaluations,
         bool LoopComplete,
-        bool? InvestigationComplete);  // null = absent = treated as complete (backward compat)
+        bool? InvestigationComplete); // null = absent = treated as complete (backward compat)
 
     private sealed record ReviewCommentDto(string? FilePath, int? LineNumber, string? Severity, string? Message);
 
     private sealed record ConfidenceEvaluationDto(
         string? Concern,
-        [property: JsonConverter(typeof(FlexibleIntConverter))] int Confidence);
+        [property: JsonConverter(typeof(FlexibleIntConverter))]
+        int Confidence);
 
     /// <summary>
     ///     Tolerates <c>"summary"</c> being a JSON string, array of strings, or any other
@@ -711,8 +754,10 @@ public sealed partial class ToolAwareAiReviewCore(
             return 0;
         }
 
-        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) =>
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
+        {
             writer.WriteNumberValue(value);
+        }
     }
 
     /// <summary>
@@ -762,8 +807,9 @@ public sealed partial class ToolAwareAiReviewCore(
         public override void Write(
             Utf8JsonWriter writer,
             List<ConfidenceEvaluationDto>? value,
-            JsonSerializerOptions options) =>
+            JsonSerializerOptions options)
+        {
             JsonSerializer.Serialize(writer, value, options);
+        }
     }
 }
-

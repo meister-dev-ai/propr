@@ -48,11 +48,16 @@ public sealed partial class AiRepositoryInstructionEvaluator(
 
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, "You are a relevance evaluator. Determine which repository instructions are applicable to the provided pull request files."),
+            new(
+                ChatRole.System,
+                "You are a relevance evaluator. Determine which repository instructions are applicable to the provided pull request files."),
             new(ChatRole.User, prompt),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = evaluatorOptions.Value.Deployment }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(
+            messages,
+            new ChatOptions { ModelId = evaluatorOptions.Value.Deployment },
+            cancellationToken);
         var responseText = response.Text ?? "";
 
         var relevant = ParseRelevantInstructions(responseText, instructions, logger);
@@ -61,7 +66,9 @@ public sealed partial class AiRepositoryInstructionEvaluator(
         return relevant;
     }
 
-    private static string BuildEvaluationPrompt(IReadOnlyList<RepositoryInstruction> instructions, IReadOnlyList<string> changedFilePaths)
+    private static string BuildEvaluationPrompt(
+        IReadOnlyList<RepositoryInstruction> instructions,
+        IReadOnlyList<string> changedFilePaths)
     {
         var sb = new StringBuilder();
         sb.AppendLine("## Changed Files in Pull Request");
@@ -114,13 +121,22 @@ public sealed partial class AiRepositoryInstructionEvaluator(
         }
     }
 
-    [LoggerMessage(EventId = 4010, Level = LogLevel.Debug, Message = "Evaluating relevance for {InstructionCount} repository instruction(s)")]
+    [LoggerMessage(
+        EventId = 4010,
+        Level = LogLevel.Debug,
+        Message = "Evaluating relevance for {InstructionCount} repository instruction(s)")]
     private static partial void LogEvaluationStarted(ILogger logger, int instructionCount);
 
-    [LoggerMessage(EventId = 4011, Level = LogLevel.Debug, Message = "Relevance evaluation complete: {InputCount} → {OutputCount} instruction(s) retained")]
+    [LoggerMessage(
+        EventId = 4011,
+        Level = LogLevel.Debug,
+        Message = "Relevance evaluation complete: {InputCount} → {OutputCount} instruction(s) retained")]
     private static partial void LogEvaluationCompleted(ILogger logger, int inputCount, int outputCount);
 
-    [LoggerMessage(EventId = 4012, Level = LogLevel.Warning, Message = "Evaluator returned non-JSON or schema-mismatched response; returning empty instruction list")]
+    [LoggerMessage(
+        EventId = 4012,
+        Level = LogLevel.Warning,
+        Message = "Evaluator returned non-JSON or schema-mismatched response; returning empty instruction list")]
     private static partial void LogEvaluatorParseWarning(ILogger logger, Exception ex);
 
     private sealed class RelevanceResponse

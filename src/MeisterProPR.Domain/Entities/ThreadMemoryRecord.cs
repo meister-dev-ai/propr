@@ -1,9 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-namespace MeisterProPR.Domain.Entities;
-
 using MeisterProPR.Domain.Enums;
+
+namespace MeisterProPR.Domain.Entities;
 
 /// <summary>
 ///     Represents one stored embedding for a resolved PR review thread within a client's memory store.
@@ -55,8 +55,8 @@ public sealed class ThreadMemoryRecord
 
     /// <summary>
     ///     Indicates how this memory record was created.
-    ///     <see cref="MemorySource.ThreadResolved" /> for records created by the crawl state machine;
-    ///     <see cref="MemorySource.AdminDismissed" /> for records created by an admin explicitly dismissing a finding.
+    ///     <see cref="Enums.MemorySource.ThreadResolved" /> for records created by the crawl state machine;
+    ///     <see cref="Enums.MemorySource.AdminDismissed" /> for records created by an admin explicitly dismissing a finding.
     ///     Defaults to <see cref="MemorySource.ThreadResolved" /> for backward compatibility with existing records.
     /// </summary>
     public MemorySource MemorySource { get; init; } = MemorySource.ThreadResolved;

@@ -6,6 +6,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -16,6 +17,7 @@ public sealed class CrawlingModuleTests
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         Guid.NewGuid(),
         Guid.NewGuid(),
+        ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
         Guid.NewGuid(),
@@ -28,7 +30,7 @@ public sealed class CrawlingModuleTests
     public async Task CrawlAsync_SelectedSourceScope_SnapshotsSelectedProCursorSourcesOnQueuedJob()
     {
         var crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
-        var prFetcher = Substitute.For<IAssignedPrFetcher>();
+        var prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
         var jobs = Substitute.For<IJobRepository>();
         var statusFetcher = Substitute.For<IPrStatusFetcher>();
         var sut = new PrCrawlService(crawlConfigs, prFetcher, jobs, statusFetcher, NullLogger<PrCrawlService>.Instance);
@@ -40,27 +42,28 @@ public sealed class CrawlingModuleTests
             ProCursorSourceIds = [sourceId],
             InvalidProCursorSourceIds = [],
         };
-        var pr = new AssignedPullRequestRef(config.OrganizationUrl, config.ProjectId, "repo-1", 48, 2);
+        var pr = CreateAssignedReview(config, "repo-1", 48, 2);
 
         crawlConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([config]);
-        prFetcher.GetAssignedOpenPullRequestsAsync(config).Returns([pr]);
+        prFetcher.ListAssignedOpenReviewsAsync(config).Returns([pr]);
         jobs.FindActiveJob(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
             .Returns((ReviewJob?)null);
 
         await sut.CrawlAsync();
 
-        await jobs.Received(1).AddAsync(
-            Arg.Is<ReviewJob>(job =>
-                job.PullRequestId == pr.PullRequestId &&
-                job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
-                job.ProCursorSourceIds.SequenceEqual(new[] { sourceId })));
+        await jobs.Received(1)
+            .AddAsync(
+                Arg.Is<ReviewJob>(job =>
+                    job.PullRequestId == pr.CodeReview.Number &&
+                    job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
+                    job.ProCursorSourceIds.SequenceEqual(new[] { sourceId })));
     }
 
     [Fact]
     public async Task CrawlAsync_InvalidSelectedSources_DoesNotQueueJob()
     {
         var crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
-        var prFetcher = Substitute.For<IAssignedPrFetcher>();
+        var prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
         var jobs = Substitute.For<IJobRepository>();
         var statusFetcher = Substitute.For<IPrStatusFetcher>();
         var sut = new PrCrawlService(crawlConfigs, prFetcher, jobs, statusFetcher, NullLogger<PrCrawlService>.Instance);
@@ -73,13 +76,30 @@ public sealed class CrawlingModuleTests
         };
 
         crawlConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([config]);
-        prFetcher.GetAssignedOpenPullRequestsAsync(config)
-            .Returns([new AssignedPullRequestRef(config.OrganizationUrl, config.ProjectId, "repo-1", 49, 1)]);
+        prFetcher.ListAssignedOpenReviewsAsync(config)
+            .Returns([CreateAssignedReview(config, "repo-1", 49, 1)]);
         jobs.FindActiveJob(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
             .Returns((ReviewJob?)null);
 
         await sut.CrawlAsync();
 
         await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+    }
+
+    private static AssignedCodeReviewRef CreateAssignedReview(
+        CrawlConfigurationDto config,
+        string repositoryId,
+        int reviewNumber,
+        int revisionId)
+    {
+        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+        var repository = new RepositoryRef(host, repositoryId, config.ProviderProjectKey, config.ProviderProjectKey);
+        var review = new CodeReviewRef(
+            repository,
+            CodeReviewPlatformKind.PullRequest,
+            reviewNumber.ToString(),
+            reviewNumber);
+
+        return new AssignedCodeReviewRef(host, repository, review, revisionId);
     }
 }

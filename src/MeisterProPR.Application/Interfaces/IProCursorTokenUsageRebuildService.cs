@@ -10,6 +10,13 @@ namespace MeisterProPR.Application.Interfaces;
 /// </summary>
 public interface IProCursorTokenUsageRebuildService
 {
+    /// <summary>
+    ///     Rebuilds selected ProCursor token usage rollup intervals from retained raw events.
+    /// </summary>
+    /// <param name="clientId">The client identifier.</param>
+    /// <param name="request">The rebuild request.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The rebuild response.</returns>
     Task<ProCursorTokenUsageRebuildResponse> RebuildAsync(
         Guid clientId,
         ProCursorTokenUsageRebuildRequest request,

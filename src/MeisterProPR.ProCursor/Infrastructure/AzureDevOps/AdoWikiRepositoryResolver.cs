@@ -26,8 +26,7 @@ internal static class AdoWikiRepositoryResolver
 
         if (wiki is null)
         {
-            throw new InvalidOperationException(
-                $"Unable to resolve the backing repository for wiki source {source.Id}.");
+            throw new InvalidOperationException($"Unable to resolve the backing repository for wiki source {source.Id}.");
         }
 
         return wiki.RepositoryId.ToString();

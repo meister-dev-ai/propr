@@ -6,7 +6,6 @@ using System.Text;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
-using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -50,13 +49,14 @@ public sealed class AuthController(
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
 
-        return this.Ok(new
-        {
-            accessToken,
-            refreshToken = rawRefreshToken,
-            expiresIn = 900,
-            tokenType = "Bearer",
-        });
+        return this.Ok(
+            new
+            {
+                accessToken,
+                refreshToken = rawRefreshToken,
+                expiresIn = 900,
+                tokenType = "Bearer",
+            });
     }
 
     /// <summary>Exchange a valid refresh token for a new JWT access token.</summary>
@@ -83,12 +83,13 @@ public sealed class AuthController(
         }
 
         var accessToken = jwtTokenService.GenerateAccessToken(user);
-        return this.Ok(new
-        {
-            accessToken,
-            expiresIn = 900,
-            tokenType = "Bearer",
-        });
+        return this.Ok(
+            new
+            {
+                accessToken,
+                expiresIn = 900,
+                tokenType = "Bearer",
+            });
     }
 
     /// <summary>Returns the current user's global role and per-client roles. Requires authentication.</summary>
@@ -105,13 +106,14 @@ public sealed class AuthController(
         var clientRoles = AuthHelpers.GetClientRoles(this.HttpContext);
         var globalRole = isAdmin ? "Admin" : "User";
 
-        return this.Ok(new
-        {
-            globalRole,
-            clientRoles = clientRoles.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => (int)kvp.Value),
-        });
+        return this.Ok(
+            new
+            {
+                globalRole,
+                clientRoles = clientRoles.ToDictionary(
+                    kvp => kvp.Key.ToString(),
+                    kvp => (int)kvp.Value),
+            });
     }
 
     private static string ComputeSha256(string input)

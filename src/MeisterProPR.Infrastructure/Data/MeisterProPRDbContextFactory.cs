@@ -3,7 +3,6 @@
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Pgvector.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Data;
 

@@ -3,7 +3,7 @@
 
 namespace MeisterProPR.Infrastructure.Data.Models;
 
-/// <summary>EF persistence model for <see cref="Domain.Entities.RefreshToken"/>.</summary>
+/// <summary>EF persistence model for <see cref="Domain.Entities.RefreshToken" />.</summary>
 public sealed class RefreshTokenRecord
 {
     public Guid Id { get; set; }

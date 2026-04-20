@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
@@ -18,28 +19,28 @@ public sealed class FileByFileReviewOrchestratorTierTests
     [Fact]
     public void ClassifyTier_10LineDiff_ReturnsLow()
     {
-        var file = BuildFile(diff: BuildDiff(10));
+        var file = BuildFile(BuildDiff(10));
         Assert.Equal(FileComplexityTier.Low, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
     [Fact]
     public void ClassifyTier_100LineDiff_ReturnsMedium()
     {
-        var file = BuildFile(diff: BuildDiff(100));
+        var file = BuildFile(BuildDiff(100));
         Assert.Equal(FileComplexityTier.Medium, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
     [Fact]
     public void ClassifyTier_300LineDiff_ReturnsHigh()
     {
-        var file = BuildFile(diff: BuildDiff(300));
+        var file = BuildFile(BuildDiff(300));
         Assert.Equal(FileComplexityTier.High, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
     [Fact]
     public void ClassifyTier_NullDiffAndNoFullContent_ReturnsLow()
     {
-        var file = BuildFile(diff: null, fullContent: null);
+        var file = BuildFile();
         Assert.Equal(FileComplexityTier.Low, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
@@ -47,7 +48,7 @@ public sealed class FileByFileReviewOrchestratorTierTests
     public void ClassifyTier_150LineDiff_ReturnsMedium_BoundaryInclusive()
     {
         // 150 changed lines → boundary is ≤150 → Medium
-        var file = BuildFile(diff: BuildDiff(150));
+        var file = BuildFile(BuildDiff(150));
         Assert.Equal(FileComplexityTier.Medium, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
@@ -55,21 +56,21 @@ public sealed class FileByFileReviewOrchestratorTierTests
     public void ClassifyTier_30LineDiff_ReturnsLow_BoundaryInclusive()
     {
         // 30 changed lines → boundary is ≤30 → Low
-        var file = BuildFile(diff: BuildDiff(30));
+        var file = BuildFile(BuildDiff(30));
         Assert.Equal(FileComplexityTier.Low, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
     [Fact]
     public void ClassifyTier_31LineDiff_ReturnsMedium()
     {
-        var file = BuildFile(diff: BuildDiff(31));
+        var file = BuildFile(BuildDiff(31));
         Assert.Equal(FileComplexityTier.Medium, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
     [Fact]
     public void ClassifyTier_151LineDiff_ReturnsHigh()
     {
-        var file = BuildFile(diff: BuildDiff(151));
+        var file = BuildFile(BuildDiff(151));
         Assert.Equal(FileComplexityTier.High, FileByFileReviewOrchestrator.ClassifyTier(file));
     }
 
@@ -103,16 +104,18 @@ public sealed class FileByFileReviewOrchestratorTierTests
 
     // ─── helpers ─────────────────────────────────────────────────────────────────
 
-    private static ChangedFile BuildFile(string? diff = null, string? fullContent = null) =>
-        new(
-            path: "src/Foo.cs",
-            changeType: ChangeType.Edit,
-            fullContent: fullContent ?? string.Empty,
-            unifiedDiff: diff ?? string.Empty);
+    private static ChangedFile BuildFile(string? diff = null, string? fullContent = null)
+    {
+        return new ChangedFile(
+            "src/Foo.cs",
+            ChangeType.Edit,
+            fullContent ?? string.Empty,
+            diff ?? string.Empty);
+    }
 
     private static string BuildDiff(int changedLines)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (var i = 0; i < changedLines; i++)
         {
             sb.AppendLine($"+line {i}");

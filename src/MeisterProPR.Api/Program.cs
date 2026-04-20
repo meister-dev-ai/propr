@@ -1,11 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Api.Features.Clients.Controllers;
+using MeisterProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
@@ -14,8 +17,8 @@ using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Clients;
 using MeisterProPR.Infrastructure.Features.Crawling;
@@ -24,9 +27,13 @@ using MeisterProPR.Infrastructure.Features.Mentions;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
+using MeisterProPR.Infrastructure.Services;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -35,6 +42,7 @@ using Serilog.Events;
 using Serilog.Formatting.Json;
 using Serilog.Sinks.Grafana.Loki;
 using Swashbuckle.AspNetCore.Swagger;
+using IPNetwork = System.Net.IPNetwork;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -60,7 +68,9 @@ try
     builder.Host.UseSerilog((context, services, configuration) =>
     {
         static string? RedactSecret(string? value)
-            => string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
+        {
+            return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
+        }
 
         configuration
             .ReadFrom.Configuration(context.Configuration)
@@ -85,11 +95,26 @@ try
                 ApiKey = RedactSecret(request.ApiKey),
                 request.ModelCapabilities,
             })
-            .Destructure.ByTransforming<SetAdoCredentialsRequest>(request => new
+            .Destructure.ByTransforming<CreateClientProviderConnectionRequest>(request => new
             {
-                request.TenantId,
-                request.ClientId,
+                request.ProviderFamily,
+                request.HostBaseUrl,
+                request.AuthenticationKind,
+                request.OAuthTenantId,
+                request.OAuthClientId,
+                request.DisplayName,
                 Secret = RedactSecret(request.Secret),
+                request.IsActive,
+            })
+            .Destructure.ByTransforming<PatchClientProviderConnectionRequest>(request => new
+            {
+                request.HostBaseUrl,
+                request.AuthenticationKind,
+                request.OAuthTenantId,
+                request.OAuthClientId,
+                request.DisplayName,
+                Secret = RedactSecret(request.Secret),
+                request.IsActive,
             })
             .Destructure.ByTransforming<DiscoverModelsRequest>(request => new
             {
@@ -112,7 +137,7 @@ try
         {
             configuration.WriteTo.GrafanaLoki(
                 lokiUrl,
-                labels: [new LokiLabel { Key = "app", Value = "meister-dev-propr" }]);
+                [new LokiLabel { Key = "app", Value = "meister-dev-propr" }]);
         }
     });
 
@@ -138,14 +163,44 @@ try
         Directory.CreateDirectory(dataProtectionKeysPath);
         dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
     }
+
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        // Trust loopback and private proxy networks by default; deployments with public ingress should
+        // extend this list explicitly instead of opening forwarded headers to every remote address.
+        options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Loopback, 8));
+        options.KnownIPNetworks.Add(new IPNetwork(IPAddress.IPv6Loopback, 128));
+        options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+        options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        options.KnownIPNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+    });
+
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
-    builder.Services.AddSingleton<IValidator<SetAdoCredentialsRequest>, SetAdoCredentialsRequestValidator>();
     builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
-    builder.Services.AddSingleton<IValidator<CreateClientAdoOrganizationScopeRequest>, CreateClientAdoOrganizationScopeRequestValidator>();
-    builder.Services.AddSingleton<IValidator<PatchClientAdoOrganizationScopeRequest>, PatchClientAdoOrganizationScopeRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<CreateClientProviderConnectionRequest>,
+            CreateClientProviderConnectionRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<PatchClientProviderConnectionRequest>,
+            PatchClientProviderConnectionRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<CreateClientProviderScopeRequest>, CreateClientProviderScopeRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<PatchClientProviderScopeRequest>, PatchClientProviderScopeRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<SetClientReviewerIdentityRequest>, SetClientReviewerIdentityRequestValidator>();
     builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<CreateAdminWebhookConfigRequest>, CreateAdminWebhookConfigRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<PatchAdminWebhookConfigRequest>, PatchAdminWebhookConfigRequestValidator>();
 
     // Register ReviewJobWorker as singleton so WorkerHealthCheck can inject it by concrete type,
     // then forward the same instance as IHostedService.
@@ -227,9 +282,9 @@ try
                 // use a predicate so any subdomain is matched.
                 .SetIsOriginAllowed(origin =>
                     allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase) ||
-                    Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
-                    (uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase) ||
-                     uri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase)))
+                    (Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                     (uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase) ||
+                      uri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))))
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -246,6 +301,8 @@ try
     builder.Services.AddOpenTelemetry()
         .WithTracing(tracing => tracing
             .AddSource(ReviewJobTelemetry.Source.Name)
+            .AddSource("MeisterProPR.Webhooks")
+            .AddSource("MeisterProPR.Crawling")
             .AddSource("MeisterProPR.Infrastructure")
             .AddAspNetCoreInstrumentation()
             .AddOtlpExporter(o =>
@@ -264,7 +321,7 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {
-        options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Meister DEV ProPR API", Version = "v1" });
+        options.SwaggerDoc("v1", new OpenApiInfo { Title = "Meister DEV ProPR API", Version = "v1" });
         foreach (var xmlFile in Directory.GetFiles(AppContext.BaseDirectory, "MeisterProPR.*.xml"))
         {
             options.IncludeXmlComments(xmlFile);
@@ -279,6 +336,26 @@ try
     if (hasDatabaseConnectionString)
     {
         healthChecksBuilder.AddCheck<DatabaseHealthCheck>("database");
+    }
+
+    static Task WriteHealthResponse(HttpContext httpContext, HealthReport report)
+    {
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            totalDurationMs = report.TotalDuration.TotalMilliseconds,
+            entries = report.Entries.ToDictionary(
+                entry => entry.Key,
+                entry => new
+                {
+                    status = entry.Value.Status.ToString(),
+                    description = entry.Value.Description,
+                    durationMs = entry.Value.Duration.TotalMilliseconds,
+                    data = entry.Value.Data.ToDictionary(item => item.Key, item => item.Value),
+                }),
+        };
+
+        return httpContext.Response.WriteAsJsonAsync(payload);
     }
 
     var app = builder.Build();
@@ -309,7 +386,7 @@ try
         // Apply any pending migrations automatically on startup
         await db.Database.MigrateAsync();
 
-        var secretBackfillService = scope.ServiceProvider.GetRequiredService<MeisterProPR.Infrastructure.Services.SecretBackfillService>();
+        var secretBackfillService = scope.ServiceProvider.GetRequiredService<SecretBackfillService>();
         await secretBackfillService.BackfillAsync();
 
         // Startup recovery: transition stale Processing jobs (e.g., from a crash) back to Pending
@@ -325,12 +402,14 @@ try
         }
 
         // Seed bootstrap admin user if none exists
-        var bootstrapService = scope.ServiceProvider.GetService<MeisterProPR.Infrastructure.Auth.AdminBootstrapService>();
+        var bootstrapService = scope.ServiceProvider.GetService<AdminBootstrapService>();
         if (bootstrapService is not null)
         {
             await bootstrapService.SeedAsync();
         }
     }
+
+    app.UseForwardedHeaders();
 
     app.UseSerilogRequestLogging(opts =>
     {
@@ -362,7 +441,12 @@ try
     app.UseCors();
     app.UseMiddleware<AuthMiddleware>();
     app.MapControllers();
-    app.MapHealthChecks("/healthz");
+    app.MapHealthChecks(
+        "/healthz",
+        new HealthCheckOptions
+        {
+            ResponseWriter = WriteHealthResponse,
+        });
     app.MapPrometheusScrapingEndpoint();
 
     app.Run();

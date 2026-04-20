@@ -15,7 +15,10 @@ public sealed class ProCursorOptions
     [Range(1, 32, ErrorMessage = "MaxIndexConcurrency must be between 1 and 32.")]
     public int MaxIndexConcurrency { get; set; } = 2;
 
-    /// <summary>Maximum number of knowledge or symbol results returned to callers. Bound to <c>PROCURSOR_MAX_QUERY_RESULTS</c>.</summary>
+    /// <summary>
+    ///     Maximum number of knowledge or symbol results returned to callers. Bound to <c>PROCURSOR_MAX_QUERY_RESULTS</c>
+    ///     .
+    /// </summary>
     [Range(1, 20, ErrorMessage = "MaxQueryResults must be between 1 and 20.")]
     public int MaxQueryResults { get; set; } = 5;
 
@@ -35,7 +38,10 @@ public sealed class ProCursorOptions
     [Range(1, 3600, ErrorMessage = "RefreshPollSeconds must be between 1 and 3600.")]
     public int RefreshPollSeconds { get; set; } = 30;
 
-    /// <summary>Retention window, in minutes, for stale temp workspaces before cleanup. Bound to <c>PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES</c>.</summary>
+    /// <summary>
+    ///     Retention window, in minutes, for stale temp workspaces before cleanup. Bound to
+    ///     <c>PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES</c>.
+    /// </summary>
     [Range(1, 1440, ErrorMessage = "TempWorkspaceRetentionMinutes must be between 1 and 1440.")]
     public int TempWorkspaceRetentionMinutes { get; set; } = 120;
 

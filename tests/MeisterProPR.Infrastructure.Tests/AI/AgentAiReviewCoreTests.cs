@@ -8,7 +8,6 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -27,7 +26,9 @@ public class AgentAiReviewCoreTests
     }
 
     private static AgentAiReviewCore CreateCore(IChatClient chatClient)
-        => new(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+    {
+        return new AgentAiReviewCore(chatClient, Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()));
+    }
 
     private static PullRequest CreatePullRequest(IReadOnlyList<ChangedFile>? files = null)
     {
@@ -63,7 +64,10 @@ public class AgentAiReviewCoreTests
 
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
         var core = CreateCore(mockClient);
@@ -110,7 +114,10 @@ public class AgentAiReviewCoreTests
 
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
         var core = CreateCore(mockClient);
@@ -129,7 +136,10 @@ public class AgentAiReviewCoreTests
         // Arrange
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse("this is not valid json {{ }}"));
 
         var core = CreateCore(mockClient);
@@ -178,7 +188,10 @@ public class AgentAiReviewCoreTests
 
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
         var core = CreateCore(mockClient);
@@ -206,7 +219,10 @@ public class AgentAiReviewCoreTests
 
         var mockClient = Substitute.For<IChatClient>();
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(CreateChatResponse(json));
 
         var core = CreateCore(mockClient);

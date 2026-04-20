@@ -17,6 +17,7 @@ public sealed class CrawlConfigurationDtoTests
         var dto = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
             reviewerId,
@@ -34,6 +35,7 @@ public sealed class CrawlConfigurationDtoTests
         var dto = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
             null, // ReviewerId is Guid? — must accept null
@@ -51,6 +53,7 @@ public sealed class CrawlConfigurationDtoTests
         var dto = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
             null,
@@ -73,6 +76,7 @@ public sealed class CrawlConfigurationDtoTests
         var dto = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
             null,
@@ -104,6 +108,7 @@ public sealed class CrawlConfigurationDtoTests
         var dto = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
             null,

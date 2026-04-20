@@ -22,8 +22,14 @@ internal sealed class AppUserEntityTypeConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(u => u.Username).HasDatabaseName("ix_app_users_username").IsUnique();
 
-        builder.HasMany(u => u.ClientAssignments).WithOne(r => r.User).HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(u => u.ClientAssignments)
+            .WithOne(r => r.User)
+            .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(u => u.Pats).WithOne(p => p.User).HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasMany(u => u.RefreshTokens).WithOne(t => t.User).HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(u => u.RefreshTokens)
+            .WithOne(t => t.User)
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

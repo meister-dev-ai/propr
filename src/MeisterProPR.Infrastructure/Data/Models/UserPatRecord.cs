@@ -3,7 +3,7 @@
 
 namespace MeisterProPR.Infrastructure.Data.Models;
 
-/// <summary>EF persistence model for <see cref="Domain.Entities.UserPat"/>.</summary>
+/// <summary>EF persistence model for <see cref="Domain.Entities.UserPat" />.</summary>
 public sealed class UserPatRecord
 {
     public Guid Id { get; set; }

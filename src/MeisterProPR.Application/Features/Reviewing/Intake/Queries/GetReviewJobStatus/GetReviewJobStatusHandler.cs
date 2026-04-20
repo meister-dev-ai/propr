@@ -10,7 +10,9 @@ namespace MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJo
 public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
 {
     /// <summary>Returns the status DTO for the requested job, or <see langword="null" /> when the job does not exist.</summary>
-    public async Task<ReviewJobStatusDto?> HandleAsync(GetReviewJobStatusQuery query, CancellationToken cancellationToken = default)
+    public async Task<ReviewJobStatusDto?> HandleAsync(
+        GetReviewJobStatusQuery query,
+        CancellationToken cancellationToken = default)
     {
         var job = await intakeStore.GetByIdAsync(query.JobId, cancellationToken);
         if (job is null)
@@ -33,8 +35,20 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
                 : new ReviewJobResultDto(
                     job.Result.Summary,
                     job.Result.Comments
-                        .Select(comment => new ReviewJobCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message))
+                        .Select(comment => new ReviewJobCommentDto(
+                            comment.FilePath,
+                            comment.LineNumber,
+                            comment.Severity,
+                            comment.Message))
                         .ToArray()),
-            job.ErrorMessage);
+            job.ErrorMessage)
+        {
+            ClientId = job.ClientId,
+            Provider = job.Provider,
+            Host = job.ProviderHost,
+            Repository = job.RepositoryReference,
+            CodeReview = job.CodeReviewReference,
+            ReviewRevision = job.ReviewRevisionReference,
+        };
     }
 }

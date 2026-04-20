@@ -13,7 +13,9 @@ public sealed class GetReviewJobProtocolHandler(IReviewDiagnosticsReader diagnos
     /// <summary>
     ///     Returns the protocol history for the requested review job.
     /// </summary>
-    public Task<GetReviewJobProtocolResult?> HandleAsync(GetReviewJobProtocolQuery query, CancellationToken ct = default)
+    public Task<GetReviewJobProtocolResult?> HandleAsync(
+        GetReviewJobProtocolQuery query,
+        CancellationToken ct = default)
     {
         return diagnosticsReader.GetJobProtocolAsync(query.JobId, ct);
     }

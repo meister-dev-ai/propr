@@ -11,8 +11,25 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Provides client-scoped Azure DevOps discovery data for guided admin configuration flows.</summary>
 [ApiController]
-public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryService) : ControllerBase
+public sealed partial class AdoDiscoveryController(
+    IScmProviderRegistry providerRegistry,
+    ILogger<AdoDiscoveryController> logger) : ControllerBase
 {
+    private const string DiscoveryNotFoundMessage = "The requested discovery resource was not found.";
+    private const string DiscoveryRequestRejectedMessage = "The discovery request could not be completed.";
+
+    private IActionResult DiscoveryNotFound(string operation, Exception ex)
+    {
+        LogDiscoveryResourceNotFound(logger, operation, ex);
+        return this.NotFound(new { error = DiscoveryNotFoundMessage });
+    }
+
+    private IActionResult DiscoveryBadRequest(string operation, Exception ex)
+    {
+        LogDiscoveryRequestRejected(logger, operation, ex);
+        return this.BadRequest(new { error = DiscoveryRequestRejectedMessage });
+    }
+
     /// <summary>
     ///     Lists projects available within one configured Azure DevOps organization scope.
     ///     Requires global admin or <c>ClientUser</c> access for the specified client.
@@ -31,7 +48,10 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetProjects(Guid clientId, [FromQuery] Guid organizationScopeId, CancellationToken ct = default)
+    public async Task<IActionResult> GetProjects(
+        Guid clientId,
+        [FromQuery] Guid organizationScopeId,
+        CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
@@ -47,16 +67,17 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
 
         try
         {
-            var projects = await adoDiscoveryService.ListProjectsAsync(clientId, organizationScopeId, ct);
+            var projects = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                .ListProjectsAsync(clientId, organizationScopeId, ct);
             return this.Ok(projects);
         }
         catch (KeyNotFoundException ex)
         {
-            return this.NotFound(new { error = ex.Message });
+            return this.DiscoveryNotFound("list_projects", ex);
         }
         catch (InvalidOperationException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_projects", ex);
         }
     }
 
@@ -106,20 +127,21 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
 
         try
         {
-            var sources = await adoDiscoveryService.ListSourcesAsync(clientId, organizationScopeId, projectId, parsedSourceKind, ct);
+            var sources = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                .ListSourcesAsync(clientId, organizationScopeId, projectId, parsedSourceKind, ct);
             return this.Ok(sources);
         }
         catch (KeyNotFoundException ex)
         {
-            return this.NotFound(new { error = ex.Message });
+            return this.DiscoveryNotFound("list_sources", ex);
         }
         catch (ArgumentException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_sources", ex);
         }
         catch (InvalidOperationException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_sources", ex);
         }
     }
 
@@ -188,26 +210,27 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
 
         try
         {
-            var branches = await adoDiscoveryService.ListBranchesAsync(
-                clientId,
-                organizationScopeId,
-                projectId,
-                parsedSourceKind,
-                new CanonicalSourceReferenceDto(canonicalSourceProvider.Trim(), canonicalSourceValue.Trim()),
-                ct);
+            var branches = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                .ListBranchesAsync(
+                    clientId,
+                    organizationScopeId,
+                    projectId,
+                    parsedSourceKind,
+                    new CanonicalSourceReferenceDto(canonicalSourceProvider.Trim(), canonicalSourceValue.Trim()),
+                    ct);
             return this.Ok(branches);
         }
         catch (KeyNotFoundException ex)
         {
-            return this.NotFound(new { error = ex.Message });
+            return this.DiscoveryNotFound("list_branches", ex);
         }
         catch (ArgumentException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_branches", ex);
         }
         catch (InvalidOperationException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_branches", ex);
         }
     }
 
@@ -249,20 +272,21 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
 
         try
         {
-            var crawlFilters = await adoDiscoveryService.ListCrawlFiltersAsync(clientId, organizationScopeId, projectId, ct);
+            var crawlFilters = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                .ListCrawlFiltersAsync(clientId, organizationScopeId, projectId, ct);
             return this.Ok(crawlFilters);
         }
         catch (KeyNotFoundException ex)
         {
-            return this.NotFound(new { error = ex.Message });
+            return this.DiscoveryNotFound("list_crawl_filters", ex);
         }
         catch (ArgumentException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_crawl_filters", ex);
         }
         catch (InvalidOperationException ex)
         {
-            return this.BadRequest(new { error = ex.Message });
+            return this.DiscoveryBadRequest("list_crawl_filters", ex);
         }
     }
 
@@ -283,7 +307,7 @@ public sealed class AdoDiscoveryController(IAdoDiscoveryService adoDiscoveryServ
 
     private static bool TryParseSourceKind(string sourceKind, out ProCursorSourceKind parsedSourceKind)
     {
-        if (Enum.TryParse(sourceKind, ignoreCase: true, out parsedSourceKind))
+        if (Enum.TryParse(sourceKind, true, out parsedSourceKind))
         {
             return parsedSourceKind is ProCursorSourceKind.Repository or ProCursorSourceKind.AdoWiki;
         }

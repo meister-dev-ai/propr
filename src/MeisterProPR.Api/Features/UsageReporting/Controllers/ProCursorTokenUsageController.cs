@@ -73,7 +73,13 @@ public sealed class ProCursorTokenUsageController(
             return this.ValidationProblem();
         }
 
-        var response = await readRepository.GetClientUsageAsync(clientId, startDate, endDate, parsedGranularity, groupBy, ct);
+        var response = await readRepository.GetClientUsageAsync(
+            clientId,
+            startDate,
+            endDate,
+            parsedGranularity,
+            groupBy,
+            ct);
         return this.Ok(response);
     }
 
@@ -175,7 +181,13 @@ public sealed class ProCursorTokenUsageController(
             return this.ValidationProblem();
         }
 
-        var response = await readRepository.GetSourceUsageAsync(clientId, sourceId, startDate, endDate, parsedGranularity, ct);
+        var response = await readRepository.GetSourceUsageAsync(
+            clientId,
+            sourceId,
+            startDate,
+            endDate,
+            parsedGranularity,
+            ct);
         return response is null ? this.NotFound() : this.Ok(response);
     }
 
@@ -357,7 +369,12 @@ public sealed class ProCursorTokenUsageController(
         startDate = default;
         endDate = default;
 
-        if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out startDate) ||
+        if (!DateOnly.TryParseExact(
+                from,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out startDate) ||
             !DateOnly.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out endDate))
         {
             error = "from and to must use yyyy-MM-dd format.";
@@ -379,7 +396,8 @@ public sealed class ProCursorTokenUsageController(
         from = default;
         to = default;
 
-        if (string.IsNullOrWhiteSpace(period) || period.Length < 2 || !period.EndsWith("d", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(period) || period.Length < 2 ||
+            !period.EndsWith("d", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -415,23 +433,37 @@ public sealed class ProCursorTokenUsageController(
     private static string BuildCsv(IReadOnlyList<ProCursorTokenUsageExportRowDto> rows)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("date,sourceId,sourceDisplayName,modelName,callType,prompt_tokens,completion_tokens,total_tokens,estimated_cost_usd,tokens_estimated,index_job_id,source_path,resource_id,knowledge_chunk_id");
+        builder.AppendLine(
+            "date,sourceId,sourceDisplayName,modelName,callType,prompt_tokens,completion_tokens,total_tokens,estimated_cost_usd,tokens_estimated,index_job_id,source_path,resource_id,knowledge_chunk_id");
 
         foreach (var row in rows)
         {
-            builder.Append(Escape(row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))).Append(',')
-                .Append(Escape(row.SourceId?.ToString())).Append(',')
-                .Append(Escape(row.SourceDisplayName)).Append(',')
-                .Append(Escape(row.ModelName)).Append(',')
-                .Append(Escape(row.CallType.ToString().ToLowerInvariant())).Append(',')
-                .Append(row.PromptTokens.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(row.CompletionTokens.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(row.TotalTokens.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(row.EstimatedCostUsd?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append(',')
-                .Append(row.TokensEstimated ? "true" : "false").Append(',')
-                .Append(Escape(row.IndexJobId?.ToString())).Append(',')
-                .Append(Escape(row.SourcePath)).Append(',')
-                .Append(Escape(row.ResourceId)).Append(',')
+            builder.Append(Escape(row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))
+                .Append(',')
+                .Append(Escape(row.SourceId?.ToString()))
+                .Append(',')
+                .Append(Escape(row.SourceDisplayName))
+                .Append(',')
+                .Append(Escape(row.ModelName))
+                .Append(',')
+                .Append(Escape(row.CallType.ToString().ToLowerInvariant()))
+                .Append(',')
+                .Append(row.PromptTokens.ToString(CultureInfo.InvariantCulture))
+                .Append(',')
+                .Append(row.CompletionTokens.ToString(CultureInfo.InvariantCulture))
+                .Append(',')
+                .Append(row.TotalTokens.ToString(CultureInfo.InvariantCulture))
+                .Append(',')
+                .Append(row.EstimatedCostUsd?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)
+                .Append(',')
+                .Append(row.TokensEstimated ? "true" : "false")
+                .Append(',')
+                .Append(Escape(row.IndexJobId?.ToString()))
+                .Append(',')
+                .Append(Escape(row.SourcePath))
+                .Append(',')
+                .Append(Escape(row.ResourceId))
+                .Append(',')
                 .Append(Escape(row.KnowledgeChunkId?.ToString()))
                 .AppendLine();
         }

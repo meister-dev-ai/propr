@@ -9,7 +9,6 @@ using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
-using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -104,14 +103,14 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         var job = MakeJob(prId: 5, threadId: 20, commentId: 200);
         await this._repo.AddAsync(job);
 
-        var exists = await this._repo.ExistsForCommentAsync(ClientId, 5, 20, 200);
+        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 5, 20, 200);
         Assert.True(exists);
     }
 
     [Fact]
     public async Task ExistsForCommentAsync_WhenJobDoesNotExist_ReturnsFalse()
     {
-        var exists = await this._repo.ExistsForCommentAsync(ClientId, 99, 99, 99);
+        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 99, 99, 99);
         Assert.False(exists);
     }
 
@@ -122,7 +121,10 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         var job = MakeJob();
         await this._repo.AddAsync(job);
 
-        var transitioned = await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        var transitioned = await this._repo.TryTransitionAsync(
+            job.Id,
+            MentionJobStatus.Pending,
+            MentionJobStatus.Processing);
         Assert.True(transitioned);
 
         var pending = await this._repo.GetPendingAsync();
@@ -136,7 +138,10 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         await this._repo.AddAsync(job);
 
         // Job is Pending, try to transition from Processing → Completed (invalid)
-        var transitioned = await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Processing, MentionJobStatus.Completed);
+        var transitioned = await this._repo.TryTransitionAsync(
+            job.Id,
+            MentionJobStatus.Processing,
+            MentionJobStatus.Completed);
         Assert.False(transitioned);
 
         // Status should still be Pending

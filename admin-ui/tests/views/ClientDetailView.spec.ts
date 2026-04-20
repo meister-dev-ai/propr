@@ -30,20 +30,6 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
-vi.mock('@/components/AdoCredentialsForm.vue', () => ({
-  default: {
-    name: 'AdoCredentialsForm',
-    props: ['clientId', 'hasCredentials'],
-    emits: ['credentials-updated', 'credentials-cleared'],
-    template: `
-      <div class="ado-form-stub" :data-client-id="clientId" :data-has-credentials="String(hasCredentials)">
-        <button class="emit-credentials-updated" @click="$emit('credentials-updated')">emit updated</button>
-        <button class="emit-credentials-cleared" @click="$emit('credentials-cleared')">emit cleared</button>
-      </div>
-    `,
-  },
-}))
-
 vi.mock('@/components/ConfirmDialog.vue', () => ({
   default: {
     name: 'ConfirmDialog',
@@ -61,6 +47,38 @@ vi.mock('@/components/ClientCrawlConfigsTab.vue', () => ({
   },
 }))
 
+vi.mock('@/components/ClientWebhookConfigsTab.vue', () => ({
+  default: {
+    name: 'ClientWebhookConfigsTab',
+    props: ['clientId'],
+    template: '<div class="client-webhook-configs-tab-stub" :data-client-id="clientId">webhook tab</div>',
+  },
+}))
+
+vi.mock('@/components/ClientProviderConnectionsTab.vue', () => ({
+  default: {
+    name: 'ClientProviderConnectionsTab',
+    props: ['clientId'],
+    template: '<div class="client-provider-connections-tab-stub" :data-client-id="clientId">provider tab</div>',
+  },
+}))
+
+vi.mock('@/components/ProviderConnectionStatusList.vue', () => ({
+  default: {
+    name: 'ProviderConnectionStatusList',
+    props: ['clientId'],
+    template: '<div class="provider-connection-status-list-stub" :data-client-id="clientId">provider status</div>',
+  },
+}))
+
+vi.mock('@/components/ProviderConnectionAuditTrail.vue', () => ({
+  default: {
+    name: 'ProviderConnectionAuditTrail',
+    props: ['clientId'],
+    template: '<div class="provider-connection-audit-trail-stub" :data-client-id="clientId">provider audit</div>',
+  },
+}))
+
 vi.mock('@/components/UsageDashboard.vue', () => ({
   default: {
     name: 'UsageDashboard',
@@ -73,7 +91,6 @@ const sampleClient = {
   id: 'client-1',
   displayName: 'Acme Corp',
   isActive: true,
-  hasAdoCredentials: false,
   createdAt: '2024-01-01T00:00:00Z',
 }
 
@@ -146,31 +163,17 @@ describe('ClientDetailView', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'clients' })
   })
 
-  it('passes the client state to AdoCredentialsForm and reacts to credential events', async () => {
+  it('shows the provider-management handoff in the system tab', async () => {
     mockGet.mockResolvedValue({ data: sampleClient })
     const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
     await flushPromises()
 
-    const adoForm = wrapper.find('.ado-form-stub')
-    expect(adoForm.attributes('data-client-id')).toBe('client-1')
-    expect(adoForm.attributes('data-has-credentials')).toBe('false')
-    expect(wrapper.text()).toContain('Not configured')
-    expect(wrapper.text()).toContain('Requires ADO credentials')
-
-    await wrapper.find('.emit-credentials-updated').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.ado-form-stub').attributes('data-has-credentials')).toBe('true')
-    expect(wrapper.text()).toContain('Configured')
-    expect(wrapper.find('input[name="reviewerOrgUrl"]').exists()).toBe(true)
-
-    await wrapper.find('.emit-credentials-cleared').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.ado-form-stub').attributes('data-has-credentials')).toBe('false')
-    expect(wrapper.text()).toContain('Not configured')
-    expect(wrapper.text()).toContain('Requires ADO credentials')
+    expect(wrapper.text()).toContain('Provider Access')
+    expect(wrapper.text()).toContain('Provider connections, organization scopes, and reviewer identities are managed in the Providers tab.')
+    expect(wrapper.text()).toContain('managed in the Providers tab')
+    expect(wrapper.text()).not.toContain('ADO Credentials')
+    expect(wrapper.text()).not.toContain('AI Reviewer Identity')
   })
 
   it('passes the current client ID into the crawl configuration tab', async () => {
@@ -180,6 +183,60 @@ describe('ClientDetailView', () => {
     await flushPromises()
 
     expect(wrapper.find('.client-crawl-configs-tab-stub').attributes('data-client-id')).toBe('client-1')
+  })
+
+  it('passes the current client ID into the webhook configuration tab', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    expect(wrapper.find('.client-webhook-configs-tab-stub').attributes('data-client-id')).toBe('client-1')
+  })
+
+  it('passes the current client ID into the provider connections tab', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
+    expect(providersTab).toBeDefined()
+    await providersTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.client-provider-connections-tab-stub').attributes('data-client-id')).toBe('client-1')
+  })
+
+  it('passes the current client ID into the provider operations widgets', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
+    expect(providersTab).toBeDefined()
+    await providersTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.provider-connection-status-list-stub').attributes('data-client-id')).toBe('client-1')
+    expect(wrapper.find('.provider-connection-audit-trail-stub').attributes('data-client-id')).toBe('client-1')
+  })
+
+  it('keeps the providers onboarding tab available from the detail page', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
+    expect(providersTab).toBeDefined()
+
+    await providersTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.client-provider-connections-tab-stub').exists()).toBe(true)
+    expect(wrapper.text()).toContain('provider audit')
   })
 
   it('passes the current client ID into the usage dashboard tab', async () => {
@@ -219,7 +276,7 @@ describe('ClientDetailView', () => {
     await flushPromises()
     const elapsedMs = Date.now() - startedAt
 
-    expect(wrapper.find('.ado-form-stub').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Provider Access')
     expect(wrapper.find('.client-crawl-configs-tab-stub').exists()).toBe(true)
     expect(elapsedMs).toBeLessThan(2000)
   })

@@ -20,7 +20,7 @@ public sealed class ProCursorModuleTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddProCursorModule(BuildConfiguration(withDatabaseConnectionString: false, stubMode: true));
+        services.AddProCursorModule(BuildConfiguration(false, true));
 
         Assert.NotNull(FindService<IProCursorGateway>(services));
 
@@ -37,7 +37,7 @@ public sealed class ProCursorModuleTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddProCursorModule(BuildConfiguration(withDatabaseConnectionString: true, stubMode: true));
+        services.AddProCursorModule(BuildConfiguration(true, true));
 
         Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
         Assert.NotNull(FindService<IProCursorIndexJobRepository>(services));
@@ -80,22 +80,25 @@ public sealed class ProCursorModuleTests
     private static IConfiguration BuildConfiguration(bool withDatabaseConnectionString, bool stubMode)
     {
         return new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["DB_CONNECTION_STRING"] = withDatabaseConnectionString ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
-                ["ADO_STUB_PR"] = stubMode ? "true" : "false",
-                ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "7",
-                ["PROCURSOR_MAX_QUERY_RESULTS"] = "20",
-                ["PROCURSOR_MAX_SOURCES_PER_QUERY"] = "5",
-                ["PROCURSOR_CHUNK_TARGET_LINES"] = "120",
-                ["PROCURSOR_MINI_INDEX_TTL_MINUTES"] = "30",
-                ["PROCURSOR_REFRESH_POLL_SECONDS"] = "15",
-                ["PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES"] = "60",
-                ["PROCURSOR_EMBEDDING_DIMENSIONS"] = "1536",
-                ["PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS"] = "30",
-                ["PROCURSOR_TOKEN_USAGE_EVENT_RETENTION_DAYS"] = "30",
-                ["PROCURSOR_TOKEN_USAGE_ROLLUP_RETENTION_DAYS"] = "90",
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["DB_CONNECTION_STRING"] = withDatabaseConnectionString
+                        ? "Host=localhost;Database=meister;Username=test;Password=test"
+                        : null,
+                    ["ADO_STUB_PR"] = stubMode ? "true" : "false",
+                    ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "7",
+                    ["PROCURSOR_MAX_QUERY_RESULTS"] = "20",
+                    ["PROCURSOR_MAX_SOURCES_PER_QUERY"] = "5",
+                    ["PROCURSOR_CHUNK_TARGET_LINES"] = "120",
+                    ["PROCURSOR_MINI_INDEX_TTL_MINUTES"] = "30",
+                    ["PROCURSOR_REFRESH_POLL_SECONDS"] = "15",
+                    ["PROCURSOR_TEMP_WORKSPACE_RETENTION_MINUTES"] = "60",
+                    ["PROCURSOR_EMBEDDING_DIMENSIONS"] = "1536",
+                    ["PROCURSOR_TOKEN_USAGE_ROLLUP_POLL_SECONDS"] = "30",
+                    ["PROCURSOR_TOKEN_USAGE_EVENT_RETENTION_DAYS"] = "30",
+                    ["PROCURSOR_TOKEN_USAGE_ROLLUP_RETENTION_DAYS"] = "90",
+                })
             .Build();
     }
 

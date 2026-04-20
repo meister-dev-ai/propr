@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers;
@@ -16,29 +17,32 @@ public sealed class CrawlingConfigurationModuleIntegrationTests(AdminCrawlConfig
     {
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/crawl-configurations");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
-        request.Content = JsonContent.Create(new
-        {
-            clientId = factory.TestClientId,
-            organizationScopeId = factory.GuidedOrganizationScopeId,
-            projectId = "GuidedProject",
-            crawlIntervalSeconds = 60,
-            repoFilters = new[]
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
             {
-                new
+                clientId = factory.TestClientId,
+                organizationScopeId = factory.GuidedOrganizationScopeId,
+                providerProjectKey = "GuidedProject",
+                crawlIntervalSeconds = 60,
+                repoFilters = new[]
                 {
-                    displayName = "Repository One",
-                    canonicalSourceRef = new
+                    new
                     {
-                        provider = "azureDevOps",
-                        value = "repo-1",
+                        displayName = "Repository One",
+                        canonicalSourceRef = new
+                        {
+                            provider = "azureDevOps",
+                            value = "repo-1",
+                        },
+                        targetBranchPatterns = new[] { "main" },
                     },
-                    targetBranchPatterns = new[] { "main" },
                 },
-            },
-            proCursorSourceScopeMode = "selectedSources",
-            proCursorSourceIds = new[] { factory.GuidedProCursorSourceId },
-        });
+                proCursorSourceScopeMode = "selectedSources",
+                proCursorSourceIds = new[] { factory.GuidedProCursorSourceId },
+            });
 
         var response = await http.SendAsync(request);
 
@@ -59,7 +63,7 @@ public sealed class CrawlingDiscoveryModuleIntegrationTests(AdoDiscoveryControll
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/crawl-filters?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await http.SendAsync(request);
 
@@ -77,8 +81,12 @@ public sealed class CrawlingIdentityResolutionModuleIntegrationTests(IdentitiesC
     public async Task ResolveIdentity_ClientAdministrator_ReturnsResolvedIdentity()
     {
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await http.SendAsync(request);
 

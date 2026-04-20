@@ -1,16 +1,16 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
-using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
-using MeisterProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.AI;
-using MeisterProPR.Infrastructure.AzureDevOps;
-using MeisterProPR.Infrastructure.AzureDevOps.Stub;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
+using MeisterProPR.Infrastructure.Features.Providers.Forgejo.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Providers.GitHub.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
@@ -18,6 +18,7 @@ using MeisterProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInje
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,8 +34,20 @@ public static class ReviewingModuleServiceCollectionExtensions
     /// <summary>
     ///     Registers Reviewing persistence, orchestration, and diagnostics services.
     /// </summary>
-    public static IServiceCollection AddReviewingModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
+    public static IServiceCollection AddReviewingModule(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
+        if (configuration.HasDatabaseConnectionString())
+        {
+            services.TryAddScoped<IScmProviderRegistry, ScmProviderRegistry>();
+            services.AddAzureDevOpsProviderAdapters();
+            services.AddGitHubProviderAdapters();
+            services.AddGitLabProviderAdapters();
+            services.AddForgejoProviderAdapters();
+        }
+
         services.AddReviewingIntake(configuration);
 
         if (configuration.HasDatabaseConnectionString())
@@ -48,6 +61,8 @@ public static class ReviewingModuleServiceCollectionExtensions
         services.AddReviewingExecution();
         services.AddReviewingDiagnostics();
         services.AddReviewingThreadMemory();
+        services.TryAddScoped<IRepositoryInstructionFetcher, ProviderRepositoryInstructionFetcher>();
+        services.TryAddScoped<IRepositoryExclusionFetcher, ProviderRepositoryExclusionFetcher>();
 
         services.AddSingleton<ApplicationIAiReviewCore>(sp => new ToolAwareAiReviewCore(
             null,
@@ -66,26 +81,10 @@ public static class ReviewingModuleServiceCollectionExtensions
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
         services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
         services.AddScoped<IThreadMemoryService, ThreadMemoryService>();
+        services.TryAddScoped<IReviewerThreadStatusFetcher, ProviderReviewerThreadStatusFetcher>();
         services.AddTransient<ReviewOrchestrationService>();
 
-        if (configuration.GetValue<bool>("ADO_STUB_PR"))
-        {
-            services.AddScoped<IReviewContextToolsFactory, StubReviewContextToolsFactory>();
-            services.AddScoped<IRepositoryInstructionFetcher, NullRepositoryInstructionFetcher>();
-            services.AddScoped<IRepositoryExclusionFetcher, NullRepositoryExclusionFetcher>();
-        }
-        else
-        {
-            services.AddScoped<IReviewContextToolsFactory>(sp =>
-                new AdoReviewContextToolsFactory(
-                    sp.GetRequiredService<VssConnectionFactory>(),
-                    sp.GetRequiredService<IClientAdoCredentialRepository>(),
-                    sp.GetRequiredService<IProCursorGateway>(),
-                    sp.GetRequiredService<IOptions<AiReviewOptions>>(),
-                    sp.GetRequiredService<ILoggerFactory>()));
-            services.AddScoped<IRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>();
-            services.AddScoped<IRepositoryExclusionFetcher, AdoRepositoryExclusionFetcher>();
-        }
+        services.AddAzureDevOpsReviewingServices(configuration);
 
         if (!string.IsNullOrWhiteSpace(configuration["AI_EVALUATOR_ENDPOINT"]) &&
             !string.IsNullOrWhiteSpace(configuration["AI_EVALUATOR_DEPLOYMENT"]))

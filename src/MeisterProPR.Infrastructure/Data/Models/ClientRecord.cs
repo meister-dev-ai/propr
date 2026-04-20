@@ -12,9 +12,6 @@ public sealed class ClientRecord
     public DateTimeOffset CreatedAt { get; set; }
     public Guid Id { get; set; }
     public string DisplayName { get; set; } = string.Empty;
-    public string? AdoTenantId { get; set; }
-    public string? AdoClientId { get; set; }
-    public string? AdoClientSecret { get; set; }
     public Guid? ReviewerId { get; set; }
 
     /// <summary>
@@ -26,7 +23,11 @@ public sealed class ClientRecord
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
 
-    public ICollection<ClientAdoOrganizationScopeRecord> AdoOrganizationScopes { get; set; } = [];
+    public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];
+
+    public ICollection<ProviderConnectionAuditEntryRecord> ProviderConnectionAuditEntries { get; set; } = [];
+
+    public ICollection<ClientReviewerIdentityRecord> ReviewerIdentities { get; set; } = [];
 
     public ICollection<CrawlConfigurationRecord> CrawlConfigurations { get; set; } = [];
 }

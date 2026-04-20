@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
-/// <summary>EF Core implementation of <see cref="IUserRepository"/>.</summary>
+/// <summary>EF Core implementation of <see cref="IUserRepository" />.</summary>
 public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepository
 {
     public async Task<AppUser?> GetByUsernameAsync(string username, CancellationToken ct = default)
@@ -85,14 +85,15 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         }
         else
         {
-            db.UserClientRoles.Add(new UserClientRoleRecord
-            {
-                Id = assignment.Id == Guid.Empty ? Guid.NewGuid() : assignment.Id,
-                UserId = assignment.UserId,
-                ClientId = assignment.ClientId,
-                Role = assignment.Role,
-                AssignedAt = assignment.AssignedAt,
-            });
+            db.UserClientRoles.Add(
+                new UserClientRoleRecord
+                {
+                    Id = assignment.Id == Guid.Empty ? Guid.NewGuid() : assignment.Id,
+                    UserId = assignment.UserId,
+                    ClientId = assignment.ClientId,
+                    Role = assignment.Role,
+                    AssignedAt = assignment.AssignedAt,
+                });
         }
 
         await db.SaveChangesAsync(ct);
@@ -140,14 +141,15 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         };
         foreach (var a in record.ClientAssignments)
         {
-            user.ClientAssignments.Add(new UserClientRole
-            {
-                Id = a.Id,
-                UserId = a.UserId,
-                ClientId = a.ClientId,
-                Role = a.Role,
-                AssignedAt = a.AssignedAt,
-            });
+            user.ClientAssignments.Add(
+                new UserClientRole
+                {
+                    Id = a.Id,
+                    UserId = a.UserId,
+                    ClientId = a.ClientId,
+                    Role = a.Role,
+                    AssignedAt = a.AssignedAt,
+                });
         }
 
         return user;

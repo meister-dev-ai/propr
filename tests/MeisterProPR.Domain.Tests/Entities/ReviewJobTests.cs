@@ -3,6 +3,7 @@
 
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Domain.Tests.Entities;
 
@@ -17,7 +18,14 @@ public class ReviewJobTests
         int prId = 1,
         int iterationId = 1)
     {
-        return new ReviewJob(id ?? Guid.NewGuid(), clientId ?? Guid.NewGuid(), orgUrl, projectId, repoId, prId, iterationId);
+        return new ReviewJob(
+            id ?? Guid.NewGuid(),
+            clientId ?? Guid.NewGuid(),
+            orgUrl,
+            projectId,
+            repoId,
+            prId,
+            iterationId);
     }
 
     [Fact]
@@ -119,6 +127,39 @@ public class ReviewJobTests
     }
 
     [Fact]
+    public void Constructor_PopulatesProviderNeutralCompatibilityFields()
+    {
+        var job = CreateJob(orgUrl: "https://dev.azure.com/org", projectId: "proj", repoId: "repo", prId: 42);
+
+        Assert.Equal(ScmProvider.AzureDevOps, job.Provider);
+        Assert.Equal("https://dev.azure.com", job.HostBaseUrl);
+        Assert.Equal("proj", job.RepositoryOwnerOrNamespace);
+        Assert.Equal("proj", job.RepositoryProjectPath);
+        Assert.Equal(CodeReviewPlatformKind.PullRequest, job.CodeReviewPlatformKind);
+        Assert.Equal("42", job.ExternalCodeReviewId);
+        Assert.Equal("https://dev.azure.com", job.ProviderHost.HostBaseUrl);
+        Assert.Equal("repo", job.RepositoryReference.ExternalRepositoryId);
+        Assert.Equal(42, job.CodeReviewReference.Number);
+        Assert.Null(job.ReviewRevisionReference);
+    }
+
+    [Fact]
+    public void SetReviewRevision_StoresProviderNeutralRevisionFields()
+    {
+        var job = CreateJob();
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-7", "patch-7");
+
+        job.SetReviewRevision(revision);
+
+        Assert.Equal("head-sha", job.RevisionHeadSha);
+        Assert.Equal("base-sha", job.RevisionBaseSha);
+        Assert.Equal("start-sha", job.RevisionStartSha);
+        Assert.Equal("revision-7", job.ProviderRevisionId);
+        Assert.Equal("patch-7", job.ReviewPatchIdentity);
+        Assert.Equal(revision, job.ReviewRevisionReference);
+    }
+
+    [Fact]
     public void ResultAndErrorMessage_AreNullByDefault()
     {
         var job = CreateJob();
@@ -135,9 +176,9 @@ public class ReviewJobTests
     }
 
     /// <summary>
-    /// Backward compat invariant: TotalInputTokensAggregated must ALWAYS equal the
-    /// sum of all TotalInputTokens across all TokenBreakdownEntry items, regardless
-    /// of whether tokens are accumulated via AccumulateTokens or AccumulateTierTokens.
+    ///     Backward compat invariant: TotalInputTokensAggregated must ALWAYS equal the
+    ///     sum of all TotalInputTokens across all TokenBreakdownEntry items, regardless
+    ///     of whether tokens are accumulated via AccumulateTokens or AccumulateTierTokens.
     /// </summary>
     [Fact]
     public void AccumulateTierTokens_MaintainsBackwardCompatInvariant()
@@ -204,4 +245,3 @@ public class ReviewJobTests
         Assert.Equal(150, job.TotalOutputTokensAggregated);
     }
 }
-

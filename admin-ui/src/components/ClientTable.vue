@@ -7,7 +7,6 @@
       <tr>
         <th>Display Name</th>
         <th>Status</th>
-        <th>ADO Credentials</th>
         <th>Usage (30d)</th>
         <th>Created</th>
       </tr>
@@ -19,12 +18,6 @@
           <span :class="client.isActive ? 'chip chip-success' : 'chip chip-muted'">
             <i :class="client.isActive ? 'fi fi-rr-check-circle' : 'fi fi-rr-ban'"></i>
             {{ client.isActive ? 'Active' : 'Inactive' }}
-          </span>
-        </td>
-        <td>
-          <span :class="client.hasAdoCredentials ? 'chip chip-success' : 'chip chip-muted'">
-            <i :class="client.hasAdoCredentials ? 'fi fi-rr-plug-connection' : 'fi fi-rr-minus-circle'"></i>
-            {{ client.hasAdoCredentials ? 'Configured' : 'None' }}
           </span>
         </td>
         <td>
@@ -51,7 +44,6 @@ interface Client {
   id: string
   displayName: string
   isActive: boolean
-  hasAdoCredentials: boolean
   createdAt: string
   recentUsageTokens?: number
 }

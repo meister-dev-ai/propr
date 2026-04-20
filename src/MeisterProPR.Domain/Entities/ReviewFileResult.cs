@@ -38,7 +38,7 @@ public class ReviewFileResult
     public Guid JobId { get; private set; }
 
     /// <summary>The repository-relative file path being reviewed.</summary>
-    public string FilePath { get; private set; } = null!;
+    public string FilePath { get; } = null!;
 
     /// <summary>True when the file review reached a terminal successful state.</summary>
     public bool IsComplete { get; private set; }

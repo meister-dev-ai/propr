@@ -48,7 +48,7 @@ internal sealed partial class AgentMentionAnswerService(
         var userMessage = BuildUserMessage(pullRequest, cleanQuestion, threadId);
 
         var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, cancellationToken)
-            ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
+                               ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
 
         var modelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault()
             ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
@@ -67,7 +67,10 @@ internal sealed partial class AgentMentionAnswerService(
 
         LogGeneratingAnswer(logger, pullRequest.PullRequestId, cleanQuestion.Length);
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(
+            messages,
+            new ChatOptions { ModelId = modelId },
+            cancellationToken);
         return response.Text ?? "";
     }
 
@@ -142,6 +145,7 @@ internal sealed partial class AgentMentionAnswerService(
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "AgentMentionAnswerService: generating answer for PR#{PullRequestId}, question length {QuestionLength}")]
+        Message =
+            "AgentMentionAnswerService: generating answer for PR#{PullRequestId}, question length {QuestionLength}")]
     private static partial void LogGeneratingAnswer(ILogger logger, int pullRequestId, int questionLength);
 }

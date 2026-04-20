@@ -8,10 +8,16 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum ProCursorIndexJobStatus
 {
+    /// <summary>Job is awaiting processing.</summary>
     Pending = 0,
+    /// <summary>Job is currently being processed.</summary>
     Processing = 1,
+    /// <summary>Job has completed successfully.</summary>
     Completed = 2,
+    /// <summary>Job has failed.</summary>
     Failed = 3,
+    /// <summary>Job has been superseded by another job.</summary>
     Superseded = 4,
+    /// <summary>Job has been cancelled.</summary>
     Cancelled = 5,
 }

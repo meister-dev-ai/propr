@@ -62,7 +62,9 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
             .IsRequired(false)
             .HasConversion(
                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                v => v == null ? null : JsonSerializer.Deserialize<IReadOnlyList<ReviewComment>>(v, (JsonSerializerOptions?)null));
+                v => v == null
+                    ? null
+                    : JsonSerializer.Deserialize<IReadOnlyList<ReviewComment>>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(r => r.JobId).HasDatabaseName("ix_review_file_results_job_id");
         builder.HasIndex(r => new { r.JobId, r.FilePath })

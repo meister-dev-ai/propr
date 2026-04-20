@@ -90,7 +90,6 @@ interface Client {
   id: string
   displayName: string
   isActive: boolean
-  hasAdoCredentials: boolean
   createdAt: string
   recentUsageTokens?: number
 }

@@ -3,10 +3,13 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -21,7 +24,7 @@ using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
 
-/// <summary>Integration tests for <see cref="MeisterProPR.Api.Controllers.UserPatsController"/>.</summary>
+/// <summary>Integration tests for <see cref="MeisterProPR.Api.Controllers.UserPatsController" />.</summary>
 public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiFactory factory)
     : IClassFixture<UserPatsControllerTests.UserPatsApiFactory>
 {
@@ -59,7 +62,7 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
         var token = factory.GenerateUserToken(userId);
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/users/me/pats");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.SendAsync(request);
 
@@ -83,22 +86,23 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
         {
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             // Seed only a revoked PAT
-            db.UserPats.Add(new UserPatRecord
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                TokenHash = "revoked-only",
-                Label = "Revoked Only",
-                IsRevoked = true,
-                CreatedAt = now,
-            });
+            db.UserPats.Add(
+                new UserPatRecord
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TokenHash = "revoked-only",
+                    Label = "Revoked Only",
+                    IsRevoked = true,
+                    CreatedAt = now,
+                });
             await db.SaveChangesAsync();
         }
 
         var token = factory.GenerateUserToken(userId);
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/users/me/pats");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.SendAsync(request);
 
@@ -134,11 +138,12 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim("sub", userId.ToString()),
-                    new Claim("global_role", "User"),
-                }),
+                Subject = new ClaimsIdentity(
+                    new[]
+                    {
+                        new Claim("sub", userId.ToString()),
+                        new Claim("global_role", "User"),
+                    }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
                 Issuer = "meisterpropr",
@@ -161,10 +166,9 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
@@ -173,12 +177,12 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 services.AddSingleton(userRepo);
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
                 services.AddSingleton(Substitute.For<IJobRepository>());
             });

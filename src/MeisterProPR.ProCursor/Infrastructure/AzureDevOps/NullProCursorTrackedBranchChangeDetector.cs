@@ -11,6 +11,13 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 /// </summary>
 public sealed class NullProCursorTrackedBranchChangeDetector : IProCursorTrackedBranchChangeDetector
 {
+    /// <summary>
+    ///     Gets the latest commit SHA for a tracked branch.
+    /// </summary>
+    /// <param name="source">The knowledge source.</param>
+    /// <param name="trackedBranch">The tracked branch.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Always returns null as this is a no-op implementation.</returns>
     public Task<string?> GetLatestCommitShaAsync(
         ProCursorKnowledgeSource source,
         ProCursorTrackedBranch trackedBranch,

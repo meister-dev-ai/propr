@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -43,7 +44,12 @@ public sealed partial class ThreadMemoryService(
     {
         try
         {
-            var summary = await embedder.GenerateResolutionSummaryAsync(evt.FilePath, evt.ChangeExcerpt, evt.CommentHistory, evt.ClientId, ct);
+            var summary = await embedder.GenerateResolutionSummaryAsync(
+                evt.FilePath,
+                evt.ChangeExcerpt,
+                evt.CommentHistory,
+                evt.ClientId,
+                ct);
 
             var compositeText = BuildCompositeText(evt.FilePath, evt.ChangeExcerpt, evt.CommentHistory, summary);
             var vector = await embedder.GenerateEmbeddingAsync(compositeText, evt.ClientId, ct);
@@ -67,38 +73,42 @@ public sealed partial class ThreadMemoryService(
 
             await repository.UpsertAsync(record, ct);
 
-            await activityLog.AppendAsync(new MemoryActivityLogEntry
-            {
-                Id = Guid.NewGuid(),
-                ClientId = evt.ClientId,
-                ThreadId = evt.ThreadId,
-                RepositoryId = evt.RepositoryId,
-                PullRequestId = evt.PullRequestId,
-                Action = MemoryActivityAction.Stored,
-                PreviousStatus = null,
-                CurrentStatus = "resolved",
-                Reason = null,
-                OccurredAt = now,
-            }, ct);
+            await activityLog.AppendAsync(
+                new MemoryActivityLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = evt.ClientId,
+                    ThreadId = evt.ThreadId,
+                    RepositoryId = evt.RepositoryId,
+                    PullRequestId = evt.PullRequestId,
+                    Action = MemoryActivityAction.Stored,
+                    PreviousStatus = null,
+                    CurrentStatus = "resolved",
+                    Reason = null,
+                    OccurredAt = now,
+                },
+                ct);
 
             LogEmbeddingStored(logger, evt.ThreadId, evt.ClientId);
         }
         catch (Exception ex)
         {
             LogProcessResolvedFailed(logger, evt.ThreadId, evt.ClientId, ex);
-            await activityLog.AppendAsync(new MemoryActivityLogEntry
-            {
-                Id = Guid.NewGuid(),
-                ClientId = evt.ClientId,
-                ThreadId = evt.ThreadId,
-                RepositoryId = evt.RepositoryId,
-                PullRequestId = evt.PullRequestId,
-                Action = MemoryActivityAction.Stored,
-                PreviousStatus = null,
-                CurrentStatus = "resolved",
-                Reason = ex.Message,
-                OccurredAt = DateTimeOffset.UtcNow,
-            }, ct);
+            await activityLog.AppendAsync(
+                new MemoryActivityLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = evt.ClientId,
+                    ThreadId = evt.ThreadId,
+                    RepositoryId = evt.RepositoryId,
+                    PullRequestId = evt.PullRequestId,
+                    Action = MemoryActivityAction.Stored,
+                    PreviousStatus = null,
+                    CurrentStatus = "resolved",
+                    Reason = ex.Message,
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                ct);
         }
     }
 
@@ -110,19 +120,21 @@ public sealed partial class ThreadMemoryService(
             var deleted = await repository.RemoveByThreadAsync(evt.ClientId, evt.RepositoryId, evt.ThreadId, ct);
             var outcome = deleted ? "deleted" : "no_op";
 
-            await activityLog.AppendAsync(new MemoryActivityLogEntry
-            {
-                Id = Guid.NewGuid(),
-                ClientId = evt.ClientId,
-                ThreadId = evt.ThreadId,
-                RepositoryId = evt.RepositoryId,
-                PullRequestId = evt.PullRequestId,
-                Action = MemoryActivityAction.Removed,
-                PreviousStatus = "resolved",
-                CurrentStatus = "active",
-                Reason = outcome,
-                OccurredAt = DateTimeOffset.UtcNow,
-            }, ct);
+            await activityLog.AppendAsync(
+                new MemoryActivityLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = evt.ClientId,
+                    ThreadId = evt.ThreadId,
+                    RepositoryId = evt.RepositoryId,
+                    PullRequestId = evt.PullRequestId,
+                    Action = MemoryActivityAction.Removed,
+                    PreviousStatus = "resolved",
+                    CurrentStatus = "active",
+                    Reason = outcome,
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                ct);
 
             LogEmbeddingRemoved(logger, evt.ThreadId, evt.ClientId, outcome);
         }
@@ -145,19 +157,21 @@ public sealed partial class ThreadMemoryService(
     {
         try
         {
-            await activityLog.AppendAsync(new MemoryActivityLogEntry
-            {
-                Id = Guid.NewGuid(),
-                ClientId = clientId,
-                ThreadId = threadId,
-                RepositoryId = repositoryId,
-                PullRequestId = pullRequestId,
-                Action = MemoryActivityAction.NoOp,
-                PreviousStatus = previousStatus,
-                CurrentStatus = currentStatus,
-                Reason = reason,
-                OccurredAt = DateTimeOffset.UtcNow,
-            }, ct);
+            await activityLog.AppendAsync(
+                new MemoryActivityLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = clientId,
+                    ThreadId = threadId,
+                    RepositoryId = repositoryId,
+                    PullRequestId = pullRequestId,
+                    Action = MemoryActivityAction.NoOp,
+                    PreviousStatus = previousStatus,
+                    CurrentStatus = currentStatus,
+                    Reason = reason,
+                    OccurredAt = DateTimeOffset.UtcNow,
+                },
+                ct);
         }
         catch (Exception ex)
         {
@@ -349,7 +363,7 @@ public sealed partial class ThreadMemoryService(
                 this._opts.MemoryMinSimilarity,
                 ct) ?? [];
 
-            IReadOnlyList<ThreadMemoryMatchDto> matches = semanticMatches;
+            var matches = semanticMatches;
             var retrievalMode = semanticMatches.Count > 0 ? "semantic_similarity" : "no_match";
 
             if (matches.Count == 0)
@@ -372,25 +386,31 @@ public sealed partial class ThreadMemoryService(
 
             if (protocolId.HasValue)
             {
-                var retrievalDetails = JsonSerializer.Serialize(new
-                {
-                    filePath,
-                    resultCount = matches.Count,
-                    topN = this._opts.MemoryTopN,
-                    minSimilarity = this._opts.MemoryMinSimilarity,
-                    retrievalMode,
-                    similarityScores,
-                    matchSources = matches.Select(m => new
+                var retrievalDetails = JsonSerializer.Serialize(
+                    new
                     {
-                        m.MemoryRecordId,
-                        m.ThreadId,
-                        m.FilePath,
-                        m.SimilarityScore,
-                        m.MatchSource,
-                    }).ToList(),
-                });
+                        filePath,
+                        resultCount = matches.Count,
+                        topN = this._opts.MemoryTopN,
+                        minSimilarity = this._opts.MemoryMinSimilarity,
+                        retrievalMode,
+                        similarityScores,
+                        matchSources = matches.Select(m => new
+                        {
+                            m.MemoryRecordId,
+                            m.ThreadId,
+                            m.FilePath,
+                            m.SimilarityScore,
+                            m.MatchSource,
+                        })
+                            .ToList(),
+                    });
                 await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value, "memory_retrieval_executed", retrievalDetails, null, ct);
+                    protocolId.Value,
+                    "memory_retrieval_executed",
+                    retrievalDetails,
+                    null,
+                    ct);
             }
 
             if (matches.Count == 0)
@@ -400,7 +420,13 @@ public sealed partial class ThreadMemoryService(
 
             // Reconsider draft findings with AI.
             var effectiveModelId = job.AiModel ?? this._opts.ModelId;
-            var reconsideredResult = await this.ReconsiderWithAiAsync(clientId, draftResult, matches, effectiveModelId, protocolId, ct);
+            var reconsideredResult = await this.ReconsiderWithAiAsync(
+                clientId,
+                draftResult,
+                matches,
+                effectiveModelId,
+                protocolId,
+                ct);
 
             if (protocolId.HasValue && reconsideredResult is not null)
             {
@@ -428,7 +454,7 @@ public sealed partial class ThreadMemoryService(
                     })
                     .ToList();
 
-                var draftSeverityByKey = new Dictionary<string, Domain.Enums.CommentSeverity>();
+                var draftSeverityByKey = new Dictionary<string, CommentSeverity>();
                 foreach (var c in draftResult.Comments)
                 {
                     draftSeverityByKey.TryAdd(CommentKey(c), c.Severity);
@@ -451,32 +477,38 @@ public sealed partial class ThreadMemoryService(
                     })
                     .ToList();
 
-                var reconsiderationDetails = JsonSerializer.Serialize(new
-                {
-                    filePath,
-                    contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
-                    originalCommentCount = draftResult.Comments.Count,
-                    finalCommentCount = reconsideredResult.Comments.Count,
-                    retainedCount = reconsideredResult.Comments.Count - downgraded.Count,
-                    discardedCount = discarded.Count,
-                    downgradedCount = downgraded.Count,
-                    discarded,
-                    downgraded,
-                });
+                var reconsiderationDetails = JsonSerializer.Serialize(
+                    new
+                    {
+                        filePath,
+                        contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
+                        originalCommentCount = draftResult.Comments.Count,
+                        finalCommentCount = reconsideredResult.Comments.Count,
+                        retainedCount = reconsideredResult.Comments.Count - downgraded.Count,
+                        discardedCount = discarded.Count,
+                        downgradedCount = downgraded.Count,
+                        discarded,
+                        downgraded,
+                    });
                 await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value, "memory_reconsideration_completed", reconsiderationDetails, null, ct);
+                    protocolId.Value,
+                    "memory_reconsideration_completed",
+                    reconsiderationDetails,
+                    null,
+                    ct);
             }
             else if (protocolId.HasValue)
             {
                 // AI returned null (empty response, parse failure, or inner exception).
                 // Emit a protocol event so the trace is not left dangling after memory_retrieval_executed.
-                var failureDetails = JsonSerializer.Serialize(new
-                {
-                    filePath,
-                    contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
-                    originalCommentCount = draftResult.Comments.Count,
-                    reason = "ai_returned_null_or_parse_failed",
-                });
+                var failureDetails = JsonSerializer.Serialize(
+                    new
+                    {
+                        filePath,
+                        contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
+                        originalCommentCount = draftResult.Comments.Count,
+                        reason = "ai_returned_null_or_parse_failed",
+                    });
 
                 await protocolRecorder.RecordMemoryEventAsync(
                     protocolId.Value,
@@ -497,7 +529,11 @@ public sealed partial class ThreadMemoryService(
             {
                 var details = JsonSerializer.Serialize(new { filePath, operationType = "retrieve_and_reconsider" });
                 await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value, "memory_operation_failed", details, ex.Message, ct);
+                    protocolId.Value,
+                    "memory_operation_failed",
+                    details,
+                    ex.Message,
+                    ct);
             }
 
             return draftResult;
@@ -528,23 +564,27 @@ public sealed partial class ThreadMemoryService(
                 return null;
             }
 
-            effectiveModelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault() ?? effectiveModelId;
-            effectiveChatClient = aiChatClientFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey);
+            effectiveModelId = activeConnection.ActiveModel ??
+                               activeConnection.Models.FirstOrDefault() ?? effectiveModelId;
+            effectiveChatClient = aiChatClientFactory.CreateClient(
+                activeConnection.EndpointUrl,
+                activeConnection.ApiKey);
         }
 
         try
         {
-            var draftJson = JsonSerializer.Serialize(new
-            {
-                summary = draftResult.Summary,
-                comments = draftResult.Comments.Select(c => new
+            var draftJson = JsonSerializer.Serialize(
+                new
                 {
-                    file_path = c.FilePath,
-                    line_number = c.LineNumber,
-                    severity = c.Severity.ToString().ToLowerInvariant(),
-                    message = c.Message,
-                }),
-            });
+                    summary = draftResult.Summary,
+                    comments = draftResult.Comments.Select(c => new
+                    {
+                        file_path = c.FilePath,
+                        line_number = c.LineNumber,
+                        severity = c.Severity.ToString().ToLowerInvariant(),
+                        message = c.Message,
+                    }),
+                });
 
             var systemMsg = BuildReconsiderationSystemPrompt();
             var userMsg = BuildReconsiderationUserMessage(draftJson, matches);
@@ -555,7 +595,10 @@ public sealed partial class ThreadMemoryService(
                 new ChatMessage(ChatRole.User, userMsg),
             };
 
-            var response = await effectiveChatClient.GetResponseAsync(messages, new ChatOptions { ModelId = effectiveModelId }, ct);
+            var response = await effectiveChatClient.GetResponseAsync(
+                messages,
+                new ChatOptions { ModelId = effectiveModelId },
+                ct);
             var text = response.Text;
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -575,14 +618,14 @@ public sealed partial class ThreadMemoryService(
                     userMsg,
                     text,
                     ct,
-                    name: "ai_call_memory_reconsideration");
+                    "ai_call_memory_reconsideration");
                 await protocolRecorder.AddTokensAsync(
                     protocolId.Value,
                     inputTokens ?? 0,
                     outputTokens ?? 0,
-                    connectionCategory: Domain.Enums.AiConnectionModelCategory.MemoryReconsideration,
-                    modelId: effectiveModelId,
-                    ct: ct);
+                    AiConnectionModelCategory.MemoryReconsideration,
+                    effectiveModelId,
+                    ct);
             }
 
             // Parse the AI response using the same mechanism as the main review loop.
@@ -595,28 +638,30 @@ public sealed partial class ThreadMemoryService(
         }
     }
 
-    private static string BuildReconsiderationSystemPrompt() =>
-        """
-        You are an expert code reviewer with access to historical memory of past PR review decisions.
-        You are in the RECONSIDERATION phase — you will be given draft findings from an initial review pass
-        alongside records of how similar issues were resolved previously in this codebase.
+    private static string BuildReconsiderationSystemPrompt()
+    {
+        return """
+               You are an expert code reviewer with access to historical memory of past PR review decisions.
+               You are in the RECONSIDERATION phase — you will be given draft findings from an initial review pass
+               alongside records of how similar issues were resolved previously in this codebase.
 
-        Your task: evaluate each draft finding against the historical context and decide whether to:
-          - RETAIN: The current finding is valid even considering past resolutions (same problem recurs unfixed, or a different instance).
-          - DOWNGRADE: Lower the severity if history shows the team typically accepts this pattern.
-          - DISCARD: Remove the finding if a past resolution clearly demonstrates the same concern was intentionally accepted or by design.
+               Your task: evaluate each draft finding against the historical context and decide whether to:
+                 - RETAIN: The current finding is valid even considering past resolutions (same problem recurs unfixed, or a different instance).
+                 - DOWNGRADE: Lower the severity if history shows the team typically accepts this pattern.
+                 - DISCARD: Remove the finding if a past resolution clearly demonstrates the same concern was intentionally accepted or by design.
 
-        CRITICAL OUTPUT RULE: Your ENTIRE response must be a single raw JSON object using exactly these keys:
-          "summary" (string), "comments" (array with file_path/line_number/severity/message),
-          "confidence_evaluations" (array), "investigation_complete" (bool), "loop_complete" (bool).
-        Do NOT wrap in markdown fences. Return only valid JSON.
-        """;
+               CRITICAL OUTPUT RULE: Your ENTIRE response must be a single raw JSON object using exactly these keys:
+                 "summary" (string), "comments" (array with file_path/line_number/severity/message),
+                 "confidence_evaluations" (array), "investigation_complete" (bool), "loop_complete" (bool).
+               Do NOT wrap in markdown fences. Return only valid JSON.
+               """;
+    }
 
     private static string BuildReconsiderationUserMessage(
         string draftFindingsJson,
         IReadOnlyList<ThreadMemoryMatchDto> matches)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         sb.AppendLine("## Draft Findings from Initial Review");
         sb.AppendLine(draftFindingsJson);
         sb.AppendLine();
@@ -625,12 +670,12 @@ public sealed partial class ThreadMemoryService(
         for (var i = 0; i < matches.Count; i++)
         {
             var m = matches[i];
-            var isDismissed = m.Source == Domain.Enums.MemorySource.AdminDismissed;
+            var isDismissed = m.Source == MemorySource.AdminDismissed;
 
             if (isDismissed)
             {
                 sb.AppendLine($"### Entry {i + 1} ⚠️ ADMIN-DISMISSED PATTERN (Memory ID: {m.MemoryRecordId})");
-                sb.AppendLine($"  The administrator has explicitly dismissed this pattern. **DISCARD** any finding that closely matches it.");
+                sb.AppendLine("  The administrator has explicitly dismissed this pattern. **DISCARD** any finding that closely matches it.");
             }
             else if (string.Equals(m.MatchSource, "exact_file_fallback", StringComparison.Ordinal))
             {
@@ -646,9 +691,10 @@ public sealed partial class ThreadMemoryService(
                 sb.AppendLine($"- **File**: {m.FilePath}");
             }
 
-            sb.AppendLine(isDismissed
-                ? $"- **Dismissed pattern**: {m.ResolutionSummary}"
-                : $"- **How it was resolved**: {m.ResolutionSummary}");
+            sb.AppendLine(
+                isDismissed
+                    ? $"- **Dismissed pattern**: {m.ResolutionSummary}"
+                    : $"- **How it was resolved**: {m.ResolutionSummary}");
             sb.AppendLine();
         }
 
@@ -673,14 +719,15 @@ public sealed partial class ThreadMemoryService(
                 foreach (var commentEl in commentsEl.EnumerateArray())
                 {
                     var filePath = commentEl.TryGetProperty("file_path", out var fp) ? fp.GetString() : null;
-                    int? lineNumber = commentEl.TryGetProperty("line_number", out var ln) && ln.ValueKind == JsonValueKind.Number
+                    int? lineNumber = commentEl.TryGetProperty("line_number", out var ln) &&
+                                      ln.ValueKind == JsonValueKind.Number
                         ? ln.GetInt32()
                         : null;
                     var severityStr = commentEl.TryGetProperty("severity", out var sv) ? sv.GetString() : "warning";
                     var message = commentEl.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
-                    var severity = Enum.TryParse<Domain.Enums.CommentSeverity>(severityStr, true, out var parsed)
+                    var severity = Enum.TryParse<CommentSeverity>(severityStr, true, out var parsed)
                         ? parsed
-                        : Domain.Enums.CommentSeverity.Warning;
+                        : CommentSeverity.Warning;
 
                     comments.Add(new ReviewComment(filePath, lineNumber, severity, message));
                 }
@@ -737,7 +784,8 @@ public sealed partial class ThreadMemoryService(
             return null;
         }
 
-        if (degradedComponents.Contains(EmbeddingDegradedComponent) && degradedComponents.Contains(RepositoryDegradedComponent))
+        if (degradedComponents.Contains(EmbeddingDegradedComponent) &&
+            degradedComponents.Contains(RepositoryDegradedComponent))
         {
             return "Historical duplicate protection ran without thread-memory embeddings or repository lookups.";
         }

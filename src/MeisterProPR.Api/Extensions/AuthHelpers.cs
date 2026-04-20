@@ -8,7 +8,7 @@ namespace MeisterProPR.Api.Extensions;
 
 /// <summary>
 ///     Helpers for per-client role enforcement using <c>HttpContext.Items["ClientRoles"]</c>
-///     and <c>HttpContext.Items["IsAdmin"]</c> populated by <see cref="MeisterProPR.Api.Middleware.AuthMiddleware"/>.
+///     and <c>HttpContext.Items["IsAdmin"]</c> populated by <see cref="MeisterProPR.Api.Middleware.AuthMiddleware" />.
 /// </summary>
 public static class AuthHelpers
 {
@@ -84,12 +84,12 @@ public static class AuthHelpers
 
     /// <summary>
     ///     Returns <c>null</c> (access granted) when the caller is a global admin or holds at least
-    ///     <paramref name="minRole"/> for the specified <paramref name="clientId"/>.
+    ///     <paramref name="minRole" /> for the specified <paramref name="clientId" />.
     ///     Returns a 403 object result otherwise.
     /// </summary>
     /// <param name="ctx">The current HTTP context.</param>
     /// <param name="clientId">The client identifier to check the role against.</param>
-    /// <param name="minRole">Minimum required role (e.g. <see cref="ClientRole.ClientAdministrator"/>).</param>
+    /// <param name="minRole">Minimum required role (e.g. <see cref="ClientRole.ClientAdministrator" />).</param>
     public static IActionResult? RequireClientRole(HttpContext ctx, Guid clientId, ClientRole minRole)
     {
         if (IsAdmin(ctx))

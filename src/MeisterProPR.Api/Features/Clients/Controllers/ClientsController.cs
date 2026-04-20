@@ -12,12 +12,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
-/// <summary>Manages clients (admin), ADO credentials, and reviewer identity.</summary>
+/// <summary>Manages clients, client-scoped reviewer identity, and related admin configuration.</summary>
 [ApiController]
 public sealed partial class ClientsController(
     IClientAdminService clientAdminService,
-    IClientAdoCredentialRepository adoCredentialRepository,
-    IClientAdoOrganizationScopeRepository organizationScopeRepository,
     IUserRepository userRepository,
     ILogger<ClientsController> logger) : ControllerBase
 {
@@ -28,7 +26,6 @@ public sealed partial class ClientsController(
             client.DisplayName,
             client.IsActive,
             client.CreatedAt,
-            client.HasAdoCredentials,
             client.ReviewerId,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage);
@@ -102,36 +99,6 @@ public sealed partial class ClientsController(
             nameof(this.GetClient),
             new { clientId = client.Id },
             ToClientResponse(client));
-    }
-
-    /// <summary>
-    ///     Removes ADO service principal credentials from a client.
-    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Credentials removed (or client had no credentials — idempotent).</response>
-    /// <response code="401">Missing or invalid admin credentials.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpDelete("clients/{clientId:guid}/ado-credentials")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAdoCredentials(Guid clientId, CancellationToken ct = default)
-    {
-        var auth = this.RequireAdmin();
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            return this.NotFound();
-        }
-
-        await adoCredentialRepository.ClearAsync(clientId, ct);
-        return this.NoContent();
     }
 
     /// <summary>
@@ -289,54 +256,6 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Sets or replaces ADO service principal credentials for a client.
-    ///     Requires a global admin JWT or <c>X-User-Pat</c>.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">ADO credential details — all three fields required.</param>
-    /// <param name="validator">Validator for the request body.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Credentials stored.</response>
-    /// <response code="400">One or more fields are missing or blank.</response>
-    /// <response code="401">Missing or invalid admin credentials.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpPut("clients/{clientId:guid}/ado-credentials")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> PutAdoCredentials(
-        Guid clientId,
-        [FromBody] SetAdoCredentialsRequest request,
-        [FromServices] IValidator<SetAdoCredentialsRequest> validator,
-        CancellationToken ct = default)
-    {
-        var auth = this.RequireAdmin();
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            return this.NotFound();
-        }
-
-        await adoCredentialRepository.UpsertAsync(
-            clientId,
-            new ClientAdoCredentials(request.TenantId, request.ClientId, request.Secret),
-            ct);
-
-        return this.NoContent();
-    }
-
-    /// <summary>
     ///     Sets or replaces the ADO reviewer identity GUID for a client.
     ///     Requires global admin or <c>ClientAdministrator</c> role for the specified client.
     ///     Until this is set, review jobs for the client will be rejected.
@@ -394,246 +313,6 @@ public sealed partial class ClientsController(
         LogReviewerIdentityUpdated(logger, clientId, actorType);
         return this.NoContent();
     }
-
-    /// <summary>
-    ///     Lists Azure DevOps organization scopes configured for a client.
-    ///     Requires global admin or <c>ClientUser</c> access for the specified client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Organization scopes found.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpGet("clients/{clientId:guid}/ado-organization-scopes")]
-    [ProducesResponseType(typeof(IReadOnlyList<ClientAdoOrganizationScopeDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetAdoOrganizationScopes(Guid clientId, CancellationToken ct = default)
-    {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            return this.NotFound();
-        }
-
-        var scopes = await organizationScopeRepository.GetByClientIdAsync(clientId, ct);
-        return this.Ok(scopes);
-    }
-
-    /// <summary>
-    ///     Gets one Azure DevOps organization scope configured for a client.
-    ///     Requires global admin or <c>ClientUser</c> access for the specified client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="scopeId">Organization-scope identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Organization scope found.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client or organization scope not found.</response>
-    [HttpGet("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
-    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetAdoOrganizationScope(Guid clientId, Guid scopeId, CancellationToken ct = default)
-    {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientUser);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            return this.NotFound();
-        }
-
-        var scope = await organizationScopeRepository.GetByIdAsync(clientId, scopeId, ct);
-        return scope is null ? this.NotFound() : this.Ok(scope);
-    }
-
-    /// <summary>
-    ///     Creates an Azure DevOps organization scope for a client.
-    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Organization-scope details.</param>
-    /// <param name="validator">Validator for the request body.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="201">Organization scope created.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client not found.</response>
-    /// <response code="409">An organization scope for the URL already exists.</response>
-    [HttpPost("clients/{clientId:guid}/ado-organization-scopes")]
-    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> CreateAdoOrganizationScope(
-        Guid clientId,
-        [FromBody] CreateClientAdoOrganizationScopeRequest request,
-        [FromServices] IValidator<CreateClientAdoOrganizationScopeRequest> validator,
-        CancellationToken ct = default)
-    {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            return this.NotFound();
-        }
-
-        try
-        {
-            var created = await organizationScopeRepository.AddAsync(clientId, request.OrganizationUrl, request.DisplayName, ct);
-            if (created is null)
-            {
-                return this.NotFound();
-            }
-
-            LogAdoOrganizationScopeCreated(logger, clientId, created.Id, created.VerificationStatus, created.IsEnabled);
-
-            return this.CreatedAtAction(
-                nameof(this.GetAdoOrganizationScope),
-                new { clientId, scopeId = created.Id },
-                created);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return this.Conflict(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    ///     Applies partial updates to an Azure DevOps organization scope.
-    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="scopeId">Organization-scope identifier.</param>
-    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
-    /// <param name="validator">Validator for the request body.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Organization scope updated.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client or organization scope not found.</response>
-    /// <response code="409">An organization scope for the URL already exists.</response>
-    [HttpPatch("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
-    [ProducesResponseType(typeof(ClientAdoOrganizationScopeDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> PatchAdoOrganizationScope(
-        Guid clientId,
-        Guid scopeId,
-        [FromBody] PatchClientAdoOrganizationScopeRequest request,
-        [FromServices] IValidator<PatchClientAdoOrganizationScopeRequest> validator,
-        CancellationToken ct = default)
-    {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        var existing = await organizationScopeRepository.GetByIdAsync(clientId, scopeId, ct);
-        if (existing is null)
-        {
-            return this.NotFound();
-        }
-
-        var organizationUrl = request.OrganizationUrl ?? existing.OrganizationUrl;
-        var displayName = request.DisplayName ?? existing.DisplayName;
-        var isEnabled = request.IsEnabled ?? existing.IsEnabled;
-
-        try
-        {
-            var updated = await organizationScopeRepository.UpdateAsync(
-                clientId,
-                scopeId,
-                organizationUrl,
-                displayName,
-                isEnabled,
-                ct);
-
-            if (updated is null)
-            {
-                return this.NotFound();
-            }
-
-            LogAdoOrganizationScopeUpdated(logger, clientId, scopeId, updated.VerificationStatus, updated.IsEnabled);
-            return this.Ok(updated);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return this.Conflict(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    ///     Deletes an Azure DevOps organization scope from a client.
-    ///     Requires global admin or <c>ClientAdministrator</c> access for the specified client.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="scopeId">Organization-scope identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Organization scope deleted.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client or organization scope not found.</response>
-    [HttpDelete("clients/{clientId:guid}/ado-organization-scopes/{scopeId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAdoOrganizationScope(Guid clientId, Guid scopeId, CancellationToken ct = default)
-    {
-        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        var deleted = await organizationScopeRepository.DeleteAsync(clientId, scopeId, ct);
-        if (deleted)
-        {
-            LogAdoOrganizationScopeDeleted(logger, clientId, scopeId);
-        }
-
-        return deleted ? this.NoContent() : this.NotFound();
-    }
-
-
 }
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
@@ -642,7 +321,6 @@ public sealed record ClientResponse(
     string DisplayName,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    bool HasAdoCredentials,
     Guid? ReviewerId,
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage);
@@ -651,9 +329,10 @@ public sealed record ClientResponse(
 public sealed record CrawlConfigResponse(
     Guid Id,
     Guid ClientId,
+    ScmProvider Provider,
     Guid? OrganizationScopeId,
-    string OrganizationUrl,
-    string ProjectId,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     int CrawlIntervalSeconds,
     bool IsActive,
     DateTimeOffset CreatedAt,
@@ -683,21 +362,5 @@ public sealed record PatchClientRequest(
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null);
 
-/// <summary>Request body for setting ADO service principal credentials.</summary>
-public sealed record SetAdoCredentialsRequest(string TenantId, string ClientId, string Secret);
-
-/// <summary>Request body for creating a client-scoped Azure DevOps organization scope.</summary>
-public sealed record CreateClientAdoOrganizationScopeRequest(string OrganizationUrl, string? DisplayName);
-
-/// <summary>
-///     Request body for patching a client-scoped Azure DevOps organization scope.
-///     Omit a field to leave it unchanged.
-/// </summary>
-public sealed record PatchClientAdoOrganizationScopeRequest(
-    string? OrganizationUrl = null,
-    string? DisplayName = null,
-    bool? IsEnabled = null);
-
 /// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
 public sealed record SetReviewerIdentityRequest(Guid ReviewerId);
-

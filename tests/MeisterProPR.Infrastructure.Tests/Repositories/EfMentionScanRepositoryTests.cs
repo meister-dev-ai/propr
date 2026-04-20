@@ -8,7 +8,6 @@ using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
-using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 

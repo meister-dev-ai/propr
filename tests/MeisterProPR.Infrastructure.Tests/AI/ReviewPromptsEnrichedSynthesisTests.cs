@@ -58,7 +58,7 @@ public class ReviewPromptsEnrichedSynthesisTests
     [Fact]
     public void BuildSynthesisUserMessage_WithNullComments_DoesNotIncludeFindingsTableOrDirective()
     {
-        var result = ReviewPrompts.BuildSynthesisUserMessage(SingleFileSummaries, "My PR", null, null);
+        var result = ReviewPrompts.BuildSynthesisUserMessage(SingleFileSummaries, "My PR", null);
 
         Assert.DoesNotContain("All Per-File Findings", result);
         Assert.DoesNotContain("cross_cutting_concerns", result);

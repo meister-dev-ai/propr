@@ -8,8 +8,15 @@ namespace MeisterProPR.Domain.Tests.Entities.ProCursor;
 
 public sealed class ProCursorTrackedBranchTransitionTests
 {
-    private static ProCursorTrackedBranch CreateTrackedBranch() =>
-        new(Guid.NewGuid(), Guid.NewGuid(), "main", ProCursorRefreshTriggerMode.Manual, true);
+    private static ProCursorTrackedBranch CreateTrackedBranch()
+    {
+        return new ProCursorTrackedBranch(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "main",
+            ProCursorRefreshTriggerMode.Manual,
+            true);
+    }
 
     [Fact]
     public void Constructor_DefaultsBranchToEnabled()

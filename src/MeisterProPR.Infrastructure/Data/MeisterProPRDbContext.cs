@@ -5,7 +5,6 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
-using Pgvector.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Data;
 
@@ -18,8 +17,14 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Crawl configurations table.</summary>
     public DbSet<CrawlConfigurationRecord> CrawlConfigurations => this.Set<CrawlConfigurationRecord>();
 
-    /// <summary>Client-scoped Azure DevOps organization scopes.</summary>
-    public DbSet<ClientAdoOrganizationScopeRecord> ClientAdoOrganizationScopes => this.Set<ClientAdoOrganizationScopeRecord>();
+    /// <summary>Client-scoped SCM provider connections.</summary>
+    public DbSet<ClientScmConnectionRecord> ClientScmConnections => this.Set<ClientScmConnectionRecord>();
+
+    /// <summary>Client-scoped provider scope selections.</summary>
+    public DbSet<ClientScmScopeRecord> ClientScmScopes => this.Set<ClientScmScopeRecord>();
+
+    /// <summary>Configured provider reviewer identities.</summary>
+    public DbSet<ClientReviewerIdentityRecord> ClientReviewerIdentities => this.Set<ClientReviewerIdentityRecord>();
 
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
@@ -64,16 +69,35 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     public DbSet<AiConnectionRecord> AiConnections => this.Set<AiConnectionRecord>();
 
     /// <summary>Per-deployment embedding capability metadata under one AI connection.</summary>
-    public DbSet<AiConnectionModelCapabilityRecord> AiConnectionModelCapabilities => this.Set<AiConnectionModelCapabilityRecord>();
+    public DbSet<AiConnectionModelCapabilityRecord> AiConnectionModelCapabilities =>
+        this.Set<AiConnectionModelCapabilityRecord>();
 
     /// <summary>Repository-scope filters for crawl configurations.</summary>
     public DbSet<CrawlRepoFilterRecord> CrawlRepoFilters => this.Set<CrawlRepoFilterRecord>();
 
+    /// <summary>Webhook configurations table.</summary>
+    public DbSet<WebhookConfigurationRecord> WebhookConfigurations => this.Set<WebhookConfigurationRecord>();
+
+    /// <summary>Repository-scope filters for webhook configurations.</summary>
+    public DbSet<WebhookRepoFilterRecord> WebhookRepoFilters => this.Set<WebhookRepoFilterRecord>();
+
+    /// <summary>Durable webhook delivery-history entries.</summary>
+    public DbSet<WebhookDeliveryLogEntryRecord> WebhookDeliveryLogEntries => this.Set<WebhookDeliveryLogEntryRecord>();
+
+    /// <summary>Append-only provider-connection operational audit entries.</summary>
+    public DbSet<ProviderConnectionAuditEntryRecord> ProviderConnectionAuditEntries =>
+        this.Set<ProviderConnectionAuditEntryRecord>();
+
+    /// <summary>Installation-wide provider-family activation policy.</summary>
+    public DbSet<ProviderActivationRecord> ProviderActivations => this.Set<ProviderActivationRecord>();
+
     /// <summary>Explicit ProCursor source associations for crawl configurations.</summary>
-    public DbSet<CrawlConfigurationProCursorSourceRecord> CrawlConfigurationProCursorSources => this.Set<CrawlConfigurationProCursorSourceRecord>();
+    public DbSet<CrawlConfigurationProCursorSourceRecord> CrawlConfigurationProCursorSources =>
+        this.Set<CrawlConfigurationProCursorSourceRecord>();
 
     /// <summary>Snapshotted ProCursor source scope for queued review jobs.</summary>
-    public DbSet<ReviewJobProCursorSourceScopeRecord> ReviewJobProCursorSourceScopes => this.Set<ReviewJobProCursorSourceScopeRecord>();
+    public DbSet<ReviewJobProCursorSourceScopeRecord> ReviewJobProCursorSourceScopes =>
+        this.Set<ReviewJobProCursorSourceScopeRecord>();
 
     /// <summary>Per-client and per-crawl-config AI prompt overrides.</summary>
     public DbSet<PromptOverrideRecord> PromptOverrides => this.Set<PromptOverrideRecord>();
@@ -143,7 +167,13 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     // Returns the configured embedding dimension.
     // Falls back to 1536 (the production default).
-    private static int GetMemoryEmbeddingDimensions() => 1536;
+    private static int GetMemoryEmbeddingDimensions()
+    {
+        return 1536;
+    }
 
-    private static int GetProCursorEmbeddingDimensions() => 1536;
+    private static int GetProCursorEmbeddingDimensions()
+    {
+        return 1536;
+    }
 }

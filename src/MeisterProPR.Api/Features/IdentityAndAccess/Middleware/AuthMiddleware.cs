@@ -11,12 +11,15 @@ namespace MeisterProPR.Api.Middleware;
 ///     <c>context.Items["UserId"]</c>, and <c>context.Items["ClientRoles"]</c>
 ///     by evaluating two credential paths in order:
 ///     <list type="number">
-///       <item><description><c>Authorization: Bearer {jwt}</c> — validated locally.</description></item>
-///       <item><description><c>X-User-Pat</c> header — BCrypt-verified against stored PAT hashes.</description></item>
+///         <item>
+///             <description><c>Authorization: Bearer {jwt}</c> — validated locally.</description>
+///         </item>
+///         <item>
+///             <description><c>X-User-Pat</c> header — BCrypt-verified against stored PAT hashes.</description>
+///         </item>
 ///     </list>
 /// </summary>
-public sealed class AuthMiddleware(
-    RequestDelegate next)
+public sealed class AuthMiddleware(RequestDelegate next)
 {
     private const string PatHeader = "X-User-Pat";
 
@@ -47,7 +50,8 @@ public sealed class AuthMiddleware(
                             var userRepo = context.RequestServices.GetService<IUserRepository>();
                             if (userRepo is not null)
                             {
-                                context.Items["ClientRoles"] = await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
+                                context.Items["ClientRoles"] =
+                                    await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
                             }
                         }
                     }
@@ -73,7 +77,8 @@ public sealed class AuthMiddleware(
                     {
                         context.Items["UserId"] = user.Id.ToString();
                         context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
-                        context.Items["ClientRoles"] = await userRepo.GetUserClientRolesAsync(user.Id, context.RequestAborted);
+                        context.Items["ClientRoles"] =
+                            await userRepo.GetUserClientRolesAsync(user.Id, context.RequestAborted);
                         await next(context);
                         return;
                     }

@@ -14,8 +14,8 @@ namespace MeisterProPR.Infrastructure.Auth;
 /// <summary>HS256-signed JWT service using MEISTER_JWT_SECRET.</summary>
 public sealed class JwtTokenService : IJwtTokenService
 {
-    private readonly SymmetricSecurityKey _signingKey;
     private readonly JwtSecurityTokenHandler _handler = new();
+    private readonly SymmetricSecurityKey _signingKey;
 
     public JwtTokenService(IConfiguration configuration)
     {
@@ -28,14 +28,13 @@ public sealed class JwtTokenService : IJwtTokenService
 
         if (secret.Length < 32)
         {
-            throw new InvalidOperationException(
-                "MEISTER_JWT_SECRET must be at least 32 characters long (256 bits).");
+            throw new InvalidOperationException("MEISTER_JWT_SECRET must be at least 32 characters long (256 bits).");
         }
 
         this._signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public string GenerateAccessToken(AppUser user)
     {
         var claims = new[]
@@ -58,7 +57,7 @@ public sealed class JwtTokenService : IJwtTokenService
         return this._handler.WriteToken(token);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public ClaimsPrincipal? ValidateAccessToken(string token)
     {
         try

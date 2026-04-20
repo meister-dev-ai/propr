@@ -33,6 +33,63 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("project_id")
             .IsRequired();
 
+        builder.Property(j => j.Provider)
+            .HasColumnName("provider")
+            .HasConversion<int>()
+            .HasDefaultValue(ScmProvider.AzureDevOps)
+            .IsRequired();
+
+        builder.Property(j => j.HostBaseUrl)
+            .HasColumnName("host_base_url")
+            .HasMaxLength(512)
+            .IsRequired(false);
+
+        builder.Property(j => j.RepositoryOwnerOrNamespace)
+            .HasColumnName("repository_owner_or_namespace")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
+        builder.Property(j => j.RepositoryProjectPath)
+            .HasColumnName("repository_project_path")
+            .HasMaxLength(512)
+            .IsRequired(false);
+
+        builder.Property(j => j.CodeReviewPlatformKind)
+            .HasColumnName("code_review_platform_kind")
+            .HasConversion<int>()
+            .HasDefaultValue(CodeReviewPlatformKind.PullRequest)
+            .IsRequired();
+
+        builder.Property(j => j.ExternalCodeReviewId)
+            .HasColumnName("external_code_review_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.RevisionHeadSha)
+            .HasColumnName("revision_head_sha")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.RevisionBaseSha)
+            .HasColumnName("revision_base_sha")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.RevisionStartSha)
+            .HasColumnName("revision_start_sha")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.ProviderRevisionId)
+            .HasColumnName("provider_revision_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(j => j.ReviewPatchIdentity)
+            .HasColumnName("review_patch_identity")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
         builder.Property(j => j.ProCursorSourceScopeMode)
             .HasColumnName("procursor_source_scope_mode")
             .HasConversion<int>()
@@ -138,7 +195,14 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(j => new { j.ClientId, j.PullRequestId })
             .HasDatabaseName("ix_review_jobs_client_pr");
 
+        builder.HasIndex(j => new { j.ClientId, j.Provider, j.RepositoryId, j.ExternalCodeReviewId })
+            .HasDatabaseName("ix_review_jobs_client_provider_review");
+
         builder.Ignore(j => j.ProCursorSourceIds);
+        builder.Ignore(j => j.ProviderHost);
+        builder.Ignore(j => j.RepositoryReference);
+        builder.Ignore(j => j.CodeReviewReference);
+        builder.Ignore(j => j.ReviewRevisionReference);
 
         var tokenBreakdownConverter = new ValueConverter<List<TokenBreakdownEntry>, string>(
             v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
@@ -163,7 +227,7 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
     {
         try
         {
-            return JsonSerializer.Deserialize<List<TokenBreakdownEntry>>(v, (JsonSerializerOptions?)null)
+            return JsonSerializer.Deserialize<List<TokenBreakdownEntry>>(v)
                    ?? new List<TokenBreakdownEntry>();
         }
         catch (JsonException)

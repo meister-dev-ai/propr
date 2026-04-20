@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -11,7 +10,6 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -36,7 +34,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         job.Status = JobStatus.Processing;
 
-        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "- old\n+ new", false);
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "- old\n+ new");
         var pr = CreatePullRequest([file]);
         var draftResult = new ReviewResult("draft", []);
         var reconsidered = new ReviewResult("reconsidered", []);
@@ -47,15 +45,30 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         jobRepository.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewJob?>(job));
 
-        protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
 
         memoryService.RetrieveAndReconsiderAsync(
-                Arg.Any<Guid>(), Arg.Any<ReviewJob>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<ReviewResult>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewJob>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(reconsidered);
 
         chatClient.GetResponseAsync(
-                Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
 
         // Stub synthesis
@@ -80,8 +93,15 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         await orchestrator.ReviewAsync(job, pr, context, CancellationToken.None);
 
         // Assert: memory service was called with at least one file
-        await memoryService.Received().RetrieveAndReconsiderAsync(
-            Arg.Any<Guid>(), Arg.Any<ReviewJob>(), "src/Foo.cs", Arg.Any<string?>(), Arg.Any<ReviewResult>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        await memoryService.Received()
+            .RetrieveAndReconsiderAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewJob>(),
+                "src/Foo.cs",
+                Arg.Any<string?>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -98,7 +118,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         job.Status = JobStatus.Processing;
 
-        var file = new ChangedFile("src/Bar.cs", ChangeType.Edit, "content", "- old\n+ new", false);
+        var file = new ChangedFile("src/Bar.cs", ChangeType.Edit, "content", "- old\n+ new");
         var pr = CreatePullRequest([file]);
         var draftResult = new ReviewResult("draft", []);
 
@@ -106,10 +126,19 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
             .Returns(draftResult);
         jobRepository.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewJob?>(job));
-        protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
         chatClient.GetResponseAsync(
-                Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
 
         // No memory service passed (null)
@@ -143,7 +172,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         job.Status = JobStatus.Processing;
 
         var comment = new ReviewComment("src/Baz.cs", 8, CommentSeverity.Warning, "fresh issue");
-        var file = new ChangedFile("src/Baz.cs", ChangeType.Edit, "content", "- old\n+ new", false);
+        var file = new ChangedFile("src/Baz.cs", ChangeType.Edit, "content", "- old\n+ new");
         var pr = CreatePullRequest([file]);
         var draftResult = new ReviewResult("draft", [comment]);
         var storedResults = new List<ReviewFileResult>();
@@ -161,9 +190,19 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
             });
         jobRepository.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        protocolRecorder.BeginAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
-        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
 
         var orchestrator = new FileByFileReviewOrchestrator(
@@ -213,8 +252,6 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
             null,
             "feature/x",
             "main",
-            files ?? new List<ChangedFile>().AsReadOnly(),
-            PrStatus.Active,
-            null);
+            files ?? new List<ChangedFile>().AsReadOnly());
     }
 }

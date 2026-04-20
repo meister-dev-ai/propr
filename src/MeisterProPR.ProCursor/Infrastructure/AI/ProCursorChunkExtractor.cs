@@ -7,6 +7,7 @@ using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.ProCursor;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,7 +35,9 @@ public sealed class ProCursorChunkExtractor(
         var targetLines = Math.Max(10, this._options.ChunkTargetLines);
         var extractedChunks = new List<ProCursorExtractedChunk>();
 
-        foreach (var sourcePath in materializedSource.MaterializedPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (var sourcePath in materializedSource.MaterializedPaths.OrderBy(
+                     path => path,
+                     StringComparer.OrdinalIgnoreCase))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -73,15 +76,16 @@ public sealed class ProCursorChunkExtractor(
                     continue;
                 }
 
-                extractedChunks.Add(new ProCursorExtractedChunk(
-                    sourcePath,
-                    chunkKind,
-                    title,
-                    chunkOrdinal++,
-                    lineIndex + 1,
-                    lineIndex + sliceLength,
-                    ComputeContentHash(slice),
-                    slice));
+                extractedChunks.Add(
+                    new ProCursorExtractedChunk(
+                        sourcePath,
+                        chunkKind,
+                        title,
+                        chunkOrdinal++,
+                        lineIndex + 1,
+                        lineIndex + sliceLength,
+                        ComputeContentHash(slice),
+                        slice));
             }
         }
 
@@ -96,7 +100,7 @@ public sealed class ProCursorChunkExtractor(
 
     private static string DetermineChunkKind(ProCursorKnowledgeSource source, string sourcePath)
     {
-        if (source.SourceKind == Domain.Enums.ProCursorSourceKind.AdoWiki)
+        if (source.SourceKind == ProCursorSourceKind.AdoWiki)
         {
             return "wiki_page";
         }

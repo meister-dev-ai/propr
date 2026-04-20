@@ -261,7 +261,8 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -287,10 +288,9 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 // InMemory EF Core DB + IJobRepository (replaces deleted InMemoryJobRepository)
                 services.AddDbContextFactory<MeisterProPRDbContext>(opts =>
@@ -326,7 +326,9 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs?clientId={factory.AssignedClientId}");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/reviewing/jobs?clientId={factory.AssignedClientId}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -339,7 +341,14 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
-        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 123, 1);
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            factory.AssignedClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            123,
+            1);
         await jobRepo.AddAsync(job);
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
@@ -357,7 +366,14 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
-        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 124, 1);
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            factory.AssignedClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            124,
+            1);
         await jobRepo.AddAsync(job);
         await jobRepo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
         await jobRepo.SetResultAsync(job.Id, new ReviewResult("summary", []));
@@ -377,17 +393,25 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
-        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 125, 1);
-        job.Protocols.Add(new ReviewJobProtocol
-        {
-            Id = Guid.NewGuid(),
-            JobId = job.Id,
-            AttemptNumber = 1,
-            Label = "src/Foo.cs",
-            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
-            CompletedAt = DateTimeOffset.UtcNow,
-            Outcome = "Completed",
-        });
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            factory.AssignedClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            125,
+            1);
+        job.Protocols.Add(
+            new ReviewJobProtocol
+            {
+                Id = Guid.NewGuid(),
+                JobId = job.Id,
+                AttemptNumber = 1,
+                Label = "src/Foo.cs",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                CompletedAt = DateTimeOffset.UtcNow,
+                Outcome = "Completed",
+            });
         await jobRepo.AddAsync(job);
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
@@ -405,14 +429,21 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
-        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 126, 1);
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            factory.AssignedClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            126,
+            1);
         await jobRepo.AddAsync(job);
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
         var http = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/clients/{factory.AssignedClientId}/reviewing/pr-view?organizationUrl=https://dev.azure.com/org&projectId=proj&repositoryId=repo&pullRequestId=126");
+            $"/clients/{factory.AssignedClientId}/reviewing/pr-view?providerScopePath=https://dev.azure.com/org&providerProjectKey=proj&repositoryId=repo&pullRequestId=126");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
@@ -426,16 +457,17 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 127, 1);
-        job.Protocols.Add(new ReviewJobProtocol
-        {
-            Id = Guid.NewGuid(),
-            JobId = job.Id,
-            AttemptNumber = 1,
-            Label = "src/Bar.cs",
-            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
-            CompletedAt = DateTimeOffset.UtcNow,
-            Outcome = "Completed",
-        });
+        job.Protocols.Add(
+            new ReviewJobProtocol
+            {
+                Id = Guid.NewGuid(),
+                JobId = job.Id,
+                AttemptNumber = 1,
+                Label = "src/Bar.cs",
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                CompletedAt = DateTimeOffset.UtcNow,
+                Outcome = "Completed",
+            });
         await jobRepo.AddAsync(job);
 
         var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
@@ -467,7 +499,8 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", "User"),
                 ]),
@@ -500,18 +533,19 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IJobRepository, JobRepository>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 // IUserRepository: test user has ClientUser role for AssignedClientId
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetUserClientRolesAsync(testUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { assignedClientId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { assignedClientId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != testUserId),
                         Arg.Any<CancellationToken>())
@@ -530,11 +564,12 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
                         Arg.Any<string?>(),
                         Arg.Any<int?>(),
                         Arg.Any<CancellationToken>())
-                    .Returns(call => Task.FromResult(new PagedResult<ThreadMemoryRecord>(
-                        [],
-                        0,
-                        call.ArgAt<int>(2),
-                        call.ArgAt<int>(3))));
+                    .Returns(call => Task.FromResult(
+                        new PagedResult<ThreadMemoryRecord>(
+                            [],
+                            0,
+                            call.ArgAt<int>(2),
+                            call.ArgAt<int>(3))));
                 services.AddSingleton(memoryRepository);
             });
         }

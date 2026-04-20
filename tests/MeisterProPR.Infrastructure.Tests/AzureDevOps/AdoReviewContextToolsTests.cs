@@ -5,7 +5,6 @@ using Azure.Core;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AzureDevOps;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
@@ -71,7 +70,7 @@ public class AdoReviewContextToolsTests
     public async Task GetFileContentAsync_FileExceedsMaxSize_ReturnsErrorString()
     {
         // Arrange — set a very small max size so any content exceeds it
-        var sut = new TestableAdoReviewContextTools(DefaultOptions(maxFileSizeBytes: 5));
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(5));
         sut.SetFile("/src/Big.cs", "this content is longer than 5 bytes");
 
         // Act
@@ -86,7 +85,7 @@ public class AdoReviewContextToolsTests
     public async Task GetFileContentAsync_FileExceedsMaxSize_DoesNotCacheContent()
     {
         // Arrange
-        var sut = new TestableAdoReviewContextTools(DefaultOptions(maxFileSizeBytes: 5));
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(5));
         sut.SetFile("/src/Big.cs", "this content is longer than 5 bytes");
 
         // First call — exceeds limit, returns error string
@@ -117,7 +116,7 @@ public class AdoReviewContextToolsTests
     {
         // Arrange — AI-supplied branch is ignored; stored _sourceBranch is always used, so both calls
         // resolve to the same cache key and only one actual fetch occurs.
-        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch: "feat/my-pr");
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feat/my-pr");
         sut.SetFile("/src/Foo.cs", "main content");
 
         // Act — AI tries two different branches; stored branch is enforced for both
@@ -169,12 +168,13 @@ public class AdoReviewContextToolsTests
         await sut.GetFileContentAsync("/src/Missing.cs", "main", 1, 10, CancellationToken.None);
 
         // Assert — a Warning must be logged containing the path and branch
-        logger.Received(1).Log(
-            LogLevel.Warning,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("/src/Missing.cs") && o.ToString()!.Contains(sourceBranch)),
-            Arg.Any<Exception?>(),
-            Arg.Any<Func<object, Exception?, string>>());
+        logger.Received(1)
+            .Log(
+                LogLevel.Warning,
+                Arg.Any<EventId>(),
+                Arg.Is<object>(o => o.ToString()!.Contains("/src/Missing.cs") && o.ToString()!.Contains(sourceBranch)),
+                Arg.Any<Exception?>(),
+                Arg.Any<Func<object, Exception?, string>>());
     }
 
     // T006(c) — US1: empty string returned when file not found (regression guard)
@@ -208,7 +208,7 @@ public class AdoReviewContextToolsTests
             ILogger<AdoReviewContextTools>? logger = null)
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
+                Substitute.For<IClientScmConnectionRepository>(),
                 Substitute.For<IProCursorGateway>(),
                 options,
                 "https://dev.azure.com/org",
@@ -235,7 +235,10 @@ public class AdoReviewContextToolsTests
         }
 
         /// <inheritdoc />
-        protected internal override Task<string?> FetchRawFileContentAsync(string path, string branch, CancellationToken ct)
+        protected internal override Task<string?> FetchRawFileContentAsync(
+            string path,
+            string branch,
+            CancellationToken ct)
         {
             this.FetchCallCount++;
             this.LastFetchedBranch = branch;

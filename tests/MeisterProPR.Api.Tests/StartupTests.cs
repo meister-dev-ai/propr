@@ -2,7 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,11 +30,9 @@ public sealed class StartupTests : IClassFixture<StartupTests.NoAiEndpointFactor
     ///     T026 [US3] — Verifies the application starts successfully without <c>AI_ENDPOINT</c>
     ///     set in configuration. After US3 the global AI endpoint is removed and AI connections
     ///     are sourced per-client from the database.
-    ///
     ///     RED state: startup currently throws <see cref="InvalidOperationException" />
     ///     because <c>RequireConfig("AI_ENDPOINT")</c> runs in <c>Program.cs</c> and
     ///     <c>InfrastructureServiceExtensions</c> also throws when <c>AI_ENDPOINT</c> is null.
-    ///
     ///     GREEN state: after T030 + T033 remove both places that require <c>AI_ENDPOINT</c>,
     ///     the application starts and <c>GET /healthz</c> responds with 200 or 503.
     /// </summary>
@@ -71,31 +72,30 @@ public sealed class StartupTests : IClassFixture<StartupTests.NoAiEndpointFactor
             builder.ConfigureServices(services =>
             {
                 // Stub all services that require live external connections
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 // Stub repositories so the app can resolve services without a real DB.
                 // These stubs also satisfy worker startup DI resolution after T031+T032,
                 // when InMemoryJobRepository/EnvVarClientRegistry are deleted.
                 var jobRepo = Substitute.For<IJobRepository>();
                 jobRepo.GetProcessingJobsAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<MeisterProPR.Domain.Entities.ReviewJob>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
                 services.AddSingleton(jobRepo);
 
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, MeisterProPR.Domain.Enums.ClientRole>()));
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
                 var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
                 aiConnectionRepo.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<MeisterProPR.Application.DTOs.AiConnectionDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<AiConnectionDto>>([]));
                 services.AddSingleton(aiConnectionRepo);
             });
         }

@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -43,13 +44,14 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            displayName,
-            endpointUrl = "https://fake.openai.azure.com/",
-            models = models ?? DefaultModels,
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName,
+                endpointUrl = "https://fake.openai.azure.com/",
+                models = models ?? DefaultModels,
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -66,7 +68,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -93,14 +95,15 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            displayName = "My Connection",
-            endpointUrl = "https://fake.openai.azure.com/",
-            models = new[] { "gpt-4o" },
-            apiKey = "sk-test-secret",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "My Connection",
+                endpointUrl = "https://fake.openai.azure.com/",
+                models = new[] { "gpt-4o" },
+                apiKey = "sk-test-secret",
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -125,12 +128,13 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            endpointUrl = "https://fake.openai.azure.com/",
-            models = new[] { "gpt-4o" },
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                endpointUrl = "https://fake.openai.azure.com/",
+                models = new[] { "gpt-4o" },
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -143,13 +147,14 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            displayName = "Bad Endpoint",
-            endpointUrl = "not-a-url",
-            models = new[] { "gpt-4o" },
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "Bad Endpoint",
+                endpointUrl = "not-a-url",
+                models = new[] { "gpt-4o" },
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -162,13 +167,14 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            displayName = "No Models",
-            endpointUrl = "https://fake.openai.azure.com/",
-            models = Array.Empty<string>(),
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "No Models",
+                endpointUrl = "https://fake.openai.azure.com/",
+                models = Array.Empty<string>(),
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -185,14 +191,15 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            displayName = "Renamed Connection",
-            endpointUrl = "https://updated-resource.openai.azure.com/",
-            models = new[] { "gpt-4.1" },
-            apiKey = "sk-updated-secret",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "Renamed Connection",
+                endpointUrl = "https://updated-resource.openai.azure.com/",
+                models = new[] { "gpt-4.1" },
+                apiKey = "sk-updated-secret",
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -220,11 +227,12 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            endpointUrl = "not-a-valid-url",
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                endpointUrl = "not-a-valid-url",
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -240,7 +248,8 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
                    HttpMethod.Post,
                    $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate"))
         {
-            activateRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+            activateRequest.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
             activateRequest.Content = JsonContent.Create(new { model = "gpt-4o" });
             var activateResponse = await http.SendAsync(activateRequest);
             Assert.Equal(HttpStatusCode.OK, activateResponse.StatusCode);
@@ -249,11 +258,12 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new
-        {
-            models = new[] { "gpt-4o-mini" },
-        });
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                models = new[] { "gpt-4o-mini" },
+            });
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -270,7 +280,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { model = "gpt-4o" });
 
         var response = await http.SendAsync(request);
@@ -290,7 +300,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { model = "o1-preview" }); // not in list
 
         var response = await http.SendAsync(request);
@@ -304,7 +314,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections/{Guid.NewGuid()}/activate");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { model = "gpt-4o" });
 
         var response = await http.SendAsync(request);
@@ -323,7 +333,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var activateReq = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        activateReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        activateReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         activateReq.Content = JsonContent.Create(new { model = "gpt-4o" });
         await http.SendAsync(activateReq);
 
@@ -331,7 +341,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var deactivateReq = new HttpRequestMessage(
             HttpMethod.Post,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}/deactivate");
-        deactivateReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        deactivateReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(deactivateReq);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -351,7 +361,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Delete,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -364,7 +374,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var request = new HttpRequestMessage(
             HttpMethod.Delete,
             $"/clients/{factory.ClientId}/ai-connections/{Guid.NewGuid()}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -414,7 +424,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
         using var deleteReq = new HttpRequestMessage(
             HttpMethod.Delete,
             $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        deleteReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        deleteReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         var deleteResp = await http.SendAsync(deleteReq);
         Assert.Equal(HttpStatusCode.NoContent, deleteResp.StatusCode);
 
@@ -449,7 +459,8 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -475,10 +486,9 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
             {
                 // Stub external/infra services not needed for these tests
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IPrStatusFetcher>());
                 services.AddSingleton(Substitute.For<IThreadMemoryService>());
 
@@ -492,20 +502,16 @@ public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsContro
                 // Stub remaining dependencies that the app expects but aren't exercised here
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredRepo);
                 services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }

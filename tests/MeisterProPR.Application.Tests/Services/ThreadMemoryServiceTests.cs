@@ -11,7 +11,6 @@ using MeisterProPR.Domain.Events;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -29,39 +28,74 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadResolvedAsync_NormalCase_StoresEmbeddingAndAppendsActivityLogEntry()
     {
         var (embedder, repo, _, activityLog, service) = CreateService();
-        var vector = new float[] { 0.1f, 0.2f };
-        embedder.GenerateResolutionSummaryAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        var vector = new[] { 0.1f, 0.2f };
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
             .Returns("Resolution summary.");
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(vector);
 
-        var evt = new ThreadResolvedDomainEvent(ClientId, "repo-1", 42, 7, "src/Foo.cs", "diff", "comment history", DateTimeOffset.UtcNow);
+        var evt = new ThreadResolvedDomainEvent(
+            ClientId,
+            "repo-1",
+            42,
+            7,
+            "src/Foo.cs",
+            "diff",
+            "comment history",
+            DateTimeOffset.UtcNow);
         await service.HandleThreadResolvedAsync(evt);
 
-        await repo.Received(1).UpsertAsync(Arg.Is<ThreadMemoryRecord>(r =>
-            r.ClientId == ClientId && r.ThreadId == 7 && r.RepositoryId == "repo-1"), Arg.Any<CancellationToken>());
-        await activityLog.Received(1).AppendAsync(Arg.Is<MemoryActivityLogEntry>(e =>
-            e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Stored && e.Reason == null),
-            Arg.Any<CancellationToken>());
+        await repo.Received(1)
+            .UpsertAsync(
+                Arg.Is<ThreadMemoryRecord>(r =>
+                    r.ClientId == ClientId && r.ThreadId == 7 && r.RepositoryId == "repo-1"),
+                Arg.Any<CancellationToken>());
+        await activityLog.Received(1)
+            .AppendAsync(
+                Arg.Is<MemoryActivityLogEntry>(e =>
+                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Stored &&
+                    e.Reason == null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task HandleThreadResolvedAsync_EmbedderThrows_AppendsStoredEntryWithErrorReasonAndDoesNotThrow()
     {
         var (embedder, repo, _, activityLog, service) = CreateService();
-        embedder.GenerateResolutionSummaryAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
             .Returns("Summary.");
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("no embedding connection"));
 
-        var evt = new ThreadResolvedDomainEvent(ClientId, "repo-1", 42, 7, null, null, "history", DateTimeOffset.UtcNow);
+        var evt = new ThreadResolvedDomainEvent(
+            ClientId,
+            "repo-1",
+            42,
+            7,
+            null,
+            null,
+            "history",
+            DateTimeOffset.UtcNow);
         var ex = await Record.ExceptionAsync(() => service.HandleThreadResolvedAsync(evt));
 
         Assert.Null(ex);
         await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
-        await activityLog.Received(1).AppendAsync(Arg.Is<MemoryActivityLogEntry>(e =>
-            e.Action == MemoryActivityAction.Stored && e.Reason != null && e.Reason.Contains("no embedding connection")),
-            Arg.Any<CancellationToken>());
+        await activityLog.Received(1)
+            .AppendAsync(
+                Arg.Is<MemoryActivityLogEntry>(e =>
+                    e.Action == MemoryActivityAction.Stored && e.Reason != null &&
+                    e.Reason.Contains("no embedding connection")),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -74,9 +108,12 @@ public sealed class ThreadMemoryServiceTests
         var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
-        await activityLog.Received(1).AppendAsync(Arg.Is<MemoryActivityLogEntry>(e =>
-            e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Removed && e.Reason == "deleted"),
-            Arg.Any<CancellationToken>());
+        await activityLog.Received(1)
+            .AppendAsync(
+                Arg.Is<MemoryActivityLogEntry>(e =>
+                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Removed &&
+                    e.Reason == "deleted"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -89,9 +126,11 @@ public sealed class ThreadMemoryServiceTests
         var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
-        await activityLog.Received(1).AppendAsync(Arg.Is<MemoryActivityLogEntry>(e =>
-            e.Action == MemoryActivityAction.Removed && e.Reason == "no_op"),
-            Arg.Any<CancellationToken>());
+        await activityLog.Received(1)
+            .AppendAsync(
+                Arg.Is<MemoryActivityLogEntry>(e =>
+                    e.Action == MemoryActivityAction.Removed && e.Reason == "no_op"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -114,9 +153,12 @@ public sealed class ThreadMemoryServiceTests
 
         await service.RecordNoOpAsync(ClientId, "repo-1", 42, 7, "Active", "Active", "still_active");
 
-        await activityLog.Received(1).AppendAsync(Arg.Is<MemoryActivityLogEntry>(e =>
-            e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp && e.Reason == "still_active"),
-            Arg.Any<CancellationToken>());
+        await activityLog.Received(1)
+            .AppendAsync(
+                Arg.Is<MemoryActivityLogEntry>(e =>
+                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp &&
+                    e.Reason == "still_active"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -142,22 +184,33 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
 
         var result = await service.RetrieveAndReconsiderAsync(
-            ClientId, job, "src/Foo.cs", "diff", draftResult, ProtocolId);
+            ClientId,
+            job,
+            "src/Foo.cs",
+            "diff",
+            draftResult,
+            ProtocolId);
 
         Assert.NotNull(result);
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_retrieval_executed"),
-            Arg.Is<string?>(d => d != null && d.Contains("1")),
-            Arg.Is<string?>(e => e == null),
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_retrieval_executed"),
+                Arg.Is<string?>(d => d != null && d.Contains("1")),
+                Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -166,13 +219,23 @@ public sealed class ThreadMemoryServiceTests
         var (embedder, repo, _, _, service) = CreateService();
         var draftResult = new ReviewResult("draft summary", []);
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         var result = await service.RetrieveAndReconsiderAsync(
-            ClientId, job, "src/Foo.cs", null, draftResult, ProtocolId);
+            ClientId,
+            job,
+            "src/Foo.cs",
+            null,
+            draftResult,
+            ProtocolId);
 
         Assert.Same(draftResult, result);
     }
@@ -183,17 +246,33 @@ public sealed class ThreadMemoryServiceTests
         var (embedder, repo, recorder, _, service) = CreateService(out var chatClient);
         var draftResult = new ReviewResult("draft summary", []);
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
         repo.FindByFilePathAsync(ClientId, "repo", "/package.json", Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(new List<ThreadMemoryMatchDto>
-            {
-                new(Guid.NewGuid(), 6023, "/package.json", "Closed without code change.", 0f, "exact_file_fallback"),
-            });
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        6023,
+                        "/package.json",
+                        "Closed without code change.",
+                        0f,
+                        "exact_file_fallback"),
+                });
 
-        var responseJson = """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
@@ -207,17 +286,19 @@ public sealed class ThreadMemoryServiceTests
             ProtocolId);
 
         Assert.Equal("reconsidered", result.Summary);
-        await repo.Received(1).FindByFilePathAsync(ClientId, "repo", "/package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_retrieval_executed"),
-            Arg.Is<string?>(d =>
-                d != null &&
-                d.Contains("\"retrievalMode\":\"exact_file_fallback\"") &&
-                d.Contains("\"resultCount\":1") &&
-                d.Contains("6023")),
-            Arg.Is<string?>(e => e == null),
-            Arg.Any<CancellationToken>());
+        await repo.Received(1)
+            .FindByFilePathAsync(ClientId, "repo", "/package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_retrieval_executed"),
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("\"retrievalMode\":\"exact_file_fallback\"") &&
+                    d.Contains("\"resultCount\":1") &&
+                    d.Contains("6023")),
+                Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -229,8 +310,7 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new InvalidOperationException("no embedding"));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
-        var result = await service.RetrieveAndReconsiderAsync(
-            ClientId, job, "src/Foo.cs", null, draftResult, null);
+        var result = await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Foo.cs", null, draftResult, null);
 
         Assert.Same(draftResult, result);
     }
@@ -241,21 +321,32 @@ public sealed class ThreadMemoryServiceTests
         var (embedder, repo, recorder, _, service) = CreateService();
         var draftResult = new ReviewResult("draft", []);
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("store unavailable"));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         var result = await service.RetrieveAndReconsiderAsync(
-            ClientId, job, "src/Foo.cs", null, draftResult, ProtocolId);
+            ClientId,
+            job,
+            "src/Foo.cs",
+            null,
+            draftResult,
+            ProtocolId);
 
         Assert.Same(draftResult, result);
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_operation_failed"),
-            Arg.Any<string?>(),
-            Arg.Is<string?>(e => e != null && e.Contains("store unavailable")),
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_operation_failed"),
+                Arg.Any<string?>(),
+                Arg.Is<string?>(e => e != null && e.Contains("store unavailable")),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -268,29 +359,39 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
-        var responseJson = """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
         var chatResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))
         {
             Usage = new UsageDetails { InputTokenCount = 150, OutputTokenCount = 75 },
         };
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(chatResponse));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Foo.cs", "diff", draftResult, ProtocolId);
 
-        await recorder.Received(1).RecordAiCallAsync(
-            ProtocolId,
-            0,
-            Arg.Any<long?>(),
-            Arg.Any<long?>(),
-            Arg.Any<string?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>(),
-            Arg.Is<string?>(n => n == "ai_call_memory_reconsideration"));
+        await recorder.Received(1)
+            .RecordAiCallAsync(
+                ProtocolId,
+                0,
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Is<string?>(n => n == "ai_call_memory_reconsideration"));
     }
 
     [Fact]
@@ -303,27 +404,37 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
-        var responseJson = """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
         var chatResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))
         {
             Usage = new UsageDetails { InputTokenCount = 200, OutputTokenCount = 100 },
         };
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(chatResponse));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Foo.cs", "diff", draftResult, ProtocolId);
 
-        await recorder.Received(1).AddTokensAsync(
-            ProtocolId,
-            Arg.Any<long>(),
-            Arg.Any<long>(),
-            Arg.Any<AiConnectionModelCategory?>(),
-            Arg.Any<string?>(),
-            ct: Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .AddTokensAsync(
+                ProtocolId,
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -338,30 +449,40 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 5, "src/Foo.cs", "Was accepted by design.", 0.88f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
         // AI reconsideration discards commentB — only commentA is in the response
-        var responseJson = """{"summary":"reconsidered","comments":[{"file_path":"src/Foo.cs","line_number":10,"severity":"warning","message":"Missing null check"}],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        var responseJson =
+            """{"summary":"reconsidered","comments":[{"file_path":"src/Foo.cs","line_number":10,"severity":"warning","message":"Missing null check"}],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
         var chatResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson));
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(chatResponse));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
         await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Foo.cs", "diff", draftResult, ProtocolId);
 
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_reconsideration_completed"),
-            Arg.Is<string?>(d =>
-                d != null &&
-                d.Contains("discarded") &&
-                d.Contains("Unused variable xyz") &&
-                d.Contains("\"discardedCount\":1") &&
-                d.Contains("\"originalCommentCount\":2") &&
-                d.Contains("\"finalCommentCount\":1")),
-            Arg.Is<string?>(e => e == null),
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_reconsideration_completed"),
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("discarded") &&
+                    d.Contains("Unused variable xyz") &&
+                    d.Contains("\"discardedCount\":1") &&
+                    d.Contains("\"originalCommentCount\":2") &&
+                    d.Contains("\"finalCommentCount\":1")),
+                Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -375,37 +496,53 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.90f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.5f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
         // AI returns empty response — ReconsiderWithAiAsync returns null
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Empty))));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
-        var result = await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Foo.cs", "diff", draftResult, ProtocolId);
+        var result = await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "src/Foo.cs",
+            "diff",
+            draftResult,
+            ProtocolId);
 
         // Draft is returned unchanged
         Assert.Same(draftResult, result);
 
         // memory_reconsideration_failed must be emitted so the protocol is not left dangling
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_reconsideration_failed"),
-            Arg.Is<string?>(d =>
-                d != null &&
-                d.Contains("\"reason\":\"ai_returned_null_or_parse_failed\"") &&
-                d.Contains("\"originalCommentCount\":1")),
-            Arg.Is<string?>(e => e != null && e.Contains("retained unchanged")),
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_reconsideration_failed"),
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("\"reason\":\"ai_returned_null_or_parse_failed\"") &&
+                    d.Contains("\"originalCommentCount\":1")),
+                Arg.Is<string?>(e => e != null && e.Contains("retained unchanged")),
+                Arg.Any<CancellationToken>());
 
         // memory_reconsideration_completed must NOT be emitted
-        await recorder.DidNotReceive().RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_reconsideration_completed"),
-            Arg.Any<string?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        await recorder.DidNotReceive()
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_reconsideration_completed"),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -419,23 +556,38 @@ public sealed class ThreadMemoryServiceTests
             new(Guid.NewGuid(), 9, "src/Bar.cs", "Accepted as known pattern.", 0.85f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new float[] { 0.3f });
-        repo.FindSimilarAsync(Arg.Any<Guid>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.3f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .Returns(matches);
         // AI returns invalid JSON — ParseReconsiderationResponse returns null
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "not valid json at all"))));
 
         var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
-        var result = await service.RetrieveAndReconsiderAsync(ClientId, job, "src/Bar.cs", "diff", draftResult, ProtocolId);
+        var result = await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "src/Bar.cs",
+            "diff",
+            draftResult,
+            ProtocolId);
 
         Assert.Same(draftResult, result);
-        await recorder.Received(1).RecordMemoryEventAsync(
-            ProtocolId,
-            Arg.Is<string>(s => s == "memory_reconsideration_failed"),
-            Arg.Is<string?>(d => d != null && d.Contains("\"reason\":\"ai_returned_null_or_parse_failed\"")),
-            Arg.Is<string?>(e => e != null),
-            Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                Arg.Is<string>(s => s == "memory_reconsideration_failed"),
+                Arg.Is<string?>(d => d != null && d.Contains("\"reason\":\"ai_returned_null_or_parse_failed\"")),
+                Arg.Is<string?>(e => e != null),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -446,9 +598,22 @@ public sealed class ThreadMemoryServiceTests
 
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .Returns([0.2f, 0.8f]);
-        repo.FindSimilarInPullRequestAsync(ClientId, "repo-1", 42, Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
-            .Returns([
-                new ThreadMemoryMatchDto(memoryRecordId, 700, "/src/Foo.cs", "Validate the configuration before using it.", 0.91f),
+        repo.FindSimilarInPullRequestAsync(
+                ClientId,
+                "repo-1",
+                42,
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ThreadMemoryMatchDto(
+                    memoryRecordId,
+                    700,
+                    "/src/Foo.cs",
+                    "Validate the configuration before using it.",
+                    0.91f),
             ]);
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
@@ -466,16 +631,30 @@ public sealed class ThreadMemoryServiceTests
     }
 
     [Fact]
-    public async Task FindDuplicateSuppressionMatchAsync_EmbeddingFails_UsesPullRequestFileFallbackAndReportsDegradedMode()
+    public async Task
+        FindDuplicateSuppressionMatchAsync_EmbeddingFails_UsesPullRequestFileFallbackAndReportsDegradedMode()
     {
         var (embedder, repo, _, _, service) = CreateService();
         var memoryRecordId = Guid.NewGuid();
 
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
-        repo.FindByPullRequestFilePathAsync(ClientId, "repo-1", 42, "/src/Foo.cs", Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns([
-                new ThreadMemoryMatchDto(memoryRecordId, 701, "/src/Foo.cs", "Validate the config before using it as a connection string.", 0f, "exact_file_fallback"),
+        repo.FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                "/src/Foo.cs",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ThreadMemoryMatchDto(
+                    memoryRecordId,
+                    701,
+                    "/src/Foo.cs",
+                    "Validate the config before using it as a connection string.",
+                    0f,
+                    "exact_file_fallback"),
             ]);
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
@@ -500,9 +679,22 @@ public sealed class ThreadMemoryServiceTests
 
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .Returns([0.5f]);
-        repo.FindSimilarInPullRequestAsync(ClientId, "repo-1", 42, Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(), Arg.Any<CancellationToken>())
+        repo.FindSimilarInPullRequestAsync(
+                ClientId,
+                "repo-1",
+                42,
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("repository unavailable"));
-        repo.FindByPullRequestFilePathAsync(ClientId, "repo-1", 42, "/src/Foo.cs", Arg.Any<int>(), Arg.Any<CancellationToken>())
+        repo.FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                "/src/Foo.cs",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("repository unavailable"));
 
         var match = await service.FindDuplicateSuppressionMatchAsync(
@@ -524,7 +716,9 @@ public sealed class ThreadMemoryServiceTests
         IProtocolRecorder recorder,
         IMemoryActivityLog activityLog,
         ThreadMemoryService service) CreateService()
-        => CreateService(out _);
+    {
+        return CreateService(out _);
+    }
 
     private static (
         IThreadMemoryEmbedder embedder,

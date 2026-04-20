@@ -29,11 +29,21 @@
         </div>
 
         <div class="form-group">
+          <label for="crawlProvider">Automation Provider</label>
+          <div class="input-wrapper">
+            <input id="crawlProvider" :value="providerLabel" type="text" readonly />
+          </div>
+          <span class="field-help">
+            {{ isAzureDevOpsProvider ? 'Guided crawl discovery currently uses Azure DevOps organization and project selections.' : 'This configuration stores a non-Azure DevOps provider value. Guided selections remain read-only in this form.' }}
+          </span>
+        </div>
+
+        <div class="form-group">
           <label for="crawlOrganizationScope">Azure DevOps Organization</label>
           <div v-if="legacyModeWithoutScope" class="input-wrapper">
             <input
               id="crawlOrganizationScope"
-              :value="props.config?.organizationUrl ?? ''"
+              :value="props.config?.providerScopePath ?? ''"
               type="text"
               readonly
             />
@@ -445,9 +455,11 @@ import { listProCursorSources } from '@/services/proCursorService'
 import type { ProCursorKnowledgeSourceDto } from '@/services/proCursorService'
 import type { components } from '@/services/generated/openapi'
 
-type CrawlConfigResponse = components['schemas']['CrawlConfigResponse']
+type ScmProvider = components['schemas']['ScmProvider']
+type CrawlConfigResponse = components['schemas']['CrawlConfigResponse'] & { provider?: ScmProvider }
 type CrawlRepoFilterResponse = components['schemas']['CrawlRepoFilterResponse']
 type CrawlRepoFilterRequest = components['schemas']['CrawlRepoFilterRequest']
+type CreateAdminCrawlConfigRequest = components['schemas']['CreateAdminCrawlConfigRequest'] & { provider?: ScmProvider }
 type PromptOverrideDto = components['schemas']['PromptOverrideDto']
 type ProCursorSourceScopeMode = components['schemas']['ProCursorSourceScopeMode']
 
@@ -476,8 +488,9 @@ const emit = defineEmits<{
 
 const editMode = computed(() => !!props.config)
 const clientId = ref(props.clientId ?? props.config?.clientId ?? '')
+const provider = computed<ScmProvider>(() => normalizeProvider(props.config?.provider))
 const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
-const projectId = ref(props.config?.projectId ?? '')
+const projectId = ref(props.config?.providerProjectKey ?? '')
 const crawlIntervalSeconds = ref<number>(props.config?.crawlIntervalSeconds ?? 60)
 const isActive = ref(props.config?.isActive ?? true)
 const repairRequiredProCursorSourceIds = ref<string[]>(normalizeStringList(props.config?.invalidProCursorSourceIds))
@@ -524,10 +537,11 @@ const loading = ref(false)
 
 const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
 const canLoadOrganizationScopes = computed(() => isValidUuid(effectiveClientId.value))
+const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
 const legacyModeWithoutScope = computed(() => editMode.value && !organizationScopeId.value)
-const canEditOrganizationSelection = computed(() => !editMode.value && canLoadOrganizationScopes.value)
-const canEditProjectSelection = computed(() => !editMode.value && !!organizationScopeId.value)
-const canEditRepoFilters = computed(() => !!organizationScopeId.value && !!projectId.value && !legacyModeWithoutScope.value)
+const canEditOrganizationSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && canLoadOrganizationScopes.value)
+const canEditProjectSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && !!organizationScopeId.value)
+const canEditRepoFilters = computed(() => isAzureDevOpsProvider.value && !!organizationScopeId.value && !!projectId.value && !legacyModeWithoutScope.value)
 const selectedOrganizationScope = computed(() =>
   organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
 )
@@ -544,6 +558,7 @@ const selectedProCursorSourceCount = computed(() => serializeProCursorSourceIds(
 const filteredOverrides = computed(() =>
   overrides.value.filter((override) => override.scope === 'crawlConfigScope' && override.crawlConfigId === props.config?.id),
 )
+const providerLabel = computed(() => formatProvider(provider.value))
 
 watch(
   () => effectiveClientId.value,
@@ -585,6 +600,30 @@ onMounted(async () => {
 
 function normalizeText(value: string | null | undefined): string {
   return value?.trim() ?? ''
+}
+
+function normalizeProvider(value: string | null | undefined): ScmProvider {
+  switch (value) {
+    case 'github':
+    case 'gitLab':
+    case 'forgejo':
+      return value
+    default:
+      return 'azureDevOps'
+  }
+}
+
+function formatProvider(value: ScmProvider): string {
+  switch (value) {
+    case 'gitLab':
+      return 'GitLab'
+    case 'forgejo':
+      return 'Forgejo'
+    case 'github':
+      return 'GitHub'
+    default:
+      return 'Azure DevOps'
+  }
 }
 
 function normalizeStringList(values: ReadonlyArray<string | null | undefined> | null | undefined): string[] {
@@ -712,9 +751,9 @@ function formatProCursorSourceLabel(source: ProCursorKnowledgeSourceDto): string
 }
 
 function formatProCursorSourcePath(source: ProCursorKnowledgeSourceDto): string {
-  const organizationUrl = normalizeText(source.organizationUrl) || 'No organization'
+  const providerScopePath = normalizeText(source.providerScopePath) || 'No organization'
   const sourceDisplayName = normalizeText(source.sourceDisplayName) || normalizeText(source.repositoryId) || 'No selected source'
-  return `${organizationUrl} / ${normalizeText(source.projectId) || 'No project'} / ${sourceDisplayName}`
+  return `${providerScopePath} / ${normalizeText(source.providerProjectKey) || 'No project'} / ${sourceDisplayName}`
 }
 
 function sortProCursorSources(sources: ProCursorKnowledgeSourceDto[]): ProCursorKnowledgeSourceDto[] {
@@ -1139,16 +1178,19 @@ async function handleSubmit(): Promise<void> {
       return
     }
 
+    const body: CreateAdminCrawlConfigRequest = {
+      clientId: effectiveClientId.value,
+      provider: provider.value,
+      organizationScopeId: organizationScopeId.value || undefined,
+      providerProjectKey: projectId.value.trim(),
+      crawlIntervalSeconds: crawlIntervalSeconds.value,
+      repoFilters: serializeRepoFilters(),
+      proCursorSourceScopeMode: proCursorSourceScopeMode.value,
+      proCursorSourceIds: serializeProCursorSourceIds(),
+    }
+
     const { data, error, response } = await createAdminClient().POST('/admin/crawl-configurations', {
-      body: {
-        clientId: effectiveClientId.value,
-        organizationScopeId: organizationScopeId.value || undefined,
-        projectId: projectId.value.trim(),
-        crawlIntervalSeconds: crawlIntervalSeconds.value,
-        repoFilters: serializeRepoFilters(),
-        proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-        proCursorSourceIds: serializeProCursorSourceIds(),
-      },
+      body,
     })
 
     if (response.status === 403) {

@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.ValueObjects;
+
 namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>
@@ -23,7 +25,7 @@ public interface IRepositoryExclusionFetcher
     /// <param name="targetBranch">The target branch from which to read the exclusion file.</param>
     /// <param name="clientId">Optional client identifier used to resolve ADO credentials.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<MeisterProPR.Application.ValueObjects.ReviewExclusionRules> FetchAsync(
+    Task<ReviewExclusionRules> FetchAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,

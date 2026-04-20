@@ -28,7 +28,7 @@ public sealed class ProCursorSymbolQueryServiceTests
         var symbolGraphRepository = Substitute.For<IProCursorSymbolGraphRepository>();
         var source = CreateSource();
         var branch = source.TrackedBranches.Single();
-        var snapshot = CreateReadySnapshot(source, branch, "commit-1", supportsSymbolQueries: true);
+        var snapshot = CreateReadySnapshot(source, branch, "commit-1", true);
         var symbol = new ProCursorSymbolRecord(
             Guid.NewGuid(),
             snapshot.Id,
@@ -49,11 +49,33 @@ public sealed class ProCursorSymbolQueryServiceTests
             .Returns(snapshot);
         symbolGraphRepository.SearchAsync(snapshot.Id, "Greeter", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorSymbolRecord>>([symbol]));
-        symbolGraphRepository.ListEdgesAsync(snapshot.Id, symbol.SymbolKey, Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<ProCursorSymbolEdge>>([
-                new ProCursorSymbolEdge(Guid.NewGuid(), snapshot.Id, symbol.SymbolKey, "M:Demo.Greeter.Run", "containment", "src/Greeter.cs", 8, 12),
-                new ProCursorSymbolEdge(Guid.NewGuid(), snapshot.Id, "M:Demo.Program.Main", symbol.SymbolKey, "reference", "src/Program.cs", 4, 4),
-            ]));
+        symbolGraphRepository.ListEdgesAsync(
+                snapshot.Id,
+                symbol.SymbolKey,
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ProCursorSymbolEdge>>(
+                [
+                    new ProCursorSymbolEdge(
+                        Guid.NewGuid(),
+                        snapshot.Id,
+                        symbol.SymbolKey,
+                        "M:Demo.Greeter.Run",
+                        "containment",
+                        "src/Greeter.cs",
+                        8,
+                        12),
+                    new ProCursorSymbolEdge(
+                        Guid.NewGuid(),
+                        snapshot.Id,
+                        "M:Demo.Program.Main",
+                        symbol.SymbolKey,
+                        "reference",
+                        "src/Program.cs",
+                        4,
+                        4),
+                ]));
 
         var service = CreateService(sourceRepository, snapshotRepository, embeddingService, symbolGraphRepository);
 
@@ -68,8 +90,12 @@ public sealed class ProCursorSymbolQueryServiceTests
         Assert.NotNull(result.Symbol);
         Assert.Equal("Greeter", result.Symbol!.DisplayName);
         Assert.Equal("src/Greeter.cs", result.Symbol.Definition.FilePath);
-        Assert.Contains(result.Relations, relation => relation.RelationKind == "containment" && relation.ToSymbol == "M:Demo.Greeter.Run");
-        Assert.Contains(result.Relations, relation => relation.RelationKind == "reference" && relation.FromSymbol == "M:Demo.Program.Main");
+        Assert.Contains(
+            result.Relations,
+            relation => relation.RelationKind == "containment" && relation.ToSymbol == "M:Demo.Greeter.Run");
+        Assert.Contains(
+            result.Relations,
+            relation => relation.RelationKind == "reference" && relation.FromSymbol == "M:Demo.Program.Main");
     }
 
     [Fact]
@@ -81,7 +107,7 @@ public sealed class ProCursorSymbolQueryServiceTests
         var symbolGraphRepository = Substitute.For<IProCursorSymbolGraphRepository>();
         var source = CreateSource();
         var branch = source.TrackedBranches.Single();
-        var snapshot = CreateReadySnapshot(source, branch, "commit-1", supportsSymbolQueries: false);
+        var snapshot = CreateReadySnapshot(source, branch, "commit-1", false);
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([source]));
@@ -109,7 +135,7 @@ public sealed class ProCursorSymbolQueryServiceTests
         var symbolGraphRepository = Substitute.For<IProCursorSymbolGraphRepository>();
         var source = CreateSource();
         var branch = source.TrackedBranches.Single();
-        var snapshot = CreateReadySnapshot(source, branch, "commit-1", supportsSymbolQueries: true);
+        var snapshot = CreateReadySnapshot(source, branch, "commit-1", true);
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([source]));
@@ -140,8 +166,8 @@ public sealed class ProCursorSymbolQueryServiceTests
         var firstSource = CreateSource();
         firstSource.UpdateDefinition(
             "A Source",
-            firstSource.OrganizationUrl,
-            firstSource.ProjectId,
+            firstSource.ProviderScopePath,
+            firstSource.ProviderProjectKey,
             "repo-a",
             firstSource.DefaultBranch,
             firstSource.RootPath,
@@ -150,15 +176,15 @@ public sealed class ProCursorSymbolQueryServiceTests
         var secondSource = CreateSource();
         secondSource.UpdateDefinition(
             "B Source",
-            secondSource.OrganizationUrl,
-            secondSource.ProjectId,
+            secondSource.ProviderScopePath,
+            secondSource.ProviderProjectKey,
             "repo-b",
             secondSource.DefaultBranch,
             secondSource.RootPath,
             secondSource.IsEnabled,
             secondSource.SymbolMode);
-        var firstSnapshot = CreateReadySnapshot(firstSource, firstSource.TrackedBranches.Single(), "commit-a", supportsSymbolQueries: true);
-        var secondSnapshot = CreateReadySnapshot(secondSource, secondSource.TrackedBranches.Single(), "commit-b", supportsSymbolQueries: true);
+        var firstSnapshot = CreateReadySnapshot(firstSource, firstSource.TrackedBranches.Single(), "commit-a", true);
+        var secondSnapshot = CreateReadySnapshot(secondSource, secondSource.TrackedBranches.Single(), "commit-b", true);
         var symbol = new ProCursorSymbolRecord(
             Guid.NewGuid(),
             secondSnapshot.Id,
@@ -198,7 +224,8 @@ public sealed class ProCursorSymbolQueryServiceTests
 
         Assert.Equal("notFound", result.Status);
         await snapshotRepository.Received(1).GetLatestReadyAsync(firstSource.Id, null, Arg.Any<CancellationToken>());
-        await snapshotRepository.DidNotReceive().GetLatestReadyAsync(secondSource.Id, null, Arg.Any<CancellationToken>());
+        await snapshotRepository.DidNotReceive()
+            .GetLatestReadyAsync(secondSource.Id, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -211,8 +238,11 @@ public sealed class ProCursorSymbolQueryServiceTests
         var materializer = Substitute.For<IProCursorMaterializer>();
         var symbolExtractor = Substitute.For<IProCursorSymbolExtractor>();
         var source = CreateSource();
-        var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", supportsSymbolQueries: true);
-        var rootDirectory = Path.Combine(Path.GetTempPath(), "meisterpropr-procursor-overlay-query-tests", Guid.NewGuid().ToString("N"));
+        var baseSnapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), "commit-base", true);
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-overlay-query-tests",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootDirectory);
 
         sourceRepository.ListByClientAsync(ClientId, Arg.Any<CancellationToken>())
@@ -221,34 +251,39 @@ public sealed class ProCursorSymbolQueryServiceTests
             .Returns(baseSnapshot);
         materializer.SourceKind.Returns(ProCursorSourceKind.Repository);
         materializer.MaterializeAsync(source, Arg.Any<ProCursorTrackedBranch>(), null, Arg.Any<CancellationToken>())
-            .Returns(new ProCursorMaterializedSource(
-                source.Id,
-                Guid.NewGuid(),
-                "feature/branch",
-                "commit-overlay",
-                rootDirectory,
-                ["/src/Greeter.cs"]));
-        symbolExtractor.ExtractAsync(Arg.Any<ProCursorMaterializedSource>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    Guid.NewGuid(),
+                    "feature/branch",
+                    "commit-overlay",
+                    rootDirectory,
+                    ["/src/Greeter.cs"]));
+        symbolExtractor.ExtractAsync(
+                Arg.Any<ProCursorMaterializedSource>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var overlayId = call.ArgAt<Guid>(1);
                 return new ProCursorSymbolExtractionResult(
-                    [new ProCursorSymbolRecord(
-                        Guid.NewGuid(),
-                        overlayId,
-                        "csharp",
-                        "T:Demo.Greeter",
-                        "Greeter",
-                        "type",
-                        null,
-                        "src/Greeter.cs",
-                        3,
-                        12,
-                        "Demo.Greeter",
-                        "Greeter Demo.Greeter")],
+                    [
+                        new ProCursorSymbolRecord(
+                            Guid.NewGuid(),
+                            overlayId,
+                            "csharp",
+                            "T:Demo.Greeter",
+                            "Greeter",
+                            "type",
+                            null,
+                            "src/Greeter.cs",
+                            3,
+                            12,
+                            "Demo.Greeter",
+                            "Greeter Demo.Greeter"),
+                    ],
                     [],
-                    true,
-                    null);
+                    true);
             });
 
         var miniIndexBuilder = new ProCursorMiniIndexBuilder(

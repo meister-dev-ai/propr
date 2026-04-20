@@ -65,7 +65,7 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         Guid stalJobId;
         await using (var db = new MeisterProPRDbContext(options))
         {
-            var repo = new JobRepository(db, new Fixtures.TestDbContextFactory(options));
+            var repo = new JobRepository(db, new TestDbContextFactory(options));
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -95,10 +95,9 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
                 builder.UseSetting("MEISTER_JWT_SECRET", "test-jwt-secret-at-least-32-chars-ok!!");
                 builder.ConfigureServices(services =>
                 {
-                    services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                     services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                     services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                    services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                    services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 });
             });
 

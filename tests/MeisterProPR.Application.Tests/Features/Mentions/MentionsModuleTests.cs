@@ -23,6 +23,7 @@ public sealed class MentionsModuleTests
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         ConfigId,
         ClientId,
+        ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
         ReviewerId,
@@ -39,11 +40,13 @@ public sealed class MentionsModuleTests
         var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
         var scanRepository = Substitute.For<IMentionScanRepository>();
         var jobRepository = Substitute.For<IMentionReplyJobRepository>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
         var channel = Channel.CreateUnbounded<MentionReplyJob>();
         var sut = new MentionScanService(
             crawlConfigs,
             activePrFetcher,
             pullRequestFetcher,
+            clientRegistry,
             scanRepository,
             jobRepository,
             channel.Writer,
@@ -68,25 +71,46 @@ public sealed class MentionsModuleTests
                     100,
                     null,
                     null,
-                    [new PrThreadComment("Alice", $"@<{ReviewerId}> please help", Guid.NewGuid(), 200, DateTimeOffset.UtcNow)]),
+                    [
+                        new PrThreadComment(
+                            "Alice",
+                            $"@<{ReviewerId}> please help",
+                            Guid.NewGuid(),
+                            200,
+                            DateTimeOffset.UtcNow),
+                    ]),
             ]);
 
         crawlConfigs.GetAllActiveAsync(Arg.Any<CancellationToken>()).Returns([DefaultConfig]);
-        activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns([pr]);
-        pullRequestFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        pullRequestFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(pullRequest);
-        jobRepository.ExistsForCommentAsync(ClientId, 1, 100, 200, Arg.Any<CancellationToken>()).Returns(false);
+        jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, 100, 200, Arg.Any<CancellationToken>()).Returns(false);
 
         await sut.ScanAsync();
 
-        await jobRepository.Received(1).AddAsync(
-            Arg.Is<MentionReplyJob>(job =>
-                job.ClientId == ClientId &&
-                job.PullRequestId == 1 &&
-                job.ThreadId == 100 &&
-                job.CommentId == 200),
-            Arg.Any<CancellationToken>());
+        await jobRepository.Received(1)
+            .AddAsync(
+                Arg.Is<MentionReplyJob>(job =>
+                    job.ClientId == ClientId &&
+                    job.PullRequestId == 1 &&
+                    job.ThreadId == 100 &&
+                    job.CommentId == 200),
+                Arg.Any<CancellationToken>());
         Assert.Equal(1, channel.Reader.Count);
     }
 
@@ -96,26 +120,65 @@ public sealed class MentionsModuleTests
         var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
         var jobRepository = Substitute.For<IMentionReplyJobRepository>();
         var answerService = Substitute.For<IMentionAnswerService>();
-        var threadReplier = Substitute.For<IAdoThreadReplier>();
+        var threadReplier = Substitute.For<IReviewThreadReplyPublisher>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        threadReplier.Provider.Returns(ScmProvider.AzureDevOps);
+        threadReplier.ReplyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>())
+            .Returns(threadReplier);
         var sut = new MentionReplyService(
             pullRequestFetcher,
             jobRepository,
             answerService,
-            threadReplier,
+            providerRegistry,
             NullLogger<MentionReplyService>.Instance);
 
-        var job = new MentionReplyJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 7, 3, 11, "@bot please help");
-        var pullRequest = new PullRequest("https://dev.azure.com/org", "proj", "repo", "repo", 7, 1, "PR", null, "feature/a", "main", []);
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            ClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            7,
+            3,
+            11,
+            "@bot please help");
+        var pullRequest = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            7,
+            1,
+            "PR",
+            null,
+            "feature/a",
+            "main",
+            []);
 
         jobRepository.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing).Returns(true);
-        pullRequestFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        pullRequestFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(pullRequest);
         answerService.AnswerAsync(pullRequest, ClientId, job.MentionText, job.ThreadId, Arg.Any<CancellationToken>())
             .Returns("Here is the answer.");
 
         await sut.ProcessAsync(job);
 
-        await threadReplier.Received(1).ReplyAsync(job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, job.ThreadId, "Here is the answer.", job.ClientId, Arg.Any<CancellationToken>());
+        await threadReplier.Received(1)
+            .ReplyAsync(job.ClientId, job.ReviewThreadReference, "Here is the answer.", Arg.Any<CancellationToken>());
         await jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
     }
 }

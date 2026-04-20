@@ -80,6 +80,8 @@ public sealed partial class MemoryActivityLogRepository(
         return new PagedResult<MemoryActivityLogEntry>(items, totalCount, query.Page, query.PageSize);
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to append MemoryActivityLogEntry for thread {ThreadId} / client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to append MemoryActivityLogEntry for thread {ThreadId} / client {ClientId}")]
     private static partial void LogAppendFailed(ILogger logger, int threadId, Guid clientId, Exception ex);
 }

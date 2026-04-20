@@ -14,37 +14,77 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 /// </summary>
 public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IReviewJobExecutionStore
 {
-    public ReviewJob? GetById(Guid id) => inner.GetById(id);
+    public ReviewJob? GetById(Guid id)
+    {
+        return inner.GetById(id);
+    }
 
-    public IReadOnlyList<ReviewJob> GetPendingJobs() => inner.GetPendingJobs();
+    public IReadOnlyList<ReviewJob> GetPendingJobs()
+    {
+        return inner.GetPendingJobs();
+    }
 
-    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
-        => inner.GetStuckProcessingJobsAsync(threshold, ct);
+    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
+        TimeSpan threshold,
+        CancellationToken ct = default)
+    {
+        return inner.GetStuckProcessingJobsAsync(threshold, ct);
+    }
 
     public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
-        => inner.TryTransitionAsync(id, from, to, ct);
+    {
+        return inner.TryTransitionAsync(id, from, to, ct);
+    }
 
     public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)
-        => inner.UpdateRetryCountAsync(id, retryCount, ct);
+    {
+        return inner.UpdateRetryCountAsync(id, retryCount, ct);
+    }
 
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
-        => inner.SetFailedAsync(id, errorMessage, ct);
+    {
+        return inner.SetFailedAsync(id, errorMessage, ct);
+    }
 
     public Task DeleteAsync(Guid id, CancellationToken ct = default)
-        => inner.DeleteAsync(id, ct);
+    {
+        return inner.DeleteAsync(id, ct);
+    }
 
     public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
-        => inner.SetResultAsync(id, result, ct);
+    {
+        return inner.SetResultAsync(id, result, ct);
+    }
 
     public Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
-        => inner.AddFileResultAsync(result, ct);
+    {
+        return inner.AddFileResultAsync(result, ct);
+    }
 
-    public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(string organizationUrl, string projectId, string repositoryId, int pullRequestId, int iterationId, CancellationToken ct = default)
-        => inner.GetCompletedJobWithFileResultsAsync(organizationUrl, projectId, repositoryId, pullRequestId, iterationId, ct);
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        CancellationToken ct = default)
+    {
+        return inner.GetCompletedJobWithFileResultsAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            ct);
+    }
 
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
-        => inner.SetCancelledAsync(id, ct);
+    {
+        return inner.SetCancelledAsync(id, ct);
+    }
 
     public Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default)
-        => inner.UpdateAiConfigAsync(id, connectionId, model, ct);
+    {
+        return inner.UpdateAiConfigAsync(id, connectionId, model, ct);
+    }
 }

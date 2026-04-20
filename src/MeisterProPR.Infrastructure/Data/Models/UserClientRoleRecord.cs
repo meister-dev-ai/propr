@@ -5,7 +5,7 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Infrastructure.Data.Models;
 
-/// <summary>EF persistence model for <see cref="Domain.Entities.UserClientRole"/>.</summary>
+/// <summary>EF persistence model for <see cref="Domain.Entities.UserClientRole" />.</summary>
 public sealed class UserClientRoleRecord
 {
     public Guid Id { get; set; }

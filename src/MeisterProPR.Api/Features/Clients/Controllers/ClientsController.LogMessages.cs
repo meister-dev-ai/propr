@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.Enums;
-using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -15,7 +14,8 @@ public sealed partial class ClientsController
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "ADO organization scope {ScopeId} created for client {ClientId}; verification status {VerificationStatus}; enabled={IsEnabled}")]
+        Message =
+            "ADO organization scope {ScopeId} created for client {ClientId}; verification status {VerificationStatus}; enabled={IsEnabled}")]
     private static partial void LogAdoOrganizationScopeCreated(
         ILogger logger,
         Guid clientId,
@@ -25,7 +25,8 @@ public sealed partial class ClientsController
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "ADO organization scope {ScopeId} updated for client {ClientId}; verification status {VerificationStatus}; enabled={IsEnabled}")]
+        Message =
+            "ADO organization scope {ScopeId} updated for client {ClientId}; verification status {VerificationStatus}; enabled={IsEnabled}")]
     private static partial void LogAdoOrganizationScopeUpdated(
         ILogger logger,
         Guid clientId,

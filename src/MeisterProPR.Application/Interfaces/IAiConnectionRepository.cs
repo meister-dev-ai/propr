@@ -56,5 +56,8 @@ public interface IAiConnectionRepository
     ///     Returns the connection tagged with the specified <paramref name="tier" /> for the given client,
     ///     or <see langword="null" /> if no such connection exists. The caller falls back to the active default.
     /// </summary>
-    Task<AiConnectionDto?> GetForTierAsync(Guid clientId, AiConnectionModelCategory tier, CancellationToken ct = default);
+    Task<AiConnectionDto?> GetForTierAsync(
+        Guid clientId,
+        AiConnectionModelCategory tier,
+        CancellationToken ct = default);
 }

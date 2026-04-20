@@ -2,6 +2,9 @@
 CLAUDE.md
 GEMINI.md
 
+# Local data
+.ignore
+
 # Build output
 bin/
 obj/

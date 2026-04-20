@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using MeisterProPR.Application.DTOs;
@@ -10,7 +11,6 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Auth;
-using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,8 +20,8 @@ using NSubstitute;
 namespace MeisterProPR.Api.Tests.Controllers;
 
 /// <summary>
-/// Regression coverage for thread-memory admin endpoints.
-/// Ensures read-only endpoints do not require constructing <see cref="IThreadMemoryService"/>.
+///     Regression coverage for thread-memory admin endpoints.
+///     Ensures read-only endpoints do not require constructing <see cref="IThreadMemoryService" />.
 /// </summary>
 public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.ThreadMemoryApiFactory factory)
     : IClassFixture<ThreadMemoryControllerTests.ThreadMemoryApiFactory>
@@ -33,7 +33,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/reviewing/thread-memory?clientId={factory.ClientId}&page=1&pageSize=50");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
 
@@ -47,7 +47,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/reviewing/thread-memory/activity-log?clientId={factory.ClientId}&page=1&pageSize=50");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
 
@@ -79,7 +79,8 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -105,10 +106,9 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IJobRepository>());
 
                 var userRepo = Substitute.For<IUserRepository>();
@@ -128,25 +128,26 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
                         Arg.Any<string?>(),
                         Arg.Any<int?>(),
                         Arg.Any<CancellationToken>())
-                    .Returns(call => Task.FromResult(new PagedResult<ThreadMemoryRecord>(
-                        [
-                            new ThreadMemoryRecord
-                            {
-                                Id = Guid.NewGuid(),
-                                ClientId = clientId,
-                                ThreadId = 42,
-                                RepositoryId = "repo",
-                                PullRequestId = 7,
-                                FilePath = "src/File.cs",
-                                ResolutionSummary = "Resolved",
-                                EmbeddingVector = [0.1f],
-                                CreatedAt = DateTimeOffset.UtcNow,
-                                UpdatedAt = DateTimeOffset.UtcNow,
-                            },
-                        ],
-                        1,
-                        call.ArgAt<int>(2),
-                        call.ArgAt<int>(3))));
+                    .Returns(call => Task.FromResult(
+                        new PagedResult<ThreadMemoryRecord>(
+                            [
+                                new ThreadMemoryRecord
+                                {
+                                    Id = Guid.NewGuid(),
+                                    ClientId = clientId,
+                                    ThreadId = 42,
+                                    RepositoryId = "repo",
+                                    PullRequestId = 7,
+                                    FilePath = "src/File.cs",
+                                    ResolutionSummary = "Resolved",
+                                    EmbeddingVector = [0.1f],
+                                    CreatedAt = DateTimeOffset.UtcNow,
+                                    UpdatedAt = DateTimeOffset.UtcNow,
+                                },
+                            ],
+                            1,
+                            call.ArgAt<int>(2),
+                            call.ArgAt<int>(3))));
                 services.AddSingleton(memoryRepository);
 
                 var scanRepository = Substitute.For<IReviewPrScanRepository>();
@@ -160,30 +161,32 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
                     .Returns(call =>
                     {
                         var query = call.ArgAt<MemoryActivityLogQuery>(1);
-                        return Task.FromResult(new PagedResult<MemoryActivityLogEntry>(
-                            [
-                                new MemoryActivityLogEntry
-                                {
-                                    Id = Guid.NewGuid(),
-                                    ClientId = clientId,
-                                    ThreadId = 42,
-                                    RepositoryId = "repo",
-                                    PullRequestId = 7,
-                                    Action = MemoryActivityAction.Stored,
-                                    PreviousStatus = null,
-                                    CurrentStatus = "resolved",
-                                    Reason = null,
-                                    OccurredAt = DateTimeOffset.UtcNow,
-                                },
-                            ],
-                            1,
-                            query.Page,
-                            query.PageSize));
+                        return Task.FromResult(
+                            new PagedResult<MemoryActivityLogEntry>(
+                                [
+                                    new MemoryActivityLogEntry
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        ClientId = clientId,
+                                        ThreadId = 42,
+                                        RepositoryId = "repo",
+                                        PullRequestId = 7,
+                                        Action = MemoryActivityAction.Stored,
+                                        PreviousStatus = null,
+                                        CurrentStatus = "resolved",
+                                        Reason = null,
+                                        OccurredAt = DateTimeOffset.UtcNow,
+                                    },
+                                ],
+                                1,
+                                query.Page,
+                                query.PageSize));
                     });
                 services.AddSingleton(activityLog);
 
                 // Intentionally broken service to guard against constructor eager activation regressions.
-                services.AddScoped<IThreadMemoryService>(_ => throw new InvalidOperationException("intentional-thread-memory-service-failure"));
+                services.AddScoped<IThreadMemoryService>(_ =>
+                    throw new InvalidOperationException("intentional-thread-memory-service-failure"));
             });
         }
     }

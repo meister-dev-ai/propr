@@ -17,7 +17,7 @@
                 <div class="pr-meta">
                     <span class="pr-id-badge">PR #{{ data.pullRequestId }}</span>
                     <span class="pr-repo">{{ data.repositoryId }}</span>
-                    <span class="pr-project">{{ data.projectId }}</span>
+                    <span class="pr-project">{{ data.providerProjectKey }}</span>
                 </div>
                 <div class="pr-stat-strip">
                     <div class="stat-pill">
@@ -174,7 +174,7 @@
             </section>
         </template>
 
-        <p v-else class="empty-state">No data. Provide clientId, organizationUrl, projectId, repositoryId and pullRequestId query parameters.</p>
+        <p v-else class="empty-state">No data. Provide clientId, providerScopePath, providerProjectKey, repositoryId and pullRequestId query parameters.</p>
     </div>
 </template>
 
@@ -192,13 +192,13 @@ const data = ref<PrReviewViewDto | null>(null)
 const memoryTab = ref<'originated' | 'contributed'>('originated')
 
 const clientId = computed(() => route.query.clientId as string | undefined)
-const organizationUrl = computed(() => route.query.orgUrl as string | undefined)
-const projectId = computed(() => route.query.project as string | undefined)
+const providerScopePath = computed(() => route.query.providerScopePath as string | undefined)
+const providerProjectKey = computed(() => route.query.providerProjectKey as string | undefined)
 const repositoryId = computed(() => route.query.repositoryId as string | undefined)
 const pullRequestId = computed(() => route.query.pullRequestId ? Number(route.query.pullRequestId) : undefined)
 
 async function loadData() {
-    if (!clientId.value || !organizationUrl.value || !projectId.value || !repositoryId.value || !pullRequestId.value) {
+    if (!clientId.value || !providerScopePath.value || !providerProjectKey.value || !repositoryId.value || !pullRequestId.value) {
         return
     }
 
@@ -206,8 +206,8 @@ async function loadData() {
     error.value = ''
     try {
         data.value = await getPrView(clientId.value, {
-            organizationUrl: organizationUrl.value,
-            projectId: projectId.value,
+            providerScopePath: providerScopePath.value,
+            providerProjectKey: providerProjectKey.value,
             repositoryId: repositoryId.value,
             pullRequestId: pullRequestId.value,
         })

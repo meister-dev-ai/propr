@@ -193,9 +193,9 @@ public class HtmlSanitizerTests
         const string input =
             """
             **Summary**
-            
+
             Found 2 issues:
-            
+
             1. Missing index on `users` table
             2. Generic constraint issue with `Foo<T>`
             """;

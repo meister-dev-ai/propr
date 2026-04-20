@@ -7,7 +7,7 @@ using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
-using Pgvector.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
@@ -20,9 +20,9 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    private const string RepoId = "test-repo";
     private static readonly Guid ClientA = Guid.Parse("cccccccc-0000-0000-0000-000000000001");
     private static readonly Guid ClientB = Guid.Parse("cccccccc-0000-0000-0000-000000000002");
-    private const string RepoId = "test-repo";
 
     private MeisterProPRDbContext _db = null!;
     private ThreadMemoryRepository _repo = null!;
@@ -41,13 +41,14 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         {
             if (!await this._db.Clients.AnyAsync(c => c.Id == clientId))
             {
-                this._db.Clients.Add(new ClientRecord
-                {
-                    Id = clientId,
-                    DisplayName = $"Memory Test Client {clientId:N}",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
+                this._db.Clients.Add(
+                    new ClientRecord
+                    {
+                        Id = clientId,
+                        DisplayName = $"Memory Test Client {clientId:N}",
+                        IsActive = true,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
             }
         }
 
@@ -119,7 +120,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         await this._repo.BulkUpsertAsync(records);
 
-        var count = await this._db.ThreadMemoryRecords.CountAsync(r => r.ClientId == ClientA && r.ThreadId >= 200 && r.ThreadId < 205);
+        var count = await this._db.ThreadMemoryRecords.CountAsync(r =>
+            r.ClientId == ClientA && r.ThreadId >= 200 && r.ThreadId < 205);
         Assert.Equal(5, count);
     }
 
@@ -131,7 +133,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.BulkUpsertAsync(records);
         await this._repo.BulkUpsertAsync(records); // second run — same keys
 
-        var count = await this._db.ThreadMemoryRecords.CountAsync(r => r.ClientId == ClientA && r.ThreadId >= 300 && r.ThreadId < 303);
+        var count = await this._db.ThreadMemoryRecords.CountAsync(r =>
+            r.ClientId == ClientA && r.ThreadId >= 300 && r.ThreadId < 303);
         Assert.Equal(3, count);
     }
 
@@ -164,7 +167,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.UpsertAsync(CreateRecord(ClientA, 1, 501, nearVector));
         await this._repo.UpsertAsync(CreateRecord(ClientA, 1, 502, farVector));
 
-        var results = await this._repo.FindSimilarAsync(ClientA, queryVector, topN: 5, minSimilarity: 0.7f);
+        var results = await this._repo.FindSimilarAsync(ClientA, queryVector, 5, 0.7f);
 
         Assert.NotEmpty(results);
         Assert.Equal(501, results[0].ThreadId);
@@ -176,11 +179,13 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     public async Task FindSimilarAsync_HonoursTopNCap()
     {
         var queryVector = V(1f, 0f, 0f, 0f);
-        var records = Enumerable.Range(600, 10).Select(i =>
-            CreateRecord(ClientA, 1, i, V(1f, 0f, 0f, 0f))).ToList();
+        var records = Enumerable.Range(600, 10)
+            .Select(i =>
+                CreateRecord(ClientA, 1, i, V(1f, 0f, 0f, 0f)))
+            .ToList();
         await this._repo.BulkUpsertAsync(records);
 
-        var results = await this._repo.FindSimilarAsync(ClientA, queryVector, topN: 3, minSimilarity: 0.5f);
+        var results = await this._repo.FindSimilarAsync(ClientA, queryVector, 3, 0.5f);
 
         Assert.True(results.Count <= 3);
     }
@@ -191,7 +196,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var vector = V(1f, 0f, 0f, 0f);
         await this._repo.UpsertAsync(CreateRecord(ClientB, 1, 700, vector));
 
-        var results = await this._repo.FindSimilarAsync(ClientA, vector, topN: 10, minSimilarity: 0.0f);
+        var results = await this._repo.FindSimilarAsync(ClientA, vector, 10, 0.0f);
 
         Assert.DoesNotContain(results, r => r.ThreadId == 700);
     }
@@ -199,24 +204,64 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     [Fact]
     public async Task FindSimilarAsync_EmptyStore_ReturnsEmptyList()
     {
-        var results = await this._repo.FindSimilarAsync(ClientA, V(1f, 0f, 0f, 0f), topN: 5, minSimilarity: 0.5f);
+        var results = await this._repo.FindSimilarAsync(ClientA, V(1f, 0f, 0f, 0f), 5, 0.5f);
         Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task FindSimilarAsync_WithDbContextFactory_SupportsParallelLookups()
+    {
+        var options = fixture.ConnectionString;
+        Assert.False(string.IsNullOrWhiteSpace(options));
+
+        var dbOptions = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(options, o => o.UseVector())
+            .Options;
+        var factory = new PooledDbContextFactory<MeisterProPRDbContext>(dbOptions);
+        var repo = new ThreadMemoryRepository(this._db, factory);
+
+        var nearVector = V(1f, 0f, 0f, 0f);
+        var queryVector = V(0.99f, 0.01f, 0f, 0f);
+        await repo.UpsertAsync(CreateRecord(ClientA, 1, 503, nearVector));
+
+        var tasks = Enumerable.Range(0, 4)
+            .Select(_ => repo.FindSimilarAsync(ClientA, queryVector, 5, 0.7f));
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, matches => Assert.Equal(503, Assert.Single(matches).ThreadId));
     }
 
     [Fact]
     public async Task FindByFilePathAsync_ReturnsSameRepoExactPathMatchesOrderedByUpdatedAt()
     {
-        var older = CreateRecord(ClientA, 1, 801, filePath: "/package.json", updatedAt: DateTimeOffset.UtcNow.AddMinutes(-10));
+        var older = CreateRecord(
+            ClientA,
+            1,
+            801,
+            filePath: "/package.json",
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(-10));
         var newer = CreateRecord(ClientA, 1, 802, filePath: "/package.json", updatedAt: DateTimeOffset.UtcNow);
-        var otherRepo = CreateRecord(ClientA, 1, 803, filePath: "/package.json", repositoryId: "other-repo", updatedAt: DateTimeOffset.UtcNow.AddMinutes(5));
-        var otherPath = CreateRecord(ClientA, 1, 804, filePath: "/vite.config.js", updatedAt: DateTimeOffset.UtcNow.AddMinutes(6));
+        var otherRepo = CreateRecord(
+            ClientA,
+            1,
+            803,
+            filePath: "/package.json",
+            repositoryId: "other-repo",
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(5));
+        var otherPath = CreateRecord(
+            ClientA,
+            1,
+            804,
+            filePath: "/vite.config.js",
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(6));
 
         await this._repo.UpsertAsync(older);
         await this._repo.UpsertAsync(newer);
         await this._repo.UpsertAsync(otherRepo);
         await this._repo.UpsertAsync(otherPath);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/package.json", topN: 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/package.json", 5);
 
         Assert.Collection(
             results,
@@ -240,7 +285,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var record = CreateRecord(ClientA, 1, 805, filePath: "/SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/src/package.json", topN: 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal(805, results[0].ThreadId);
@@ -252,7 +297,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var record = CreateRecord(ClientA, 77, 806, filePath: "/SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "/src/package.json", topN: 5);
+        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "/src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal(806, results[0].ThreadId);
@@ -271,21 +316,21 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     public async Task FindSimilarAsync_InvalidTopN_Throws()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            this._repo.FindSimilarAsync(ClientA, V(1f), topN: 0, minSimilarity: 0.5f));
+            this._repo.FindSimilarAsync(ClientA, V(1f), 0, 0.5f));
     }
 
     [Fact]
     public async Task FindSimilarAsync_InvalidSimilarity_Throws()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            this._repo.FindSimilarAsync(ClientA, V(1f), topN: 1, minSimilarity: 1.5f));
+            this._repo.FindSimilarAsync(ClientA, V(1f), 1, 1.5f));
     }
 
     [Fact]
     public async Task FindSimilarInPullRequestAsync_InvalidSimilarity_Throws()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 1, V(1f), topN: 1, minSimilarity: -0.1f));
+            this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 1, V(1f), 1, -0.1f));
     }
 
     // ---------------------------------------------------------------------------

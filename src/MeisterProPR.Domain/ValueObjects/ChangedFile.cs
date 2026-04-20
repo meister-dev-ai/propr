@@ -13,7 +13,13 @@ public sealed record ChangedFile
     /// <summary>
     ///     Creates a new <see cref="ChangedFile" />.
     /// </summary>
-    public ChangedFile(string path, ChangeType changeType, string fullContent, string unifiedDiff, bool isBinary = false, string? originalPath = null)
+    public ChangedFile(
+        string path,
+        ChangeType changeType,
+        string fullContent,
+        string unifiedDiff,
+        bool isBinary = false,
+        string? originalPath = null)
     {
         if (string.IsNullOrEmpty(path))
         {

@@ -3,11 +3,11 @@
 
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
-using Pgvector.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Intake;
@@ -61,7 +61,7 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
         job.CompletedAt = DateTimeOffset.UtcNow;
         await this._dbContext.SaveChangesAsync();
 
-        var found = await this._store.FindActiveJobAsync(request.OrganizationUrl, request.ProjectId, request.RepositoryId, request.PullRequestId, request.IterationId);
+        var found = await this._store.FindActiveJobAsync(job.ClientId, request);
 
         Assert.Null(found);
     }
@@ -72,7 +72,12 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
         var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 12, 4);
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
 
-        await this._store.UpdatePrContextAsync(job.Id, "Add feature", "repo-display", "refs/heads/feature/x", "refs/heads/main");
+        await this._store.UpdatePrContextAsync(
+            job.Id,
+            "Add feature",
+            "repo-display",
+            "refs/heads/feature/x",
+            "refs/heads/main");
 
         var refreshed = await this._store.GetByIdAsync(job.Id);
         Assert.NotNull(refreshed);
@@ -80,5 +85,34 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
         Assert.Equal("repo-display", refreshed.PrRepositoryName);
         Assert.Equal("feature/x", refreshed.PrSourceBranch);
         Assert.Equal("main", refreshed.PrTargetBranch);
+    }
+
+    [Fact]
+    public async Task FindActiveJobAsync_ProviderNeutralReviewRevisionMatchesNormalizedTarget()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.example.com");
+        var repository = new RepositoryRef(host, "repo-gh-1", "acme", "acme/propr");
+        var request = new SubmitReviewJobRequestDto(
+            host.HostBaseUrl,
+            repository.OwnerOrNamespace,
+            repository.ExternalRepositoryId,
+            42,
+            1)
+        {
+            Provider = ScmProvider.GitHub,
+            Host = host,
+            Repository = repository,
+            CodeReview = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42),
+            ReviewRevision = new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"),
+        };
+
+        var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
+
+        var found = await this._store.FindActiveJobAsync(job.ClientId, request);
+
+        Assert.NotNull(found);
+        Assert.Equal(job.Id, found!.Id);
+        Assert.Equal(ScmProvider.GitHub, found.Provider);
+        Assert.Equal("patch-1", found.ReviewPatchIdentity);
     }
 }

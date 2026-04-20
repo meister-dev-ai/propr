@@ -19,7 +19,10 @@ public class ReviewPromptsQualityTests
     [Fact]
     public void AgenticLoopGuidance_StartsWithCertaintyGate()
     {
-        Assert.StartsWith("CERTAINTY GATE", ReviewPrompts.AgenticLoopGuidance.TrimStart(), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(
+            "CERTAINTY GATE",
+            ReviewPrompts.AgenticLoopGuidance.TrimStart(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ── T004(b): INFO rule appears before tool descriptions ──────────────────────
@@ -56,7 +59,10 @@ public class ReviewPromptsQualityTests
     public void AgenticLoopGuidance_DoesNotContainStandaloneVerificationRuleHeading()
     {
         // The heading "Verification rule:" must not exist as a standalone rule label
-        Assert.DoesNotContain("Verification rule:", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "Verification rule:",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ── T004(e): Old 'Findings validation rule' heading is removed ───────────────
@@ -64,7 +70,10 @@ public class ReviewPromptsQualityTests
     [Fact]
     public void AgenticLoopGuidance_DoesNotContainFindingsValidationRuleHeading()
     {
-        Assert.DoesNotContain("Findings validation rule", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "Findings validation rule",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ── T004(f): Old 'SUGGESTION batching rule' heading is removed ───────────────
@@ -72,7 +81,10 @@ public class ReviewPromptsQualityTests
     [Fact]
     public void AgenticLoopGuidance_DoesNotContainSuggestionBatchingRuleHeading()
     {
-        Assert.DoesNotContain("SUGGESTION batching rule", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "SUGGESTION batching rule",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ── T004(g): CRITICAL OUTPUT RULE appears at most once ──────────────────────
@@ -104,25 +116,37 @@ public class ReviewPromptsQualityTests
     [Fact]
     public void BuildQualityFilterSystemPrompt_ContainsDiscard()
     {
-        Assert.Contains("DISCARD", ReviewPrompts.BuildQualityFilterSystemPrompt(null), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "DISCARD",
+            ReviewPrompts.BuildQualityFilterSystemPrompt(null),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void BuildQualityFilterSystemPrompt_ContainsSpeculativeLanguage()
     {
-        Assert.Contains("speculative language", ReviewPrompts.BuildQualityFilterSystemPrompt(null), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "speculative language",
+            ReviewPrompts.BuildQualityFilterSystemPrompt(null),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void BuildQualityFilterSystemPrompt_ContainsInfoSeverity()
     {
-        Assert.Contains("INFO-severity", ReviewPrompts.BuildQualityFilterSystemPrompt(null), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "INFO-severity",
+            ReviewPrompts.BuildQualityFilterSystemPrompt(null),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void BuildQualityFilterSystemPrompt_ContainsDuplicate()
     {
-        Assert.Contains("duplicate", ReviewPrompts.BuildQualityFilterSystemPrompt(null), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "duplicate",
+            ReviewPrompts.BuildQualityFilterSystemPrompt(null),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ── T019: BuildQualityFilterUserMessage formatting ──────────────────────────
@@ -141,7 +165,8 @@ public class ReviewPromptsQualityTests
 
         // Count data rows (lines starting with "| 1 |", "| 2 |", "| 3 |")
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var dataRows = lines.Count(l => l.TrimStart().StartsWith("|") && !l.Contains("---") && !l.Contains("File") && !l.Contains("#"));
+        var dataRows = lines.Count(l =>
+            l.TrimStart().StartsWith("|") && !l.Contains("---") && !l.Contains("File") && !l.Contains("#"));
         Assert.True(dataRows >= 3, $"Expected at least 3 data rows, got: {dataRows}. Output:\n{result}");
     }
 

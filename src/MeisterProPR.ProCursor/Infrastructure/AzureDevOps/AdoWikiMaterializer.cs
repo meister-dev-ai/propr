@@ -17,39 +17,53 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 /// </summary>
 public partial class AdoWikiMaterializer(
     VssConnectionFactory connectionFactory,
-    IClientAdoCredentialRepository credentialRepository,
+    IClientScmConnectionRepository connectionRepository,
     IOptions<ProCursorOptions> options,
     ILogger<AdoWikiMaterializer> logger)
-    : AdoGitProCursorMaterializerBase(connectionFactory, credentialRepository, options, logger)
+#pragma warning disable CS9107 // Parameter is captured into the state of the enclosing type and its value is also passed to the base constructor. The value might be captured by the base class as well.
+    : AdoGitProCursorMaterializerBase(connectionFactory, connectionRepository, options, logger)
+#pragma warning restore CS9107 // Parameter is captured into the state of the enclosing type and its value is also passed to the base constructor. The value might be captured by the base class as well.
 {
     /// <inheritdoc />
     public override ProCursorSourceKind SourceKind => ProCursorSourceKind.AdoWiki;
 
-    protected override void LogMaterializedSource(ILogger logger, Guid sourceId, string branchName, string commitSha, int fileCount)
+    /// <inheritdoc />
+    protected override void LogMaterializedSource(
+        ILogger logger,
+        Guid sourceId,
+        string branchName,
+        string commitSha,
+        int fileCount)
     {
         LogMaterializedWikiSource(logger, sourceId, branchName, commitSha, fileCount);
     }
 
+    /// <inheritdoc />
     protected internal override async Task<string> ResolveRepositoryIdAsync(
         ProCursorKnowledgeSource source,
         CancellationToken ct)
     {
-        var credentials = source.ClientId != Guid.Empty
-            ? await credentialRepository.GetByClientIdAsync(source.ClientId, ct)
-            : null;
+        var credentials = await this.ResolveConnectionCredentialsAsync(source, ct);
 
         var wikis = await this.ListWikisAsync(source, credentials, ct);
         return AdoWikiRepositoryResolver.ResolveRepositoryId(source, wikis);
     }
 
+    /// <summary>
+    ///     Lists all wikis for the given source.
+    /// </summary>
+    /// <param name="source">The ProCursor knowledge source.</param>
+    /// <param name="credentials">The Azure DevOps service principal credentials.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A read-only list of wikis.</returns>
     protected internal virtual async Task<IReadOnlyList<WikiV2>> ListWikisAsync(
         ProCursorKnowledgeSource source,
-        ClientAdoCredentials? credentials,
+        AdoServicePrincipalCredentials? credentials,
         CancellationToken ct)
     {
-        var connection = await connectionFactory.GetConnectionAsync(source.OrganizationUrl, credentials, ct);
+        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
         var wikiClient = connection.GetClient<WikiHttpClient>();
-        var wikis = await wikiClient.GetAllWikisAsync(source.ProjectId, null, ct);
+        var wikis = await wikiClient.GetAllWikisAsync(source.ProviderProjectKey, null, ct);
         return wikis.ToList().AsReadOnly();
     }
 }

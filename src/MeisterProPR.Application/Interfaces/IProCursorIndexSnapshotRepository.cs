@@ -29,10 +29,14 @@ public interface IProCursorIndexSnapshotRepository
         CancellationToken ct = default);
 
     /// <summary>Returns the persisted knowledge chunks belonging to one ready snapshot.</summary>
-    Task<IReadOnlyList<ProCursorKnowledgeChunk>> ListKnowledgeChunksAsync(Guid snapshotId, CancellationToken ct = default);
+    Task<IReadOnlyList<ProCursorKnowledgeChunk>> ListKnowledgeChunksAsync(
+        Guid snapshotId,
+        CancellationToken ct = default);
 
     /// <summary>Lists snapshots for a knowledge source.</summary>
-    Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(Guid knowledgeSourceId, CancellationToken ct = default);
+    Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(
+        Guid knowledgeSourceId,
+        CancellationToken ct = default);
 
     /// <summary>Replaces the persisted chunk set for a snapshot.</summary>
     Task ReplaceKnowledgeChunksAsync(

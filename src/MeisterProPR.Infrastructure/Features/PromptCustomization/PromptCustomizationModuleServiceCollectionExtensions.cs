@@ -19,7 +19,10 @@ public static class PromptCustomizationModuleServiceCollectionExtensions
     /// <summary>
     ///     Registers prompt override persistence and application services.
     /// </summary>
-    public static IServiceCollection AddPromptCustomizationModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
+    public static IServiceCollection AddPromptCustomizationModule(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         if (configuration.HasDatabaseConnectionString())
         {

@@ -58,6 +58,7 @@ public interface IThreadMemoryService
         ReviewResult draftResult,
         Guid? protocolId,
         CancellationToken ct = default);
+
     /// <summary>
     ///     Stores a finding dismissal as an <c>AdminDismissed</c> memory record, generating an embedding
     ///     for the finding message so the memory reconsideration pipeline can suppress similar future findings.

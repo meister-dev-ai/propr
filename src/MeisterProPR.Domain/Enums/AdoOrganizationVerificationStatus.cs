@@ -8,9 +8,28 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum AdoOrganizationVerificationStatus
 {
+    /// <summary>
+    ///     The verification status is unknown.
+    /// </summary>
     Unknown = 0,
+
+    /// <summary>
+    ///     The organization has been verified.
+    /// </summary>
     Verified = 1,
+
+    /// <summary>
+    ///     The organization verification failed due to unauthorized access.
+    /// </summary>
     Unauthorized = 2,
+
+    /// <summary>
+    ///     The organization is unreachable.
+    /// </summary>
     Unreachable = 3,
+
+    /// <summary>
+    ///     The organization verification is stale.
+    /// </summary>
     Stale = 4,
 }

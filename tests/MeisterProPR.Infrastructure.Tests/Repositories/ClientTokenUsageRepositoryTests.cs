@@ -2,14 +2,12 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
-using TheoryAttribute = Xunit.SkippableTheoryAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
@@ -19,9 +17,9 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    private Guid _clientId;
     private MeisterProPRDbContext _dbContext = null!;
     private IClientTokenUsageRepository _repo = null!;
-    private Guid _clientId;
 
     public async Task InitializeAsync()
     {
@@ -34,13 +32,14 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
 
         // Seed a client for FK constraint
         this._clientId = Guid.NewGuid();
-        this._dbContext.Clients.Add(new ClientRecord
-        {
-            Id = this._clientId,
-            DisplayName = "Test Client for Token Usage",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        this._dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = this._clientId,
+                DisplayName = "Test Client for Token Usage",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await this._dbContext.SaveChangesAsync();
 
         this._repo = new ClientTokenUsageRepository(this._dbContext);
@@ -70,8 +69,8 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
         const string modelId = "gpt-4o";
 
-        await this._repo.UpsertAsync(this._clientId, modelId, date, inputTokens: 100, outputTokens: 50, ct: default);
-        await this._repo.UpsertAsync(this._clientId, modelId, date, inputTokens: 200, outputTokens: 75, ct: default);
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default);
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 200, 75, default);
 
         var sample = await this._dbContext.ClientTokenUsageSamples
             .SingleAsync(s => s.ClientId == this._clientId && s.ModelId == modelId && s.Date == date);
@@ -88,8 +87,8 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
         const string model1 = "gpt-5-mini";
         const string model2 = "text-embedding-3-small";
 
-        await this._repo.UpsertAsync(this._clientId, model1, date, inputTokens: 100, outputTokens: 50, ct: default);
-        await this._repo.UpsertAsync(this._clientId, model2, date, inputTokens: 200, outputTokens: 75, ct: default);
+        await this._repo.UpsertAsync(this._clientId, model1, date, 100, 50, default);
+        await this._repo.UpsertAsync(this._clientId, model2, date, 200, 75, default);
 
         var samples = await this._dbContext.ClientTokenUsageSamples
             .Where(s => s.ClientId == this._clientId && s.Date == date)

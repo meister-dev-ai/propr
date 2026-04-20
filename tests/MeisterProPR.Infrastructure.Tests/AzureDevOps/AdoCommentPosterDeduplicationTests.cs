@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AzureDevOps;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -275,7 +274,10 @@ public class AdoCommentPosterDeduplicationTests
                 42,
                 new List<PrThreadComment>
                 {
-                    new("Bot", "WARNING: Validate the configuration value before using it as a connection string.", BotId),
+                    new(
+                        "Bot",
+                        "WARNING: Validate the configuration value before using it as a connection string.",
+                        BotId),
                 }.AsReadOnly()),
         };
 
@@ -301,7 +303,10 @@ public class AdoCommentPosterDeduplicationTests
                 42,
                 new List<PrThreadComment>
                 {
-                    new("Bot", "WARNING: Validate the configuration value before using it as a connection string.", BotId),
+                    new(
+                        "Bot",
+                        "WARNING: Validate the configuration value before using it as a connection string.",
+                        BotId),
                 }.AsReadOnly()),
         };
 

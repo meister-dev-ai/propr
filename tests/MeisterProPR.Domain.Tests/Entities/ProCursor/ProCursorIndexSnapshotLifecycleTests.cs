@@ -7,8 +7,10 @@ namespace MeisterProPR.Domain.Tests.Entities.ProCursor;
 
 public sealed class ProCursorIndexSnapshotLifecycleTests
 {
-    private static ProCursorIndexSnapshot CreateSnapshot() =>
-        new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "abc123", "full");
+    private static ProCursorIndexSnapshot CreateSnapshot()
+    {
+        return new ProCursorIndexSnapshot(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "abc123", "full");
+    }
 
     [Fact]
     public void Constructor_DefaultsStatusToBuilding()

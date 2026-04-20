@@ -18,8 +18,10 @@ public class ReviewPromptsTests
         return new ChangedFile(path, ChangeType.Edit, content, diff);
     }
 
-    private static IReadOnlyList<ChangedFileSummary> AsSummaries(params ChangedFile[] files) =>
-        files.Select(f => new ChangedFileSummary(f.Path, f.ChangeType)).ToList().AsReadOnly();
+    private static IReadOnlyList<ChangedFileSummary> AsSummaries(params ChangedFile[] files)
+    {
+        return files.Select(f => new ChangedFileSummary(f.Path, f.ChangeType)).ToList().AsReadOnly();
+    }
 
     private static PrCommentThread CreateThread(string? filePath)
     {
@@ -75,7 +77,15 @@ public class ReviewPromptsTests
         // Only fooThread and prThread should be in the message (barThread was pre-filtered out)
         var filteredThreads = new List<PrCommentThread> { fooThread, prThread }.AsReadOnly();
 
-        var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, filteredThreads, "My PR", "feature/x", "main");
+        var msg = ReviewPrompts.BuildPerFileUserMessage(
+            file,
+            1,
+            1,
+            allFiles,
+            filteredThreads,
+            "My PR",
+            "feature/x",
+            "main");
 
         Assert.Contains("src/Foo.cs", msg);
         Assert.Contains("(PR-level)", msg);
@@ -141,7 +151,7 @@ public class ReviewPromptsTests
     [Fact]
     public void BuildPerFileUserMessage_DoesNotContainFullContentBlock()
     {
-        var file = CreateFile("src/Foo.cs", content: "UNIQUE_FILE_CONTENT_MARKER", diff: "+code");
+        var file = CreateFile("src/Foo.cs", "UNIQUE_FILE_CONTENT_MARKER");
         var allFiles = AsSummaries(file);
 
         var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main");
@@ -154,7 +164,7 @@ public class ReviewPromptsTests
     [Fact]
     public void BuildPerFileUserMessage_ContainsDiff()
     {
-        var file = CreateFile("src/Foo.cs", content: "code", diff: "+UNIQUE_DIFF_MARKER");
+        var file = CreateFile("src/Foo.cs", "code", "+UNIQUE_DIFF_MARKER");
         var allFiles = AsSummaries(file);
 
         var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main");
@@ -273,7 +283,10 @@ public class ReviewPromptsTests
     public void AgenticLoopGuidance_ContainsConditionalLanguageProhibition()
     {
         // The CERTAINTY GATE section prohibits speculative language — spot-check one canonical phrase
-        Assert.Contains("Omission is always preferable to speculation", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Omission is always preferable to speculation",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // T012(b) — US2: AgenticLoopGuidance instructs get_file_tree for config files
@@ -348,7 +361,7 @@ public class ReviewPromptsTests
     [Fact]
     public void BuildSynthesisSystemPrompt_JsonMode_DescribesJsonOutput()
     {
-        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null, jsonMode: true);
+        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null, true);
 
         Assert.Contains("Do not call any tools", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("plain text", prompt, StringComparison.OrdinalIgnoreCase);
@@ -360,7 +373,7 @@ public class ReviewPromptsTests
     [Fact]
     public void BuildSynthesisSystemPrompt_PlainTextMode_DoesNotDescribeJson()
     {
-        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null, jsonMode: false);
+        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null);
 
         Assert.Contains("plain text", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cross_cutting_concerns", prompt);
@@ -373,7 +386,7 @@ public class ReviewPromptsTests
         var overrides = new Dictionary<string, string> { ["SynthesisSystemPrompt"] = "Custom synthesis override" };
         var context = new ReviewSystemContext(null, [], null) { PromptOverrides = overrides };
 
-        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(context, jsonMode: false);
+        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(context);
 
         Assert.Equal("Custom synthesis override", prompt);
     }

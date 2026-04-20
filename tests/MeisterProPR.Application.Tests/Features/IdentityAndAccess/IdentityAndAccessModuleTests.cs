@@ -56,10 +56,11 @@ public sealed class IdentityAndAccessModuleTests
     private static IConfiguration BuildConfiguration(string secret)
     {
         return new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MEISTER_JWT_SECRET"] = secret,
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = secret,
+                })
             .Build();
     }
 }

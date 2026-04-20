@@ -19,23 +19,24 @@ public sealed class ThreadMemoryEmbedderTests
 {
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
 
-    private static AiConnectionDto ValidEmbeddingConnection(string? activeModel = "text-embedding-3-small") =>
-        new(
-            Id: Guid.NewGuid(),
-            ClientId: ClientId,
-            DisplayName: "Test Embedding",
-            EndpointUrl: "https://test.openai.azure.com",
-            Models: ["text-embedding-3-small", "fallback-model"],
-            IsActive: true,
-            ActiveModel: activeModel,
-            CreatedAt: DateTimeOffset.UtcNow,
-            ModelCategory: AiConnectionModelCategory.Embedding,
-            ModelCapabilities:
+    private static AiConnectionDto ValidEmbeddingConnection(string? activeModel = "text-embedding-3-small")
+    {
+        return new AiConnectionDto(
+            Guid.NewGuid(),
+            ClientId,
+            "Test Embedding",
+            "https://test.openai.azure.com",
+            ["text-embedding-3-small", "fallback-model"],
+            true,
+            activeModel,
+            DateTimeOffset.UtcNow,
+            AiConnectionModelCategory.Embedding,
             [
                 new AiConnectionModelCapabilityDto("text-embedding-3-small", "cl100k_base", 8192, 1536),
                 new AiConnectionModelCapabilityDto("fallback-model", "cl100k_base", 8192, 1536),
             ],
-            ApiKey: "test-key");
+            "test-key");
+    }
 
     private static ThreadMemoryEmbedder BuildEmbedder(
         IAiConnectionRepository? aiConnRepo = null,
@@ -45,17 +46,17 @@ public sealed class ThreadMemoryEmbedderTests
         var repository = aiConnRepo ?? Substitute.For<IAiConnectionRepository>();
         var opts = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions());
         return new ThreadMemoryEmbedder(
-            aiConnectionRepository: repository,
-            embeddingGeneratorFactory: factory ?? Substitute.For<IAiEmbeddingGeneratorFactory>(),
-            embeddingDeploymentResolver: new EmbeddingDeploymentResolver(repository),
-            options: opts,
-            chatClient: chatClient ?? Substitute.For<IChatClient>());
+            repository,
+            factory ?? Substitute.For<IAiEmbeddingGeneratorFactory>(),
+            new EmbeddingDeploymentResolver(repository),
+            opts,
+            chatClient ?? Substitute.For<IChatClient>());
     }
 
     [Fact]
     public async Task GenerateEmbeddingAsync_NormalCase_ReturnsFloatArrayFromGenerator()
     {
-        var expectedFloats = new float[] { 0.1f, 0.2f, 0.3f };
+        var expectedFloats = new[] { 0.1f, 0.2f, 0.3f };
 
         var aiConnRepo = Substitute.For<IAiConnectionRepository>();
         aiConnRepo.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
@@ -101,10 +102,10 @@ public sealed class ThreadMemoryEmbedderTests
         var aiConnRepo = Substitute.For<IAiConnectionRepository>();
         // ActiveModel is null — should fall back to Models[0]
         aiConnRepo.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(ValidEmbeddingConnection(activeModel: null));
+            .Returns(ValidEmbeddingConnection(null));
 
         var generator = Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>();
-        var embedding = new Embedding<float>(new float[] { 0.5f });
+        var embedding = new Embedding<float>(new[] { 0.5f });
         generator.GenerateAsync(
                 Arg.Any<IEnumerable<string>>(),
                 Arg.Any<EmbeddingGenerationOptions?>(),
@@ -123,18 +124,22 @@ public sealed class ThreadMemoryEmbedderTests
 
         await embedder.GenerateEmbeddingAsync("some text", ClientId);
 
-        factory.Received(1).CreateGenerator(
-            Arg.Any<string>(),
-            Arg.Is<string>(m => m == firstModel),
-            Arg.Any<string?>(),
-            Arg.Any<int>());
+        factory.Received(1)
+            .CreateGenerator(
+                Arg.Any<string>(),
+                Arg.Is<string>(m => m == firstModel),
+                Arg.Any<string?>(),
+                Arg.Any<int>());
     }
 
     [Fact]
     public async Task GenerateResolutionSummaryAsync_WhenChatClientThrows_ReturnsFallbackSummaryWithoutThrowing()
     {
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("AI endpoint unreachable"));
 
         var embedder = BuildEmbedder(chatClient: chatClient);
@@ -149,7 +154,10 @@ public sealed class ThreadMemoryEmbedderTests
     public async Task GenerateResolutionSummaryAsync_WhenChatClientThrows_ReturnsFallbackText()
     {
         var chatClient = Substitute.For<IChatClient>();
-        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("AI endpoint unreachable"));
 
         var embedder = BuildEmbedder(chatClient: chatClient);
@@ -196,7 +204,7 @@ public sealed class ThreadMemoryEmbedderTests
             .Returns(new ChatResponse([message]));
 
         var embedder = BuildEmbedder(chatClient: chatClient);
-        await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", changeExcerpt: null, commentHistory: "Alice: looks fine", clientId: ClientId);
+        await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", null, "Alice: looks fine", ClientId);
 
         Assert.NotNull(capturedMessages);
         var userContent = capturedMessages!.First(m => m.Role == ChatRole.User).Text;

@@ -4,7 +4,6 @@
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -36,9 +35,9 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
     ];
 
     private MeisterProPRDbContext _db = null!;
-    private EfProtocolRecorder _recorder = null!;
     private Guid _jobId;
     private Guid _protocolId;
+    private EfProtocolRecorder _recorder = null!;
 
     public async Task InitializeAsync()
     {
@@ -170,13 +169,18 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             null);
 
         var storedEvents = await this._db.ProtocolEvents
-            .Where(e => e.ProtocolId == this._protocolId && (e.Name == "dedup_summary" || e.Name == "dedup_degraded_mode"))
+            .Where(e => e.ProtocolId == this._protocolId &&
+                        (e.Name == "dedup_summary" || e.Name == "dedup_degraded_mode"))
             .OrderBy(e => e.Name)
             .ToListAsync();
 
         Assert.Equal(2, storedEvents.Count);
-        Assert.Contains("\"suppressedCount\":2", storedEvents.First(e => e.Name == "dedup_summary").InputTextSample ?? string.Empty);
-        Assert.Contains("thread_memory_embedding", storedEvents.First(e => e.Name == "dedup_degraded_mode").InputTextSample ?? string.Empty);
+        Assert.Contains(
+            "\"suppressedCount\":2",
+            storedEvents.First(e => e.Name == "dedup_summary").InputTextSample ?? string.Empty);
+        Assert.Contains(
+            "thread_memory_embedding",
+            storedEvents.First(e => e.Name == "dedup_degraded_mode").InputTextSample ?? string.Empty);
     }
 
     [Fact]

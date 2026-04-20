@@ -3,11 +3,12 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Auth;
 using Microsoft.AspNetCore.Hosting;
@@ -40,7 +41,7 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.OwnedClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
 
@@ -60,7 +61,7 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.OwnedClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
 
@@ -81,7 +82,7 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.UnownedClientId}/ai-connections");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
 
@@ -96,7 +97,7 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.OwnedClientId}/prompt-overrides");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
 
@@ -111,7 +112,7 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/clients/{factory.UnownedClientId}/prompt-overrides");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await http.SendAsync(request);
 
@@ -141,11 +142,12 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim("sub", userId.ToString()),
-                    new Claim("global_role", "User"),
-                }),
+                Subject = new ClaimsIdentity(
+                    new[]
+                    {
+                        new Claim("sub", userId.ToString()),
+                        new Claim("global_role", "User"),
+                    }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
                 Issuer = "meisterpropr",
@@ -170,47 +172,43 @@ public sealed class AuthMiddlewareClientRolesTests(AuthMiddlewareClientRolesTest
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 // IUserRepository: GetUserClientRolesAsync returns {ownedClientId: ClientAdministrator}
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetUserClientRolesAsync(testUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { ownedClientId, ClientRole.ClientAdministrator },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { ownedClientId, ClientRole.ClientAdministrator },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != testUserId),
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 services.AddSingleton(userRepo);
 
                 // IAiConnectionRepository: return empty list (we just test auth, not data)
                 var aiRepo = Substitute.For<IAiConnectionRepository>();
                 aiRepo.GetByClientAsync(ownedClientId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.AiConnectionDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<AiConnectionDto>>([]));
                 aiRepo.GetByClientAsync(
                         Arg.Is<Guid>(id => id != ownedClientId),
                         Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.AiConnectionDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<AiConnectionDto>>([]));
                 services.AddSingleton(aiRepo);
 
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<Application.DTOs.CrawlConfigurationDto>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
-
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredRepo);
 
                 var promptOverrideService = Substitute.For<IPromptOverrideService>();
                 promptOverrideService.ListByClientAsync(ownedClientId, Arg.Any<CancellationToken>())

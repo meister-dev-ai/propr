@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.Options;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
@@ -17,7 +17,9 @@ public sealed class AgentAiCommentResolutionCoreTests
 {
     private const string ModelId = "gpt-4o";
 
-    private static PrCommentThread BuildThread(int threadId, params (string author, string content, Guid? authorId)[] comments)
+    private static PrCommentThread BuildThread(
+        int threadId,
+        params (string author, string content, Guid? authorId)[] comments)
     {
         var prComments = comments
             .Select(c => new PrThreadComment(c.author, c.content, c.authorId))
@@ -160,7 +162,8 @@ public sealed class AgentAiCommentResolutionCoreTests
 
         await chatClient.Received(1)
             .GetResponseAsync(
-                Arg.Is<IList<ChatMessage>>(msgs => msgs.Any(m => m.Text != null && m.Text.Contains("Missing null check"))),
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Text != null && m.Text.Contains("Missing null check"))),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
     }
@@ -179,7 +182,8 @@ public sealed class AgentAiCommentResolutionCoreTests
 
         await chatClient.Received(1)
             .GetResponseAsync(
-                Arg.Is<IList<ChatMessage>>(msgs => msgs.Any(m => m.Text != null && m.Text.Contains("Why StringBuilder"))),
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Text != null && m.Text.Contains("Why StringBuilder"))),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
     }
@@ -191,24 +195,33 @@ public sealed class AgentAiCommentResolutionCoreTests
         var chatClient = BuildChatClient("""{"resolved": true, "replyText": null}""");
         var sut = new AgentAiCommentResolutionCore();
 
-        var comments = new List<PrThreadComment> { new("Bot", "Null check missing.", null) }.AsReadOnly();
+        var comments = new List<PrThreadComment> { new("Bot", "Null check missing.") }.AsReadOnly();
         var thread = new PrCommentThread(1, "/src/Target.cs", 5, comments);
 
-        var targetFile = new ChangedFile("/src/Target.cs", Domain.Enums.ChangeType.Edit, "", "diff for target");
-        var otherFile = new ChangedFile("/src/Other.cs", Domain.Enums.ChangeType.Edit, "", "diff for other");
+        var targetFile = new ChangedFile("/src/Target.cs", ChangeType.Edit, "", "diff for target");
+        var otherFile = new ChangedFile("/src/Other.cs", ChangeType.Edit, "", "diff for other");
         var pr = new PullRequest(
-            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 2,
-            "Fix", null, "feature/fix", "main",
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            2,
+            "Fix",
+            null,
+            "feature/fix",
+            "main",
             new List<ChangedFile> { targetFile, otherFile }.AsReadOnly());
 
         await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
-        await chatClient.Received(1).GetResponseAsync(
-            Arg.Is<IList<ChatMessage>>(msgs =>
-                msgs.Any(m => m.Text != null && m.Text.Contains("diff for target")) &&
-                msgs.All(m => m.Text == null || !m.Text.Contains("diff for other"))),
-            Arg.Any<ChatOptions?>(),
-            Arg.Any<CancellationToken>());
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Text != null && m.Text.Contains("diff for target")) &&
+                    msgs.All(m => m.Text == null || !m.Text.Contains("diff for other"))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -217,23 +230,32 @@ public sealed class AgentAiCommentResolutionCoreTests
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
         var sut = new AgentAiCommentResolutionCore();
 
-        var comments = new List<PrThreadComment> { new("Bot", "Issue here.", null) }.AsReadOnly();
+        var comments = new List<PrThreadComment> { new("Bot", "Issue here.") }.AsReadOnly();
         var thread = new PrCommentThread(1, "/src/Missing.cs", 1, comments);
 
-        var otherFile = new ChangedFile("/src/Other.cs", Domain.Enums.ChangeType.Edit, "", "diff for other");
+        var otherFile = new ChangedFile("/src/Other.cs", ChangeType.Edit, "", "diff for other");
         var pr = new PullRequest(
-            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 2,
-            "Fix", null, "feature/fix", "main",
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            2,
+            "Fix",
+            null,
+            "feature/fix",
+            "main",
             new List<ChangedFile> { otherFile }.AsReadOnly());
 
         await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
-        await chatClient.Received(1).GetResponseAsync(
-            Arg.Is<IList<ChatMessage>>(msgs =>
-                msgs.Any(m => m.Text != null && m.Text.Contains("not changed in the latest iteration")) &&
-                msgs.All(m => m.Text == null || !m.Text.Contains("diff for other"))),
-            Arg.Any<ChatOptions?>(),
-            Arg.Any<CancellationToken>());
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Text != null && m.Text.Contains("not changed in the latest iteration")) &&
+                    msgs.All(m => m.Text == null || !m.Text.Contains("diff for other"))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -243,25 +265,34 @@ public sealed class AgentAiCommentResolutionCoreTests
         var sut = new AgentAiCommentResolutionCore();
 
         // PR-level thread: FilePath is null
-        var comments = new List<PrThreadComment> { new("Bot", "Overall design concern.", null) }.AsReadOnly();
+        var comments = new List<PrThreadComment> { new("Bot", "Overall design concern.") }.AsReadOnly();
         var thread = new PrCommentThread(1, null, null, comments);
 
-        var fileA = new ChangedFile("/src/A.cs", Domain.Enums.ChangeType.Edit, "", "big diff A");
-        var fileB = new ChangedFile("/src/B.cs", Domain.Enums.ChangeType.Add, "", "big diff B");
+        var fileA = new ChangedFile("/src/A.cs", ChangeType.Edit, "", "big diff A");
+        var fileB = new ChangedFile("/src/B.cs", ChangeType.Add, "", "big diff B");
         var pr = new PullRequest(
-            "https://dev.azure.com/org", "proj", "repo", "repo", 1, 2,
-            "Fix", null, "feature/fix", "main",
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            2,
+            "Fix",
+            null,
+            "feature/fix",
+            "main",
             new List<ChangedFile> { fileA, fileB }.AsReadOnly());
 
         await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
 
-        await chatClient.Received(1).GetResponseAsync(
-            Arg.Is<IList<ChatMessage>>(msgs =>
-                msgs.Any(m => m.Text != null && m.Text.Contains("/src/A.cs")) &&
-                msgs.Any(m => m.Text != null && m.Text.Contains("/src/B.cs")) &&
-                msgs.All(m => m.Text == null || !m.Text.Contains("big diff A")) &&
-                msgs.All(m => m.Text == null || !m.Text.Contains("big diff B"))),
-            Arg.Any<ChatOptions?>(),
-            Arg.Any<CancellationToken>());
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Text != null && m.Text.Contains("/src/A.cs")) &&
+                    msgs.Any(m => m.Text != null && m.Text.Contains("/src/B.cs")) &&
+                    msgs.All(m => m.Text == null || !m.Text.Contains("big diff A")) &&
+                    msgs.All(m => m.Text == null || !m.Text.Contains("big diff B"))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 }

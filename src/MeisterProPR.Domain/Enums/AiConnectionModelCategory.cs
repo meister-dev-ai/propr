@@ -26,6 +26,9 @@ public enum AiConnectionModelCategory
     /// <summary>Virtual category for out-of-loop memory reconsideration AI calls (not a real connection category).</summary>
     MemoryReconsideration = 4,
 
-    /// <summary>Default category for connections with no explicit category (e.g., a basic AI connection). Used for token breakdown reporting.</summary>
+    /// <summary>
+    ///     Default category for connections with no explicit category (e.g., a basic AI connection). Used for token
+    ///     breakdown reporting.
+    /// </summary>
     Default = 5,
 }

@@ -29,11 +29,12 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
     {
         var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
         var refreshInvoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            refreshInvoked.TrySetResult();
-            return Task.FromResult(4);
-        });
+        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                refreshInvoked.TrySetResult();
+                return Task.FromResult(4);
+            });
 
         var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
         retentionService.PurgeExpiredAsync(Arg.Any<CancellationToken>())

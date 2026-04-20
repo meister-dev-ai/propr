@@ -575,14 +575,14 @@ const prReviewLink = computed(() => {
     if (!protocols.value.length || !routeClientId.value) return null
     const p = protocols.value[0]
     // Some protocols might not have full PR info yet if it's a very fresh/failed job
-    if (!p.organizationUrl || !p.projectId || !p.repositoryId || !p.pullRequestId) return null
+    if (!p.providerScopePath || !p.providerProjectKey || !p.repositoryId || !p.pullRequestId) return null
     
     return {
         name: 'pr-review',
         query: {
             clientId: routeClientId.value,
-            orgUrl: p.organizationUrl,
-            project: p.projectId,
+            providerScopePath: p.providerScopePath,
+            providerProjectKey: p.providerProjectKey,
             repositoryId: p.repositoryId,
             pullRequestId: String(p.pullRequestId),
         },

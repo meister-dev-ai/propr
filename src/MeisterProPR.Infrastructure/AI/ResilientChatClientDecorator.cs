@@ -51,18 +51,27 @@ public sealed partial class ResilientChatClientDecorator(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
-        => inner.GetStreamingResponseAsync(messages, options, cancellationToken);
+    {
+        return inner.GetStreamingResponseAsync(messages, options, cancellationToken);
+    }
 
     /// <inheritdoc />
     public object? GetService(Type serviceType, object? key = null)
-        => inner.GetService(serviceType, key);
+    {
+        return inner.GetService(serviceType, key);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        inner.Dispose();
+    }
 
     /// <inheritdoc />
     public TService? GetService<TService>(object? key = null) where TService : class
-        => inner.GetService<TService>(key);
-
-    /// <inheritdoc />
-    public void Dispose() => inner.Dispose();
+    {
+        return inner.GetService<TService>(key);
+    }
 
     [LoggerMessage(
         Level = LogLevel.Information,

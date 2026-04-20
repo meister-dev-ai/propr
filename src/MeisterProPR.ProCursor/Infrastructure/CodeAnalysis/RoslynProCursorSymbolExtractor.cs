@@ -14,8 +14,8 @@ namespace MeisterProPR.Infrastructure.CodeAnalysis.ProCursor;
 /// <summary>
 ///     Roslyn-backed symbol extractor for C# ProCursor snapshots.
 /// </summary>
-public sealed class RoslynProCursorSymbolExtractor(
-    ILogger<RoslynProCursorSymbolExtractor> logger) : IProCursorSymbolExtractor
+public sealed class RoslynProCursorSymbolExtractor(ILogger<RoslynProCursorSymbolExtractor> logger)
+    : IProCursorSymbolExtractor
 {
     private static readonly IReadOnlyList<MetadataReference> MetadataReferences = BuildMetadataReferences();
 
@@ -65,7 +65,7 @@ public sealed class RoslynProCursorSymbolExtractor(
         }
 
         var compilation = CSharpCompilation.Create(
-            assemblyName: $"ProCursor_{snapshotId:N}",
+            $"ProCursor_{snapshotId:N}",
             syntaxTrees,
             MetadataReferences,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -82,7 +82,14 @@ public sealed class RoslynProCursorSymbolExtractor(
             var root = await syntaxTree.GetRootAsync(ct);
             var repositoryPath = repositoryPathByTree[syntaxTree];
 
-            this.CollectDeclaredSymbols(snapshotId, semanticModel, root, repositoryPath, symbolsByKey, keyBySymbol, edgesByKey);
+            this.CollectDeclaredSymbols(
+                snapshotId,
+                semanticModel,
+                root,
+                repositoryPath,
+                symbolsByKey,
+                keyBySymbol,
+                edgesByKey);
         }
 
         foreach (var syntaxTree in syntaxTrees)
@@ -105,8 +112,7 @@ public sealed class RoslynProCursorSymbolExtractor(
         return new ProCursorSymbolExtractionResult(
             symbolsByKey.Values.ToList().AsReadOnly(),
             edgesByKey.Values.ToList().AsReadOnly(),
-            true,
-            null);
+            true);
     }
 
     private void CollectDeclaredSymbols(
@@ -169,10 +175,18 @@ public sealed class RoslynProCursorSymbolExtractor(
                 continue;
             }
 
-            var relationKind = toSymbol!.TypeKind == TypeKind.Interface && typeDeclaration.Kind() != SyntaxKind.InterfaceDeclaration
+            var relationKind = toSymbol!.TypeKind == TypeKind.Interface &&
+                               typeDeclaration.Kind() != SyntaxKind.InterfaceDeclaration
                 ? "implementation"
                 : "inheritance";
-            AddEdge(snapshotId, fromKey, toKey, relationKind, repositoryPath, baseType.GetLocation().GetLineSpan(), edgesByKey);
+            AddEdge(
+                snapshotId,
+                fromKey,
+                toKey,
+                relationKind,
+                repositoryPath,
+                baseType.GetLocation().GetLineSpan(),
+                edgesByKey);
         }
 
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
@@ -185,7 +199,14 @@ public sealed class RoslynProCursorSymbolExtractor(
                 continue;
             }
 
-            AddEdge(snapshotId, fromKey, toKey, "call", repositoryPath, invocation.GetLocation().GetLineSpan(), edgesByKey);
+            AddEdge(
+                snapshotId,
+                fromKey,
+                toKey,
+                "call",
+                repositoryPath,
+                invocation.GetLocation().GetLineSpan(),
+                edgesByKey);
         }
 
         foreach (var referenceNode in root.DescendantNodes().Where(IsReferenceCandidate))
@@ -204,7 +225,14 @@ public sealed class RoslynProCursorSymbolExtractor(
                 continue;
             }
 
-            AddEdge(snapshotId, fromKey, toKey, "reference", repositoryPath, referenceNode.GetLocation().GetLineSpan(), edgesByKey);
+            AddEdge(
+                snapshotId,
+                fromKey,
+                toKey,
+                "reference",
+                repositoryPath,
+                referenceNode.GetLocation().GetLineSpan(),
+                edgesByKey);
         }
     }
 
@@ -322,7 +350,8 @@ public sealed class RoslynProCursorSymbolExtractor(
     {
         return node switch
         {
-            BaseNamespaceDeclarationSyntax namespaceDeclaration => semanticModel.GetDeclaredSymbol(namespaceDeclaration),
+            BaseNamespaceDeclarationSyntax namespaceDeclaration =>
+                semanticModel.GetDeclaredSymbol(namespaceDeclaration),
             BaseTypeDeclarationSyntax typeDeclaration => semanticModel.GetDeclaredSymbol(typeDeclaration),
             DelegateDeclarationSyntax delegateDeclaration => semanticModel.GetDeclaredSymbol(delegateDeclaration),
             MethodDeclarationSyntax methodDeclaration => semanticModel.GetDeclaredSymbol(methodDeclaration),
@@ -331,7 +360,8 @@ public sealed class RoslynProCursorSymbolExtractor(
             PropertyDeclarationSyntax propertyDeclaration => semanticModel.GetDeclaredSymbol(propertyDeclaration),
             EventDeclarationSyntax eventDeclaration => semanticModel.GetDeclaredSymbol(eventDeclaration),
             IndexerDeclarationSyntax indexerDeclaration => semanticModel.GetDeclaredSymbol(indexerDeclaration),
-            VariableDeclaratorSyntax variableDeclarator when variableDeclarator.Parent?.Parent is FieldDeclarationSyntax or EventFieldDeclarationSyntax
+            VariableDeclaratorSyntax variableDeclarator when variableDeclarator.Parent?.Parent is FieldDeclarationSyntax
+                    or EventFieldDeclarationSyntax
                 => semanticModel.GetDeclaredSymbol(variableDeclarator),
             _ => null,
         };
@@ -358,7 +388,9 @@ public sealed class RoslynProCursorSymbolExtractor(
                 supportedSymbol = symbol;
                 symbolKind = "type";
                 return true;
-            case IMethodSymbol methodSymbol when methodSymbol.MethodKind is MethodKind.Ordinary or MethodKind.Constructor or MethodKind.StaticConstructor:
+            case IMethodSymbol methodSymbol
+                when methodSymbol.MethodKind is MethodKind.Ordinary or MethodKind.Constructor
+                    or MethodKind.StaticConstructor:
                 supportedSymbol = methodSymbol;
                 symbolKind = "method";
                 return true;
@@ -389,7 +421,10 @@ public sealed class RoslynProCursorSymbolExtractor(
         };
     }
 
-    private static string NormalizeRepositoryPath(string path) => path.TrimStart('/').Replace('\\', '/');
+    private static string NormalizeRepositoryPath(string path)
+    {
+        return path.TrimStart('/').Replace('\\', '/');
+    }
 
     private static string BuildSymbolKey(ISymbol symbol)
     {
@@ -401,7 +436,8 @@ public sealed class RoslynProCursorSymbolExtractor(
     {
         return symbol switch
         {
-            IMethodSymbol methodSymbol when methodSymbol.MethodKind is MethodKind.Constructor or MethodKind.StaticConstructor
+            IMethodSymbol methodSymbol when methodSymbol.MethodKind is MethodKind.Constructor
+                    or MethodKind.StaticConstructor
                 => methodSymbol.ContainingType.Name,
             _ => symbol.Name,
         };
@@ -409,7 +445,10 @@ public sealed class RoslynProCursorSymbolExtractor(
 
     private static string? TryGetContainingSymbolKey(ISymbol symbol)
     {
-        if (symbol.ContainingSymbol is null || !TryGetSupportedSymbol(symbol.ContainingSymbol, out var containingSymbol, out _))
+        if (symbol.ContainingSymbol is null || !TryGetSupportedSymbol(
+                symbol.ContainingSymbol,
+                out var containingSymbol,
+                out _))
         {
             return null;
         }
@@ -432,8 +471,9 @@ public sealed class RoslynProCursorSymbolExtractor(
 
     private static IReadOnlyList<MetadataReference> BuildMetadataReferences()
     {
-        var trustedPlatformAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?.Split(Path.PathSeparator)
-                                       ?? [];
+        var trustedPlatformAssemblies =
+            (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?.Split(Path.PathSeparator)
+            ?? [];
 
         return trustedPlatformAssemblies
             .Where(path => !string.IsNullOrWhiteSpace(path))

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Immutable;
+using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
@@ -28,9 +29,39 @@ public sealed partial class FileByFileReviewOrchestrator(
     IAiChatClientFactory? aiClientFactory = null,
     IThreadMemoryService? memoryService = null) : IFileByFileReviewOrchestrator
 {
+    // ── Post-processing filters (feature 023) ────────────────────────────────────
+
+    /// <summary>
+    ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
+    ///     A comment containing any of these is speculative and must be discarded.
+    /// </summary>
+    private static readonly ImmutableArray<string> HedgePhrases =
+    [
+        "if your ", "if the file", "if [", "please verify", "validate that",
+        "consider whether", "this may be", "this could be", "you may want to",
+        "worth checking", "it appears", "it seems", "i cannot confirm",
+        "unclear whether", "worth verifying", "if applicable",
+    ];
+
+    /// <summary>
+    ///     Vague action phrases applied only to <see cref="CommentSeverity.Suggestion" /> entries.
+    ///     A suggestion containing any of these does not name a specific, actionable alternative.
+    /// </summary>
+    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
+    [
+        "consider refactoring", "consider adding", "you could also", "you might also",
+        "you might want to", "it would be worth", "would also be good",
+        "could be strengthened", "could be made", "could also verify",
+    ];
+
     private readonly AiReviewOptions _opts = options.Value;
 
-    public async Task<ReviewResult> ReviewAsync(ReviewJob job, PullRequest pr, ReviewSystemContext baseContext, CancellationToken ct, IChatClient? overrideClient = null)
+    public async Task<ReviewResult> ReviewAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        CancellationToken ct,
+        IChatClient? overrideClient = null)
     {
         var effectiveClient = overrideClient ?? chatClient
             ?? throw new InvalidOperationException("No chat client available for file review orchestration.");
@@ -63,10 +94,13 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
 
         // Priority ordering: largest content first; deleted/binary files last; stable secondary sort by path.
-        filesToReview = [.. filesToReview
-            .OrderBy(f => f.IsBinary || f.ChangeType == MeisterProPR.Domain.Enums.ChangeType.Delete ? 1 : 0)
-            .ThenByDescending(f => (f.FullContent?.Length ?? 0) + (f.UnifiedDiff?.Length ?? 0))
-            .ThenBy(f => f.Path)];
+        filesToReview =
+        [
+            .. filesToReview
+                .OrderBy(f => f.IsBinary || f.ChangeType == ChangeType.Delete ? 1 : 0)
+                .ThenByDescending(f => (f.FullContent?.Length ?? 0) + (f.UnifiedDiff?.Length ?? 0))
+                .ThenBy(f => f.Path),
+        ];
 
         var exceptions = new List<Exception>();
 
@@ -87,7 +121,16 @@ public sealed partial class FileByFileReviewOrchestrator(
                 {
                     var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
                     var existingResult = existingResults.GetValueOrDefault(file.Path);
-                    await this.ReviewSingleFileAsync(job, pr, file, fileIndex, allChangedFiles.Count, baseContext, existingResult, effectiveClient, ct);
+                    await this.ReviewSingleFileAsync(
+                        job,
+                        pr,
+                        file,
+                        fileIndex,
+                        allChangedFiles.Count,
+                        baseContext,
+                        existingResult,
+                        effectiveClient,
+                        ct);
                 }
                 catch (Exception ex)
                 {
@@ -158,7 +201,12 @@ public sealed partial class FileByFileReviewOrchestrator(
         Guid? protocolId = null;
         try
         {
-            protocolId = await protocolRecorder.BeginAsync(job.Id, job.RetryCount + 1, file.Path, fileResult.Id, ct: ct);
+            protocolId = await protocolRecorder.BeginAsync(
+                job.Id,
+                job.RetryCount + 1,
+                file.Path,
+                fileResult.Id,
+                ct: ct);
         }
         catch (Exception ex)
         {
@@ -226,8 +274,13 @@ public sealed partial class FileByFileReviewOrchestrator(
         try
         {
             protocolId = await protocolRecorder.BeginAsync(
-                job.Id, job.RetryCount + 1, file.Path, fileResult.Id,
-                connectionCategory: tierCategory, modelId: tierDto?.ActiveModel, ct: ct);
+                job.Id,
+                job.RetryCount + 1,
+                file.Path,
+                fileResult.Id,
+                tierCategory,
+                tierDto?.ActiveModel,
+                ct);
         }
         catch (Exception ex)
         {
@@ -391,7 +444,12 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
     }
 
-    private async Task<ReviewResult> SynthesizeResultsAsync(ReviewJob job, PullRequest pr, ReviewSystemContext baseContext, IChatClient effectiveClient, CancellationToken ct)
+    private async Task<ReviewResult> SynthesizeResultsAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        IChatClient effectiveClient,
+        CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
         var allResults = jobWithResults!.FileReviewResults;
@@ -416,7 +474,10 @@ public sealed partial class FileByFileReviewOrchestrator(
         AiConnectionDto? synthTierDto = null;
         if (aiConnectionRepository is not null && aiClientFactory is not null)
         {
-            synthTierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, ct);
+            synthTierDto = await aiConnectionRepository.GetForTierAsync(
+                job.ClientId,
+                AiConnectionModelCategory.HighEffort,
+                ct);
             if (synthTierDto is not null)
             {
                 effectiveClient = aiClientFactory.CreateClient(synthTierDto.EndpointUrl, synthTierDto.ApiKey);
@@ -424,10 +485,10 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
 
         baseContext.ModelId = synthTierDto?.ActiveModel
-            ?? synthTierDto?.Models.FirstOrDefault()
-            ?? baseContext.ModelId
-            ?? job.AiModel
-            ?? this._opts.ModelId;
+                              ?? synthTierDto?.Models.FirstOrDefault()
+                              ?? baseContext.ModelId
+                              ?? job.AiModel
+                              ?? this._opts.ModelId;
 
         LogSynthesisStarted(logger, job.Id);
 
@@ -435,8 +496,13 @@ public sealed partial class FileByFileReviewOrchestrator(
         try
         {
             protocolId = await protocolRecorder.BeginAsync(
-                job.Id, job.RetryCount + 1, "synthesis", null,
-                connectionCategory: AiConnectionModelCategory.HighEffort, modelId: synthTierDto?.ActiveModel, ct: ct);
+                job.Id,
+                job.RetryCount + 1,
+                "synthesis",
+                null,
+                AiConnectionModelCategory.HighEffort,
+                synthTierDto?.ActiveModel,
+                ct);
         }
         catch (Exception ex)
         {
@@ -448,8 +514,12 @@ public sealed partial class FileByFileReviewOrchestrator(
         try
         {
             var expectsJson = allComments.Count > 0;
-            var systemPrompt = ReviewPrompts.BuildSynthesisSystemPrompt(baseContext, jsonMode: expectsJson);
-            var userMessage = ReviewPrompts.BuildSynthesisUserMessage(perFileSummaries, pr.Title, pr.Description, allComments);
+            var systemPrompt = ReviewPrompts.BuildSynthesisSystemPrompt(baseContext, expectsJson);
+            var userMessage = ReviewPrompts.BuildSynthesisUserMessage(
+                perFileSummaries,
+                pr.Title,
+                pr.Description,
+                allComments);
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, systemPrompt),
@@ -512,6 +582,7 @@ public sealed partial class FileByFileReviewOrchestrator(
             {
                 finalSummary = string.Join("\n\n", perFileSummaries.Select(s => $"## {s.FilePath}\n{s.Summary}"));
             }
+
             if (protocolId.HasValue)
             {
                 await protocolRecorder.RecordAiCallAsync(
@@ -558,7 +629,7 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
 
         var combinedComments = crossCuttingComments.Count > 0
-            ? (IReadOnlyList<ReviewComment>)crossCuttingComments.Concat(deduped).ToList()
+            ? crossCuttingComments.Concat(deduped).ToList()
             : (IReadOnlyList<ReviewComment>)deduped;
 
         LogCrossCuttingConcernsFound(logger, crossCuttingComments.Count, job.Id);
@@ -577,9 +648,9 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(StripMarkdownCodeFences(responseText));
+            using var doc = JsonDocument.Parse(StripMarkdownCodeFences(responseText));
             if (!doc.RootElement.TryGetProperty("cross_cutting_concerns", out var concernsEl) ||
-                concernsEl.ValueKind != System.Text.Json.JsonValueKind.Array)
+                concernsEl.ValueKind != JsonValueKind.Array)
             {
                 return [];
             }
@@ -611,7 +682,7 @@ public sealed partial class FileByFileReviewOrchestrator(
 
             return result;
         }
-        catch (System.Text.Json.JsonException)
+        catch (JsonException)
         {
             return [];
         }
@@ -634,36 +705,38 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(trimmed);
+            using var doc = JsonDocument.Parse(trimmed);
             if (!doc.RootElement.TryGetProperty("summary", out var summaryEl))
             {
                 return false;
             }
 
-            summary = summaryEl.ValueKind == System.Text.Json.JsonValueKind.String
+            summary = summaryEl.ValueKind == JsonValueKind.String
                 ? summaryEl.GetString() ?? string.Empty
                 : summaryEl.GetRawText();
             crossCuttingComments = ParseCrossCuttingConcerns(trimmed);
             return true;
         }
-        catch (System.Text.Json.JsonException)
+        catch (JsonException)
         {
             return false;
         }
     }
 
-    private static string BuildSynthesisJsonRepairPrompt() =>
-        """
-        Your previous response was not valid JSON.
-        Reformat it now as a single raw JSON object with exactly these keys:
-        - "summary": string
-        - "cross_cutting_concerns": array of objects with keys "message" and "severity"
+    private static string BuildSynthesisJsonRepairPrompt()
+    {
+        return """
+               Your previous response was not valid JSON.
+               Reformat it now as a single raw JSON object with exactly these keys:
+               - "summary": string
+               - "cross_cutting_concerns": array of objects with keys "message" and "severity"
 
-        Escape any quotes inside string values correctly.
-        Do NOT use markdown fences.
-        Do NOT add any prose before or after the JSON.
-        The first character must be '{' and the last character must be '}'.
-        """;
+               Escape any quotes inside string values correctly.
+               Do NOT use markdown fences.
+               Do NOT add any prose before or after the JSON.
+               The first character must be '{' and the last character must be '}'.
+               """;
+    }
 
     private static bool LooksLikeJsonObject(string text)
     {
@@ -701,7 +774,9 @@ public sealed partial class FileByFileReviewOrchestrator(
         return trimmed.Trim();
     }
 
-    private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(IReadOnlyList<PrCommentThread>? allThreads, string filePath)
+    private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(
+        IReadOnlyList<PrCommentThread>? allThreads,
+        string filePath)
     {
         if (allThreads is null)
         {
@@ -726,9 +801,9 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(responseText);
+            using var doc = JsonDocument.Parse(responseText);
             if (!doc.RootElement.TryGetProperty("comments", out var commentsEl) ||
-                commentsEl.ValueKind != System.Text.Json.JsonValueKind.Array)
+                commentsEl.ValueKind != JsonValueKind.Array)
             {
                 return [];
             }
@@ -743,13 +818,13 @@ public sealed partial class FileByFileReviewOrchestrator(
                 }
 
                 string? filePath = null;
-                if (item.TryGetProperty("file_path", out var fpEl) && fpEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                if (item.TryGetProperty("file_path", out var fpEl) && fpEl.ValueKind == JsonValueKind.String)
                 {
                     filePath = fpEl.GetString();
                 }
 
                 int? lineNumber = null;
-                if (item.TryGetProperty("line_number", out var lnEl) && lnEl.ValueKind == System.Text.Json.JsonValueKind.Number)
+                if (item.TryGetProperty("line_number", out var lnEl) && lnEl.ValueKind == JsonValueKind.Number)
                 {
                     lineNumber = lnEl.GetInt32();
                 }
@@ -771,7 +846,7 @@ public sealed partial class FileByFileReviewOrchestrator(
 
             return result;
         }
-        catch (System.Text.Json.JsonException)
+        catch (JsonException)
         {
             return [];
         }
@@ -782,7 +857,11 @@ public sealed partial class FileByFileReviewOrchestrator(
     ///     If the AI call fails or returns an empty list, falls back to the original comments.
     /// </summary>
     internal async Task<List<ReviewComment>> RunQualityFilterAsync(
-        Guid jobId, List<ReviewComment> comments, ReviewSystemContext baseContext, IChatClient effectiveClient, CancellationToken ct)
+        Guid jobId,
+        List<ReviewComment> comments,
+        ReviewSystemContext baseContext,
+        IChatClient effectiveClient,
+        CancellationToken ct)
     {
         try
         {
@@ -864,7 +943,9 @@ public sealed partial class FileByFileReviewOrchestrator(
         return count;
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Starting review for file {FilePath} ({Index}/{Total}) in job {JobId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Starting review for file {FilePath} ({Index}/{Total}) in job {JobId}")]
     private static partial void LogFileReviewStarted(ILogger logger, string filePath, int index, int total, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Completed review for file {FilePath} in job {JobId}")]
@@ -879,83 +960,108 @@ public sealed partial class FileByFileReviewOrchestrator(
     [LoggerMessage(Level = LogLevel.Information, Message = "Completed synthesis for job {JobId}")]
     private static partial void LogSynthesisCompleted(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis failed for job {JobId} — using fallback concatenation")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Synthesis failed for job {JobId} — using fallback concatenation")]
     private static partial void LogSynthesisFailed(ILogger logger, Guid jobId, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis for job {JobId} returned invalid JSON — requesting one repair pass")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Synthesis for job {JobId} returned invalid JSON — requesting one repair pass")]
     private static partial void LogSynthesisJsonRepairStarted(ILogger logger, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Synthesis JSON repair succeeded for job {JobId}")]
     private static partial void LogSynthesisJsonRepairSucceeded(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Synthesis JSON repair failed for job {JobId} — using fallback concatenation")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Synthesis JSON repair failed for job {JobId} — using fallback concatenation")]
     private static partial void LogSynthesisJsonRepairFailed(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to begin protocol recording for file {FilePath} in job {JobId}")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to begin protocol recording for file {FilePath} in job {JobId}")]
     private static partial void LogProtocolBeginFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Excluded file {FilePath} from review in job {JobId} (matched pattern: {Pattern})")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Excluded file {FilePath} from review in job {JobId} (matched pattern: {Pattern})")]
     private static partial void LogFileExcluded(ILogger logger, string filePath, string pattern, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "File {FilePath} classified as tier {Tier} ({ChangedLines} changed lines) in job {JobId}")]
-    private static partial void LogTierAssigned(ILogger logger, string filePath, FileComplexityTier tier, int changedLines, Guid jobId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "File {FilePath} classified as tier {Tier} ({ChangedLines} changed lines) in job {JobId}")]
+    private static partial void LogTierAssigned(
+        ILogger logger,
+        string filePath,
+        FileComplexityTier tier,
+        int changedLines,
+        Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "MaxIterationsOverride={MaxIterationsOverride} applied for file {FilePath} in job {JobId}")]
-    private static partial void LogMaxIterationsOverrideApplied(ILogger logger, int maxIterationsOverride, string filePath, Guid jobId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "MaxIterationsOverride={MaxIterationsOverride} applied for file {FilePath} in job {JobId}")]
+    private static partial void LogMaxIterationsOverrideApplied(
+        ILogger logger,
+        int maxIterationsOverride,
+        string filePath,
+        Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "{CrossCuttingCount} cross-cutting concern(s) identified in synthesis for job {JobId}")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "{CrossCuttingCount} cross-cutting concern(s) identified in synthesis for job {JobId}")]
     private static partial void LogCrossCuttingConcernsFound(ILogger logger, int crossCuttingCount, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "{DismissalCount} dismissal pattern(s) injected into context for file {FilePath} in job {JobId}")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "{DismissalCount} dismissal pattern(s) injected into context for file {FilePath} in job {JobId}")]
     private static partial void LogDismissalsInjected(ILogger logger, int dismissalCount, string filePath, Guid jobId);
 
     // ── Post-processing filter log messages (feature 023) ────────────────────────
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Dropped {DroppedCount} speculative comment(s) from {FilePath} for job {JobId}")]
-    private static partial void LogSpeculativeCommentsDropped(ILogger logger, int droppedCount, string filePath, Guid jobId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Dropped {DroppedCount} speculative comment(s) from {FilePath} for job {JobId}")]
+    private static partial void LogSpeculativeCommentsDropped(
+        ILogger logger,
+        int droppedCount,
+        string filePath,
+        Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Dropped {DroppedCount} INFO comment(s) from {FilePath} for job {JobId}")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Dropped {DroppedCount} INFO comment(s) from {FilePath} for job {JobId}")]
     private static partial void LogInfoCommentsDropped(ILogger logger, int droppedCount, string filePath, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Dropped {DroppedCount} vague suggestion(s) from {FilePath} for job {JobId}")]
-    private static partial void LogVagueSuggestionsDropped(ILogger logger, int droppedCount, string filePath, Guid jobId);
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Dropped {DroppedCount} vague suggestion(s) from {FilePath} for job {JobId}")]
+    private static partial void LogVagueSuggestionsDropped(
+        ILogger logger,
+        int droppedCount,
+        string filePath,
+        Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Downgraded {DowngradedCount} comment severity(ies) in {FilePath} for job {JobId} (confidence floor applied)")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message =
+            "Downgraded {DowngradedCount} comment severity(ies) in {FilePath} for job {JobId} (confidence floor applied)")]
     private static partial void LogSeverityDowngraded(ILogger logger, int downgradedCount, string filePath, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Quality filter started for job {JobId}: {CommentCount} comments before filter")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Quality filter started for job {JobId}: {CommentCount} comments before filter")]
     private static partial void LogQualityFilterStarted(ILogger logger, Guid jobId, int commentCount);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Quality filter completed for job {JobId}: {Before} → {After} comments")]
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Quality filter completed for job {JobId}: {Before} → {After} comments")]
     private static partial void LogQualityFilterCompleted(ILogger logger, Guid jobId, int before, int after);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Quality filter failed for job {JobId} — using pre-filter comment list")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Quality filter failed for job {JobId} — using pre-filter comment list")]
     private static partial void LogQualityFilterFailed(ILogger logger, Guid jobId, Exception ex);
-
-    // ── Post-processing filters (feature 023) ────────────────────────────────────
-
-    /// <summary>
-    ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
-    ///     A comment containing any of these is speculative and must be discarded.
-    /// </summary>
-    private static readonly ImmutableArray<string> HedgePhrases =
-    [
-        "if your ", "if the file", "if [", "please verify", "validate that",
-        "consider whether", "this may be", "this could be", "you may want to",
-        "worth checking", "it appears", "it seems", "i cannot confirm",
-        "unclear whether", "worth verifying", "if applicable",
-    ];
-
-    /// <summary>
-    ///     Vague action phrases applied only to <see cref="CommentSeverity.Suggestion" /> entries.
-    ///     A suggestion containing any of these does not name a specific, actionable alternative.
-    /// </summary>
-    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
-    [
-        "consider refactoring", "consider adding", "you could also", "you might also",
-        "you might want to", "it would be worth", "would also be good",
-        "could be strengthened", "could be made", "could also verify",
-    ];
 
     /// <summary>
     ///     Discards any <see cref="ReviewComment" /> whose message contains a hedge phrase,
@@ -1052,8 +1158,8 @@ public sealed partial class FileByFileReviewOrchestrator(
     ///     Applies confidence-gated severity downgrade using the reviewer's final confidence score
     ///     from the agentic loop (IMP-07, US5).
     ///     <list type="bullet">
-    ///       <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorError" /> → ERROR becomes WARNING</item>
-    ///       <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorWarning" /> → WARNING becomes SUGGESTION</item>
+    ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorError" /> → ERROR becomes WARNING</item>
+    ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorWarning" /> → WARNING becomes SUGGESTION</item>
     ///     </list>
     ///     Downgrade is skipped when <paramref name="finalConfidence" /> is <see langword="null" />.
     /// </summary>

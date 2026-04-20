@@ -3,6 +3,8 @@
 
 using System.Net;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,27 +56,28 @@ public sealed class AdminKeyMiddlewareTests(AdminKeyMiddlewareTests.AdminKeyFact
             builder.UseSetting("MEISTER_JWT_SECRET", "test-admin-jwt-secret-32chars!!");
             builder.ConfigureServices(services =>
             {
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 var jobRepo = Substitute.For<IJobRepository>();
                 jobRepo.GetAllJobsAsync(
-                        Arg.Any<int>(), Arg.Any<int>(),
-                        Arg.Any<MeisterProPR.Domain.Enums.JobStatus?>(),
-                        Arg.Any<Guid?>(), Arg.Any<int?>(),
+                        Arg.Any<int>(),
+                        Arg.Any<int>(),
+                        Arg.Any<JobStatus?>(),
+                        Arg.Any<Guid?>(),
+                        Arg.Any<int?>(),
                         Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<(int, IReadOnlyList<MeisterProPR.Domain.Entities.ReviewJob>)>((0, [])));
+                    .Returns(Task.FromResult<(int, IReadOnlyList<ReviewJob>)>((0, [])));
                 jobRepo.GetProcessingJobsAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<MeisterProPR.Domain.Entities.ReviewJob>>([]));
+                    .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
                 services.AddSingleton(jobRepo);
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<MeisterProPR.Domain.Entities.AppUser?>(null));
+                    .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, MeisterProPR.Domain.Enums.ClientRole>()));
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 services.AddSingleton(userRepo);
                 services.AddSingleton(Substitute.For<IClientRegistry>());
                 services.AddSingleton(Substitute.For<IThreadMemoryRepository>());

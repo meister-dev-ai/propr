@@ -24,13 +24,19 @@ public class ReviewPromptsValidationTests
     [Fact]
     public void AgenticLoopGuidance_StatesOmissionPreferableToSpeculation()
     {
-        Assert.Contains("Omission is always preferable to speculation", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "Omission is always preferable to speculation",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // Certainty Gate must require the finding to be directly observed
     [Fact]
     public void AgenticLoopGuidance_RequiresDirectObservation()
     {
-        Assert.Contains("directly seen the problematic code", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "directly seen the problematic code",
+            ReviewPrompts.AgenticLoopGuidance,
+            StringComparison.OrdinalIgnoreCase);
     }
 }

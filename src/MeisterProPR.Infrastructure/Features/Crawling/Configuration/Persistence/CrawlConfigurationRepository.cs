@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -11,57 +12,11 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>Database-backed crawl configuration repository.</summary>
-public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext)
+public sealed class CrawlConfigurationRepository(
+    MeisterProPRDbContext dbContext,
+    IProviderActivationService? providerActivationService = null)
     : ICrawlConfigurationRepository
 {
-    private static CrawlConfigurationDto ToDto(CrawlConfigurationRecord c, Guid? reviewerId)
-    {
-        var proCursorSourceIds = c.ProCursorSources
-            .Select(link => link.ProCursorSourceId)
-            .Distinct()
-            .ToList()
-            .AsReadOnly();
-
-        var invalidProCursorSourceIds = c.ProCursorSources
-            .Where(link => link.ProCursorSource is null || link.ProCursorSource.ClientId != c.ClientId || !link.ProCursorSource.IsEnabled)
-            .Select(link => link.ProCursorSourceId)
-            .Distinct()
-            .ToList()
-            .AsReadOnly();
-
-        return new(
-            c.Id,
-            c.ClientId,
-            c.OrganizationUrl,
-            c.ProjectId,
-            reviewerId,
-            c.CrawlIntervalSeconds,
-            c.IsActive,
-            c.CreatedAt,
-            c.RepoFilters
-                .Select(f => new CrawlRepoFilterDto(
-                    f.Id,
-                    f.RepositoryName,
-                    f.TargetBranchPatterns,
-                    f.SourceProvider is not null && f.CanonicalSourceRef is not null
-                        ? new CanonicalSourceReferenceDto(f.SourceProvider, f.CanonicalSourceRef)
-                        : null,
-                    f.DisplayName))
-                .ToList()
-                .AsReadOnly(),
-            c.OrganizationScopeId,
-            c.ProCursorSourceScopeMode,
-            proCursorSourceIds,
-            invalidProCursorSourceIds);
-    }
-
-    private IQueryable<CrawlConfigurationRecord> BaseQuery() =>
-        dbContext.CrawlConfigurations
-            .Include(c => c.Client)
-            .Include(c => c.RepoFilters)
-            .Include(c => c.ProCursorSources)
-                .ThenInclude(link => link.ProCursorSource);
-
     /// <inheritdoc />
     public async Task<bool> SetActiveAsync(Guid configId, Guid clientId, bool isActive, CancellationToken ct = default)
     {
@@ -80,6 +35,7 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
     /// <inheritdoc />
     public async Task<CrawlConfigurationDto> AddAsync(
         Guid clientId,
+        ScmProvider provider,
         string organizationUrl,
         string projectId,
         int crawlIntervalSeconds,
@@ -90,6 +46,7 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
+            Provider = provider,
             OrganizationUrl = organizationUrl,
             ProjectId = projectId,
             OrganizationScopeId = organizationScopeId,
@@ -109,6 +66,7 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         return new CrawlConfigurationDto(
             record.Id,
             record.ClientId,
+            record.Provider,
             record.OrganizationUrl,
             record.ProjectId,
             clientReviewerId,
@@ -125,6 +83,13 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         var records = await this.BaseQuery()
             .Where(c => c.IsActive)
             .ToListAsync(ct);
+
+        if (providerActivationService is not null)
+        {
+            var enabledProviders = await providerActivationService.GetEnabledProvidersAsync(ct);
+            records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
+        }
+
         return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
     }
 
@@ -170,12 +135,20 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
             .Where(c => c.ClientId == clientId)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(ct);
+
+        if (providerActivationService is not null)
+        {
+            var enabledProviders = await providerActivationService.GetEnabledProvidersAsync(ct);
+            records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
+        }
+
         return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<CrawlConfigurationDto>> GetByClientIdsAsync(
-        IEnumerable<Guid> clientIds, CancellationToken ct = default)
+        IEnumerable<Guid> clientIds,
+        CancellationToken ct = default)
     {
         var ids = clientIds.ToList();
         if (ids.Count == 0)
@@ -187,6 +160,13 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
             .Where(c => ids.Contains(c.ClientId))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(ct);
+
+        if (providerActivationService is not null)
+        {
+            var enabledProviders = await providerActivationService.GetEnabledProvidersAsync(ct);
+            records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
+        }
+
         return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
     }
 
@@ -196,6 +176,16 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         var record = await this.BaseQuery()
             .Where(c => c.Id == configId)
             .FirstOrDefaultAsync(ct);
+
+        if (record is not null && providerActivationService is not null)
+        {
+            var enabled = await providerActivationService.IsEnabledAsync(record.Provider, ct);
+            if (!enabled)
+            {
+                return null;
+            }
+        }
+
         return record is null ? null : ToDto(record, record.Client.ReviewerId);
     }
 
@@ -252,16 +242,17 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
 
         foreach (var filter in filters)
         {
-            config.RepoFilters.Add(new CrawlRepoFilterRecord
-            {
-                Id = Guid.NewGuid(),
-                CrawlConfigurationId = configId,
-                SourceProvider = filter.CanonicalSourceRef?.Provider,
-                CanonicalSourceRef = filter.CanonicalSourceRef?.Value,
-                DisplayName = filter.DisplayName,
-                RepositoryName = filter.RepositoryName,
-                TargetBranchPatterns = filter.TargetBranchPatterns.ToArray(),
-            });
+            config.RepoFilters.Add(
+                new CrawlRepoFilterRecord
+                {
+                    Id = Guid.NewGuid(),
+                    CrawlConfigurationId = configId,
+                    SourceProvider = filter.CanonicalSourceRef?.Provider,
+                    CanonicalSourceRef = filter.CanonicalSourceRef?.Value,
+                    DisplayName = filter.DisplayName,
+                    RepositoryName = filter.RepositoryName,
+                    TargetBranchPatterns = filter.TargetBranchPatterns.ToArray(),
+                });
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -271,7 +262,7 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
     /// <inheritdoc />
     public async Task<bool> UpdateSourceScopeAsync(
         Guid configId,
-        Domain.Enums.ProCursorSourceScopeMode scopeMode,
+        ProCursorSourceScopeMode scopeMode,
         IReadOnlyList<Guid> proCursorSourceIds,
         CancellationToken ct = default)
     {
@@ -286,20 +277,73 @@ public sealed class CrawlConfigurationRepository(MeisterProPRDbContext dbContext
         config.ProCursorSourceScopeMode = scopeMode;
         dbContext.CrawlConfigurationProCursorSources.RemoveRange(config.ProCursorSources);
 
-        if (scopeMode == Domain.Enums.ProCursorSourceScopeMode.SelectedSources)
+        if (scopeMode == ProCursorSourceScopeMode.SelectedSources)
         {
             foreach (var sourceId in proCursorSourceIds.Distinct())
             {
-                config.ProCursorSources.Add(new CrawlConfigurationProCursorSourceRecord
-                {
-                    CrawlConfigurationId = configId,
-                    ProCursorSourceId = sourceId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
+                config.ProCursorSources.Add(
+                    new CrawlConfigurationProCursorSourceRecord
+                    {
+                        CrawlConfigurationId = configId,
+                        ProCursorSourceId = sourceId,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
             }
         }
 
         await dbContext.SaveChangesAsync(ct);
         return true;
+    }
+
+    private static CrawlConfigurationDto ToDto(CrawlConfigurationRecord c, Guid? reviewerId)
+    {
+        var proCursorSourceIds = c.ProCursorSources
+            .Select(link => link.ProCursorSourceId)
+            .Distinct()
+            .ToList()
+            .AsReadOnly();
+
+        var invalidProCursorSourceIds = c.ProCursorSources
+            .Where(link => link.ProCursorSource is null || link.ProCursorSource.ClientId != c.ClientId ||
+                           !link.ProCursorSource.IsEnabled)
+            .Select(link => link.ProCursorSourceId)
+            .Distinct()
+            .ToList()
+            .AsReadOnly();
+
+        return new CrawlConfigurationDto(
+            c.Id,
+            c.ClientId,
+            c.Provider,
+            c.OrganizationUrl,
+            c.ProjectId,
+            reviewerId,
+            c.CrawlIntervalSeconds,
+            c.IsActive,
+            c.CreatedAt,
+            c.RepoFilters
+                .Select(f => new CrawlRepoFilterDto(
+                    f.Id,
+                    f.RepositoryName,
+                    f.TargetBranchPatterns,
+                    f.SourceProvider is not null && f.CanonicalSourceRef is not null
+                        ? new CanonicalSourceReferenceDto(f.SourceProvider, f.CanonicalSourceRef)
+                        : null,
+                    f.DisplayName))
+                .ToList()
+                .AsReadOnly(),
+            c.OrganizationScopeId,
+            c.ProCursorSourceScopeMode,
+            proCursorSourceIds,
+            invalidProCursorSourceIds);
+    }
+
+    private IQueryable<CrawlConfigurationRecord> BaseQuery()
+    {
+        return dbContext.CrawlConfigurations
+            .Include(c => c.Client)
+            .Include(c => c.RepoFilters)
+            .Include(c => c.ProCursorSources)
+            .ThenInclude(link => link.ProCursorSource);
     }
 }

@@ -3,12 +3,10 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
@@ -27,9 +25,9 @@ public sealed class AgentMentionAnswerServiceTests
             "Test Connection",
             "https://ai.example.com",
             ["gpt-4o"],
-            IsActive: true,
-            ActiveModel: "gpt-4o",
-            CreatedAt: DateTimeOffset.UtcNow,
+            true,
+            "gpt-4o",
+            DateTimeOffset.UtcNow,
             ApiKey: "test-key");
     }
 
@@ -53,7 +51,10 @@ public sealed class AgentMentionAnswerServiceTests
     {
         var chatClient = Substitute.For<IChatClient>();
         chatClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
         return chatClient;
     }
@@ -82,7 +83,10 @@ public sealed class AgentMentionAnswerServiceTests
         var captured = new List<IEnumerable<ChatMessage>>();
         var chatClient = Substitute.For<IChatClient>();
         chatClient
-            .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
         var sut = CreateSut(chatClient);
@@ -104,7 +108,10 @@ public sealed class AgentMentionAnswerServiceTests
         var captured = new List<IEnumerable<ChatMessage>>();
         var chatClient = Substitute.For<IChatClient>();
         chatClient
-            .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
         var thread = new PrCommentThread(
@@ -114,7 +121,7 @@ public sealed class AgentMentionAnswerServiceTests
             [
                 new PrThreadComment("alice", $"@<{BotGuid}> Is this safe?", BotGuid),
             ]);
-        var pr = MakePr(threads: [thread]);
+        var pr = MakePr([thread]);
         var sut = CreateSut(chatClient);
 
         // Act

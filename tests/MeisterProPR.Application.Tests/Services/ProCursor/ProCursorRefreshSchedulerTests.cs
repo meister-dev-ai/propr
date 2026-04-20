@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -62,12 +61,13 @@ public sealed class ProCursorRefreshSchedulerTests
         Assert.Equal(1, queuedCount);
         Assert.Equal("commit-new", branch.LastSeenCommitSha);
         await sourceRepository.Received(1).UpdateAsync(source, Arg.Any<CancellationToken>());
-        await jobRepository.Received(1).AddAsync(
-            Arg.Is<ProCursorIndexJob>(job =>
-                job.KnowledgeSourceId == source.Id &&
-                job.TrackedBranchId == branch.Id &&
-                job.RequestedCommitSha == "commit-new"),
-            Arg.Any<CancellationToken>());
+        await jobRepository.Received(1)
+            .AddAsync(
+                Arg.Is<ProCursorIndexJob>(job =>
+                    job.KnowledgeSourceId == source.Id &&
+                    job.TrackedBranchId == branch.Id &&
+                    job.RequestedCommitSha == "commit-new"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -110,7 +110,8 @@ public sealed class ProCursorRefreshSchedulerTests
         var queuedCount = await scheduler.ScheduleRefreshesAsync(CancellationToken.None);
 
         Assert.Equal(0, queuedCount);
-        await sourceRepository.DidNotReceive().UpdateAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
+        await sourceRepository.DidNotReceive()
+            .UpdateAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
         await jobRepository.DidNotReceive().AddAsync(Arg.Any<ProCursorIndexJob>(), Arg.Any<CancellationToken>());
     }
 
@@ -160,12 +161,13 @@ public sealed class ProCursorRefreshSchedulerTests
         Assert.Equal("commit-stuck", branch.LastSeenCommitSha);
         Assert.Null(branch.LastIndexedCommitSha);
         await sourceRepository.DidNotReceive().UpdateAsync(source, Arg.Any<CancellationToken>());
-        await jobRepository.Received(1).AddAsync(
-            Arg.Is<ProCursorIndexJob>(job =>
-                job.KnowledgeSourceId == source.Id &&
-                job.TrackedBranchId == branch.Id &&
-                job.RequestedCommitSha == "commit-stuck"),
-            Arg.Any<CancellationToken>());
+        await jobRepository.Received(1)
+            .AddAsync(
+                Arg.Is<ProCursorIndexJob>(job =>
+                    job.KnowledgeSourceId == source.Id &&
+                    job.TrackedBranchId == branch.Id &&
+                    job.RequestedCommitSha == "commit-stuck"),
+                Arg.Any<CancellationToken>());
     }
 
     private static ProCursorIndexCoordinator CreateCoordinator(

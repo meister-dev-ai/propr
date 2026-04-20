@@ -12,12 +12,13 @@ namespace MeisterProPR.Infrastructure.Services;
 /// <summary>
 ///     Recomputes ProCursor token usage rollups from raw event history.
 /// </summary>
-public sealed class ProCursorTokenUsageAggregationService(MeisterProPRDbContext db) : IProCursorTokenUsageAggregationService
+public sealed class ProCursorTokenUsageAggregationService(MeisterProPRDbContext db)
+    : IProCursorTokenUsageAggregationService
 {
     public Task<int> RefreshRecentAsync(CancellationToken ct = default)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        return this.RefreshAsync(today.AddDays(-1), today, null, includeMonthly: true, ct);
+        return this.RefreshAsync(today.AddDays(-1), today, null, true, ct);
     }
 
     public async Task<int> RefreshAsync(
@@ -107,21 +108,23 @@ public sealed class ProCursorTokenUsageAggregationService(MeisterProPRDbContext 
         ProCursorTokenUsageGranularity granularity,
         DateTimeOffset recomputedAtUtc)
     {
-        foreach (var group in GroupEvents(events, granularity, includeSource: true))
+        foreach (var group in GroupEvents(events, granularity, true))
         {
-            yield return BuildRollup(group, granularity, recomputedAtUtc, includeSource: true);
+            yield return BuildRollup(group, granularity, recomputedAtUtc, true);
         }
 
-        foreach (var group in GroupEvents(events, granularity, includeSource: false))
+        foreach (var group in GroupEvents(events, granularity, false))
         {
-            yield return BuildRollup(group, granularity, recomputedAtUtc, includeSource: false);
+            yield return BuildRollup(group, granularity, recomputedAtUtc, false);
         }
     }
 
-    private static IEnumerable<IGrouping<(Guid ClientId, Guid? SourceId, string? SourceDisplayName, DateOnly BucketStart, string ModelName), ProCursorTokenUsageEvent>> GroupEvents(
-        IEnumerable<ProCursorTokenUsageEvent> events,
-        ProCursorTokenUsageGranularity granularity,
-        bool includeSource)
+    private static
+        IEnumerable<IGrouping<(Guid ClientId, Guid? SourceId, string? SourceDisplayName, DateOnly BucketStart, string
+            ModelName), ProCursorTokenUsageEvent>> GroupEvents(
+            IEnumerable<ProCursorTokenUsageEvent> events,
+            ProCursorTokenUsageGranularity granularity,
+            bool includeSource)
     {
         return events.GroupBy(item => (
             item.ClientId,
@@ -132,12 +135,15 @@ public sealed class ProCursorTokenUsageAggregationService(MeisterProPRDbContext 
     }
 
     private static ProCursorTokenUsageRollup BuildRollup(
-        IGrouping<(Guid ClientId, Guid? SourceId, string? SourceDisplayName, DateOnly BucketStart, string ModelName), ProCursorTokenUsageEvent> group,
+        IGrouping<(Guid ClientId, Guid? SourceId, string? SourceDisplayName, DateOnly BucketStart, string ModelName),
+            ProCursorTokenUsageEvent> group,
         ProCursorTokenUsageGranularity granularity,
         DateTimeOffset recomputedAtUtc,
         bool includeSource)
     {
-        var estimatedCosts = group.Where(item => item.EstimatedCostUsd.HasValue).Select(item => item.EstimatedCostUsd!.Value).ToList();
+        var estimatedCosts = group.Where(item => item.EstimatedCostUsd.HasValue)
+            .Select(item => item.EstimatedCostUsd!.Value)
+            .ToList();
         return new ProCursorTokenUsageRollup(
             Guid.NewGuid(),
             group.Key.ClientId,
@@ -162,6 +168,8 @@ public sealed class ProCursorTokenUsageAggregationService(MeisterProPRDbContext 
             : date;
     }
 
-    private static DateOnly ToMonthEnd(DateOnly monthStart) =>
-        monthStart.AddMonths(1).AddDays(-1);
+    private static DateOnly ToMonthEnd(DateOnly monthStart)
+    {
+        return monthStart.AddMonths(1).AddDays(-1);
+    }
 }

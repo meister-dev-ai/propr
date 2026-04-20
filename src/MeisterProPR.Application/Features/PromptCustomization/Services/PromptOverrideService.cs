@@ -104,8 +104,9 @@ public sealed class PromptOverrideService(IPromptOverrideRepository repository) 
         return await repository.DeleteAsync(id, ct);
     }
 
-    private static PromptOverrideDto ToDto(PromptOverride entity) =>
-        new(
+    private static PromptOverrideDto ToDto(PromptOverride entity)
+    {
+        return new PromptOverrideDto(
             entity.Id,
             entity.ClientId,
             entity.CrawlConfigId,
@@ -114,4 +115,5 @@ public sealed class PromptOverrideService(IPromptOverrideRepository repository) 
             entity.OverrideText,
             entity.CreatedAt,
             entity.UpdatedAt);
+    }
 }

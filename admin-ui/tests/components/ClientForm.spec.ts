@@ -55,7 +55,7 @@ describe('ClientForm', () => {
   })
 
   it('calls POST /clients and emits client-created on valid submit', async () => {
-    const created = { id: '1', displayName: 'Acme', isActive: true, hasAdoCredentials: false, createdAt: '2024-01-01T00:00:00Z' }
+    const created = { id: '1', displayName: 'Acme', isActive: true, createdAt: '2024-01-01T00:00:00Z' }
     mockPost.mockResolvedValue({ data: created, response: { ok: true, status: 201 } })
     const ClientForm = await importClientForm()
     const wrapper = mount(ClientForm)

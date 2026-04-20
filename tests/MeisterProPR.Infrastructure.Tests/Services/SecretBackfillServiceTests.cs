@@ -15,7 +15,9 @@ public sealed class SecretBackfillServiceTests
 {
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterProPR.SecretBackfillServiceTests.{Guid.NewGuid():N}");
+        var keysDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"MeisterProPR.SecretBackfillServiceTests.{Guid.NewGuid():N}");
         Directory.CreateDirectory(keysDirectory);
 
         var services = new ServiceCollection();
@@ -36,90 +38,82 @@ public sealed class SecretBackfillServiceTests
     }
 
     [Fact]
-    public async Task BackfillAsync_PlaintextSecrets_ProtectsLegacyValues()
+    public async Task BackfillAsync_PlaintextApiKeys_ProtectsLegacyAiConnectionValues()
     {
         await using var db = CreateContext();
         var codec = CreateCodec();
         var clientId = Guid.NewGuid();
         var connectionId = Guid.NewGuid();
 
-        db.Clients.Add(new ClientRecord
-        {
-            Id = clientId,
-            DisplayName = "Legacy Client",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            AdoTenantId = "tenant-id",
-            AdoClientId = "client-id",
-            AdoClientSecret = "legacy-ado-secret",
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                DisplayName = "Legacy Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
 
-        db.AiConnections.Add(new AiConnectionRecord
-        {
-            Id = connectionId,
-            ClientId = clientId,
-            DisplayName = "Legacy Connection",
-            EndpointUrl = "https://fake.openai.azure.com/",
-            Models = ["gpt-4o"],
-            ApiKey = "legacy-ai-key",
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.AiConnections.Add(
+            new AiConnectionRecord
+            {
+                Id = connectionId,
+                ClientId = clientId,
+                DisplayName = "Legacy Connection",
+                EndpointUrl = "https://fake.openai.azure.com/",
+                Models = ["gpt-4o"],
+                ApiKey = "legacy-ai-key",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
 
         var sut = new SecretBackfillService(db, codec);
 
         await sut.BackfillAsync(CancellationToken.None);
 
-        var client = await db.Clients.AsNoTracking().FirstAsync(c => c.Id == clientId);
         var connection = await db.AiConnections.AsNoTracking().FirstAsync(c => c.Id == connectionId);
 
-        Assert.NotEqual("legacy-ado-secret", client.AdoClientSecret);
         Assert.NotEqual("legacy-ai-key", connection.ApiKey);
-        Assert.Equal("legacy-ado-secret", codec.Unprotect(client.AdoClientSecret!, "ClientAdoCredentials"));
         Assert.Equal("legacy-ai-key", codec.Unprotect(connection.ApiKey!, "AiConnectionApiKey"));
     }
 
     [Fact]
-    public async Task BackfillAsync_AlreadyProtectedSecrets_RemainsIdempotent()
+    public async Task BackfillAsync_AlreadyProtectedApiKeys_RemainsIdempotent()
     {
         await using var db = CreateContext();
         var codec = CreateCodec();
         var clientId = Guid.NewGuid();
         var connectionId = Guid.NewGuid();
-        var protectedClientSecret = codec.Protect("protected-ado-secret", "ClientAdoCredentials");
         var protectedApiKey = codec.Protect("protected-ai-key", "AiConnectionApiKey");
 
-        db.Clients.Add(new ClientRecord
-        {
-            Id = clientId,
-            DisplayName = "Protected Client",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            AdoTenantId = "tenant-id",
-            AdoClientId = "client-id",
-            AdoClientSecret = protectedClientSecret,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                DisplayName = "Protected Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
 
-        db.AiConnections.Add(new AiConnectionRecord
-        {
-            Id = connectionId,
-            ClientId = clientId,
-            DisplayName = "Protected Connection",
-            EndpointUrl = "https://fake.openai.azure.com/",
-            Models = ["gpt-4o"],
-            ApiKey = protectedApiKey,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.AiConnections.Add(
+            new AiConnectionRecord
+            {
+                Id = connectionId,
+                ClientId = clientId,
+                DisplayName = "Protected Connection",
+                EndpointUrl = "https://fake.openai.azure.com/",
+                Models = ["gpt-4o"],
+                ApiKey = protectedApiKey,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
 
         var sut = new SecretBackfillService(db, codec);
 
         await sut.BackfillAsync(CancellationToken.None);
 
-        var client = await db.Clients.AsNoTracking().FirstAsync(c => c.Id == clientId);
         var connection = await db.AiConnections.AsNoTracking().FirstAsync(c => c.Id == connectionId);
 
-        Assert.Equal(protectedClientSecret, client.AdoClientSecret);
         Assert.Equal(protectedApiKey, connection.ApiKey);
     }
 }

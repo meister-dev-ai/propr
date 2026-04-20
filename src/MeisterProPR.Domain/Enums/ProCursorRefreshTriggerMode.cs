@@ -8,6 +8,13 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum ProCursorRefreshTriggerMode
 {
+    /// <summary>
+    ///     Manual refresh mode.
+    /// </summary>
     Manual = 0,
+
+    /// <summary>
+    ///     Automatic refresh triggered on branch updates.
+    /// </summary>
     BranchUpdate = 1,
 }

@@ -6,6 +6,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
@@ -69,7 +70,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         await using (var db = new MeisterProPRDbContext(dbOptions))
         {
             // Migrations already applied by PostgresContainerFixture.InitializeAsync().
-            var repo = new JobRepository(db, new Fixtures.TestDbContextFactory(dbOptions));
+            var repo = new JobRepository(db, new TestDbContextFactory(dbOptions));
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
@@ -87,6 +88,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         var config = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "proj",
             Guid.NewGuid(),
@@ -99,13 +101,13 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>(new[] { config }));
 
         // Step 3 — mock fetcher returning PR #42 iteration 1
-        var prFetcher = Substitute.For<IAssignedPrFetcher>();
+        var prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
         prFetcher
-            .GetAssignedOpenPullRequestsAsync(Arg.Any<CrawlConfigurationDto>(), Arg.Any<CancellationToken>())
+            .ListAssignedOpenReviewsAsync(Arg.Any<CrawlConfigurationDto>(), Arg.Any<CancellationToken>())
             .Returns(
-                new List<AssignedPullRequestRef>
+                new List<AssignedCodeReviewRef>
                 {
-                    new("https://dev.azure.com/org", "proj", "repo-42", 42, 1),
+                    CreateAssignedReview("https://dev.azure.com/org", "proj", "repo-42", 42, 1),
                 });
 
         // Step 4 — start the factory (simulating service restart).
@@ -124,7 +126,6 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
                 builder.UseSetting("MEISTER_JWT_SECRET", "test-jwt-secret-at-least-32-chars-ok!!");
                 builder.ConfigureServices(services =>
                 {
-                    services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                     services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                     services.AddSingleton(Substitute.For<IAdoCommentPoster>());
                     services.AddSingleton(prFetcher);
@@ -156,5 +157,23 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             var (total, _) = await jobs.GetAllJobsAsync(100, 0, null);
             Assert.Equal(1, total);
         }
+    }
+
+    private static AssignedCodeReviewRef CreateAssignedReview(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int reviewNumber,
+        int revisionId)
+    {
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl);
+        var repository = new RepositoryRef(host, repositoryId, projectId, projectId);
+        var review = new CodeReviewRef(
+            repository,
+            CodeReviewPlatformKind.PullRequest,
+            reviewNumber.ToString(),
+            reviewNumber);
+
+        return new AssignedCodeReviewRef(host, repository, review, revisionId);
     }
 }

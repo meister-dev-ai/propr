@@ -15,7 +15,9 @@ public sealed partial class ClientTokenUsageController(
     IClientTokenUsageRepository tokenUsageRepository,
     ILogger<ClientTokenUsageController> logger) : ControllerBase
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Token usage queried for client {ClientId} from {From} to {To}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Token usage queried for client {ClientId} from {From} to {To}")]
     private static partial void LogTokenUsageQueried(ILogger logger, Guid clientId, DateOnly from, DateOnly to);
 
     /// <summary>Returns daily token consumption samples for the specified client within the given date range.</summary>
@@ -66,12 +68,12 @@ public sealed partial class ClientTokenUsageController(
             .ToList();
 
         var dto = new ClientTokenUsageDto(
-            ClientId: clientId,
-            From: fromDate,
-            To: toDate,
-            TotalInputTokens: sampleDtos.Sum(s => s.InputTokens),
-            TotalOutputTokens: sampleDtos.Sum(s => s.OutputTokens),
-            Samples: sampleDtos);
+            clientId,
+            fromDate,
+            toDate,
+            sampleDtos.Sum(s => s.InputTokens),
+            sampleDtos.Sum(s => s.OutputTokens),
+            sampleDtos);
 
         LogTokenUsageQueried(logger, clientId, fromDate, toDate);
         return this.Ok(dto);

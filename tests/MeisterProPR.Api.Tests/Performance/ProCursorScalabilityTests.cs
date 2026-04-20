@@ -59,7 +59,10 @@ public sealed class ProCursorScalabilityTests
         IReadOnlyCollection<TimeSpan> completionTimes;
         try
         {
-            completionTimes = await WaitForIndexedBranchesAsync(provider, expectedCommitsByBranchId, TimeSpan.FromSeconds(20));
+            completionTimes = await WaitForIndexedBranchesAsync(
+                provider,
+                expectedCommitsByBranchId,
+                TimeSpan.FromSeconds(20));
         }
         finally
         {
@@ -112,7 +115,14 @@ public sealed class ProCursorScalabilityTests
             }
 
             jobIds.Add(jobId);
-            await SeedTrackedSourceAndJobAsync(provider, clientId, sourceId, branchId, jobId, repositoryId, ProCursorRefreshTriggerMode.Manual);
+            await SeedTrackedSourceAndJobAsync(
+                provider,
+                clientId,
+                sourceId,
+                branchId,
+                jobId,
+                repositoryId,
+                ProCursorRefreshTriggerMode.Manual);
         }
 
         var worker = provider.GetRequiredService<ProCursorIndexWorker>();
@@ -135,7 +145,8 @@ public sealed class ProCursorScalabilityTests
 
         var unrelatedJobs = jobs.Where(job => job.Id != failingJobId).ToList();
         Assert.NotEmpty(unrelatedJobs);
-        var unrelatedFailureRate = unrelatedJobs.Count(job => job.Status != ProCursorIndexJobStatus.Completed) / (double)unrelatedJobs.Count;
+        var unrelatedFailureRate = unrelatedJobs.Count(job => job.Status != ProCursorIndexJobStatus.Completed) /
+                                   (double)unrelatedJobs.Count;
 
         Assert.Equal(ProCursorIndexJobStatus.Failed, jobs.Single(job => job.Id == failingJobId).Status);
         Assert.All(unrelatedJobs, job => Assert.Equal(ProCursorIndexJobStatus.Completed, job.Status));
@@ -159,33 +170,35 @@ public sealed class ProCursorScalabilityTests
         services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
         services.AddScoped<IProCursorIndexSnapshotRepository, ProCursorIndexSnapshotRepository>();
         services.AddScoped<ProCursorSymbolGraphRepository>();
-        services.AddScoped<IProCursorSymbolGraphRepository>(sp => sp.GetRequiredService<ProCursorSymbolGraphRepository>());
+        services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
+            sp.GetRequiredService<ProCursorSymbolGraphRepository>());
 
         services.AddSingleton<IProCursorMaterializer>(materializer);
-        services.AddSingleton<IProCursorTrackedBranchChangeDetector>(changeDetector);
+        services.AddSingleton(changeDetector);
         services.AddSingleton<IProCursorChunkExtractor, EmptyChunkExtractor>();
         services.AddSingleton<IProCursorEmbeddingService, EmptyEmbeddingService>();
         services.AddSingleton<IProCursorSymbolExtractor, EmptySymbolExtractor>();
 
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
-        services.AddSingleton<IOptions<ProCursorOptions>>(Options.Create(options));
+        services.AddSingleton(Options.Create(options));
         services.AddSingleton<ProCursorIndexWorker>();
 
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(true);
     }
 
     private static async Task SeedClientAsync(ServiceProvider provider, Guid clientId, string displayName)
     {
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        db.Clients.Add(new ClientRecord
-        {
-            Id = clientId,
-            DisplayName = displayName,
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                DisplayName = displayName,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
     }
 
@@ -231,17 +244,25 @@ public sealed class ProCursorScalabilityTests
         string repositoryId,
         ProCursorRefreshTriggerMode refreshTriggerMode)
     {
-        await SeedTrackedSourceAsync(provider, clientId, sourceId, branchId, repositoryId, refreshTriggerMode, "commit-old");
+        await SeedTrackedSourceAsync(
+            provider,
+            clientId,
+            sourceId,
+            branchId,
+            repositoryId,
+            refreshTriggerMode,
+            "commit-old");
 
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        db.ProCursorIndexJobs.Add(new ProCursorIndexJob(
-            jobId,
-            sourceId,
-            branchId,
-            null,
-            "refresh",
-            $"{sourceId:N}:{branchId:N}:refresh:head"));
+        db.ProCursorIndexJobs.Add(
+            new ProCursorIndexJob(
+                jobId,
+                sourceId,
+                branchId,
+                null,
+                "refresh",
+                $"{sourceId:N}:{branchId:N}:refresh:head"));
         await db.SaveChangesAsync();
     }
 
@@ -302,7 +323,8 @@ public sealed class ProCursorScalabilityTests
                 .ToListAsync();
 
             if (jobs.Count == jobIds.Count &&
-                jobs.All(job => job.Status is ProCursorIndexJobStatus.Completed or ProCursorIndexJobStatus.Failed or ProCursorIndexJobStatus.Cancelled or ProCursorIndexJobStatus.Superseded))
+                jobs.All(job => job.Status is ProCursorIndexJobStatus.Completed or ProCursorIndexJobStatus.Failed
+                    or ProCursorIndexJobStatus.Cancelled or ProCursorIndexJobStatus.Superseded))
             {
                 return;
             }
@@ -325,6 +347,16 @@ public sealed class ProCursorScalabilityTests
         return ordered[p95Index];
     }
 
+    private static string CreateRootDirectory()
+    {
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-performance",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(rootDirectory);
+        return rootDirectory;
+    }
+
     private sealed class DeterministicChangeDetector(IReadOnlyDictionary<Guid, string> latestCommitsByBranchId)
         : IProCursorTrackedBranchChangeDetector
     {
@@ -333,9 +365,10 @@ public sealed class ProCursorScalabilityTests
             ProCursorTrackedBranch trackedBranch,
             CancellationToken ct = default)
         {
-            return Task.FromResult(latestCommitsByBranchId.TryGetValue(trackedBranch.Id, out var commit)
-                ? commit
-                : trackedBranch.LastSeenCommitSha);
+            return Task.FromResult(
+                latestCommitsByBranchId.TryGetValue(trackedBranch.Id, out var commit)
+                    ? commit
+                    : trackedBranch.LastSeenCommitSha);
         }
     }
 
@@ -361,13 +394,14 @@ public sealed class ProCursorScalabilityTests
             CancellationToken ct = default)
         {
             var rootDirectory = CreateRootDirectory();
-            return Task.FromResult(new ProCursorMaterializedSource(
-                source.Id,
-                trackedBranch.Id,
-                trackedBranch.BranchName,
-                requestedCommitSha ?? trackedBranch.LastSeenCommitSha ?? "commit-head",
-                rootDirectory,
-                []));
+            return Task.FromResult(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    requestedCommitSha ?? trackedBranch.LastSeenCommitSha ?? "commit-head",
+                    rootDirectory,
+                    []));
         }
     }
 
@@ -387,13 +421,14 @@ public sealed class ProCursorScalabilityTests
             }
 
             var rootDirectory = CreateRootDirectory();
-            return Task.FromResult(new ProCursorMaterializedSource(
-                source.Id,
-                trackedBranch.Id,
-                trackedBranch.BranchName,
-                requestedCommitSha ?? trackedBranch.LastSeenCommitSha ?? "commit-head",
-                rootDirectory,
-                []));
+            return Task.FromResult(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    requestedCommitSha ?? trackedBranch.LastSeenCommitSha ?? "commit-head",
+                    rootDirectory,
+                    []));
         }
     }
 
@@ -442,15 +477,5 @@ public sealed class ProCursorScalabilityTests
         {
             return Task.FromResult(new ProCursorSymbolExtractionResult([], [], false, "text_only"));
         }
-    }
-
-    private static string CreateRootDirectory()
-    {
-        var rootDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "meisterpropr-procursor-performance",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(rootDirectory);
-        return rootDirectory;
     }
 }

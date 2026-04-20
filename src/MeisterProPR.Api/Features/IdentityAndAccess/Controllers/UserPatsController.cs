@@ -42,14 +42,15 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
 
         await userPatRepository.AddAsync(pat, ct);
 
-        return this.Ok(new
-        {
-            id = pat.Id,
-            label = pat.Label,
-            token = rawToken,
-            expiresAt = pat.ExpiresAt,
-            createdAt = pat.CreatedAt,
-        });
+        return this.Ok(
+            new
+            {
+                id = pat.Id,
+                label = pat.Label,
+                token = rawToken,
+                expiresAt = pat.ExpiresAt,
+                createdAt = pat.CreatedAt,
+            });
     }
 
     /// <summary>Lists PATs for the current user (hashes are never returned).</summary>
@@ -63,15 +64,16 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
         }
 
         var pats = await userPatRepository.ListForUserAsync(userId.Value, ct);
-        return this.Ok(pats.Select(p => new
-        {
-            id = p.Id,
-            label = p.Label,
-            expiresAt = p.ExpiresAt,
-            createdAt = p.CreatedAt,
-            lastUsedAt = p.LastUsedAt,
-            isRevoked = p.IsRevoked,
-        }));
+        return this.Ok(
+            pats.Select(p => new
+            {
+                id = p.Id,
+                label = p.Label,
+                expiresAt = p.ExpiresAt,
+                createdAt = p.CreatedAt,
+                lastUsedAt = p.LastUsedAt,
+                isRevoked = p.IsRevoked,
+            }));
     }
 
     /// <summary>Revokes a PAT by id.</summary>

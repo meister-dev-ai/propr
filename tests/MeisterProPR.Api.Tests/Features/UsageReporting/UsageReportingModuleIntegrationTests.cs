@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers;
 using MeisterProPR.Api.Tests.Controllers.ProCursor;
@@ -45,8 +46,10 @@ public sealed class ClientTokenUsageModuleIntegrationTests(ClientTokenUsageContr
         }
 
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/token-usage?from=2026-04-04&to=2026-04-04");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from=2026-04-04&to=2026-04-04");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
 
@@ -61,27 +64,49 @@ public sealed class ClientTokenUsageModuleIntegrationTests(ClientTokenUsageContr
 public sealed class ProCursorTokenUsageModuleIntegrationTests(ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory factory)
     : IClassFixture<ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory>, IAsyncLifetime
 {
-    public Task InitializeAsync() => factory.ResetAsync();
+    public Task InitializeAsync()
+    {
+        return factory.ResetAsync();
+    }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public Task DisposeAsync()
+    {
+        return Task.CompletedTask;
+    }
 
     [Fact]
     public async Task GetProCursorUsage_WhenEventsExist_ReturnsAggregatedTotals()
     {
-        var sourceId = await factory.SeedSourceAsync(displayName: "Platform Wiki", repositoryId: "wiki-a", defaultBranch: "main");
+        var sourceId = await factory.SeedSourceAsync("Platform Wiki", repositoryId: "wiki-a", defaultBranch: "main");
 
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             db.ProCursorTokenUsageEvents.AddRange(
-                CreateEvent(factory.ClientId, sourceId, new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero), 120, 0, 0.00012m),
-                CreateEvent(factory.ClientId, sourceId, new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero), 80, 0, 0.00008m));
+                CreateEvent(
+                    factory.ClientId,
+                    sourceId,
+                    new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                    120,
+                    0,
+                    0.00012m),
+                CreateEvent(
+                    factory.ClientId,
+                    sourceId,
+                    new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero),
+                    80,
+                    0,
+                    0.00008m));
             await db.SaveChangesAsync();
         }
 
         var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04&granularity=daily&groupBy=source");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04&granularity=daily&groupBy=source");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
 
         var response = await http.SendAsync(request);
 

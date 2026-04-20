@@ -8,6 +8,17 @@ namespace MeisterProPR.Domain.Entities;
 /// </summary>
 public sealed class ProCursorSymbolEdge
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ProCursorSymbolEdge"/> class.
+    /// </summary>
+    /// <param name="id">The unique identifier for the edge.</param>
+    /// <param name="snapshotId">The identifier of the snapshot this edge belongs to.</param>
+    /// <param name="fromSymbolKey">The key of the source symbol.</param>
+    /// <param name="toSymbolKey">The key of the target symbol.</param>
+    /// <param name="edgeKind">The kind of relationship between the symbols.</param>
+    /// <param name="filePath">The file path associated with the edge.</param>
+    /// <param name="lineStart">The starting line number, or null if not applicable.</param>
+    /// <param name="lineEnd">The ending line number, or null if not applicable.</param>
     public ProCursorSymbolEdge(
         Guid id,
         Guid snapshotId,
@@ -57,20 +68,44 @@ public sealed class ProCursorSymbolEdge
     {
     }
 
+    /// <summary>
+    ///     Gets the unique identifier for the edge.
+    /// </summary>
     public Guid Id { get; private set; }
 
+    /// <summary>
+    ///     Gets the identifier of the snapshot this edge belongs to.
+    /// </summary>
     public Guid SnapshotId { get; private set; }
 
+    /// <summary>
+    ///     Gets the key of the source symbol.
+    /// </summary>
     public string FromSymbolKey { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the key of the target symbol.
+    /// </summary>
     public string ToSymbolKey { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the kind of relationship between the symbols.
+    /// </summary>
     public string EdgeKind { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the file path associated with the edge.
+    /// </summary>
     public string FilePath { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the starting line number, or null if not applicable.
+    /// </summary>
     public int? LineStart { get; private set; }
 
+    /// <summary>
+    ///     Gets the ending line number, or null if not applicable.
+    /// </summary>
     public int? LineEnd { get; private set; }
 
     private static string NormalizeRequired(string value, string paramName)

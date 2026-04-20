@@ -3,7 +3,6 @@
 
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Infrastructure.AzureDevOps;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
@@ -122,7 +121,7 @@ public class VssConnectionFactoryTests
 
         // Per-client credentials use a real ClientSecretCredential path internally.
         // We can't easily substitute ClientSecretCredential, but we CAN verify the global credential is not used.
-        var perClientCredentials = new ClientAdoCredentials("tenant-id", "client-id", "secret");
+        var perClientCredentials = new AdoServicePrincipalCredentials("tenant-id", "client-id", "secret");
 
         // The ClientSecretCredential will fail with invalid tenant/client (no real AAD call in tests),
         // but we can confirm the global credential received zero calls.

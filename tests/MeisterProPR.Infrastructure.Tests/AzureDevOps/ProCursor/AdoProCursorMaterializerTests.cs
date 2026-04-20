@@ -7,7 +7,6 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AzureDevOps;
 using MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -37,8 +36,14 @@ public sealed class AdoProCursorMaterializerTests
             "/src/Docs/Runbook.md",
             "/src/Images/logo.png",
             "/tests/AppTests.cs");
-        materializer.SetContent("commit-head", "/src/App/Program.cs", "namespace App;\ninternal sealed class Program;\n");
-        materializer.SetContent("commit-head", "/src/Docs/Runbook.md", "# Runbook\nRestart the worker after changing tokens.\n");
+        materializer.SetContent(
+            "commit-head",
+            "/src/App/Program.cs",
+            "namespace App;\ninternal sealed class Program;\n");
+        materializer.SetContent(
+            "commit-head",
+            "/src/Docs/Runbook.md",
+            "# Runbook\nRestart the worker after changing tokens.\n");
 
         var result = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
 
@@ -68,7 +73,11 @@ public sealed class AdoProCursorMaterializerTests
         materializer.SetTree("requested-commit", "/README.md");
         materializer.SetContent("requested-commit", "/README.md", "# Requested\nPinned commit content.\n");
 
-        var result = await materializer.MaterializeAsync(source, trackedBranch, "requested-commit", CancellationToken.None);
+        var result = await materializer.MaterializeAsync(
+            source,
+            trackedBranch,
+            "requested-commit",
+            CancellationToken.None);
 
         try
         {
@@ -97,7 +106,10 @@ public sealed class AdoProCursorMaterializerTests
             "/wiki/.attachments/diagram.png",
             "/docs/Other.md");
         materializer.SetContent("wiki-commit", "/wiki/Home.md", "# Home\nWelcome to the wiki.\n");
-        materializer.SetContent("wiki-commit", "/wiki/Operations/Token-Caching.md", "# Token caching\nReuse the active token until it expires.\n");
+        materializer.SetContent(
+            "wiki-commit",
+            "/wiki/Operations/Token-Caching.md",
+            "# Token caching\nReuse the active token until it expires.\n");
 
         var result = await materializer.MaterializeAsync(source, trackedBranch, null, CancellationToken.None);
 
@@ -125,8 +137,8 @@ public sealed class AdoProCursorMaterializerTests
 
         source.UpdateDefinition(
             source.DisplayName,
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             "legacy-repository-id",
             source.DefaultBranch,
             source.RootPath,
@@ -153,17 +165,14 @@ public sealed class AdoProCursorMaterializerTests
 
         source.UpdateDefinition(
             "Meister DEV Wiki",
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             "2",
             source.DefaultBranch,
             source.RootPath,
             source.IsEnabled,
             source.SymbolMode,
-            source.OrganizationScopeId,
-            null,
-            null,
-            null);
+            source.OrganizationScopeId);
 
         var materializer = new TestableWikiMaterializer();
         materializer.SetWikiRepository(
@@ -213,7 +222,10 @@ public sealed class AdoProCursorMaterializerTests
         }
     }
 
-    private static ProCursorKnowledgeSource CreateSource(ProCursorSourceKind sourceKind, string branchName, string? rootPath)
+    private static ProCursorKnowledgeSource CreateSource(
+        ProCursorSourceKind sourceKind,
+        string branchName,
+        string? rootPath)
     {
         var source = new ProCursorKnowledgeSource(
             Guid.NewGuid(),
@@ -240,26 +252,41 @@ public sealed class AdoProCursorMaterializerTests
         }
     }
 
+    private static string NormalizePath(string value)
+    {
+        var normalized = value.Replace('\\', '/').Trim();
+        return normalized.StartsWith('/') ? normalized : $"/{normalized}";
+    }
+
     private sealed class TestableRepositoryMaterializer : AdoRepositoryMaterializer
     {
         private readonly Dictionary<string, string> _branchHeads = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, IReadOnlyList<string>> _trees = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<(string CommitSha, string Path), string?> _contents = new();
+        private readonly Dictionary<string, IReadOnlyList<string>> _trees = new(StringComparer.OrdinalIgnoreCase);
 
         public TestableRepositoryMaterializer(IOptions<ProCursorOptions>? options = null)
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
+                Substitute.For<IClientScmConnectionRepository>(),
                 options ?? Microsoft.Extensions.Options.Options.Create(new ProCursorOptions()),
                 NullLogger<AdoRepositoryMaterializer>.Instance)
         {
         }
 
-        public void SetBranchHead(string branchName, string commitSha) => this._branchHeads[NormalizePath(branchName)] = commitSha;
+        public void SetBranchHead(string branchName, string commitSha)
+        {
+            this._branchHeads[NormalizePath(branchName)] = commitSha;
+        }
 
-        public void SetTree(string commitSha, params string[] paths) => this._trees[commitSha] = paths.Select(NormalizePath).ToList().AsReadOnly();
+        public void SetTree(string commitSha, params string[] paths)
+        {
+            this._trees[commitSha] = paths.Select(NormalizePath).ToList().AsReadOnly();
+        }
 
-        public void SetContent(string commitSha, string path, string? content) => this._contents[(commitSha, NormalizePath(path))] = content;
+        public void SetContent(string commitSha, string path, string? content)
+        {
+            this._contents[(commitSha, NormalizePath(path))] = content;
+        }
 
         protected internal override Task<string> ResolveCommitShaAsync(
             ProCursorKnowledgeSource source,
@@ -281,9 +308,10 @@ public sealed class AdoProCursorMaterializerTests
             string commitSha,
             CancellationToken ct)
         {
-            return Task.FromResult(this._trees.TryGetValue(commitSha, out var paths)
-                ? paths
-                : (IReadOnlyList<string>)[]);
+            return Task.FromResult(
+                this._trees.TryGetValue(commitSha, out var paths)
+                    ? paths
+                    : (IReadOnlyList<string>)[]);
         }
 
         protected internal override Task<string?> GetFileContentAsync(
@@ -300,24 +328,33 @@ public sealed class AdoProCursorMaterializerTests
     private sealed class TestableWikiMaterializer : AdoWikiMaterializer
     {
         private readonly Dictionary<string, string> _branchHeads = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, IReadOnlyList<string>> _trees = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<(string CommitSha, string Path), string?> _contents = new();
+        private readonly Dictionary<string, IReadOnlyList<string>> _trees = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<Guid, WikiV2> _wikisById = [];
 
         public TestableWikiMaterializer(IOptions<ProCursorOptions>? options = null)
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
+                Substitute.For<IClientScmConnectionRepository>(),
                 options ?? Microsoft.Extensions.Options.Options.Create(new ProCursorOptions()),
                 NullLogger<AdoWikiMaterializer>.Instance)
         {
         }
 
-        public void SetBranchHead(string branchName, string commitSha) => this._branchHeads[NormalizePath(branchName)] = commitSha;
+        public void SetBranchHead(string branchName, string commitSha)
+        {
+            this._branchHeads[NormalizePath(branchName)] = commitSha;
+        }
 
-        public void SetTree(string commitSha, params string[] paths) => this._trees[commitSha] = paths.Select(NormalizePath).ToList().AsReadOnly();
+        public void SetTree(string commitSha, params string[] paths)
+        {
+            this._trees[commitSha] = paths.Select(NormalizePath).ToList().AsReadOnly();
+        }
 
-        public void SetContent(string commitSha, string path, string? content) => this._contents[(commitSha, NormalizePath(path))] = content;
+        public void SetContent(string commitSha, string path, string? content)
+        {
+            this._contents[(commitSha, NormalizePath(path))] = content;
+        }
 
         public void SetWikiRepository(Guid wikiId, Guid repositoryId, string? wikiName = null)
         {
@@ -336,7 +373,7 @@ public sealed class AdoProCursorMaterializerTests
 
         protected internal override Task<IReadOnlyList<WikiV2>> ListWikisAsync(
             ProCursorKnowledgeSource source,
-            ClientAdoCredentials? credentials,
+            AdoServicePrincipalCredentials? credentials,
             CancellationToken ct)
         {
             return Task.FromResult<IReadOnlyList<WikiV2>>(this._wikisById.Values.ToList().AsReadOnly());
@@ -362,9 +399,10 @@ public sealed class AdoProCursorMaterializerTests
             string commitSha,
             CancellationToken ct)
         {
-            return Task.FromResult(this._trees.TryGetValue(commitSha, out var paths)
-                ? paths
-                : (IReadOnlyList<string>)[]);
+            return Task.FromResult(
+                this._trees.TryGetValue(commitSha, out var paths)
+                    ? paths
+                    : (IReadOnlyList<string>)[]);
         }
 
         protected internal override Task<string?> GetFileContentAsync(
@@ -376,11 +414,5 @@ public sealed class AdoProCursorMaterializerTests
             this._contents.TryGetValue((commitSha, NormalizePath(path)), out var content);
             return Task.FromResult(content);
         }
-    }
-
-    private static string NormalizePath(string value)
-    {
-        var normalized = value.Replace('\\', '/').Trim();
-        return normalized.StartsWith('/') ? normalized : $"/{normalized}";
     }
 }

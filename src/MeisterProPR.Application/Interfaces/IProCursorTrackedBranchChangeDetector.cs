@@ -10,7 +10,10 @@ namespace MeisterProPR.Application.Interfaces;
 /// </summary>
 public interface IProCursorTrackedBranchChangeDetector
 {
-    /// <summary>Returns the latest branch-head commit SHA for the configured source branch, or <see langword="null" /> when unavailable.</summary>
+    /// <summary>
+    ///     Returns the latest branch-head commit SHA for the configured source branch, or <see langword="null" /> when
+    ///     unavailable.
+    /// </summary>
     Task<string?> GetLatestCommitShaAsync(
         ProCursorKnowledgeSource source,
         ProCursorTrackedBranch trackedBranch,

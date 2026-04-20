@@ -15,8 +15,7 @@ namespace MeisterProPR.Application.Services;
 /// </summary>
 public sealed partial class ProCursorGateway(
     IClientAdminService clientAdminService,
-    IClientAdoOrganizationScopeRepository organizationScopeRepository,
-    IAdoDiscoveryService adoDiscoveryService,
+    IScmProviderRegistry providerRegistry,
     IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
     IProCursorIndexSnapshotRepository snapshotRepository,
     ProCursorQueryService queryService,
@@ -26,7 +25,9 @@ public sealed partial class ProCursorGateway(
     private const string AzureDevOpsProvider = "azureDevOps";
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
         if (!await clientAdminService.ExistsAsync(clientId, ct))
         {
@@ -74,7 +75,7 @@ public sealed partial class ProCursorGateway(
             clientId,
             request.SourceKind,
             resolvedSource.OrganizationUrl,
-            request.ProjectId.Trim(),
+            request.ProviderProjectKey.Trim(),
             resolvedSource.RepositoryId,
             request.RootPath,
             ct);
@@ -90,7 +91,7 @@ public sealed partial class ProCursorGateway(
             request.DisplayName,
             request.SourceKind,
             resolvedSource.OrganizationUrl,
-            request.ProjectId.Trim(),
+            request.ProviderProjectKey.Trim(),
             resolvedSource.RepositoryId,
             request.DefaultBranch,
             request.RootPath,
@@ -258,8 +259,8 @@ public sealed partial class ProCursorGateway(
             source.ClientId,
             source.DisplayName,
             source.SourceKind,
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             source.RepositoryId,
             source.DefaultBranch,
             source.RootPath,
@@ -288,17 +289,17 @@ public sealed partial class ProCursorGateway(
             return await this.ResolveGuidedSourceSelectionAsync(clientId, request, ct);
         }
 
-        if (string.IsNullOrWhiteSpace(request.OrganizationUrl) || string.IsNullOrWhiteSpace(request.RepositoryId))
+        if (string.IsNullOrWhiteSpace(request.ProviderScopePath) || string.IsNullOrWhiteSpace(request.RepositoryId))
         {
-            throw new InvalidOperationException(
-                "Legacy source creation requires organizationUrl and repositoryId when organizationScopeId is not provided.");
+            throw new InvalidOperationException("Legacy source creation requires ProviderScopePath and RepositoryId when OrganizationScopeId is not provided.");
         }
 
-        var canonicalSourceRef = request.CanonicalSourceRef ?? new CanonicalSourceReferenceDto(AzureDevOpsProvider, request.RepositoryId.Trim());
+        var canonicalSourceRef = request.CanonicalSourceRef ??
+                                 new CanonicalSourceReferenceDto(AzureDevOpsProvider, request.RepositoryId.Trim());
         var sourceDisplayName = NormalizeOptional(request.SourceDisplayName) ?? request.RepositoryId.Trim();
 
         return new ResolvedSourceSelection(
-            request.OrganizationUrl.Trim(),
+            request.ProviderScopePath.Trim(),
             request.RepositoryId.Trim(),
             null,
             canonicalSourceRef,
@@ -316,14 +317,14 @@ public sealed partial class ProCursorGateway(
         }
 
         var canonicalSourceRef = request.CanonicalSourceRef
-            ?? throw new InvalidOperationException("CanonicalSourceRef is required for guided source selection.");
+                                 ?? throw new InvalidOperationException("CanonicalSourceRef is required for guided source selection.");
 
-        var scope = await organizationScopeRepository.GetByIdAsync(clientId, request.OrganizationScopeId.Value, ct);
+        var scope = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+            .GetScopeAsync(clientId, request.OrganizationScopeId.Value, ct);
         if (scope is null)
         {
             LogGuidedOrganizationScopeMissing(logger, clientId, request.OrganizationScopeId.Value);
-            throw new KeyNotFoundException(
-                $"Organization scope {request.OrganizationScopeId.Value} was not found for client {clientId}.");
+            throw new KeyNotFoundException($"Organization scope {request.OrganizationScopeId.Value} was not found for client {clientId}.");
         }
 
         if (!scope.IsEnabled)
@@ -332,17 +333,19 @@ public sealed partial class ProCursorGateway(
             throw new InvalidOperationException("The selected organization scope is disabled.");
         }
 
-        var projectId = request.ProjectId.Trim();
-        var availableSources = await adoDiscoveryService.ListSourcesAsync(
-            clientId,
-            scope.Id,
-            projectId,
-            request.SourceKind,
-            ct);
+        var projectId = request.ProviderProjectKey.Trim();
+        var availableSources = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+            .ListSourcesAsync(clientId, scope.Id, projectId, request.SourceKind, ct);
 
         var sourceOption = availableSources.FirstOrDefault(option =>
-            string.Equals(option.CanonicalSourceRef.Provider, canonicalSourceRef.Provider, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(option.CanonicalSourceRef.Value, canonicalSourceRef.Value, StringComparison.OrdinalIgnoreCase));
+            string.Equals(
+                option.CanonicalSourceRef.Provider,
+                canonicalSourceRef.Provider,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                option.CanonicalSourceRef.Value,
+                canonicalSourceRef.Value,
+                StringComparison.OrdinalIgnoreCase));
 
         if (sourceOption is null)
         {
@@ -350,13 +353,8 @@ public sealed partial class ProCursorGateway(
             throw new InvalidOperationException("The selected source is no longer available in Azure DevOps.");
         }
 
-        var availableBranches = await adoDiscoveryService.ListBranchesAsync(
-            clientId,
-            scope.Id,
-            projectId,
-            request.SourceKind,
-            canonicalSourceRef,
-            ct);
+        var availableBranches = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+            .ListBranchesAsync(clientId, scope.Id, projectId, request.SourceKind, canonicalSourceRef, ct);
 
         var branchNames = availableBranches
             .Select(branch => branch.BranchName)
@@ -373,7 +371,7 @@ public sealed partial class ProCursorGateway(
         }
 
         return new ResolvedSourceSelection(
-            scope.OrganizationUrl,
+            scope.ScopePath,
             canonicalSourceRef.Value,
             scope.Id,
             canonicalSourceRef,
@@ -392,7 +390,8 @@ public sealed partial class ProCursorGateway(
 
         if (!availableBranches.Contains(request.DefaultBranch.Trim(), StringComparer.OrdinalIgnoreCase))
         {
-            return $"The selected default branch '{request.DefaultBranch}' is no longer available for source '{sourceDisplayName}'.";
+            return
+                $"The selected default branch '{request.DefaultBranch}' is no longer available for source '{sourceDisplayName}'.";
         }
 
         var invalidTrackedBranches = request.TrackedBranches
@@ -403,21 +402,17 @@ public sealed partial class ProCursorGateway(
 
         if (invalidTrackedBranches.Count > 0)
         {
-            return $"The selected source '{sourceDisplayName}' no longer exposes tracked branches: {string.Join(", ", invalidTrackedBranches)}.";
+            return
+                $"The selected source '{sourceDisplayName}' no longer exposes tracked branches: {string.Join(", ", invalidTrackedBranches)}.";
         }
 
         return null;
     }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private sealed record ResolvedSourceSelection(
-        string OrganizationUrl,
-        string RepositoryId,
-        Guid? OrganizationScopeId,
-        CanonicalSourceReferenceDto? CanonicalSourceRef,
-        string? SourceDisplayName);
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 
     private static ProCursorSnapshotDto? MapSnapshot(
         ProCursorIndexSnapshot? snapshot,
@@ -428,7 +423,8 @@ public sealed partial class ProCursorGateway(
             return null;
         }
 
-        var branchName = trackedBranches.FirstOrDefault(branch => branch.Id == snapshot.TrackedBranchId)?.BranchName ?? string.Empty;
+        var branchName = trackedBranches.FirstOrDefault(branch => branch.Id == snapshot.TrackedBranchId)?.BranchName ??
+                         string.Empty;
         var trackedBranch = trackedBranches.FirstOrDefault(branch => branch.Id == snapshot.TrackedBranchId);
         var freshnessStatus = ProCursorFreshnessEvaluator.GetSnapshotFreshnessStatus(trackedBranch, snapshot);
 
@@ -460,8 +456,8 @@ public sealed partial class ProCursorGateway(
             trackedBranch.MiniIndexEnabled,
             trackedBranch.LastSeenCommitSha,
             trackedBranch.LastIndexedCommitSha,
-                trackedBranch.IsEnabled,
-                ProCursorFreshnessEvaluator.GetBranchFreshnessStatus(trackedBranch, latestSnapshot));
+            trackedBranch.IsEnabled,
+            ProCursorFreshnessEvaluator.GetBranchFreshnessStatus(trackedBranch, latestSnapshot));
     }
 
     private async Task<ProCursorKnowledgeAnswerDto> LogKnowledgeQueryAsync(
@@ -489,4 +485,11 @@ public sealed partial class ProCursorGateway(
 
         return response;
     }
+
+    private sealed record ResolvedSourceSelection(
+        string OrganizationUrl,
+        string RepositoryId,
+        Guid? OrganizationScopeId,
+        CanonicalSourceReferenceDto? CanonicalSourceRef,
+        string? SourceDisplayName);
 }

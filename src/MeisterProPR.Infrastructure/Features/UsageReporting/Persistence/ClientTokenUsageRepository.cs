@@ -38,7 +38,11 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                     input_tokens  = client_token_usage_samples.input_tokens  + EXCLUDED.input_tokens,
                     output_tokens = client_token_usage_samples.output_tokens + EXCLUDED.output_tokens
                 """,
-                clientId, modelId, date, inputTokens, outputTokens);
+                clientId,
+                modelId,
+                date,
+                inputTokens,
+                outputTokens);
         }
         else
         {
@@ -50,15 +54,16 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
 
             if (existing is null)
             {
-                db.ClientTokenUsageSamples.Add(new ClientTokenUsageSample
-                {
-                    Id = Guid.NewGuid(),
-                    ClientId = clientId,
-                    ModelId = modelId,
-                    Date = date,
-                    InputTokens = inputTokens,
-                    OutputTokens = outputTokens,
-                });
+                db.ClientTokenUsageSamples.Add(
+                    new ClientTokenUsageSample
+                    {
+                        Id = Guid.NewGuid(),
+                        ClientId = clientId,
+                        ModelId = modelId,
+                        Date = date,
+                        InputTokens = inputTokens,
+                        OutputTokens = outputTokens,
+                    });
             }
             else
             {

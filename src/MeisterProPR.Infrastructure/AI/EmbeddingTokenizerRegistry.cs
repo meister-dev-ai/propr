@@ -28,7 +28,10 @@ public static class EmbeddingTokenizerRegistry
     /// <summary>
     ///     Returns all supported tokenizer names.
     /// </summary>
-    public static IReadOnlyList<string> GetSupportedTokenizerNames() => SupportedTokenizerNames;
+    public static IReadOnlyList<string> GetSupportedTokenizerNames()
+    {
+        return SupportedTokenizerNames;
+    }
 
     /// <summary>
     ///     Returns whether the supplied tokenizer family is supported.

@@ -12,7 +12,7 @@ using Npgsql;
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>
-///     EF Core implementation of <see cref="IProCursorTokenUsageRecorder"/>.
+///     EF Core implementation of <see cref="IProCursorTokenUsageRecorder" />.
 ///     Uses short-lived contexts so capture does not interfere with the primary ProCursor workflow.
 /// </summary>
 public sealed partial class EfProCursorTokenUsageRecorder(
@@ -35,28 +35,29 @@ public sealed partial class EfProCursorTokenUsageRecorder(
                 return;
             }
 
-            db.ProCursorTokenUsageEvents.Add(new ProCursorTokenUsageEvent(
-                Guid.NewGuid(),
-                request.ClientId,
-                request.ProCursorSourceId,
-                request.SourceDisplayNameSnapshot,
-                request.RequestId,
-                request.OccurredAtUtc,
-                request.CallType,
-                request.DeploymentName,
-                request.ModelName,
-                request.TokenizerName,
-                request.PromptTokens,
-                request.CompletionTokens,
-                request.TokensEstimated,
-                request.EstimatedCostUsd,
-                request.CostEstimated,
-                request.AiConnectionId,
-                request.IndexJobId,
-                request.ResourceId,
-                request.SourcePath,
-                request.KnowledgeChunkId,
-                Sanitize(request.SafeMetadataJson)));
+            db.ProCursorTokenUsageEvents.Add(
+                new ProCursorTokenUsageEvent(
+                    Guid.NewGuid(),
+                    request.ClientId,
+                    request.ProCursorSourceId,
+                    request.SourceDisplayNameSnapshot,
+                    request.RequestId,
+                    request.OccurredAtUtc,
+                    request.CallType,
+                    request.DeploymentName,
+                    request.ModelName,
+                    request.TokenizerName,
+                    request.PromptTokens,
+                    request.CompletionTokens,
+                    request.TokensEstimated,
+                    request.EstimatedCostUsd,
+                    request.CostEstimated,
+                    request.AiConnectionId,
+                    request.IndexJobId,
+                    request.ResourceId,
+                    request.SourcePath,
+                    request.KnowledgeChunkId,
+                    Sanitize(request.SafeMetadataJson)));
 
             await db.SaveChangesAsync(ct);
         }
@@ -82,10 +83,12 @@ public sealed partial class EfProCursorTokenUsageRecorder(
             : value;
     }
 
-    private static bool IsDuplicateRequestIdViolation(DbUpdateException exception) =>
-        exception.InnerException is PostgresException
+    private static bool IsDuplicateRequestIdViolation(DbUpdateException exception)
+    {
+        return exception.InnerException is PostgresException
         {
             SqlState: PostgresErrorCodes.UniqueViolation,
             ConstraintName: "ux_procursor_token_usage_events_client_request",
         };
+    }
 }

@@ -19,8 +19,8 @@ public sealed record ProCursorKnowledgeQueryRequest(
 ///     Optional repository context used to bias a knowledge query.
 /// </summary>
 public sealed record ProCursorRepositoryContextDto(
-    string OrganizationUrl,
-    string ProjectId,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     string RepositoryId,
     string Branch);
 

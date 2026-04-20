@@ -6,6 +6,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -22,6 +23,7 @@ public sealed class MentionScanServiceTests
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         ConfigId,
         ClientId,
+        ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
         ReviewerId,
@@ -32,9 +34,14 @@ public sealed class MentionScanServiceTests
 
     private readonly IActivePrFetcher _activePrFetcher = Substitute.For<IActivePrFetcher>();
     private readonly Channel<MentionReplyJob> _channel;
+    private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
 
     private readonly ICrawlConfigurationRepository _crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
     private readonly IMentionReplyJobRepository _jobRepository = Substitute.For<IMentionReplyJobRepository>();
+
+    private readonly IProviderActivationService _providerActivationService =
+        Substitute.For<IProviderActivationService>();
+
     private readonly IPullRequestFetcher _pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
     private readonly IMentionScanRepository _scanRepository = Substitute.For<IMentionScanRepository>();
     private readonly MentionScanService _sut;
@@ -46,10 +53,33 @@ public sealed class MentionScanServiceTests
             this._crawlConfigs,
             this._activePrFetcher,
             this._pullRequestFetcher,
+            this._clientRegistry,
             this._scanRepository,
             this._jobRepository,
             this._channel.Writer,
-            NullLogger<MentionScanService>.Instance);
+            NullLogger<MentionScanService>.Instance,
+            this._providerActivationService);
+
+        this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+    }
+
+    [Fact]
+    public async Task ScanAsync_DisabledProvider_SkipsConfiguration()
+    {
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        this._providerActivationService.IsEnabledAsync(DefaultConfig.Provider, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        await this._sut.ScanAsync();
+
+        await this._activePrFetcher.DidNotReceive()
+            .GetRecentlyUpdatedPullRequestsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -57,7 +87,8 @@ public sealed class MentionScanServiceTests
     {
         // Arrange: no PRs returned since watermark
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
-        this._scanRepository.GetProjectScanAsync(ConfigId).ReturnsForAnyArgs(new MentionProjectScan(Guid.NewGuid(), ConfigId, DateTimeOffset.UtcNow));
+        this._scanRepository.GetProjectScanAsync(ConfigId)
+            .ReturnsForAnyArgs(new MentionProjectScan(Guid.NewGuid(), ConfigId, DateTimeOffset.UtcNow));
         this._activePrFetcher.GetRecentlyUpdatedPullRequestsAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -94,7 +125,8 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(Task.FromResult<IReadOnlyList<ActivePullRequestRef>>([pr]));
-        this._scanRepository.GetPrScanAsync(ConfigId, "repo", 42).ReturnsForAnyArgs(new MentionPrScan(Guid.NewGuid(), ConfigId, "repo", 42, lastSeen));
+        this._scanRepository.GetPrScanAsync(ConfigId, "repo", 42)
+            .ReturnsForAnyArgs(new MentionPrScan(Guid.NewGuid(), ConfigId, "repo", 42, lastSeen));
 
         // Act
         await this._sut.ScanAsync();
@@ -153,7 +185,8 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);
-        this._jobRepository.ExistsForCommentAsync(ClientId, 1, 100, 200, Arg.Any<CancellationToken>()).Returns(false);
+        this._jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, 100, 200, Arg.Any<CancellationToken>())
+            .Returns(false);
 
         // Act
         await this._sut.ScanAsync();
@@ -219,14 +252,21 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);
-        this._jobRepository.ExistsForCommentAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        this._jobRepository.ExistsForCommentAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
         await this._sut.ScanAsync();
 
         // Assert: AddAsync was NOT called (duplicate suppressed)
-        await this._jobRepository.DidNotReceiveWithAnyArgs().AddAsync(Arg.Any<MentionReplyJob>(), Arg.Any<CancellationToken>());
+        await this._jobRepository.DidNotReceiveWithAnyArgs()
+            .AddAsync(Arg.Any<MentionReplyJob>(), Arg.Any<CancellationToken>());
         Assert.Equal(0, this._channel.Reader.Count);
     }
 

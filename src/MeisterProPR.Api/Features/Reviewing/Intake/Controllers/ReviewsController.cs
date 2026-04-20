@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -24,7 +25,27 @@ public sealed class ReviewsController(IJobRepository jobRepository) : Controller
             job.PullRequestId,
             job.IterationId,
             job.SubmittedAt,
-            job.CompletedAt);
+            job.CompletedAt)
+        {
+            Provider = job.Provider,
+            HostBaseUrl = job.HostBaseUrl,
+            Repository = new ReviewRepositoryRefDto(
+                job.RepositoryReference.ExternalRepositoryId,
+                job.RepositoryReference.OwnerOrNamespace,
+                job.RepositoryReference.ProjectPath),
+            CodeReview = new ReviewCodeReviewRefDto(
+                job.CodeReviewReference.Platform,
+                job.CodeReviewReference.ExternalReviewId,
+                job.CodeReviewReference.Number),
+            ReviewRevision = job.ReviewRevisionReference is null
+                ? null
+                : new ReviewRevisionRefDto(
+                    job.ReviewRevisionReference.HeadSha,
+                    job.ReviewRevisionReference.BaseSha,
+                    job.ReviewRevisionReference.StartSha,
+                    job.ReviewRevisionReference.ProviderRevisionId,
+                    job.ReviewRevisionReference.PatchIdentity),
+        };
     }
 
     /// <summary>List all review jobs for the specified client.</summary>
@@ -55,10 +76,26 @@ public sealed class ReviewsController(IJobRepository jobRepository) : Controller
 public sealed record ReviewListItem(
     Guid JobId,
     JobStatus Status,
-    string OrganizationUrl,
-    string ProjectId,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     string RepositoryId,
     int PullRequestId,
     int IterationId,
     DateTimeOffset SubmittedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt)
+{
+    /// <summary>Normalized provider family for the review job.</summary>
+    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+
+    /// <summary>Normalized provider host base URL for the review job.</summary>
+    public string? HostBaseUrl { get; init; }
+
+    /// <summary>Normalized repository identity for the review job.</summary>
+    public ReviewRepositoryRefDto? Repository { get; init; }
+
+    /// <summary>Normalized code review identity for the review job.</summary>
+    public ReviewCodeReviewRefDto? CodeReview { get; init; }
+
+    /// <summary>Normalized review revision identity for the review job.</summary>
+    public ReviewRevisionRefDto? ReviewRevision { get; init; }
+}

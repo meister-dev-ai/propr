@@ -71,7 +71,9 @@ public sealed class ProCursorIndexWorkerTests
 
         Assert.Equal(ProCursorIndexJobStatus.Completed, job.Status);
         Assert.Equal(2, job.AttemptCount);
-        Assert.Equal(1, await db.ProCursorIndexSnapshots.CountAsync(snapshot => snapshot.KnowledgeSourceId == sourceId));
+        Assert.Equal(
+            1,
+            await db.ProCursorIndexSnapshots.CountAsync(snapshot => snapshot.KnowledgeSourceId == sourceId));
     }
 
     [Fact]
@@ -97,9 +99,24 @@ public sealed class ProCursorIndexWorkerTests
         var secondJobId = Guid.NewGuid();
         var thirdJobId = Guid.NewGuid();
 
-        await SeedSourceAndJobAsync(provider, sourceAId, sourceABranchId, firstJobId, "source-a", "main", "text_only", dedupSuffix: "1");
-        await SeedJobAsync(provider, sourceAId, sourceABranchId, secondJobId, dedupSuffix: "2");
-        await SeedSourceAndJobAsync(provider, sourceBId, sourceBBranchId, thirdJobId, "source-b", "main", "text_only", dedupSuffix: "3");
+        await SeedSourceAndJobAsync(
+            provider,
+            sourceAId,
+            sourceABranchId,
+            firstJobId,
+            "source-a",
+            "main",
+            "text_only");
+        await SeedJobAsync(provider, sourceAId, sourceABranchId, secondJobId, "2");
+        await SeedSourceAndJobAsync(
+            provider,
+            sourceBId,
+            sourceBBranchId,
+            thirdJobId,
+            "source-b",
+            "main",
+            "text_only",
+            "3");
 
         var worker = provider.GetRequiredService<ProCursorIndexWorker>();
         await worker.StartAsync(CancellationToken.None);
@@ -164,9 +181,10 @@ public sealed class ProCursorIndexWorkerTests
         services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
         services.AddScoped<IProCursorIndexSnapshotRepository, ProCursorIndexSnapshotRepository>();
         services.AddScoped<ProCursorSymbolGraphRepository>();
-        services.AddScoped<IProCursorSymbolGraphRepository>(sp => sp.GetRequiredService<ProCursorSymbolGraphRepository>());
+        services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
+            sp.GetRequiredService<ProCursorSymbolGraphRepository>());
 
-        services.AddSingleton<IProCursorMaterializer>(materializer);
+        services.AddSingleton(materializer);
         services.AddSingleton<IProCursorChunkExtractor, EmptyChunkExtractor>();
         services.AddSingleton<IProCursorEmbeddingService, EmptyEmbeddingService>();
         services.AddSingleton<IProCursorSymbolExtractor, EmptySymbolExtractor>();
@@ -174,10 +192,10 @@ public sealed class ProCursorIndexWorkerTests
 
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
-        services.AddSingleton<IOptions<ProCursorOptions>>(Options.Create(options));
+        services.AddSingleton(Options.Create(options));
         services.AddSingleton<ProCursorIndexWorker>();
 
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(true);
     }
 
     private static ServiceProvider BuildIncompleteGraphServiceProvider()
@@ -186,15 +204,17 @@ public sealed class ProCursorIndexWorkerTests
         services.AddLogging();
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
-        services.AddSingleton<IOptions<ProCursorOptions>>(Options.Create(new ProCursorOptions
-        {
-            MaxIndexConcurrency = 1,
-            RefreshPollSeconds = 1,
-            ChunkTargetLines = 50,
-        }));
+        services.AddSingleton(
+            Options.Create(
+                new ProCursorOptions
+                {
+                    MaxIndexConcurrency = 1,
+                    RefreshPollSeconds = 1,
+                    ChunkTargetLines = 50,
+                }));
         services.AddSingleton<ProCursorIndexWorker>();
 
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(true);
     }
 
     private static async Task SeedSourceAndJobAsync(
@@ -210,13 +230,14 @@ public sealed class ProCursorIndexWorkerTests
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
 
-        db.Clients.Add(new ClientRecord
-        {
-            Id = sourceId,
-            DisplayName = repositoryId,
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = sourceId,
+                DisplayName = repositoryId,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
 
         var source = new ProCursorKnowledgeSource(
             sourceId,
@@ -233,13 +254,14 @@ public sealed class ProCursorIndexWorkerTests
         source.AddTrackedBranch(branchId, branchName, ProCursorRefreshTriggerMode.Manual, true);
 
         db.ProCursorKnowledgeSources.Add(source);
-        db.ProCursorIndexJobs.Add(new ProCursorIndexJob(
-            jobId,
-            sourceId,
-            branchId,
-            null,
-            "refresh",
-            $"{sourceId:N}:{branchId:N}:{dedupSuffix}"));
+        db.ProCursorIndexJobs.Add(
+            new ProCursorIndexJob(
+                jobId,
+                sourceId,
+                branchId,
+                null,
+                "refresh",
+                $"{sourceId:N}:{branchId:N}:{dedupSuffix}"));
         await db.SaveChangesAsync();
     }
 
@@ -253,13 +275,14 @@ public sealed class ProCursorIndexWorkerTests
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
 
-        db.ProCursorIndexJobs.Add(new ProCursorIndexJob(
-            jobId,
-            sourceId,
-            branchId,
-            null,
-            "refresh",
-            $"{sourceId:N}:{branchId:N}:{dedupSuffix}"));
+        db.ProCursorIndexJobs.Add(
+            new ProCursorIndexJob(
+                jobId,
+                sourceId,
+                branchId,
+                null,
+                "refresh",
+                $"{sourceId:N}:{branchId:N}:{dedupSuffix}"));
         await db.SaveChangesAsync();
     }
 
@@ -283,6 +306,16 @@ public sealed class ProCursorIndexWorkerTests
         }
 
         throw new TimeoutException("Timed out waiting for ProCursor jobs to complete.");
+    }
+
+    private static string CreateRootDirectory()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            "meisterpropr-procursor-worker-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     private sealed class NoOpTrackedBranchChangeDetector : IProCursorTrackedBranchChangeDetector
@@ -363,13 +396,14 @@ public sealed class ProCursorIndexWorkerTests
 
             var rootDirectory = CreateRootDirectory();
             success.TrySetResult();
-            return Task.FromResult(new ProCursorMaterializedSource(
-                source.Id,
-                trackedBranch.Id,
-                trackedBranch.BranchName,
-                requestedCommitSha ?? "commit-success",
-                rootDirectory,
-                []));
+            return Task.FromResult(
+                new ProCursorMaterializedSource(
+                    source.Id,
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    requestedCommitSha ?? "commit-success",
+                    rootDirectory,
+                    []));
         }
     }
 
@@ -404,12 +438,5 @@ public sealed class ProCursorIndexWorkerTests
                 CreateRootDirectory(),
                 []);
         }
-    }
-
-    private static string CreateRootDirectory()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "meisterpropr-procursor-worker-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
     }
 }

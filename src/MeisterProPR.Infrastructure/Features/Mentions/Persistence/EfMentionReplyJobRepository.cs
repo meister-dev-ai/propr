@@ -35,6 +35,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
     /// <inheritdoc />
     public async Task<bool> ExistsForCommentAsync(
         Guid clientId,
+        string repositoryId,
         int pullRequestId,
         int threadId,
         int commentId,
@@ -44,6 +45,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
             .AnyAsync(
                 j =>
                     j.ClientId == clientId &&
+                    j.RepositoryId == repositoryId &&
                     j.PullRequestId == pullRequestId &&
                     j.ThreadId == threadId &&
                     j.CommentId == commentId,

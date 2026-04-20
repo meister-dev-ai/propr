@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MeisterProPR.Infrastructure.Data.Configurations;
 
-internal sealed class ReviewJobProCursorSourceScopeEntityTypeConfiguration : IEntityTypeConfiguration<ReviewJobProCursorSourceScopeRecord>
+internal sealed class
+    ReviewJobProCursorSourceScopeEntityTypeConfiguration : IEntityTypeConfiguration<ReviewJobProCursorSourceScopeRecord>
 {
     public void Configure(EntityTypeBuilder<ReviewJobProCursorSourceScopeRecord> builder)
     {

@@ -14,37 +14,36 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext dbContext)
     : IClientAdoOrganizationScopeRepository
 {
-    private static ClientAdoOrganizationScopeDto ToDto(ClientAdoOrganizationScopeRecord record) =>
-        new(
-            record.Id,
-            record.ClientId,
-            record.OrganizationUrl,
-            record.DisplayName,
-            record.IsEnabled,
-            record.VerificationStatus,
-            record.LastVerifiedAt,
-            record.LastVerificationError,
-            record.CreatedAt,
-            record.UpdatedAt);
-
-    public async Task<IReadOnlyList<ClientAdoOrganizationScopeDto>> GetByClientIdAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ClientAdoOrganizationScopeDto>> GetByClientIdAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
-        var records = await dbContext.ClientAdoOrganizationScopes
+        var records = await dbContext.ClientScmScopes
             .AsNoTracking()
+            .Include(scope => scope.Connection)
             .Where(scope => scope.ClientId == clientId)
-            .OrderBy(scope => scope.OrganizationUrl)
+            .Where(scope => scope.ScopeType == "organization")
+            .Where(scope => scope.Connection != null && scope.Connection.Provider == ScmProvider.AzureDevOps)
+            .OrderBy(scope => scope.ScopePath)
             .ToListAsync(ct);
 
         return records.Select(ToDto).ToList().AsReadOnly();
     }
 
-    public async Task<ClientAdoOrganizationScopeDto?> GetByIdAsync(Guid clientId, Guid scopeId, CancellationToken ct = default)
+    public async Task<ClientAdoOrganizationScopeDto?> GetByIdAsync(
+        Guid clientId,
+        Guid scopeId,
+        CancellationToken ct = default)
     {
-        var record = await dbContext.ClientAdoOrganizationScopes
+        var record = await dbContext.ClientScmScopes
             .AsNoTracking()
+            .Include(scope => scope.Connection)
             .FirstOrDefaultAsync(scope => scope.ClientId == clientId && scope.Id == scopeId, ct);
 
-        return record is null ? null : ToDto(record);
+        return record is null || record.ScopeType != "organization" ||
+               record.Connection?.Provider != ScmProvider.AzureDevOps
+            ? null
+            : ToDto(record);
     }
 
     public async Task<ClientAdoOrganizationScopeDto?> AddAsync(
@@ -53,35 +52,7 @@ public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext d
         string? displayName,
         CancellationToken ct = default)
     {
-        if (!await dbContext.Clients.AnyAsync(client => client.Id == clientId, ct))
-        {
-            return null;
-        }
-
-        var normalizedOrganizationUrl = NormalizeOrganizationUrl(organizationUrl);
-        if (await dbContext.ClientAdoOrganizationScopes.AnyAsync(
-                scope => scope.ClientId == clientId && scope.OrganizationUrl == normalizedOrganizationUrl,
-                ct))
-        {
-            throw new InvalidOperationException("An organization scope for this URL already exists.");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var record = new ClientAdoOrganizationScopeRecord
-        {
-            Id = Guid.NewGuid(),
-            ClientId = clientId,
-            OrganizationUrl = normalizedOrganizationUrl,
-            DisplayName = NormalizeOptional(displayName),
-            IsEnabled = true,
-            VerificationStatus = AdoOrganizationVerificationStatus.Unknown,
-            CreatedAt = now,
-            UpdatedAt = now,
-        };
-
-        dbContext.ClientAdoOrganizationScopes.Add(record);
-        await dbContext.SaveChangesAsync(ct);
-        return ToDto(record);
+        throw new NotSupportedException("Legacy Azure DevOps organization-scope writes are retired. Use provider scopes instead.");
     }
 
     public async Task<ClientAdoOrganizationScopeDto?> UpdateAsync(
@@ -92,28 +63,7 @@ public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext d
         bool isEnabled,
         CancellationToken ct = default)
     {
-        var record = await dbContext.ClientAdoOrganizationScopes
-            .FirstOrDefaultAsync(scope => scope.ClientId == clientId && scope.Id == scopeId, ct);
-
-        if (record is null)
-        {
-            return null;
-        }
-
-        var normalizedOrganizationUrl = NormalizeOrganizationUrl(organizationUrl);
-        if (await dbContext.ClientAdoOrganizationScopes.AnyAsync(
-                scope => scope.ClientId == clientId && scope.Id != scopeId && scope.OrganizationUrl == normalizedOrganizationUrl,
-                ct))
-        {
-            throw new InvalidOperationException("An organization scope for this URL already exists.");
-        }
-
-        record.OrganizationUrl = normalizedOrganizationUrl;
-        record.DisplayName = NormalizeOptional(displayName);
-        record.IsEnabled = isEnabled;
-        record.UpdatedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(ct);
-        return ToDto(record);
+        throw new NotSupportedException("Legacy Azure DevOps organization-scope writes are retired. Use provider scopes instead.");
     }
 
     public async Task<ClientAdoOrganizationScopeDto?> UpdateVerificationAsync(
@@ -124,15 +74,17 @@ public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext d
         string? verificationError,
         CancellationToken ct = default)
     {
-        var record = await dbContext.ClientAdoOrganizationScopes
+        var record = await dbContext.ClientScmScopes
+            .Include(scope => scope.Connection)
             .FirstOrDefaultAsync(scope => scope.ClientId == clientId && scope.Id == scopeId, ct);
 
-        if (record is null)
+        if (record is null || record.ScopeType != "organization" ||
+            record.Connection?.Provider != ScmProvider.AzureDevOps)
         {
             return null;
         }
 
-        record.VerificationStatus = verificationStatus;
+        record.VerificationStatus = MapVerificationStatus(verificationStatus);
         record.LastVerifiedAt = verifiedAt;
         record.LastVerificationError = NormalizeOptional(verificationError);
         record.UpdatedAt = DateTimeOffset.UtcNow;
@@ -142,17 +94,22 @@ public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext d
 
     public async Task<bool> DeleteAsync(Guid clientId, Guid scopeId, CancellationToken ct = default)
     {
-        var record = await dbContext.ClientAdoOrganizationScopes
-            .FirstOrDefaultAsync(scope => scope.ClientId == clientId && scope.Id == scopeId, ct);
+        throw new NotSupportedException("Legacy Azure DevOps organization-scope writes are retired. Use provider scopes instead.");
+    }
 
-        if (record is null)
-        {
-            return false;
-        }
-
-        dbContext.ClientAdoOrganizationScopes.Remove(record);
-        await dbContext.SaveChangesAsync(ct);
-        return true;
+    private static ClientAdoOrganizationScopeDto ToDto(ClientScmScopeRecord record)
+    {
+        return new ClientAdoOrganizationScopeDto(
+            record.Id,
+            record.ClientId,
+            NormalizeOrganizationUrl(record.ScopePath),
+            record.DisplayName,
+            record.IsEnabled,
+            MapVerificationStatus(record.VerificationStatus),
+            record.LastVerifiedAt,
+            record.LastVerificationError,
+            record.CreatedAt,
+            record.UpdatedAt);
     }
 
     private static string NormalizeOrganizationUrl(string organizationUrl)
@@ -161,6 +118,30 @@ public sealed class ClientAdoOrganizationScopeRepository(MeisterProPRDbContext d
         return organizationUrl.Trim().TrimEnd('/');
     }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static AdoOrganizationVerificationStatus MapVerificationStatus(string? verificationStatus)
+    {
+        return verificationStatus?.Trim().ToLowerInvariant() switch
+        {
+            "verified" => AdoOrganizationVerificationStatus.Verified,
+            "failed" => AdoOrganizationVerificationStatus.Unreachable,
+            "stale" => AdoOrganizationVerificationStatus.Stale,
+            _ => AdoOrganizationVerificationStatus.Unknown,
+        };
+    }
+
+    private static string MapVerificationStatus(AdoOrganizationVerificationStatus verificationStatus)
+    {
+        return verificationStatus switch
+        {
+            AdoOrganizationVerificationStatus.Verified => "verified",
+            AdoOrganizationVerificationStatus.Unauthorized or AdoOrganizationVerificationStatus.Unreachable => "failed",
+            AdoOrganizationVerificationStatus.Stale => "stale",
+            _ => "unknown",
+        };
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 }

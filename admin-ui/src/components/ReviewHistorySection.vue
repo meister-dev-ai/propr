@@ -19,34 +19,36 @@
                             {{ group.prSourceBranch }} &rarr; {{ group.prTargetBranch }}
                         </span>
                     </div>
-                    <div class="pr-card-header-right">
-                        <div class="pr-card-totals" v-if="group.totalInTokens > 0 || group.totalOutTokens > 0">
-                            <span class="totals-label">Tokens:</span>
-                            <span class="fat-tokens total-value">{{ formatTokens(group.totalInTokens) }} In</span>
-                            <span class="totals-separator">/</span>
-                            <span class="fat-tokens total-value">{{ formatTokens(group.totalOutTokens) }} Out</span>
-                        </div>
-                        <RouterLink
-                            v-if="canInspectClient(group.clientId)"
-                            :to="prReviewLink(group)"
-                            class="btn-ghost pr-view-btn"
-                            title="View PR analysis"
-                        >
-                            PR View ↗
-                        </RouterLink>
-                        <button
-                            v-if="group.items.length > ITEMS_VISIBLE_DEFAULT"
-                            class="btn-ghost expand-btn"
-                            @click="toggleGroupExpanded(group.key)"
-                        >
-                            <span v-if="expandedGroups.has(group.key)">
-                                Show less ▴
-                            </span>
-                            <span v-else>
-                                +{{ group.items.length - ITEMS_VISIBLE_DEFAULT }} more ▾
-                            </span>
-                        </button>
-                    </div>
+            <div class="pr-card-header-right">
+                <div class="pr-card-totals" v-if="group.totalInTokens > 0 || group.totalOutTokens > 0">
+                    <span class="totals-label">Tokens:</span>
+                    <span class="fat-tokens total-value">{{ formatTokens(group.totalInTokens) }} In</span>
+                    <span class="totals-separator">/</span>
+                    <span class="fat-tokens total-value">{{ formatTokens(group.totalOutTokens) }} Out</span>
+                </div>
+                <div class="pr-card-actions">
+                    <RouterLink
+                        v-if="canInspectClient(group.clientId)"
+                        :to="prReviewLink(group)"
+                        class="btn-ghost pr-view-btn"
+                        title="View PR analysis"
+                    >
+                        PR View ↗
+                    </RouterLink>
+                    <button
+                        v-if="group.items.length > ITEMS_VISIBLE_DEFAULT"
+                        class="btn-ghost expand-btn"
+                        @click="toggleGroupExpanded(group.key)"
+                    >
+                        <span v-if="expandedGroups.has(group.key)">
+                            Show less ▴
+                        </span>
+                        <span v-else>
+                            +{{ group.items.length - ITEMS_VISIBLE_DEFAULT }} more ▾
+                        </span>
+                    </button>
+                </div>
+            </div>
                 </div>
 
                 <div class="review-list">
@@ -182,8 +184,8 @@ type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 interface PrGroup {
     key: string
     pullRequestId: number
-    organizationUrl: string
-    projectId: string
+    providerScopePath: string
+    providerProjectKey: string
     repositoryId: string
     prTitle: string | null
     prRepositoryName: string | null
@@ -330,20 +332,20 @@ function buildGroups(items: JobListItem[]): PrGroup[] {
     const map = new Map<string, PrGroup>()
 
     for (const item of items) {
-        const orgUrl = item.organizationUrl ?? ''
-        const project = item.projectId ?? ''
+        const providerScopePath = item.providerScopePath ?? ''
+        const providerProjectKey = item.providerProjectKey ?? ''
         const repo = item.repositoryId ?? ''
         const prId = item.pullRequestId ?? 0
 
-        const key = `${orgUrl}|${project}|${repo}|${prId}`
-        const prUrl = `${orgUrl}/${project}/_git/${repo}/pullrequest/${prId}`
+        const key = `${providerScopePath}|${providerProjectKey}|${repo}|${prId}`
+        const prUrl = `${providerScopePath}/${providerProjectKey}/_git/${repo}/pullrequest/${prId}`
 
         if (!map.has(key)) {
             map.set(key, {
                 key,
                 pullRequestId: prId,
-                organizationUrl: orgUrl,
-                projectId: project,
+                providerScopePath,
+                providerProjectKey,
                 repositoryId: repo,
                 prTitle: item.prTitle ?? null,
                 prRepositoryName: item.prRepositoryName ?? null,
@@ -429,8 +431,8 @@ function prReviewLink(group: PrGroup): object {
         name: 'pr-review',
         query: {
             clientId: group.clientId,
-            orgUrl: group.organizationUrl,
-            project: group.projectId,
+            providerScopePath: group.providerScopePath,
+            providerProjectKey: group.providerProjectKey,
             repositoryId: group.repositoryId,
             pullRequestId: String(group.pullRequestId),
         },
@@ -463,6 +465,8 @@ function prReviewLink(group: PrGroup): object {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
     padding: 1rem 1.5rem;
     background: rgba(255, 255, 255, 0.02);
     border-bottom: 1px solid var(--color-border);
@@ -471,8 +475,15 @@ function prReviewLink(group: PrGroup): object {
 .pr-card-header-right {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 1rem;
     flex-shrink: 0;
+}
+
+.pr-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .pr-card-title {
@@ -548,9 +559,10 @@ function prReviewLink(group: PrGroup): object {
 .review-list-item {
     display: flex;
     align-items: center;
-    padding: 1rem 1.75rem;
+    flex-wrap: wrap; /* Allow wrapping to prevent overlap */
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--color-border);
-    gap: 1.5rem;
+    gap: 1rem;
     min-height: 4rem;
     transition: all 0.2s ease;
 }
@@ -565,11 +577,11 @@ function prReviewLink(group: PrGroup): object {
 
 /* Item Columns */
 .list-status-col {
-    flex: 0 0 120px;
+    flex: 0 0 100px;
 }
 
 .list-date-col {
-    flex: 0 0 180px;
+    flex: 0 0 160px;
 }
 
 .list-iter-col {
@@ -577,16 +589,16 @@ function prReviewLink(group: PrGroup): object {
 }
 
 .list-model-col {
-    flex: 0 0 160px;
+    flex: 0 0 120px;
     min-width: 0;
     overflow: hidden;
 }
 
 .list-summary-col {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 200px;
+    min-width: 200px; /* Prevent shrinking past chips width */
     color: var(--color-text);
-    padding: 0 0.5rem;
+    padding: 0;
 }
 
 .model-badge {
@@ -605,14 +617,9 @@ function prReviewLink(group: PrGroup): object {
     text-overflow: ellipsis;
 }
 
-.list-summary-col {
-    flex: 1;
-    min-width: 0;
-    color: var(--color-text);
-}
-
 .list-action-col {
     flex: 0 0 auto;
+    margin-left: auto; /* Keep it on the right */
 }
 
 /* Status badge */
@@ -790,5 +797,47 @@ function prReviewLink(group: PrGroup): object {
 .pagination-buttons button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+@media (max-width: 1200px) {
+    .pr-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .pr-card-header-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .review-list-item {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 1rem;
+        height: auto;
+    }
+
+    .list-status-col {
+        flex: 0 0 auto;
+    }
+
+    .list-date-col, .list-iter-col, .list-model-col {
+        flex: 0 0 auto;
+    }
+
+    .list-model-col {
+        margin-right: auto;
+    }
+
+    .list-action-col {
+        flex: 0 0 auto;
+    }
+
+    .list-summary-col {
+        flex: 1 1 100%;
+        order: 99;
+        margin-top: 0.25rem;
+        padding: 0;
+    }
 }
 </style>

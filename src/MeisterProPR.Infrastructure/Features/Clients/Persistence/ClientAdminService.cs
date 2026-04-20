@@ -6,12 +6,15 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>EF Implementation of <see cref="IClientAdminService" />.</summary>
-public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClientAdminService
+public sealed class ClientAdminService(
+    MeisterProPRDbContext dbContext,
+    IProviderActivationService? providerActivationService = null) : IClientAdminService
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<ClientDto>> GetAllAsync(CancellationToken ct = default)
@@ -121,8 +124,7 @@ public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClien
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ClientDto>> GetByIdsAsync(
-        IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ClientDto>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
     {
         var idList = ids.ToList();
         if (idList.Count == 0)
@@ -137,6 +139,68 @@ public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClien
         return clients.Select(ToDto).ToList().AsReadOnly();
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ProviderConnectionAuditEntryDto>> GetProviderConnectionAuditTrailAsync(
+        Guid clientId,
+        int take = 20,
+        CancellationToken ct = default)
+    {
+        if (take <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(take), take, "The take parameter must be greater than zero.");
+        }
+
+        await this.PurgeExpiredProviderAuditEntriesAsync(ct);
+
+        var records = await dbContext.ProviderConnectionAuditEntries
+            .AsNoTracking()
+            .Where(entry => entry.ClientId == clientId)
+            .OrderByDescending(entry => entry.OccurredAt)
+            .Take(take)
+            .ToListAsync(ct);
+
+        if (providerActivationService is not null)
+        {
+            var enabledProviders = await providerActivationService.GetEnabledProvidersAsync(ct);
+            records = records
+                .Where(record => enabledProviders.Contains(record.Provider))
+                .ToList();
+        }
+
+        return records
+            .Select(record => new ProviderConnectionAuditEntryDto(
+                record.Id,
+                record.ClientId,
+                record.ConnectionId,
+                record.Provider,
+                record.DisplayName,
+                record.HostBaseUrl,
+                record.EventType,
+                record.Summary,
+                record.OccurredAt,
+                record.Status,
+                record.FailureCategory,
+                record.Detail))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private async Task PurgeExpiredProviderAuditEntriesAsync(CancellationToken ct)
+    {
+        var cutoff = ProviderRetentionPolicy.GetProviderConnectionAuditCutoff(DateTimeOffset.UtcNow);
+        var expiredEntries = await dbContext.ProviderConnectionAuditEntries
+            .Where(entry => entry.OccurredAt < cutoff)
+            .ToListAsync(ct);
+
+        if (expiredEntries.Count == 0)
+        {
+            return;
+        }
+
+        dbContext.ProviderConnectionAuditEntries.RemoveRange(expiredEntries);
+        await dbContext.SaveChangesAsync(ct);
+    }
+
     private static ClientDto ToDto(ClientRecord client)
     {
         return new ClientDto(
@@ -144,9 +208,6 @@ public sealed class ClientAdminService(MeisterProPRDbContext dbContext) : IClien
             client.DisplayName,
             client.IsActive,
             client.CreatedAt,
-            client is { AdoTenantId: not null, AdoClientId: not null, AdoClientSecret: not null },
-            client.AdoTenantId,
-            client.AdoClientId,
             client.ReviewerId,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage);

@@ -16,20 +16,72 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.ThreadMemory.Persistenc
 public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner) : IReviewThreadMemoryService
 {
     public Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
-        => inner.HandleThreadResolvedAsync(evt, ct);
+    {
+        return inner.HandleThreadResolvedAsync(evt, ct);
+    }
 
     public Task HandleThreadReopenedAsync(ThreadReopenedDomainEvent evt, CancellationToken ct = default)
-        => inner.HandleThreadReopenedAsync(evt, ct);
+    {
+        return inner.HandleThreadReopenedAsync(evt, ct);
+    }
 
-    public Task RecordNoOpAsync(Guid clientId, string repositoryId, int pullRequestId, int threadId, string? previousStatus, string currentStatus, string reason, CancellationToken ct = default)
-        => inner.RecordNoOpAsync(clientId, repositoryId, pullRequestId, threadId, previousStatus, currentStatus, reason, ct);
+    public Task RecordNoOpAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        int threadId,
+        string? previousStatus,
+        string currentStatus,
+        string reason,
+        CancellationToken ct = default)
+    {
+        return inner.RecordNoOpAsync(
+            clientId,
+            repositoryId,
+            pullRequestId,
+            threadId,
+            previousStatus,
+            currentStatus,
+            reason,
+            ct);
+    }
 
-    public Task<ReviewResult> RetrieveAndReconsiderAsync(Guid clientId, ReviewJob job, string filePath, string? changeExcerpt, ReviewResult draftResult, Guid? protocolId, CancellationToken ct = default)
-        => inner.RetrieveAndReconsiderAsync(clientId, job, filePath, changeExcerpt, draftResult, protocolId, ct);
+    public Task<ReviewResult> RetrieveAndReconsiderAsync(
+        Guid clientId,
+        ReviewJob job,
+        string filePath,
+        string? changeExcerpt,
+        ReviewResult draftResult,
+        Guid? protocolId,
+        CancellationToken ct = default)
+    {
+        return inner.RetrieveAndReconsiderAsync(clientId, job, filePath, changeExcerpt, draftResult, protocolId, ct);
+    }
 
-    public Task<ThreadMemoryRecord> DismissFindingAsync(Guid clientId, string? filePath, string findingMessage, string? label, CancellationToken ct = default)
-        => inner.DismissFindingAsync(clientId, filePath, findingMessage, label, ct);
+    public Task<ThreadMemoryRecord> DismissFindingAsync(
+        Guid clientId,
+        string? filePath,
+        string findingMessage,
+        string? label,
+        CancellationToken ct = default)
+    {
+        return inner.DismissFindingAsync(clientId, filePath, findingMessage, label, ct);
+    }
 
-    public Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(Guid clientId, string repositoryId, int pullRequestId, string? filePath, string findingMessage, CancellationToken ct = default)
-        => inner.FindDuplicateSuppressionMatchAsync(clientId, repositoryId, pullRequestId, filePath, findingMessage, ct);
+    public Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string? filePath,
+        string findingMessage,
+        CancellationToken ct = default)
+    {
+        return inner.FindDuplicateSuppressionMatchAsync(
+            clientId,
+            repositoryId,
+            pullRequestId,
+            filePath,
+            findingMessage,
+            ct);
+    }
 }

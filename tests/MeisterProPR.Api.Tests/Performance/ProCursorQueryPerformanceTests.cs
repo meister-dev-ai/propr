@@ -33,7 +33,7 @@ public sealed class ProCursorQueryPerformanceTests
         for (var index = 1; index <= 20; index++)
         {
             var source = CreateSource($"Source {index:00}", $"repo-{index:00}");
-            var snapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), $"commit-{index:00}", supportsSymbolQueries: true);
+            var snapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), $"commit-{index:00}", true);
             var chunks = CreateKnowledgeChunks(snapshot.Id, index == 20);
 
             sources.Add(source);
@@ -47,7 +47,11 @@ public sealed class ProCursorQueryPerformanceTests
             .Returns(call => Task.FromResult<ProCursorIndexSnapshot?>(snapshotsBySourceId[call.ArgAt<Guid>(0)]));
         snapshotRepository.ListKnowledgeChunksAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(chunksBySnapshotId[call.ArgAt<Guid>(0)]));
-        embeddingService.GenerateEmbeddingsAsync(ClientId, Arg.Any<IReadOnlyList<string>>(), Arg.Any<ProCursorEmbeddingUsageContext?>(), Arg.Any<CancellationToken>())
+        embeddingService.GenerateEmbeddingsAsync(
+                ClientId,
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<ProCursorEmbeddingUsageContext?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<float[]>>([[1f, 0f]]));
 
         var service = new ProCursorQueryService(
@@ -55,11 +59,12 @@ public sealed class ProCursorQueryPerformanceTests
             snapshotRepository,
             embeddingService,
             symbolGraphRepository,
-            Options.Create(new ProCursorOptions
-            {
-                MaxQueryResults = 5,
-                MaxSourcesPerQuery = 20,
-            }),
+            Options.Create(
+                new ProCursorOptions
+                {
+                    MaxQueryResults = 5,
+                    MaxSourcesPerQuery = 20,
+                }),
             NullLogger<ProCursorQueryService>.Instance);
 
         var request = new ProCursorKnowledgeQueryRequest(
@@ -68,7 +73,9 @@ public sealed class ProCursorQueryPerformanceTests
             MaxResults: 5);
 
         _ = await service.AskKnowledgeAsync(request, CancellationToken.None);
-        var (p95, lastResult) = await MeasureP95Async(25, () => service.AskKnowledgeAsync(request, CancellationToken.None));
+        var (p95, lastResult) = await MeasureP95Async(
+            25,
+            () => service.AskKnowledgeAsync(request, CancellationToken.None));
 
         Assert.Equal("complete", lastResult.Status);
         Assert.NotEmpty(lastResult.Results);
@@ -93,7 +100,11 @@ public sealed class ProCursorQueryPerformanceTests
         for (var index = 1; index <= 20; index++)
         {
             var source = CreateSource($"Source {index:00}", $"repo-{index:00}");
-            var snapshot = CreateReadySnapshot(source, source.TrackedBranches.Single(), $"symbol-commit-{index:00}", supportsSymbolQueries: true);
+            var snapshot = CreateReadySnapshot(
+                source,
+                source.TrackedBranches.Single(),
+                $"symbol-commit-{index:00}",
+                true);
             var containsTarget = index == 20;
 
             sources.Add(source);
@@ -145,9 +156,17 @@ public sealed class ProCursorQueryPerformanceTests
             .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>(sources));
         snapshotRepository.GetLatestReadyAsync(Arg.Any<Guid>(), null, Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult<ProCursorIndexSnapshot?>(snapshotsBySourceId[call.ArgAt<Guid>(0)]));
-        symbolGraphRepository.SearchAsync(Arg.Any<Guid>(), "BillingCoordinator", Arg.Any<int>(), Arg.Any<CancellationToken>())
+        symbolGraphRepository.SearchAsync(
+                Arg.Any<Guid>(),
+                "BillingCoordinator",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(symbolsBySnapshotId[call.ArgAt<Guid>(0)]));
-        symbolGraphRepository.ListEdgesAsync(Arg.Any<Guid>(), "T:Demo.BillingCoordinator", Arg.Any<int>(), Arg.Any<CancellationToken>())
+        symbolGraphRepository.ListEdgesAsync(
+                Arg.Any<Guid>(),
+                "T:Demo.BillingCoordinator",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(relationsBySnapshotId[call.ArgAt<Guid>(0)]));
 
         var service = new ProCursorQueryService(
@@ -155,17 +174,20 @@ public sealed class ProCursorQueryPerformanceTests
             snapshotRepository,
             embeddingService,
             symbolGraphRepository,
-            Options.Create(new ProCursorOptions
-            {
-                MaxQueryResults = 5,
-                MaxSourcesPerQuery = 20,
-            }),
+            Options.Create(
+                new ProCursorOptions
+                {
+                    MaxQueryResults = 5,
+                    MaxSourcesPerQuery = 20,
+                }),
             NullLogger<ProCursorQueryService>.Instance);
 
         var request = new ProCursorSymbolQueryRequest(ClientId, "BillingCoordinator", MaxRelations: 10);
 
         _ = await service.GetSymbolInsightAsync(request, CancellationToken.None);
-        var (p95, lastResult) = await MeasureP95Async(25, () => service.GetSymbolInsightAsync(request, CancellationToken.None));
+        var (p95, lastResult) = await MeasureP95Async(
+            25,
+            () => service.GetSymbolInsightAsync(request, CancellationToken.None));
 
         Assert.Equal("complete", lastResult.Status);
         Assert.NotNull(lastResult.Symbol);
@@ -223,18 +245,19 @@ public sealed class ProCursorQueryPerformanceTests
                 : $"Operational note {index}: authentication and reviewer workflows stay isolated per client.";
             var embedding = includeMatch && index == 0 ? new[] { 1f, 0f } : new[] { 0f, 1f };
 
-            chunks.Add(new ProCursorKnowledgeChunk(
-                Guid.NewGuid(),
-                snapshotId,
-                $"docs/doc-{index}.md",
-                "wiki_page",
-                $"Document {index}",
-                index,
-                null,
-                null,
-                $"hash-{snapshotId:N}-{index}",
-                contentText,
-                embedding));
+            chunks.Add(
+                new ProCursorKnowledgeChunk(
+                    Guid.NewGuid(),
+                    snapshotId,
+                    $"docs/doc-{index}.md",
+                    "wiki_page",
+                    $"Document {index}",
+                    index,
+                    null,
+                    null,
+                    $"hash-{snapshotId:N}-{index}",
+                    contentText,
+                    embedding));
         }
 
         return chunks;

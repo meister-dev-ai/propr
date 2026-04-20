@@ -1,33 +1,64 @@
 # Configuration And Crawling
 
 This page covers the admin configuration workflow that defines what the system may review, and the
-background crawler workflow that turns saved configuration into queued review jobs.
+background crawler workflow that turns saved configuration into queued review jobs. Azure DevOps,
+GitHub, GitLab, and Forgejo-family hosts now share the same provider-neutral connection, scope,
+repository, review, revision, and webhook concepts for manual review, webhook activation, and
+operational visibility. Guided Azure DevOps discovery remains available, but the old client System
+credential and allowed-organization surface has been retired.
 
-## Guided Azure DevOps Configuration
+## Provider-Neutral Runtime Guardrails
 
-Guided Azure DevOps onboarding separates credential ownership from admin selections. Client
-credentials authorize the backend to talk to Azure DevOps. Client-scoped organization-scope
-records define which Azure DevOps organizations administrators may choose in guided ProCursor and
-crawl-config flows.
+- Provider onboarding, manual review intake, webhook ingress, and provider-scoped observability now
+    run through one shared provider-neutral model instead of branching the application workflow per
+    provider family.
+- Azure DevOps still offers guided discovery for project, source, and branch selection, but its
+    credentials, organization scopes, and reviewer setup now resolve from the same provider
+    connections and provider scopes used by the other supported SCM families.
+- Provider connections own secrets and host configuration; provider scopes define the usable
+    administrative boundary inside each connection.
+- Repository, review, revision, thread, comment, and webhook concepts are normalized so downstream
+    deduplication, thread memory, observability, and audit paths stay shared across provider families.
+- Provider readiness is evaluated as a separate read model. Verification answers whether onboarding
+    checks passed; readiness answers whether the connection is merely configured, onboarding-ready,
+    degraded, or workflow-complete for the current provider family and host variant.
+
+## Guided Azure DevOps Configuration Through Provider Connections
+
+Azure DevOps is now administered through the shared provider-management flow. Administrators create
+or recreate an Azure DevOps provider connection in the Providers tab, add one or more organization
+scopes to that connection, and then use the same provider-scoped reviewer identity and discovery
+surfaces as the other supported SCM families.
+
+During cutover, the removed client System Azure DevOps settings are not auto-migrated behind a
+hidden compatibility layer. Recreate Azure DevOps in this order:
+
+1. Add the Azure DevOps provider connection.
+2. Add the organization scope on that connection.
+3. Confirm or update the reviewer identity for that connection.
+4. Re-save crawl, ProCursor, or webhook configuration against the recreated provider-backed scope.
 
 ```mermaid
 sequenceDiagram
     actor Admin
     participant UI as Admin UI
-    participant CC as ClientsController
+    participant PCON as ClientProviderConnectionsController
+    participant PSC as ClientProviderScopesController
+    participant PRI as ClientReviewerIdentitiesController
     participant DR as AdoDiscoveryController
-    participant OS as ClientAdoOrganizationScopeRepository
     participant DS as IAdoDiscoveryService
     participant PC as ProCursorKnowledgeSourcesController
     participant PG as IProCursorGateway
     participant CFG as AdminCrawlConfigsController
 
-    Admin->>UI: Configure client ADO credentials
-    Admin->>UI: Add allowed organization
-    UI->>CC: POST /clients/{id}/ado-organization-scopes
-    CC->>OS: Store normalized org URL + verification state
+    Admin->>UI: Add Azure DevOps provider connection
+    UI->>PCON: POST /clients/{id}/provider-connections
+    Admin->>UI: Add Azure DevOps organization scope
+    UI->>PSC: POST /clients/{id}/provider-connections/{connectionId}/scopes
+    Admin->>UI: Set reviewer identity
+    UI->>PRI: PUT /clients/{id}/provider-connections/{connectionId}/reviewer-identity
     UI->>DR: GET /admin/clients/{id}/ado/discovery/projects
-    DR->>DS: Resolve live projects for organizationScopeId
+    DR->>DS: Resolve live projects for provider-backed organizationScopeId
     UI->>DR: GET discovery sources / branches / crawl-filters
     DR->>DS: Resolve live source metadata
     UI->>PC: POST guided ProCursor source
@@ -39,9 +70,89 @@ sequenceDiagram
 ```
 
 All downstream project, repository, wiki, branch, and crawl-filter choices are resolved through
-discovery endpoints and then revalidated again at save time. Compatibility remains for legacy
-callers that still send raw `organizationUrl` and repository identifiers, but the guided path is
-the primary admin boundary.
+discovery endpoints and then revalidated again at save time. Azure DevOps keeps the guided
+discovery experience, but the durable admin boundary is now the provider connection and its scopes,
+not a client-level System ADO record.
+
+## Webhook Configuration And Delivery History
+
+Webhook configuration management is a sibling flow to crawl configuration management. Each webhook
+configuration belongs to one client, stores a protected secret, owns a unique public listener path,
+and persists repository and branch scope on the server. Azure DevOps configurations use the same
+provider-backed organization selection and listener route shape as the other supported providers:
+`/webhooks/v1/providers/{provider}/{pathKey}`. Those saved rules remain authoritative even when a
+provider also applies its own upstream filters.
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant UI as Admin UI
+    participant DR as AdoDiscoveryController
+    participant DS as IAdoDiscoveryService
+    participant WH as AdminWebhookConfigsController
+    participant WR as IWebhookConfigurationRepository
+    participant DL as IWebhookDeliveryLogRepository
+
+    Admin->>UI: Open client webhook tab
+    UI->>DR: GET discovery projects / crawl-filters (Azure DevOps)
+    DR->>DS: Resolve live ADO metadata
+    Admin->>UI: Save webhook configuration
+    UI->>WH: POST /admin/webhook-configurations
+    WH->>DS: Revalidate selected scope (Azure DevOps)
+    WH->>WR: Persist path key, protected secret, and repo filters
+    WH-->>UI: Listener URL + one-time generated secret
+    UI->>WH: GET /admin/webhook-configurations/{id}/deliveries
+    WH->>DL: Load recent per-config delivery history
+    WH-->>UI: Accepted / ignored / rejected / failed entries
+```
+
+Delivery-history entries are durable per configuration and deliberately sanitized. They capture the
+received timestamp, normalized event type, response status, final outcome, provider-specific failure
+category, PR context when present, and downstream action summaries without storing auth material or
+raw secrets.
+
+## Public Webhook Intake
+
+The public provider receiver sits beside the crawler rather than replacing it. GitHub, GitLab, and
+Forgejo-family deliveries arrive through `/webhooks/v1/providers/{provider}/{pathKey}`, and Azure
+DevOps now uses the same provider-scoped ingress route instead of a separate compatibility path.
+Deliveries are matched by opaque path key, verified with the provider-specific ingress service,
+checked against the saved repository and branch scope, and then handed to the shared
+pull-request synchronization service so lifecycle handling, review-intake deduplication, scan
+updates, and reviewer-thread memory transitions are decided from one downstream path.
+
+```mermaid
+sequenceDiagram
+    participant PRV as SCM Provider Web Hook
+    participant RX as ProviderWebhookReceiverController
+    participant HD as HandleProviderWebhookDeliveryHandler
+    participant WR as IWebhookConfigurationRepository
+    participant ING as IWebhookIngressService
+    participant DL as IWebhookDeliveryLogRepository
+    participant SYNC as IPullRequestSynchronizationService
+    participant SCAN as IReviewPrScanRepository
+    participant TM as IThreadMemoryService
+    participant JR as IJobRepository
+
+    PRV->>RX: POST /webhooks/v1/providers/{provider}/{pathKey}
+    RX->>HD: HandleAsync(command)
+    HD->>WR: Resolve active configuration by path key
+    HD->>ING: Verify + parse provider payload
+    HD->>HD: Enforce saved repository / branch scope
+    HD->>SYNC: SynchronizeAsync(source=webhook, summaryLabel, PR context)
+    SYNC->>SCAN: Load current review watermark and reviewer thread state
+    SYNC->>TM: Emit resolved/reopened thread-memory transitions when status changed
+    SYNC->>JR: Queue review job, skip duplicate, or cancel active jobs
+    HD->>DL: Persist accepted / ignored / rejected / failed outcome
+    HD-->>RX: Small status payload
+    RX-->>PRV: Fast acknowledgement
+```
+
+The crawler and webhook listener can both target the same client or repository. Webhooks reduce the
+time to first action, while the crawler remains an independent discovery path and fallback mechanism
+for provider-backed configurations. Both sources converge before any durable downstream action is
+taken, which prevents provider-specific shortcuts from diverging from shared lifecycle,
+thread-memory, audit, or retention behavior.
 
 ## PR Crawler Flow
 
@@ -75,6 +186,42 @@ sequenceDiagram
 The crawler operates against crawl configurations that may reference all client ProCursor sources
 or a selected subset. That selection is durable and does not depend on reading the latest admin
 configuration during review execution.
+
+## Shared Pull-Request Synchronization
+
+`IPullRequestSynchronizationService` is the convergence point between webhook-triggered and
+crawler-triggered activity. It receives source-neutral PR activation context, resolves the latest
+iteration when necessary, runs the reviewer-thread memory state machine against the current
+`ReviewPrScan`, then decides whether to enqueue review intake, suppress duplicate work, or cancel
+active jobs for closed PRs.
+
+```mermaid
+sequenceDiagram
+    participant SRC as Crawl or Webhook
+    participant SYNC as PullRequestSynchronizationService
+    participant SCAN as IReviewPrScanRepository
+    participant TS as IReviewerThreadStatusFetcher
+    participant TM as IThreadMemoryService
+    participant JR as IJobRepository
+
+    SRC->>SYNC: SynchronizeAsync(request)
+    SYNC->>SCAN: Load scan state for client/repo/PR
+    alt Reviewer identity and scan available
+        SYNC->>TS: Fetch current reviewer-owned thread statuses
+        SYNC->>TM: Store/remove thread memory for resolved/reopened transitions
+        SYNC->>SCAN: Persist updated last-seen statuses
+    end
+    alt PR closed or abandoned
+        SYNC->>JR: Cancel active jobs for the PR
+    else Active PR with no duplicate/no-op condition
+        SYNC->>JR: Add pending review job with snapshotted source scope
+    end
+    SYNC-->>SRC: Outcome with review/lifecycle decisions and action summaries
+```
+
+This shared seam is also where synchronization-level telemetry is emitted. Observability now tracks
+activation source, PR status, review decision, and lifecycle decision for each pass, which makes it
+possible to compare webhook- and crawler-driven behavior using the same tracing and metric series.
 
 ## Crawl Source Scope Snapshotting
 

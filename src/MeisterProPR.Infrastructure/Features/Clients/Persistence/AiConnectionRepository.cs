@@ -18,83 +18,17 @@ public sealed class AiConnectionRepository(
 {
     private const string ApiKeyPurpose = "AiConnectionApiKey";
 
-    private static IReadOnlyList<AiConnectionModelCapabilityDto> MapModelCapabilities(
-        IEnumerable<AiConnectionModelCapabilityRecord> capabilities)
-    {
-        return capabilities
-            .OrderBy(capability => capability.ModelName, StringComparer.OrdinalIgnoreCase)
-            .Select(capability => new AiConnectionModelCapabilityDto(
-                capability.ModelName,
-                capability.TokenizerName,
-                capability.MaxInputTokens,
-                capability.EmbeddingDimensions,
-                capability.InputCostPer1MUsd,
-                capability.OutputCostPer1MUsd))
-            .ToList()
-            .AsReadOnly();
-    }
-
-    private string? ProtectApiKey(string? apiKey)
-        => string.IsNullOrWhiteSpace(apiKey)
-            ? apiKey
-            : secretProtectionCodec.Protect(apiKey, ApiKeyPurpose);
-
-    private string? UnprotectApiKey(string? apiKey)
-        => string.IsNullOrWhiteSpace(apiKey)
-            ? apiKey
-            : secretProtectionCodec.Unprotect(apiKey, ApiKeyPurpose);
-
-    private AiConnectionDto ToDto(AiConnectionRecord r) =>
-        new(r.Id, r.ClientId, r.DisplayName, r.EndpointUrl, r.Models, r.IsActive, r.ActiveModel, r.CreatedAt,
-            r.ModelCategory.HasValue ? (AiConnectionModelCategory)r.ModelCategory.Value : null,
-            MapModelCapabilities(r.ModelCapabilities),
-            this.UnprotectApiKey(r.ApiKey));
-
-    private static List<AiConnectionModelCapabilityRecord> ToCapabilityRecords(
-        Guid connectionId,
-        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
-    {
-        if (modelCapabilities is null || modelCapabilities.Count == 0)
-        {
-            return [];
-        }
-
-        return modelCapabilities
-            .Select(capability => new AiConnectionModelCapabilityRecord
-            {
-                Id = Guid.NewGuid(),
-                AiConnectionId = connectionId,
-                ModelName = capability.ModelName.Trim(),
-                TokenizerName = capability.TokenizerName.Trim(),
-                MaxInputTokens = capability.MaxInputTokens,
-                EmbeddingDimensions = capability.EmbeddingDimensions,
-                InputCostPer1MUsd = capability.InputCostPer1MUsd,
-                OutputCostPer1MUsd = capability.OutputCostPer1MUsd,
-            })
-            .ToList();
-    }
-
-    private static void ReplaceModelCapabilities(
-        AiConnectionRecord record,
-        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
-    {
-        record.ModelCapabilities.Clear();
-
-        foreach (var capability in ToCapabilityRecords(record.Id, modelCapabilities))
-        {
-            record.ModelCapabilities.Add(capability);
-        }
-    }
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default)
     {
-        var records = await dbContext.AiConnections
-            .Include(a => a.ModelCapabilities)
-            .Where(a => a.ClientId == clientId)
-            .OrderByDescending(a => a.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(ct);
+        var records = await this.WithReadDbAsync(
+            db => db.AiConnections
+                .Include(a => a.ModelCapabilities)
+                .Where(a => a.ClientId == clientId)
+                .OrderByDescending(a => a.CreatedAt)
+                .AsNoTracking()
+                .ToListAsync(ct),
+            ct);
 
         return records
             .Select(this.ToDto)
@@ -103,22 +37,30 @@ public sealed class AiConnectionRepository(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     Uses a short-lived <see cref="MeisterProPRDbContext" /> from the factory so concurrent
+    ///     calls from parallel file-review tasks cannot share the same context instance.
+    /// </remarks>
     public async Task<AiConnectionDto?> GetActiveForClientAsync(Guid clientId, CancellationToken ct = default)
     {
         // Only the default (no ModelCategory) connection participates in the "one active" rule.
-        var record = await dbContext.AiConnections
-            .Include(a => a.ModelCapabilities)
-            .Where(a => a.ClientId == clientId && a.IsActive && a.ModelCategory == null)
-            .FirstOrDefaultAsync(ct);
+        var record = await this.WithReadDbAsync(
+            db => db.AiConnections
+                .Include(a => a.ModelCapabilities)
+                .Where(a => a.ClientId == clientId && a.IsActive && a.ModelCategory == null)
+                .FirstOrDefaultAsync(ct),
+            ct);
         return record is null ? null : this.ToDto(record);
     }
 
     /// <inheritdoc />
     public async Task<AiConnectionDto?> GetByIdAsync(Guid connectionId, CancellationToken ct = default)
     {
-        var record = await dbContext.AiConnections
-            .Include(a => a.ModelCapabilities)
-            .FirstOrDefaultAsync(a => a.Id == connectionId, ct);
+        var record = await this.WithReadDbAsync(
+            db => db.AiConnections
+                .Include(a => a.ModelCapabilities)
+                .FirstOrDefaultAsync(a => a.Id == connectionId, ct),
+            ct);
         return record is null ? null : this.ToDto(record);
     }
 
@@ -251,7 +193,7 @@ public sealed class AiConnectionRepository(
             // then mark this one active.
             var others = await dbContext.AiConnections
                 .Where(a => a.ClientId == target.ClientId && a.IsActive
-                            && a.Id != connectionId && a.ModelCategory == null)
+                                                          && a.Id != connectionId && a.ModelCategory == null)
                 .ToListAsync(ct);
 
             foreach (var other in others)
@@ -287,6 +229,7 @@ public sealed class AiConnectionRepository(
             record.IsActive = false;
             record.ActiveModel = null;
         }
+
         await dbContext.SaveChangesAsync(ct);
         return true;
     }
@@ -296,7 +239,10 @@ public sealed class AiConnectionRepository(
     ///     Uses a short-lived <see cref="MeisterProPRDbContext" /> from the factory so concurrent
     ///     calls from parallel file-review tasks cannot share the same context instance.
     /// </remarks>
-    public async Task<AiConnectionDto?> GetForTierAsync(Guid clientId, AiConnectionModelCategory tier, CancellationToken ct = default)
+    public async Task<AiConnectionDto?> GetForTierAsync(
+        Guid clientId,
+        AiConnectionModelCategory tier,
+        CancellationToken ct = default)
     {
         var category = (short)tier;
         if (contextFactory is not null)
@@ -317,6 +263,100 @@ public sealed class AiConnectionRepository(
                 .Where(a => a.ClientId == clientId && a.ModelCategory == category)
                 .FirstOrDefaultAsync(ct);
             return record is null ? null : this.ToDto(record);
+        }
+    }
+
+    private static IReadOnlyList<AiConnectionModelCapabilityDto> MapModelCapabilities(IEnumerable<AiConnectionModelCapabilityRecord> capabilities)
+    {
+        return capabilities
+            .OrderBy(capability => capability.ModelName, StringComparer.OrdinalIgnoreCase)
+            .Select(capability => new AiConnectionModelCapabilityDto(
+                capability.ModelName,
+                capability.TokenizerName,
+                capability.MaxInputTokens,
+                capability.EmbeddingDimensions,
+                capability.InputCostPer1MUsd,
+                capability.OutputCostPer1MUsd))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private string? ProtectApiKey(string? apiKey)
+    {
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? apiKey
+            : secretProtectionCodec.Protect(apiKey, ApiKeyPurpose);
+    }
+
+    private string? UnprotectApiKey(string? apiKey)
+    {
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? apiKey
+            : secretProtectionCodec.Unprotect(apiKey, ApiKeyPurpose);
+    }
+
+    private async Task<TResult> WithReadDbAsync<TResult>(
+        Func<MeisterProPRDbContext, Task<TResult>> operation,
+        CancellationToken ct)
+    {
+        if (contextFactory is null)
+        {
+            return await operation(dbContext);
+        }
+
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return await operation(db);
+    }
+
+    private AiConnectionDto ToDto(AiConnectionRecord r)
+    {
+        return new AiConnectionDto(
+            r.Id,
+            r.ClientId,
+            r.DisplayName,
+            r.EndpointUrl,
+            r.Models,
+            r.IsActive,
+            r.ActiveModel,
+            r.CreatedAt,
+            r.ModelCategory.HasValue ? (AiConnectionModelCategory)r.ModelCategory.Value : null,
+            MapModelCapabilities(r.ModelCapabilities),
+            this.UnprotectApiKey(r.ApiKey));
+    }
+
+    private static List<AiConnectionModelCapabilityRecord> ToCapabilityRecords(
+        Guid connectionId,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
+    {
+        if (modelCapabilities is null || modelCapabilities.Count == 0)
+        {
+            return [];
+        }
+
+        return modelCapabilities
+            .Select(capability => new AiConnectionModelCapabilityRecord
+            {
+                Id = Guid.NewGuid(),
+                AiConnectionId = connectionId,
+                ModelName = capability.ModelName.Trim(),
+                TokenizerName = capability.TokenizerName.Trim(),
+                MaxInputTokens = capability.MaxInputTokens,
+                EmbeddingDimensions = capability.EmbeddingDimensions,
+                InputCostPer1MUsd = capability.InputCostPer1MUsd,
+                OutputCostPer1MUsd = capability.OutputCostPer1MUsd,
+            })
+            .ToList();
+    }
+
+    private static void ReplaceModelCapabilities(
+        AiConnectionRecord record,
+        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities)
+    {
+        record.ModelCapabilities.Clear();
+
+        foreach (var capability in ToCapabilityRecords(record.Id, modelCapabilities))
+        {
+            record.ModelCapabilities.Add(capability);
         }
     }
 }

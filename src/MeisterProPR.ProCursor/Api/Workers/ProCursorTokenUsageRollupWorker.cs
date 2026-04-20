@@ -106,7 +106,10 @@ public sealed partial class ProCursorTokenUsageRollupWorker(
                 {
                     var retentionResult = await retentionService.PurgeExpiredAsync(ct);
                     this.LastRetentionRunAtUtc = retentionResult.PerformedAtUtc;
-                    LogRetentionCompleted(logger, retentionResult.DeletedEventCount, retentionResult.DeletedRollupCount);
+                    LogRetentionCompleted(
+                        logger,
+                        retentionResult.DeletedEventCount,
+                        retentionResult.DeletedRollupCount);
                 }
             }
 

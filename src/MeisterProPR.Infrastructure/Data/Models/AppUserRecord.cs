@@ -5,7 +5,7 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Infrastructure.Data.Models;
 
-/// <summary>EF persistence model for <see cref="Domain.Entities.AppUser"/>.</summary>
+/// <summary>EF persistence model for <see cref="Domain.Entities.AppUser" />.</summary>
 public sealed class AppUserRecord
 {
     public Guid Id { get; set; }

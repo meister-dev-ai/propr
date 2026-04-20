@@ -9,7 +9,10 @@ namespace MeisterProPR.Application.Interfaces;
 /// <summary>Repository for per-client and per-crawl-config AI prompt overrides.</summary>
 public interface IPromptOverrideRepository
 {
-    /// <summary>Returns the override matching the given client, scope, crawl config, and prompt key; or <see langword="null" /> if not found.</summary>
+    /// <summary>
+    ///     Returns the override matching the given client, scope, crawl config, and prompt key; or
+    ///     <see langword="null" /> if not found.
+    /// </summary>
     Task<PromptOverride?> GetByScopeAsync(
         Guid clientId,
         PromptOverrideScope scope,

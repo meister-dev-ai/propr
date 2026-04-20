@@ -69,7 +69,10 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(
+            messages,
+            new ChatOptions { ModelId = modelId },
+            cancellationToken);
         return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 
@@ -87,7 +90,10 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             new(ChatRole.User, userMessage),
         };
 
-        var response = await chatClient.GetResponseAsync(messages, new ChatOptions { ModelId = modelId }, cancellationToken);
+        var response = await chatClient.GetResponseAsync(
+            messages,
+            new ChatOptions { ModelId = modelId },
+            cancellationToken);
         return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
     }
 

@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -10,16 +11,19 @@ using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
-/// <summary>Unit tests for <see cref="AiConnectionRepository"/> using EF Core in-memory database.</summary>
+/// <summary>Unit tests for <see cref="AiConnectionRepository" /> using EF Core in-memory database.</summary>
 public sealed class AiConnectionRepositoryTests
 {
     private static ISecretProtectionCodec CreateCodec()
     {
-        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterProPR.AiConnectionRepositoryTests.{Guid.NewGuid():N}");
+        var keysDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"MeisterProPR.AiConnectionRepositoryTests.{Guid.NewGuid():N}");
         Directory.CreateDirectory(keysDirectory);
 
         var services = new ServiceCollection();
@@ -31,13 +35,17 @@ public sealed class AiConnectionRepositoryTests
         return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
     }
 
-    private static AiConnectionRepository CreateRepository(MeisterProPRDbContext db)
-        => new(db, CreateCodec());
+    private static AiConnectionRepository CreateRepository(
+        MeisterProPRDbContext db,
+        IDbContextFactory<MeisterProPRDbContext>? contextFactory = null)
+    {
+        return new AiConnectionRepository(db, CreateCodec(), contextFactory);
+    }
 
     private static MeisterProPRDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new MeisterProPRDbContext(options);
     }
@@ -62,7 +70,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        db.AiConnections.Add(MakeRecord(clientId, isActive: false));
+        db.AiConnections.Add(MakeRecord(clientId));
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
@@ -76,9 +84,9 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var activeRecord = MakeRecord(clientId, isActive: true, activeModel: "gpt-4o");
+        var activeRecord = MakeRecord(clientId, true, "gpt-4o");
         db.AiConnections.Add(activeRecord);
-        db.AiConnections.Add(MakeRecord(clientId, isActive: false));
+        db.AiConnections.Add(MakeRecord(clientId));
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
@@ -91,13 +99,35 @@ public sealed class AiConnectionRepositoryTests
     }
 
     [Fact]
+    public async Task GetActiveForClientAsync_WithDbContextFactory_ReturnsIt()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var db = new MeisterProPRDbContext(options);
+        var factory = new PooledDbContextFactory<MeisterProPRDbContext>(options);
+        var clientId = Guid.NewGuid();
+        var activeRecord = MakeRecord(clientId, true, "gpt-4o");
+        db.AiConnections.Add(activeRecord);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db, factory);
+        var result = await repo.GetActiveForClientAsync(clientId);
+
+        Assert.NotNull(result);
+        Assert.Equal(activeRecord.Id, result.Id);
+        Assert.Equal("gpt-4o", result.ActiveModel);
+    }
+
+    [Fact]
     public async Task ActivateAsync_ValidModel_ActivatesConnectionAndDeactivatesPrevious()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var connA = MakeRecord(clientId, isActive: true, activeModel: "gpt-4o-mini");
-        var connB = MakeRecord(clientId, isActive: false);
+        var connA = MakeRecord(clientId, true, "gpt-4o-mini");
+        var connB = MakeRecord(clientId);
         connB.Models = ["gpt-4o"];
         db.AiConnections.AddRange(connA, connB);
         await db.SaveChangesAsync();
@@ -151,7 +181,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var conn = MakeRecord(clientId, isActive: true, activeModel: "gpt-4o");
+        var conn = MakeRecord(clientId, true, "gpt-4o");
         db.AiConnections.Add(conn);
         await db.SaveChangesAsync();
 
@@ -199,12 +229,12 @@ public sealed class AiConnectionRepositoryTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var connA = MakeRecord(clientId, isActive: true, activeModel: "gpt-4o");
-        var connB = MakeRecord(clientId, isActive: false);
+        var connA = MakeRecord(clientId, true, "gpt-4o");
+        var connB = MakeRecord(clientId);
         connB.Models = ["gpt-4o-mini"];
         db.AiConnections.AddRange(connA, connB);
 
-        var job = new MeisterProPR.Domain.Entities.ReviewJob(
+        var job = new ReviewJob(
             Guid.NewGuid(),
             clientId,
             "https://dev.azure.com/org",
@@ -270,13 +300,15 @@ public sealed class AiConnectionRepositoryTests
             "https://my-openai.openai.azure.com/",
             ["text-embedding-3-small"],
             "secret",
-            [new AiConnectionModelCapabilityDto(
-                "text-embedding-3-small",
-                "cl100k_base",
-                8192,
-                1536,
-                0.2m,
-                0.4m)],
+            [
+                new AiConnectionModelCapabilityDto(
+                    "text-embedding-3-small",
+                    "cl100k_base",
+                    8192,
+                    1536,
+                    0.2m,
+                    0.4m),
+            ],
             AiConnectionModelCategory.Embedding);
 
         var reloaded = await repo.GetByIdAsync(created.Id);

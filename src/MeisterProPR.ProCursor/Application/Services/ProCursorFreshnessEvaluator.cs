@@ -7,7 +7,9 @@ namespace MeisterProPR.Application.Services;
 
 internal static class ProCursorFreshnessEvaluator
 {
-    public static string GetSnapshotFreshnessStatus(ProCursorTrackedBranch? trackedBranch, ProCursorIndexSnapshot? snapshot)
+    public static string GetSnapshotFreshnessStatus(
+        ProCursorTrackedBranch? trackedBranch,
+        ProCursorIndexSnapshot? snapshot)
     {
         if (snapshot is null)
         {
@@ -48,7 +50,9 @@ internal static class ProCursorFreshnessEvaluator
             : snapshot.Status;
     }
 
-    public static string GetBranchFreshnessStatus(ProCursorTrackedBranch trackedBranch, ProCursorIndexSnapshot? latestSnapshot)
+    public static string GetBranchFreshnessStatus(
+        ProCursorTrackedBranch trackedBranch,
+        ProCursorIndexSnapshot? latestSnapshot)
     {
         if (latestSnapshot is not null &&
             string.Equals(latestSnapshot.Status, "building", StringComparison.OrdinalIgnoreCase))
@@ -58,7 +62,10 @@ internal static class ProCursorFreshnessEvaluator
 
         if (latestSnapshot is not null &&
             string.Equals(latestSnapshot.Status, "failed", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(latestSnapshot.CommitSha, trackedBranch.LastSeenCommitSha, StringComparison.OrdinalIgnoreCase))
+            string.Equals(
+                latestSnapshot.CommitSha,
+                trackedBranch.LastSeenCommitSha,
+                StringComparison.OrdinalIgnoreCase))
         {
             return "failed";
         }
@@ -69,7 +76,10 @@ internal static class ProCursorFreshnessEvaluator
         }
 
         if (!string.IsNullOrWhiteSpace(trackedBranch.LastSeenCommitSha) &&
-            !string.Equals(trackedBranch.LastSeenCommitSha, trackedBranch.LastIndexedCommitSha, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(
+                trackedBranch.LastSeenCommitSha,
+                trackedBranch.LastIndexedCommitSha,
+                StringComparison.OrdinalIgnoreCase))
         {
             return "stale";
         }

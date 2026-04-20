@@ -3,7 +3,10 @@
 
 namespace MeisterProPR.Domain.Enums;
 
-/// <summary>Describes the outcome of a single thread-lifecycle state machine evaluation recorded in <c>memory_activity_log</c>.</summary>
+/// <summary>
+///     Describes the outcome of a single thread-lifecycle state machine evaluation recorded in
+///     <c>memory_activity_log</c>.
+/// </summary>
 public enum MemoryActivityAction
 {
     /// <summary>An embedding was created or updated for a newly-resolved thread.</summary>

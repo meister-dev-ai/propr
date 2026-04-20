@@ -19,13 +19,19 @@ public sealed partial class PromptOverridesController(
 {
     private static readonly IReadOnlySet<string> ValidPromptKeys = PromptOverride.ValidPromptKeys;
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Prompt override {OverrideId} created for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Prompt override {OverrideId} created for client {ClientId}")]
     private static partial void LogOverrideCreated(ILogger logger, Guid overrideId, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Prompt override {OverrideId} updated for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Prompt override {OverrideId} updated for client {ClientId}")]
     private static partial void LogOverrideUpdated(ILogger logger, Guid overrideId, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Prompt override {OverrideId} deleted for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Prompt override {OverrideId} deleted for client {ClientId}")]
     private static partial void LogOverrideDeleted(ILogger logger, Guid overrideId, Guid clientId);
 
     /// <summary>Lists all prompt overrides for the specified client.</summary>
@@ -78,7 +84,9 @@ public sealed partial class PromptOverridesController(
 
         if (string.IsNullOrWhiteSpace(request.PromptKey) || !ValidPromptKeys.Contains(request.PromptKey))
         {
-            this.ModelState.AddModelError(nameof(request.PromptKey), $"promptKey must be one of: {string.Join(", ", ValidPromptKeys)}.");
+            this.ModelState.AddModelError(
+                nameof(request.PromptKey),
+                $"promptKey must be one of: {string.Join(", ", ValidPromptKeys)}.");
             return this.ValidationProblem();
         }
 
@@ -100,7 +108,9 @@ public sealed partial class PromptOverridesController(
 
         if (scope == PromptOverrideScope.CrawlConfigScope && request.CrawlConfigId is null)
         {
-            this.ModelState.AddModelError(nameof(request.CrawlConfigId), "crawlConfigId is required when scope is crawlConfigScope.");
+            this.ModelState.AddModelError(
+                nameof(request.CrawlConfigId),
+                "crawlConfigId is required when scope is crawlConfigScope.");
             return this.ValidationProblem();
         }
 

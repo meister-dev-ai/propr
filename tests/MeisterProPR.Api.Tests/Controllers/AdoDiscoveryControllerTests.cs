@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -37,7 +38,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/projects?organizationScopeId={factory.OrganizationScopeId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -73,7 +74,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/sources?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&sourceKind=not-real");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -89,7 +90,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/branches?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&sourceKind=repository&canonicalSourceProvider=azureDevOps&canonicalSourceValue=repo-1");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateUnassignedUserToken());
 
@@ -105,7 +106,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/branches?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&sourceKind=repository&canonicalSourceProvider=azureDevOps&canonicalSourceValue=repo-1");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -127,7 +128,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/crawl-filters?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -157,7 +158,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/projects?organizationScopeId={missingScopeId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -165,14 +166,18 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Contains("not found", body.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("The requested discovery resource was not found.", body.GetProperty("error").GetString());
     }
 
     [Fact]
     public async Task GetCrawlFilters_DisabledOrganizationScope_Returns400WithError()
     {
         var disabledScopeId = Guid.NewGuid();
-        factory.DiscoveryService.ListCrawlFiltersAsync(factory.ClientId, disabledScopeId, "project-1", Arg.Any<CancellationToken>())
+        factory.DiscoveryService.ListCrawlFiltersAsync(
+                factory.ClientId,
+                disabledScopeId,
+                "project-1",
+                Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException<IReadOnlyList<AdoCrawlFilterOptionDto>>(
                 new InvalidOperationException("The selected organization scope is disabled.")));
 
@@ -180,7 +185,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/ado/discovery/crawl-filters?organizationScopeId={disabledScopeId}&projectId=project-1");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateClientUserToken());
 
@@ -188,7 +193,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Contains("disabled", body.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("The discovery request could not be completed.", body.GetProperty("error").GetString());
     }
 
     public sealed class AdoDiscoveryApiFactory : WebApplicationFactory<Program>
@@ -202,11 +207,21 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         public Guid OrganizationScopeId { get; } = Guid.NewGuid();
         public Guid ClientUserId { get; } = Guid.NewGuid();
         public Guid UnassignedUserId { get; } = Guid.NewGuid();
-        public IAdoDiscoveryService DiscoveryService { get; } = Substitute.For<IAdoDiscoveryService>();
 
-        public string GenerateClientUserToken() => this.GenerateToken(this.ClientUserId, AppUserRole.User);
+        public IProviderAdminDiscoveryService DiscoveryService { get; } =
+            Substitute.For<IProviderAdminDiscoveryService>();
 
-        public string GenerateUnassignedUserToken() => this.GenerateToken(this.UnassignedUserId, AppUserRole.User);
+        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+
+        public string GenerateClientUserToken()
+        {
+            return this.GenerateToken(this.ClientUserId, AppUserRole.User);
+        }
+
+        public string GenerateUnassignedUserToken()
+        {
+            return this.GenerateToken(this.UnassignedUserId, AppUserRole.User);
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -232,52 +247,75 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var discoveryService = this.DiscoveryService;
+                discoveryService.Provider.Returns(ScmProvider.AzureDevOps);
                 discoveryService.ListProjectsAsync(clientId, organizationScopeId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<AdoProjectOptionDto>>([
-                        new AdoProjectOptionDto(organizationScopeId, "project-1", "Project One"),
-                    ]));
-                discoveryService.ListSourcesAsync(clientId, organizationScopeId, "project-1", ProCursorSourceKind.Repository, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>([
-                        new AdoSourceOptionDto(
-                            "Repository",
-                            new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
-                            "Repository One",
-                            "main"),
-                    ]));
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<AdoProjectOptionDto>>(
+                        [
+                            new AdoProjectOptionDto(organizationScopeId, "project-1", "Project One"),
+                        ]));
+                discoveryService.ListSourcesAsync(
+                        clientId,
+                        organizationScopeId,
+                        "project-1",
+                        ProCursorSourceKind.Repository,
+                        Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<AdoSourceOptionDto>>(
+                        [
+                            new AdoSourceOptionDto(
+                                "Repository",
+                                new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
+                                "Repository One",
+                                "main"),
+                        ]));
                 discoveryService.ListBranchesAsync(
                         clientId,
                         organizationScopeId,
                         "project-1",
                         ProCursorSourceKind.Repository,
-                        Arg.Is<CanonicalSourceReferenceDto>(dto => dto.Provider == "azureDevOps" && dto.Value == "repo-1"),
+                        Arg.Is<CanonicalSourceReferenceDto>(dto =>
+                            dto.Provider == "azureDevOps" && dto.Value == "repo-1"),
                         Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>([
-                        new AdoBranchOptionDto("main", true),
-                    ]));
-                discoveryService.ListCrawlFiltersAsync(clientId, organizationScopeId, "project-1", Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<AdoCrawlFilterOptionDto>>([
-                        new AdoCrawlFilterOptionDto(
-                            new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
-                            "Repository One",
-                            [new AdoBranchOptionDto("main", true)]),
-                    ]));
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<AdoBranchOptionDto>>(
+                        [
+                            new AdoBranchOptionDto("main", true),
+                        ]));
+                discoveryService.ListCrawlFiltersAsync(
+                        clientId,
+                        organizationScopeId,
+                        "project-1",
+                        Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<AdoCrawlFilterOptionDto>>(
+                        [
+                            new AdoCrawlFilterOptionDto(
+                                new CanonicalSourceReferenceDto("azureDevOps", "repo-1"),
+                                "Repository One",
+                                [new AdoBranchOptionDto("main", true)]),
+                        ]));
+                this.ProviderRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                    .Returns(discoveryService);
                 services.AddSingleton(discoveryService);
+                services.AddSingleton(this.ProviderRegistry);
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(unassignedUserId, Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
                 userRepo.GetUserClientRolesAsync(
@@ -291,14 +329,6 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
-                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                adoCredentialRepository.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                adoCredentialRepository.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                services.AddSingleton(adoCredentialRepository);
                 services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
@@ -309,13 +339,14 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
 
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(new ClientRecord
-            {
-                Id = this.ClientId,
-                DisplayName = "Discovery Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = this.ClientId,
+                    DisplayName = "Discovery Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             db.SaveChanges();
 
             return host;
@@ -326,9 +357,8 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(
-                issuer: "meisterpropr",
-                audience: "meisterpropr",
-                claims:
+                "meisterpropr",
+                "meisterpropr",
                 [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", role.ToString()),

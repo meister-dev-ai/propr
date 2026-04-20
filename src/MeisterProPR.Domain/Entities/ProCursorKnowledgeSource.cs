@@ -10,6 +10,9 @@ namespace MeisterProPR.Domain.Entities;
 /// </summary>
 public sealed class ProCursorKnowledgeSource
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeSource"/> class.
+    /// </summary>
     public ProCursorKnowledgeSource(
         Guid id,
         Guid clientId,
@@ -47,15 +50,16 @@ public sealed class ProCursorKnowledgeSource
         this.ClientId = clientId;
         this.DisplayName = displayName.Trim();
         this.SourceKind = sourceKind;
-        this.OrganizationUrl = organizationUrl.Trim();
-        this.ProjectId = projectId.Trim();
+        this.ProviderScopePath = organizationUrl.Trim();
+        this.ProviderProjectKey = projectId.Trim();
         this.RepositoryId = repositoryId.Trim();
         this.DefaultBranch = defaultBranch.Trim();
         this.RootPath = NormalizeOptional(rootPath);
         this.IsEnabled = isEnabled;
         this.SymbolMode = NormalizeSymbolMode(symbolMode);
         this.OrganizationScopeId = organizationScopeId;
-        (this.CanonicalSourceProvider, this.CanonicalSourceValue) = NormalizeCanonicalSource(canonicalSourceProvider, canonicalSourceValue);
+        (this.CanonicalSourceProvider, this.CanonicalSourceValue) =
+            NormalizeCanonicalSource(canonicalSourceProvider, canonicalSourceValue);
         this.SourceDisplayName = NormalizeOptional(sourceDisplayName);
         this.CreatedAt = DateTimeOffset.UtcNow;
         this.UpdatedAt = this.CreatedAt;
@@ -65,42 +69,99 @@ public sealed class ProCursorKnowledgeSource
     {
     }
 
-    public Guid Id { get; private set; }
+    /// <summary>
+    ///     Gets the unique identifier of this knowledge source.
+    /// </summary>
+    public Guid Id { get; }
 
+    /// <summary>
+    ///     Gets or sets the client identifier that owns this knowledge source.
+    /// </summary>
     public Guid ClientId { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the display name of this knowledge source.
+    /// </summary>
     public string DisplayName { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets or sets the source kind indicating the type of ProCursor source.
+    /// </summary>
     public ProCursorSourceKind SourceKind { get; private set; }
 
-    public string OrganizationUrl { get; private set; } = string.Empty;
+    /// <summary>
+    ///     Gets or sets the provider scope path (organization URL).
+    /// </summary>
+    public string ProviderScopePath { get; private set; } = string.Empty;
 
-    public string ProjectId { get; private set; } = string.Empty;
+    /// <summary>
+    ///     Gets or sets the provider project key (project ID).
+    /// </summary>
+    public string ProviderProjectKey { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets or sets the repository identifier.
+    /// </summary>
     public string RepositoryId { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets or sets the default branch name.
+    /// </summary>
     public string DefaultBranch { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets or sets the optional root path within the repository.
+    /// </summary>
     public string? RootPath { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the optional organization scope identifier.
+    /// </summary>
     public Guid? OrganizationScopeId { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the canonical source provider.
+    /// </summary>
     public string? CanonicalSourceProvider { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the canonical source value.
+    /// </summary>
     public string? CanonicalSourceValue { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the optional display name for the source.
+    /// </summary>
     public string? SourceDisplayName { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets a value indicating whether this knowledge source is enabled.
+    /// </summary>
     public bool IsEnabled { get; private set; }
 
+    /// <summary>
+    ///     Gets or sets the symbol mode for indexing.
+    /// </summary>
     public string SymbolMode { get; private set; } = string.Empty;
 
-    public DateTimeOffset CreatedAt { get; private set; }
+    /// <summary>
+    ///     Gets the date and time when this knowledge source was created.
+    /// </summary>
+    public DateTimeOffset CreatedAt { get; }
 
+    /// <summary>
+    ///     Gets or sets the date and time when this knowledge source was last updated.
+    /// </summary>
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    ///     Gets the collection of tracked branches for this knowledge source.
+    /// </summary>
     public ICollection<ProCursorTrackedBranch> TrackedBranches { get; } = [];
 
+    /// <summary>
+    ///     Updates the definition of this knowledge source with new values.
+    /// </summary>
     public void UpdateDefinition(
         string displayName,
         string organizationUrl,
@@ -122,19 +183,23 @@ public sealed class ProCursorKnowledgeSource
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultBranch);
 
         this.DisplayName = displayName.Trim();
-        this.OrganizationUrl = organizationUrl.Trim();
-        this.ProjectId = projectId.Trim();
+        this.ProviderScopePath = organizationUrl.Trim();
+        this.ProviderProjectKey = projectId.Trim();
         this.RepositoryId = repositoryId.Trim();
         this.DefaultBranch = defaultBranch.Trim();
         this.RootPath = NormalizeOptional(rootPath);
         this.OrganizationScopeId = organizationScopeId;
-        (this.CanonicalSourceProvider, this.CanonicalSourceValue) = NormalizeCanonicalSource(canonicalSourceProvider, canonicalSourceValue);
+        (this.CanonicalSourceProvider, this.CanonicalSourceValue) =
+            NormalizeCanonicalSource(canonicalSourceProvider, canonicalSourceValue);
         this.SourceDisplayName = NormalizeOptional(sourceDisplayName);
         this.IsEnabled = isEnabled;
         this.SymbolMode = NormalizeSymbolMode(symbolMode);
         this.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>
+    ///     Adds a tracked branch to this knowledge source.
+    /// </summary>
     public ProCursorTrackedBranch AddTrackedBranch(
         Guid branchId,
         string branchName,
@@ -161,21 +226,26 @@ public sealed class ProCursorKnowledgeSource
         return trackedBranch;
     }
 
+    /// <summary>
+    ///     Sets the enabled state of this knowledge source.
+    /// </summary>
     public void SetEnabled(bool isEnabled)
     {
         this.IsEnabled = isEnabled;
         this.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 
     private static (string? Provider, string? Value) NormalizeCanonicalSource(string? provider, string? value)
     {
         var normalizedProvider = NormalizeOptional(provider);
         var normalizedValue = NormalizeOptional(value);
 
-        if ((normalizedProvider is null) != (normalizedValue is null))
+        if (normalizedProvider is null != normalizedValue is null)
         {
             throw new ArgumentException("Canonical source provider and value must both be provided or both be omitted.");
         }

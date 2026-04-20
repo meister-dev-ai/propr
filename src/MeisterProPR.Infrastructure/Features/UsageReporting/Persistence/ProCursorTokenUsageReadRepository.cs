@@ -54,9 +54,10 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
             totals,
             series,
             topSources,
-            IncludesGapFilledEvents: freshness.LastRollupCompletedAtUtc is null || DateOnly.FromDateTime(freshness.LastRollupCompletedAtUtc.Value.UtcDateTime) < to,
-            IncludesEstimatedUsage: totals.EstimatedEventCount > 0,
-            LastRollupCompletedAtUtc: freshness.LastRollupCompletedAtUtc);
+            freshness.LastRollupCompletedAtUtc is null ||
+            DateOnly.FromDateTime(freshness.LastRollupCompletedAtUtc.Value.UtcDateTime) < to,
+            totals.EstimatedEventCount > 0,
+            freshness.LastRollupCompletedAtUtc);
     }
 
     public async Task<ProCursorSourceTokenUsageResponse?> GetSourceUsageAsync(
@@ -120,9 +121,10 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
             byModel,
             series,
             $"/admin/clients/{clientId}/procursor/sources/{sourceId}/token-usage/events?limit=50",
-            IncludesGapFilledEvents: freshness.LastRollupCompletedAtUtc is null || DateOnly.FromDateTime(freshness.LastRollupCompletedAtUtc.Value.UtcDateTime) < to,
-            IncludesEstimatedUsage: totals.EstimatedEventCount > 0,
-            LastRollupCompletedAtUtc: freshness.LastRollupCompletedAtUtc);
+            freshness.LastRollupCompletedAtUtc is null ||
+            DateOnly.FromDateTime(freshness.LastRollupCompletedAtUtc.Value.UtcDateTime) < to,
+            totals.EstimatedEventCount > 0,
+            freshness.LastRollupCompletedAtUtc);
     }
 
     public async Task<IReadOnlyList<ProCursorTopSourceUsageDto>> GetTopSourcesAsync(
@@ -154,7 +156,10 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
 
         if (limit <= 0)
         {
-            return new ProCursorTokenUsageEventsResponse(clientId, sourceId, Array.Empty<ProCursorTokenUsageEventDto>());
+            return new ProCursorTokenUsageEventsResponse(
+                clientId,
+                sourceId,
+                Array.Empty<ProCursorTokenUsageEventDto>());
         }
 
         var items = await db.ProCursorTokenUsageEvents
@@ -212,7 +217,9 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
         return rows.AsReadOnly();
     }
 
-    public async Task<ProCursorTokenUsageFreshnessResponse> GetFreshnessAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<ProCursorTokenUsageFreshnessResponse> GetFreshnessAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
         var lastRollup = await db.ProCursorTokenUsageRollups
             .AsNoTracking()
@@ -236,7 +243,8 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
         var endExclusive = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var query = db.ProCursorTokenUsageEvents
             .AsNoTracking()
-            .Where(item => item.ClientId == clientId && item.OccurredAtUtc >= start && item.OccurredAtUtc < endExclusive);
+            .Where(item =>
+                item.ClientId == clientId && item.OccurredAtUtc >= start && item.OccurredAtUtc < endExclusive);
 
         if (sourceId.HasValue)
         {
@@ -246,7 +254,9 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
         return query;
     }
 
-    private static IReadOnlyList<ProCursorTopSourceUsageDto> BuildTopSources(IEnumerable<ProCursorTokenUsageEvent> events, int limit)
+    private static IReadOnlyList<ProCursorTopSourceUsageDto> BuildTopSources(
+        IEnumerable<ProCursorTokenUsageEvent> events,
+        int limit)
     {
         if (limit <= 0)
         {
@@ -328,7 +338,9 @@ public sealed class ProCursorTokenUsageReadRepository(MeisterProPRDbContext db) 
 
     private static decimal? SumCosts(IEnumerable<ProCursorTokenUsageEvent> events)
     {
-        var items = events.Where(item => item.EstimatedCostUsd.HasValue).Select(item => item.EstimatedCostUsd!.Value).ToList();
+        var items = events.Where(item => item.EstimatedCostUsd.HasValue)
+            .Select(item => item.EstimatedCostUsd!.Value)
+            .ToList();
         return items.Count == 0 ? null : items.Sum();
     }
 

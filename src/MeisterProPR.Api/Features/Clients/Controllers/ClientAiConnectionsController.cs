@@ -19,20 +19,28 @@ public sealed partial class ClientAiConnectionsController(
 {
     private static readonly StringComparer ModelNameComparer = StringComparer.OrdinalIgnoreCase;
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection {ConnectionId} created for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "AI connection {ConnectionId} created for client {ClientId}")]
     private static partial void LogConnectionCreated(ILogger logger, Guid connectionId, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection {ConnectionId} deleted for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "AI connection {ConnectionId} deleted for client {ClientId}")]
     private static partial void LogConnectionDeleted(ILogger logger, Guid connectionId, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection {ConnectionId} activated with model {Model} for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "AI connection {ConnectionId} activated with model {Model} for client {ClientId}")]
     private static partial void LogConnectionActivated(ILogger logger, Guid connectionId, string model, Guid clientId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection {ConnectionId} deactivated for client {ClientId}")]
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "AI connection {ConnectionId} deactivated for client {ClientId}")]
     private static partial void LogConnectionDeactivated(ILogger logger, Guid connectionId, Guid clientId);
 
     /// <summary>Validates that the caller has ClientAdministrator access for the specified client (or is a global admin).</summary>
-    /// <returns>Null when access is granted; an <see cref="IActionResult"/> to return when denied.</returns>
+    /// <returns>Null when access is granted; an <see cref="IActionResult" /> to return when denied.</returns>
     private IActionResult? AuthorizeClientAccessAsync(Guid clientId)
     {
         return AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
@@ -48,8 +56,7 @@ public sealed partial class ClientAiConnectionsController(
             .AsReadOnly();
     }
 
-    private static IReadOnlyList<AiConnectionModelCapabilityDto> NormalizeModelCapabilities(
-        IReadOnlyList<AiConnectionModelCapabilityRequest> modelCapabilities)
+    private static IReadOnlyList<AiConnectionModelCapabilityDto> NormalizeModelCapabilities(IReadOnlyList<AiConnectionModelCapabilityRequest> modelCapabilities)
     {
         return modelCapabilities
             .Select(capability => new AiConnectionModelCapabilityDto(
@@ -113,12 +120,16 @@ public sealed partial class ClientAiConnectionsController(
 
             if (capability.InputCostPer1MUsd.HasValue && capability.InputCostPer1MUsd.Value < 0)
             {
-                this.ModelState.AddModelError(memberName, "InputCostPer1MUsd must be greater than or equal to zero when provided.");
+                this.ModelState.AddModelError(
+                    memberName,
+                    "InputCostPer1MUsd must be greater than or equal to zero when provided.");
             }
 
             if (capability.OutputCostPer1MUsd.HasValue && capability.OutputCostPer1MUsd.Value < 0)
             {
-                this.ModelState.AddModelError(memberName, "OutputCostPer1MUsd must be greater than or equal to zero when provided.");
+                this.ModelState.AddModelError(
+                    memberName,
+                    "OutputCostPer1MUsd must be greater than or equal to zero when provided.");
             }
         }
 
@@ -186,14 +197,18 @@ public sealed partial class ClientAiConnectionsController(
 
         if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 200)
         {
-            this.ModelState.AddModelError(nameof(request.DisplayName), "displayName is required and must be ≤200 characters.");
+            this.ModelState.AddModelError(
+                nameof(request.DisplayName),
+                "displayName is required and must be ≤200 characters.");
             return this.ValidationProblem();
         }
 
         if (string.IsNullOrWhiteSpace(request.EndpointUrl) || request.EndpointUrl.Length > 500 ||
             !Uri.TryCreate(request.EndpointUrl, UriKind.Absolute, out _))
         {
-            this.ModelState.AddModelError(nameof(request.EndpointUrl), "endpointUrl is required, must be a valid absolute URL, and ≤500 characters.");
+            this.ModelState.AddModelError(
+                nameof(request.EndpointUrl),
+                "endpointUrl is required, must be a valid absolute URL, and ≤500 characters.");
             return this.ValidationProblem();
         }
 
@@ -278,9 +293,12 @@ public sealed partial class ClientAiConnectionsController(
             return this.NotFound();
         }
 
-        if (request.DisplayName is not null && (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 200))
+        if (request.DisplayName is not null &&
+            (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 200))
         {
-            this.ModelState.AddModelError(nameof(request.DisplayName), "displayName must be non-empty and ≤200 characters when provided.");
+            this.ModelState.AddModelError(
+                nameof(request.DisplayName),
+                "displayName must be non-empty and ≤200 characters when provided.");
             return this.ValidationProblem();
         }
 
@@ -288,7 +306,9 @@ public sealed partial class ClientAiConnectionsController(
             (string.IsNullOrWhiteSpace(request.EndpointUrl) || request.EndpointUrl.Length > 500 ||
              !Uri.TryCreate(request.EndpointUrl, UriKind.Absolute, out _)))
         {
-            this.ModelState.AddModelError(nameof(request.EndpointUrl), "endpointUrl must be a valid absolute URL and ≤500 characters when provided.");
+            this.ModelState.AddModelError(
+                nameof(request.EndpointUrl),
+                "endpointUrl must be a valid absolute URL and ≤500 characters when provided.");
             return this.ValidationProblem();
         }
 
@@ -312,7 +332,7 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
-        IReadOnlyList<AiConnectionModelCapabilityDto>? normalizedCapabilities = existing.ModelCapabilities;
+        var normalizedCapabilities = existing.ModelCapabilities;
         if (request.ModelCapabilities is not null)
         {
             normalizedCapabilities = NormalizeModelCapabilities(request.ModelCapabilities);

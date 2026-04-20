@@ -14,11 +14,12 @@
       <RouterLink v-if="isClientAdmin" to="/clients" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
       <RouterLink to="/reviews" class="nav-link" :class="{ 'router-link-active': $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
       <div v-if="isAdmin" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'users' || $route.name === 'thread-memory' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
+          <RouterLink to="/provider-settings" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> Providers</RouterLink>
           <RouterLink to="/users" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
           <RouterLink to="/thread-memory" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
         </div>

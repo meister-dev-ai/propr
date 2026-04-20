@@ -9,22 +9,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
-/// <summary>EF Core implementation of <see cref="IUserPatRepository"/>.</summary>
+/// <summary>EF Core implementation of <see cref="IUserPatRepository" />.</summary>
 public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatRepository
 {
     public async Task AddAsync(UserPat pat, CancellationToken ct = default)
     {
-        db.UserPats.Add(new UserPatRecord
-        {
-            Id = pat.Id == Guid.Empty ? Guid.NewGuid() : pat.Id,
-            UserId = pat.UserId,
-            TokenHash = pat.TokenHash,
-            Label = pat.Label,
-            ExpiresAt = pat.ExpiresAt,
-            CreatedAt = pat.CreatedAt,
-            LastUsedAt = pat.LastUsedAt,
-            IsRevoked = pat.IsRevoked,
-        });
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = pat.Id == Guid.Empty ? Guid.NewGuid() : pat.Id,
+                UserId = pat.UserId,
+                TokenHash = pat.TokenHash,
+                Label = pat.Label,
+                ExpiresAt = pat.ExpiresAt,
+                CreatedAt = pat.CreatedAt,
+                LastUsedAt = pat.LastUsedAt,
+                IsRevoked = pat.IsRevoked,
+            });
         await db.SaveChangesAsync(ct);
     }
 
@@ -79,7 +80,9 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
             CreatedAt = p.CreatedAt,
             LastUsedAt = p.LastUsedAt,
             IsRevoked = p.IsRevoked,
-        }).ToList().AsReadOnly();
+        })
+            .ToList()
+            .AsReadOnly();
     }
 
     public async Task RevokeAsync(Guid patId, Guid userId, CancellationToken ct = default)

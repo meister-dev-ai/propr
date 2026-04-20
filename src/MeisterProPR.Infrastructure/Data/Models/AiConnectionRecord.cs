@@ -1,8 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Infrastructure.Data.Models;
-
 namespace MeisterProPR.Infrastructure.Data.Models;
 
 /// <summary>EF Core persistence model for a per-client AI connection configuration.</summary>

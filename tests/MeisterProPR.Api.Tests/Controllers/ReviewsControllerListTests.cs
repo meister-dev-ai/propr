@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -33,7 +34,7 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}/reviewing/jobs");
         if (!string.IsNullOrWhiteSpace(token))
         {
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
         return request;
@@ -76,7 +77,7 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
         await factory.ClearJobsAsync();
         var client = factory.CreateClient();
 
-        using var request = this.CreateListRequest(factory.ClientAId, token: null);
+        using var request = this.CreateListRequest(factory.ClientAId, null);
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -129,7 +130,8 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", AppUserRole.User.ToString()),
                 ]),
@@ -178,25 +180,28 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IJobRepository, JobRepository>();
 
-                ReplaceService(services, Substitute.For<IAdoTokenValidator>());
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
-                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientAUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientAId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientAId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(clientBUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientBId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientBId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != clientAUserId && id != clientBUserId),
                         Arg.Any<CancellationToken>())
@@ -207,11 +212,6 @@ public sealed class ReviewsControllerListTests(ReviewsControllerListTests.ListRe
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
-
-                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredentialRepository);
             });
         }
 

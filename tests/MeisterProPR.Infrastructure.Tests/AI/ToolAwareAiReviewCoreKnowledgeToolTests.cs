@@ -27,34 +27,40 @@ public sealed class ToolAwareAiReviewCoreKnowledgeToolTests
         var mockClient = Substitute.For<IChatClient>();
         var mockTools = Substitute.For<IReviewContextTools>();
         mockTools.AskProCursorKnowledgeAsync("How is token caching handled?", Arg.Any<CancellationToken>())
-            .Returns(new ProCursorKnowledgeAnswerDto(
-                "complete",
-                [new ProCursorKnowledgeAnswerMatchDto(
-                    Guid.NewGuid(),
-                    ProCursorSourceKind.Repository,
-                    Guid.NewGuid(),
-                    "main",
-                    "abc123",
-                    "docs/token-caching.md",
-                    "Token caching",
-                    "Token caching avoids redundant network calls.",
-                    "hybrid",
-                    0.91d,
-                    "fresh")],
-                null));
+            .Returns(
+                new ProCursorKnowledgeAnswerDto(
+                    "complete",
+                    [
+                        new ProCursorKnowledgeAnswerMatchDto(
+                            Guid.NewGuid(),
+                            ProCursorSourceKind.Repository,
+                            Guid.NewGuid(),
+                            "main",
+                            "abc123",
+                            "docs/token-caching.md",
+                            "Token caching",
+                            "Token caching avoids redundant network calls.",
+                            "hybrid",
+                            0.91d,
+                            "fresh"),
+                    ]));
 
         var callCount = 0;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 callCount++;
                 if (callCount == 1)
                 {
-                    return Task.FromResult(CreateFunctionCallResponse(
-                        "call-knowledge-1",
-                        "ask_procursor_knowledge",
-                        "{\"question\":\"How is token caching handled?\"}"));
+                    return Task.FromResult(
+                        CreateFunctionCallResponse(
+                            "call-knowledge-1",
+                            "ask_procursor_knowledge",
+                            "{\"question\":\"How is token caching handled?\"}"));
                 }
 
                 return Task.FromResult(CreateFinalReviewResponse("Knowledge grounded review."));
@@ -62,14 +68,15 @@ public sealed class ToolAwareAiReviewCoreKnowledgeToolTests
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 5),
+            DefaultOptions(),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
 
         Assert.Equal(2, callCount);
         Assert.Equal("Knowledge grounded review.", result.Summary);
-        await mockTools.Received(1).AskProCursorKnowledgeAsync("How is token caching handled?", Arg.Any<CancellationToken>());
+        await mockTools.Received(1)
+            .AskProCursorKnowledgeAsync("How is token caching handled?", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -77,21 +84,31 @@ public sealed class ToolAwareAiReviewCoreKnowledgeToolTests
     {
         var mockClient = Substitute.For<IChatClient>();
         var mockTools = Substitute.For<IReviewContextTools>();
-        mockTools.AskProCursorKnowledgeAsync("Where is the stale snapshot policy documented?", Arg.Any<CancellationToken>())
-            .Returns(new ProCursorKnowledgeAnswerDto("noResult", [], "No indexed knowledge matched the requested question."));
+        mockTools.AskProCursorKnowledgeAsync(
+                "Where is the stale snapshot policy documented?",
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ProCursorKnowledgeAnswerDto(
+                    "noResult",
+                    [],
+                    "No indexed knowledge matched the requested question."));
 
         var callCount = 0;
         mockClient
-            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 callCount++;
                 if (callCount == 1)
                 {
-                    return Task.FromResult(CreateFunctionCallResponse(
-                        "call-knowledge-2",
-                        "ask_procursor_knowledge",
-                        "{\"question\":\"Where is the stale snapshot policy documented?\"}"));
+                    return Task.FromResult(
+                        CreateFunctionCallResponse(
+                            "call-knowledge-2",
+                            "ask_procursor_knowledge",
+                            "{\"question\":\"Where is the stale snapshot policy documented?\"}"));
                 }
 
                 return Task.FromResult(CreateFinalReviewResponse("No direct knowledge entry found."));
@@ -99,16 +116,17 @@ public sealed class ToolAwareAiReviewCoreKnowledgeToolTests
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
-            DefaultOptions(maxIterations: 5),
+            DefaultOptions(),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
 
         Assert.Equal(2, callCount);
         Assert.Equal("No direct knowledge entry found.", result.Summary);
-        await mockTools.Received(1).AskProCursorKnowledgeAsync(
-            "Where is the stale snapshot policy documented?",
-            Arg.Any<CancellationToken>());
+        await mockTools.Received(1)
+            .AskProCursorKnowledgeAsync(
+                "Where is the stale snapshot policy documented?",
+                Arg.Any<CancellationToken>());
     }
 
     private static IOptions<AiReviewOptions> DefaultOptions(int maxIterations = 5)

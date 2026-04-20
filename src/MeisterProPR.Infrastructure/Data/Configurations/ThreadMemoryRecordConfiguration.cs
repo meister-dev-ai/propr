@@ -3,6 +3,7 @@
 
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -87,7 +88,7 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasDatabaseName("ix_thread_memory_records_embedding_hnsw");
 
         // FK to clients table — cascade delete so client removal cleans up memory records.
-        builder.HasOne<Data.Models.ClientRecord>()
+        builder.HasOne<ClientRecord>()
             .WithMany()
             .HasForeignKey(r => r.ClientId)
             .OnDelete(DeleteBehavior.Cascade);

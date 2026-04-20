@@ -9,13 +9,13 @@ namespace MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 /// <summary>Feature-owned persistence port for review-job intake operations.</summary>
 public interface IReviewJobIntakeStore
 {
-    /// <summary>Returns the current active job for the given PR iteration, or <see langword="null" /> when none exists.</summary>
+    /// <summary>
+    ///     Returns the current active job for the supplied normalized review target and revision,
+    ///     or <see langword="null" /> when none exists.
+    /// </summary>
     Task<ReviewJob?> FindActiveJobAsync(
-        string organizationUrl,
-        string projectId,
-        string repositoryId,
-        int pullRequestId,
-        int iterationId,
+        Guid clientId,
+        SubmitReviewJobRequestDto request,
         CancellationToken cancellationToken = default);
 
     /// <summary>Creates a new pending review job for the supplied client and request details.</summary>

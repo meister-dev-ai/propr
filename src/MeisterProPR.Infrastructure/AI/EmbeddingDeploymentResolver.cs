@@ -22,7 +22,7 @@ public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnec
         bool allowDefaultFallback,
         CancellationToken ct = default)
     {
-        AiConnectionDto? connection = await aiConnectionRepository.GetForTierAsync(
+        var connection = await aiConnectionRepository.GetForTierAsync(
             clientId,
             AiConnectionModelCategory.Embedding,
             ct);
@@ -38,8 +38,8 @@ public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnec
         }
 
         var deploymentName = connection.ActiveModel
-            ?? connection.Models.FirstOrDefault()
-            ?? throw new InvalidOperationException("no_embedding_model_configured");
+                             ?? connection.Models.FirstOrDefault()
+                             ?? throw new InvalidOperationException("no_embedding_model_configured");
 
         return this.Resolve(connection, deploymentName, expectedDimensions);
     }

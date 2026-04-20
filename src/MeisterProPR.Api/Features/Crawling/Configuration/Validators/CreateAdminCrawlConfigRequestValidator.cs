@@ -3,6 +3,7 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Validators;
 
@@ -16,18 +17,21 @@ public sealed class CreateAdminCrawlConfigRequestValidator : AbstractValidator<C
             .NotEmpty()
             .WithMessage("ClientId is required.");
 
-        this.RuleFor(r => r.OrganizationUrl)
+        this.RuleFor(r => r.ProviderScopePath)
             .Must(static url => Uri.TryCreate(url, UriKind.Absolute, out _))
-            .WithMessage("OrganizationUrl must be a valid URL.")
-            .When(r => !string.IsNullOrWhiteSpace(r.OrganizationUrl));
+            .WithMessage("ProviderScopePath must be a valid absolute URL.")
+            .When(r => !string.IsNullOrWhiteSpace(r.ProviderScopePath));
 
         this.RuleFor(r => r)
-            .Must(r => r.OrganizationScopeId.HasValue || !string.IsNullOrWhiteSpace(r.OrganizationUrl))
-            .WithMessage("Either OrganizationScopeId or OrganizationUrl is required.");
+            .Must(r =>
+                r.Provider == ScmProvider.AzureDevOps
+                    ? r.OrganizationScopeId.HasValue || !string.IsNullOrWhiteSpace(r.ProviderScopePath)
+                    : !string.IsNullOrWhiteSpace(r.ProviderScopePath))
+            .WithMessage("Azure DevOps requires OrganizationScopeId or ProviderScopePath. Other providers require ProviderScopePath.");
 
-        this.RuleFor(r => r.ProjectId)
+        this.RuleFor(r => r.ProviderProjectKey)
             .NotEmpty()
-            .WithMessage("ProjectId is required.");
+            .WithMessage("ProviderProjectKey is required.");
 
         this.RuleFor(r => r.CrawlIntervalSeconds)
             .GreaterThanOrEqualTo(10)
@@ -44,13 +48,14 @@ public sealed class CreateAdminCrawlConfigRequestValidator : AbstractValidator<C
                     .Must(f =>
                         !string.IsNullOrWhiteSpace(f.RepositoryName) ||
                         !string.IsNullOrWhiteSpace(f.DisplayName) ||
-                        (!string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Provider) && !string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Value)))
+                        (!string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Provider) &&
+                         !string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Value)))
                     .WithMessage("Each repo filter requires a repository name, display name, or canonical source reference.");
             });
 
         this.RuleFor(r => r.ProCursorSourceIds)
             .Must(ids => ids is not null && ids.Any())
             .WithMessage("At least one ProCursor source is required when ProCursorSourceScopeMode is SelectedSources.")
-            .When(r => r.ProCursorSourceScopeMode == MeisterProPR.Domain.Enums.ProCursorSourceScopeMode.SelectedSources);
+            .When(r => r.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources);
     }
 }

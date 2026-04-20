@@ -22,8 +22,14 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
         builder.Property(e => e.OccurredAt).HasColumnName("occurred_at").IsRequired();
         builder.Property(e => e.InputTokens).HasColumnName("input_tokens").IsRequired(false);
         builder.Property(e => e.OutputTokens).HasColumnName("output_tokens").IsRequired(false);
-        builder.Property(e => e.InputTextSample).HasColumnName("input_text_sample").HasMaxLength(ProtocolLimits.TextSampleMaxLength).IsRequired(false);
-        builder.Property(e => e.OutputSummary).HasColumnName("output_summary").HasMaxLength(ProtocolLimits.TextSampleMaxLength).IsRequired(false);
+        builder.Property(e => e.InputTextSample)
+            .HasColumnName("input_text_sample")
+            .HasMaxLength(ProtocolLimits.TextSampleMaxLength)
+            .IsRequired(false);
+        builder.Property(e => e.OutputSummary)
+            .HasColumnName("output_summary")
+            .HasMaxLength(ProtocolLimits.TextSampleMaxLength)
+            .IsRequired(false);
         builder.Property(e => e.Error).HasColumnName("error").IsRequired(false);
 
         builder.HasIndex(e => e.ProtocolId).HasDatabaseName("ix_protocol_events_protocol_id");

@@ -5,6 +5,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Wiki.WebApi;
@@ -17,19 +18,24 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 /// </summary>
 public sealed partial class AdoTrackedBranchChangeDetector(
     VssConnectionFactory connectionFactory,
-    IClientAdoCredentialRepository credentialRepository,
+    IClientScmConnectionRepository connectionRepository,
     ILogger<AdoTrackedBranchChangeDetector> logger) : IProCursorTrackedBranchChangeDetector
 {
+    /// <summary>
+    /// Gets the latest commit SHA for a tracked branch.
+    /// </summary>
+    /// <param name="source">The ProCursor knowledge source.</param>
+    /// <param name="trackedBranch">The tracked branch to get the commit SHA for.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The commit SHA if found; otherwise null.</returns>
     public async Task<string?> GetLatestCommitShaAsync(
         ProCursorKnowledgeSource source,
         ProCursorTrackedBranch trackedBranch,
         CancellationToken ct = default)
     {
-        ClientAdoCredentials? credentials = null;
-        if (source.ClientId != Guid.Empty)
-        {
-            credentials = await credentialRepository.GetByClientIdAsync(source.ClientId, ct);
-        }
+        var credentials = source.ClientId != Guid.Empty
+            ? await this.ResolveConnectionCredentialsAsync(source.ClientId, source.ProviderScopePath, ct)
+            : null;
 
         try
         {
@@ -54,7 +60,7 @@ public sealed partial class AdoTrackedBranchChangeDetector(
 
     private async Task<string> ResolveRepositoryIdAsync(
         ProCursorKnowledgeSource source,
-        ClientAdoCredentials? credentials,
+        AdoServicePrincipalCredentials? credentials,
         CancellationToken ct)
     {
         if (source.SourceKind != ProCursorSourceKind.AdoWiki)
@@ -68,12 +74,12 @@ public sealed partial class AdoTrackedBranchChangeDetector(
 
     private async Task<IReadOnlyList<WikiV2>> ListWikisAsync(
         ProCursorKnowledgeSource source,
-        ClientAdoCredentials? credentials,
+        AdoServicePrincipalCredentials? credentials,
         CancellationToken ct)
     {
-        var connection = await connectionFactory.GetConnectionAsync(source.OrganizationUrl, credentials, ct);
+        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
         var wikiClient = connection.GetClient<WikiHttpClient>();
-        var wikis = await wikiClient.GetAllWikisAsync(source.ProjectId, null, ct);
+        var wikis = await wikiClient.GetAllWikisAsync(source.ProviderProjectKey, null, ct);
         return wikis.ToList().AsReadOnly();
     }
 
@@ -81,15 +87,39 @@ public sealed partial class AdoTrackedBranchChangeDetector(
         ProCursorKnowledgeSource source,
         string repositoryId,
         string branchName,
-        ClientAdoCredentials? credentials,
+        AdoServicePrincipalCredentials? credentials,
         CancellationToken ct)
     {
-        var connection = await connectionFactory.GetConnectionAsync(source.OrganizationUrl, credentials, ct);
+        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
         var gitClient = connection.GetClient<GitHttpClient>();
         return await gitClient.GetBranchAsync(
-            source.ProjectId,
+            source.ProviderProjectKey,
             repositoryId,
             NormalizeBranchName(branchName),
             cancellationToken: ct);
+    }
+
+    private async Task<AdoServicePrincipalCredentials?> ResolveConnectionCredentialsAsync(
+        Guid clientId,
+        string organizationUrl,
+        CancellationToken ct)
+    {
+        var connection = await connectionRepository.GetOperationalConnectionAsync(
+            clientId,
+            new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl),
+            ct);
+
+        if (connection is null ||
+            string.IsNullOrWhiteSpace(connection.OAuthTenantId) ||
+            string.IsNullOrWhiteSpace(connection.OAuthClientId) ||
+            string.IsNullOrWhiteSpace(connection.Secret))
+        {
+            return null;
+        }
+
+        return new AdoServicePrincipalCredentials(
+            connection.OAuthTenantId,
+            connection.OAuthClientId,
+            connection.Secret);
     }
 }

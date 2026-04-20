@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
@@ -23,6 +24,11 @@ public class ReviewJobWorkerTests
     private static ReviewJob CreateJob(int prId = 1)
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", prId, 1);
+    }
+
+    private static ReviewJobMetrics CreateMetrics()
+    {
+        return new ReviewJobMetrics(Substitute.For<IServiceScopeFactory>());
     }
 
     private static IServiceScopeFactory CreateScopeFactory(IReviewJobExecutionStore? repo = null)
@@ -65,12 +71,15 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
 
         using var cts = new CancellationTokenSource();
 
         var workerTask = worker.StartAsync(cts.Token);
-        await WaitUntilAsync(() => worker.IsRunning, TimeSpan.FromSeconds(1), "Worker never entered the running state.");
+        await WaitUntilAsync(
+            () => worker.IsRunning,
+            TimeSpan.FromSeconds(1),
+            "Worker never entered the running state.");
 
         Assert.True(worker.IsRunning);
 
@@ -91,7 +100,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
 
         Assert.False(worker.IsRunning);
     }
@@ -125,7 +134,7 @@ public class ReviewJobWorkerTests
         // causing SetFailed to be called on the job.
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
@@ -135,7 +144,8 @@ public class ReviewJobWorkerTests
         await worker.StopAsync(CancellationToken.None);
 
         // Job should have been picked up — TryTransition to Processing was called
-        await repo.Received().TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>());
+        await repo.Received()
+            .TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -143,11 +153,14 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
 
         using var cts = new CancellationTokenSource();
         _ = worker.StartAsync(cts.Token);
-        await WaitUntilAsync(() => worker.IsRunning, TimeSpan.FromSeconds(1), "Worker never entered the running state.");
+        await WaitUntilAsync(
+            () => worker.IsRunning,
+            TimeSpan.FromSeconds(1),
+            "Worker never entered the running state.");
 
         Assert.True(worker.IsRunning);
 
@@ -185,7 +198,7 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         _ = worker.StartAsync(cts.Token);
@@ -226,7 +239,11 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
         sp.GetService(typeof(IReviewJobProcessor)).Returns((object?)null);
 
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), Substitute.For<ILogger<ReviewJobWorker>>());
+        var worker = new ReviewJobWorker(
+            scopeFactory,
+            CreateWorkerOptions(),
+            CreateMetrics(),
+            Substitute.For<ILogger<ReviewJobWorker>>());
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
         _ = worker.StartAsync(cts.Token);

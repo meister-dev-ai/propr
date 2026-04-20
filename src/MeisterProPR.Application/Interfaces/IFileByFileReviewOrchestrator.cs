@@ -27,5 +27,10 @@ public interface IFileByFileReviewOrchestrator
     /// </param>
     /// <returns>The final aggregated review result.</returns>
     /// <exception cref="PartialReviewFailureException">Thrown if one or more file passes fail.</exception>
-    Task<ReviewResult> ReviewAsync(ReviewJob job, PullRequest pr, ReviewSystemContext baseContext, CancellationToken ct, IChatClient? overrideClient = null);
+    Task<ReviewResult> ReviewAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        CancellationToken ct,
+        IChatClient? overrideClient = null);
 }

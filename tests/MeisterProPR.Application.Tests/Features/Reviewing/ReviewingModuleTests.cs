@@ -31,23 +31,25 @@ public sealed class ReviewingModuleTests
         var clientId = Guid.NewGuid();
         var expected = new GetReviewJobProtocolResult(
             clientId,
-            [new ReviewJobProtocolDto(
-                Guid.NewGuid(),
-                jobId,
-                1,
-                "posting",
-                null,
-                DateTimeOffset.UtcNow.AddMinutes(-1),
-                DateTimeOffset.UtcNow,
-                "Completed",
-                10,
-                5,
-                1,
-                0,
-                null,
-                null,
-                null,
-                [])]);
+            [
+                new ReviewJobProtocolDto(
+                    Guid.NewGuid(),
+                    jobId,
+                    1,
+                    "posting",
+                    null,
+                    DateTimeOffset.UtcNow.AddMinutes(-1),
+                    DateTimeOffset.UtcNow,
+                    "Completed",
+                    10,
+                    5,
+                    1,
+                    0,
+                    null,
+                    null,
+                    null,
+                    []),
+            ]);
 
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
         diagnosticsReader.GetJobProtocolAsync(jobId, Arg.Any<CancellationToken>())

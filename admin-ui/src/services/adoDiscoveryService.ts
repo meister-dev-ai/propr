@@ -3,11 +3,9 @@
 
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
+import { listProviderConnections, listProviderScopes, type ScmProviderFamily } from '@/services/providerConnectionsService'
 
 export type CanonicalSourceReferenceDto = components['schemas']['CanonicalSourceReferenceDto']
-export type ClientAdoOrganizationScopeDto = components['schemas']['ClientAdoOrganizationScopeDto']
-export type CreateClientAdoOrganizationScopeRequest = components['schemas']['CreateClientAdoOrganizationScopeRequest']
-export type PatchClientAdoOrganizationScopeRequest = components['schemas']['PatchClientAdoOrganizationScopeRequest']
 export type AdoProjectOptionDto = components['schemas']['AdoProjectOptionDto']
 export type AdoSourceOptionDto = components['schemas']['AdoSourceOptionDto']
 export type AdoBranchOptionDto = components['schemas']['AdoBranchOptionDto']
@@ -15,58 +13,63 @@ export type AdoCrawlFilterOptionDto = components['schemas']['AdoCrawlFilterOptio
 
 export type AdoSourceKind = 'repository' | 'adoWiki'
 
-export async function listAdoOrganizationScopes(clientId: string): Promise<ClientAdoOrganizationScopeDto[]> {
-  const { data, error, response } = await createAdminClient().GET('/clients/{clientId}/ado-organization-scopes', {
-    params: { path: { clientId } },
-  })
+export interface ClientAdoOrganizationScopeDto {
+  id: string
+  clientId: string
+  organizationUrl: string
+  displayName: string
+  isEnabled: boolean
+  verificationStatus: 'unknown' | 'verified' | 'stale' | 'unauthorized' | 'unreachable'
+  lastVerifiedAt?: string | null
+  lastVerificationError?: string | null
+  createdAt: string
+  updatedAt: string
+  connectionId: string
+}
 
-  if (!response.ok) {
+export async function listAdoOrganizationScopes(clientId: string): Promise<ClientAdoOrganizationScopeDto[]> {
+  try {
+    const connections = await listProviderConnections(clientId)
+    const azureConnections = connections.filter((connection) => connection.providerFamily === 'azureDevOps')
+    const scopesByConnection = await Promise.all(
+      azureConnections.map(async (connection) => {
+        const scopes = await listProviderScopes(clientId, connection.id)
+        return scopes
+          .filter((scope) => scope.scopeType.toLowerCase() === 'organization')
+          .map((scope) => ({
+            id: scope.id,
+            clientId: scope.clientId,
+            organizationUrl: scope.scopePath,
+            displayName: scope.displayName,
+            isEnabled: scope.isEnabled,
+            verificationStatus: mapVerificationStatus(scope.verificationStatus),
+            lastVerifiedAt: scope.lastVerifiedAt ?? null,
+            lastVerificationError: scope.lastVerificationError ?? null,
+            createdAt: scope.createdAt,
+            updatedAt: scope.updatedAt,
+            connectionId: connection.id,
+          }))
+      }),
+    )
+
+    return scopesByConnection
+      .flat()
+      .sort((left, right) => left.organizationUrl.localeCompare(right.organizationUrl))
+  } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to load organization scopes.'))
   }
-
-  return (data as ClientAdoOrganizationScopeDto[]) ?? []
 }
 
-export async function createAdoOrganizationScope(
-  clientId: string,
-  request: CreateClientAdoOrganizationScopeRequest,
-): Promise<ClientAdoOrganizationScopeDto> {
-  const { data, error, response } = await createAdminClient().POST('/clients/{clientId}/ado-organization-scopes', {
-    params: { path: { clientId } },
-    body: request,
-  })
-
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(error, 'Failed to create organization scope.'))
-  }
-
-  return data as ClientAdoOrganizationScopeDto
-}
-
-export async function updateAdoOrganizationScope(
-  clientId: string,
-  scopeId: string,
-  request: PatchClientAdoOrganizationScopeRequest,
-): Promise<ClientAdoOrganizationScopeDto> {
-  const { data, error, response } = await createAdminClient().PATCH('/clients/{clientId}/ado-organization-scopes/{scopeId}', {
-    params: { path: { clientId, scopeId } },
-    body: request,
-  })
-
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(error, 'Failed to update organization scope.'))
-  }
-
-  return data as ClientAdoOrganizationScopeDto
-}
-
-export async function deleteAdoOrganizationScope(clientId: string, scopeId: string): Promise<void> {
-  const { error, response } = await createAdminClient().DELETE('/clients/{clientId}/ado-organization-scopes/{scopeId}', {
-    params: { path: { clientId, scopeId } },
-  })
-
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(error, 'Failed to delete organization scope.'))
+function mapVerificationStatus(status: string): ClientAdoOrganizationScopeDto['verificationStatus'] {
+  switch (status.trim().toLowerCase()) {
+    case 'verified':
+      return 'verified'
+    case 'failed':
+      return 'unreachable'
+    case 'stale':
+      return 'stale'
+    default:
+      return 'unknown'
   }
 }
 

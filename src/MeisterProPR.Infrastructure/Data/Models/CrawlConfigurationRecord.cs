@@ -14,6 +14,7 @@ public sealed class CrawlConfigurationRecord
     public Guid ClientId { get; set; }
     public Guid Id { get; set; }
     public int CrawlIntervalSeconds { get; set; }
+    public ScmProvider Provider { get; set; } = ScmProvider.AzureDevOps;
     public string OrganizationUrl { get; set; } = string.Empty;
     public string ProjectId { get; set; } = string.Empty;
     public Guid? OrganizationScopeId { get; set; }
@@ -28,7 +29,7 @@ public sealed class CrawlConfigurationRecord
     /// <summary>Optional repository-scope filters for this crawl configuration.</summary>
     public ICollection<CrawlRepoFilterRecord> RepoFilters { get; set; } = [];
 
-    public ClientAdoOrganizationScopeRecord? OrganizationScope { get; set; }
+    public ClientScmScopeRecord? OrganizationScope { get; set; }
 
     public ICollection<CrawlConfigurationProCursorSourceRecord> ProCursorSources { get; set; } = [];
 }

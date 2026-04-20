@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -10,13 +11,18 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Api.Tests.Controllers.ProCursor;
 
-public sealed class ProCursorKnowledgeSourceFreshnessTests(
-    ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory factory)
+public sealed class ProCursorKnowledgeSourceFreshnessTests(ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory factory)
     : IClassFixture<ProCursorKnowledgeSourcesControllerTests.ProCursorApiFactory>, IAsyncLifetime
 {
-    public Task InitializeAsync() => factory.ResetAsync();
+    public Task InitializeAsync()
+    {
+        return factory.ResetAsync();
+    }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public Task DisposeAsync()
+    {
+        return Task.CompletedTask;
+    }
 
     [Fact]
     public async Task ListSources_WhenLatestSnapshotIsBuilding_ReturnsBuildingFreshness()
@@ -46,8 +52,10 @@ public sealed class ProCursorKnowledgeSourceFreshnessTests(
         }
 
         var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/procursor/sources");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/procursor/sources");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await client.SendAsync(request);
 
@@ -86,7 +94,7 @@ public sealed class ProCursorKnowledgeSourceFreshnessTests(
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/procursor/sources/{source.Id}/branches");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
 
         var response = await client.SendAsync(request);
 

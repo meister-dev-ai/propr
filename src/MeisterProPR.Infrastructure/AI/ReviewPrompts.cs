@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -38,11 +39,11 @@ internal static class ReviewPrompts
                                          Do NOT wrap it in markdown code fences (no ```json or ```). Do NOT add any
                                          text before or after the JSON. The very first character must be '{' and the
                                          very last character must be '}'. Any other format will cause a parse error.
-                                         
+
                                          HTML SAFETY RULE: Your message strings MUST NOT contain any HTML tags or raw angle brackets.
                                          Never output <style>, <script>, <div>, <!DOCTYPE>, or any < or > characters outside of markdown code blocks.
                                          If you need to reference code with angle brackets, wrap the code in triple backticks (```code here```).
-                                         
+
                                          Schema:
                                          {
                                            "summary": "<overall narrative>",
@@ -225,7 +226,11 @@ internal static class ReviewPrompts
         return sb.ToString().TrimEnd();
     }
 
-    internal static string BuildPerFileSystemPrompt(ReviewSystemContext? context, string filePath, int fileIndex, int totalFiles)
+    internal static string BuildPerFileSystemPrompt(
+        ReviewSystemContext? context,
+        string filePath,
+        int fileIndex,
+        int totalFiles)
     {
         var sb = new StringBuilder();
         sb.AppendLine(BuildGlobalSystemPrompt(context));
@@ -238,14 +243,20 @@ internal static class ReviewPrompts
     ///     Builds the stable "global" system message: persona + tools + client message + repository instructions.
     ///     This message is sent on iteration 1 only; subsequent iterations drop it from history to save tokens.
     /// </summary>
-    internal static string BuildGlobalSystemPrompt(ReviewSystemContext? context) =>
-        BuildSystemPrompt(context);
+    internal static string BuildGlobalSystemPrompt(ReviewSystemContext? context)
+    {
+        return BuildSystemPrompt(context);
+    }
 
     /// <summary>
     ///     Builds the per-file context system message that frames the reviewer on which file is currently
     ///     under review. This message is sent on every iteration and retained in message history.
     /// </summary>
-    internal static string BuildPerFileContextPrompt(ReviewSystemContext? context, string filePath, int fileIndex, int totalFiles)
+    internal static string BuildPerFileContextPrompt(
+        ReviewSystemContext? context,
+        string filePath,
+        int fileIndex,
+        int totalFiles)
     {
         if (context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
         {
@@ -608,7 +619,7 @@ internal static class ReviewPrompts
     /// </summary>
     internal static string BuildMemoryReconsiderationUserMessage(
         string draftFindingsJson,
-        IReadOnlyList<Application.DTOs.ThreadMemoryMatchDto> matches)
+        IReadOnlyList<ThreadMemoryMatchDto> matches)
     {
         var sb = new StringBuilder();
         sb.AppendLine("## Draft Findings from Initial Review");
@@ -633,4 +644,3 @@ internal static class ReviewPrompts
         return sb.ToString();
     }
 }
-

@@ -34,27 +34,28 @@ public sealed class UsageReportingModuleTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
-        db.ProCursorTokenUsageEvents.Add(new ProCursorTokenUsageEvent(
-            Guid.NewGuid(),
-            clientId,
-            sourceId,
-            "Platform Wiki",
-            $"pcidx:test:{Guid.NewGuid():N}",
-            new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
-            ProCursorTokenUsageCallType.Embedding,
-            "text-embedding-3-small",
-            "text-embedding-3-small",
-            "cl100k_base",
-            120,
-            0,
-            false,
-            0.00012m,
-            true));
+        db.ProCursorTokenUsageEvents.Add(
+            new ProCursorTokenUsageEvent(
+                Guid.NewGuid(),
+                clientId,
+                sourceId,
+                "Platform Wiki",
+                $"pcidx:test:{Guid.NewGuid():N}",
+                new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                ProCursorTokenUsageCallType.Embedding,
+                "text-embedding-3-small",
+                "text-embedding-3-small",
+                "cl100k_base",
+                120,
+                0,
+                false,
+                0.00012m,
+                true));
         await db.SaveChangesAsync();
 
         var service = new ProCursorTokenUsageAggregationService(db);
 
-        var rebuilt = await service.RefreshAsync(new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 4), clientId, includeMonthly: false);
+        var rebuilt = await service.RefreshAsync(new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 4), clientId, false);
 
         Assert.Equal(2, rebuilt);
         var rollups = await db.ProCursorTokenUsageRollups

@@ -15,19 +15,36 @@ namespace MeisterProPR.Application.Tests.Features.PromptCustomization;
 /// </summary>
 public sealed class PromptCustomizationModuleTests
 {
+    private const string PromptKey = "AgenticLoopGuidance";
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid CrawlConfigId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
     private static readonly Guid OverrideId = Guid.Parse("cccccccc-0000-0000-0000-000000000003");
-    private const string PromptKey = "AgenticLoopGuidance";
 
     [Fact]
     public async Task GetOverrideAsync_WhenCrawlConfigOverrideExists_ReturnsCrawlConfigText()
     {
-        var crawlOverride = MakeOverride(OverrideId, ClientId, CrawlConfigId, PromptOverrideScope.CrawlConfigScope, PromptKey, "crawl-config text");
-        var clientOverride = MakeOverride(Guid.NewGuid(), ClientId, null, PromptOverrideScope.ClientScope, PromptKey, "client text");
+        var crawlOverride = MakeOverride(
+            OverrideId,
+            ClientId,
+            CrawlConfigId,
+            PromptOverrideScope.CrawlConfigScope,
+            PromptKey,
+            "crawl-config text");
+        var clientOverride = MakeOverride(
+            Guid.NewGuid(),
+            ClientId,
+            null,
+            PromptOverrideScope.ClientScope,
+            PromptKey,
+            "client text");
 
         var repo = Substitute.For<IPromptOverrideRepository>();
-        repo.GetByScopeAsync(ClientId, PromptOverrideScope.CrawlConfigScope, CrawlConfigId, PromptKey, Arg.Any<CancellationToken>())
+        repo.GetByScopeAsync(
+                ClientId,
+                PromptOverrideScope.CrawlConfigScope,
+                CrawlConfigId,
+                PromptKey,
+                Arg.Any<CancellationToken>())
             .Returns(crawlOverride);
         repo.GetByScopeAsync(ClientId, PromptOverrideScope.ClientScope, null, PromptKey, Arg.Any<CancellationToken>())
             .Returns(clientOverride);
@@ -42,10 +59,21 @@ public sealed class PromptCustomizationModuleTests
     [Fact]
     public async Task GetOverrideAsync_WhenNoCrawlConfigOverride_ReturnsClientText()
     {
-        var clientOverride = MakeOverride(Guid.NewGuid(), ClientId, null, PromptOverrideScope.ClientScope, PromptKey, "client text");
+        var clientOverride = MakeOverride(
+            Guid.NewGuid(),
+            ClientId,
+            null,
+            PromptOverrideScope.ClientScope,
+            PromptKey,
+            "client text");
 
         var repo = Substitute.For<IPromptOverrideRepository>();
-        repo.GetByScopeAsync(ClientId, PromptOverrideScope.CrawlConfigScope, CrawlConfigId, PromptKey, Arg.Any<CancellationToken>())
+        repo.GetByScopeAsync(
+                ClientId,
+                PromptOverrideScope.CrawlConfigScope,
+                CrawlConfigId,
+                PromptKey,
+                Arg.Any<CancellationToken>())
             .Returns((PromptOverride?)null);
         repo.GetByScopeAsync(ClientId, PromptOverrideScope.ClientScope, null, PromptKey, Arg.Any<CancellationToken>())
             .Returns(clientOverride);
@@ -61,7 +89,12 @@ public sealed class PromptCustomizationModuleTests
     public async Task GetOverrideAsync_WhenNoOverrideExists_ReturnsNull()
     {
         var repo = Substitute.For<IPromptOverrideRepository>();
-        repo.GetByScopeAsync(Arg.Any<Guid>(), Arg.Any<PromptOverrideScope>(), Arg.Any<Guid?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        repo.GetByScopeAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<PromptOverrideScope>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
             .Returns((PromptOverride?)null);
 
         var sut = new PromptOverrideService(repo);
@@ -110,7 +143,15 @@ public sealed class PromptCustomizationModuleTests
     public async Task UpdateAsync_UpdatesOverrideTextAndUpdatedAt()
     {
         var before = DateTimeOffset.UtcNow.AddMinutes(-10);
-        var existing = MakeOverrideWithTimestamps(OverrideId, ClientId, null, PromptOverrideScope.ClientScope, PromptKey, "old text", before, before);
+        var existing = MakeOverrideWithTimestamps(
+            OverrideId,
+            ClientId,
+            null,
+            PromptOverrideScope.ClientScope,
+            PromptKey,
+            "old text",
+            before,
+            before);
         var repo = Substitute.For<IPromptOverrideRepository>();
         repo.GetByIdAsync(OverrideId, Arg.Any<CancellationToken>()).Returns(existing);
 
@@ -164,7 +205,13 @@ public sealed class PromptOverrideDomainInvariantTests
     public void Constructor_WithEmptyClientId_Throws()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            new PromptOverride(ValidId, Guid.Empty, null, PromptOverrideScope.ClientScope, "AgenticLoopGuidance", "text"));
+            new PromptOverride(
+                ValidId,
+                Guid.Empty,
+                null,
+                PromptOverrideScope.ClientScope,
+                "AgenticLoopGuidance",
+                "text"));
 
         Assert.Equal("clientId", ex.ParamName);
     }
@@ -173,7 +220,13 @@ public sealed class PromptOverrideDomainInvariantTests
     public void Constructor_CrawlConfigScopeWithNullCrawlConfigId_Throws()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            new PromptOverride(ValidId, ValidClientId, null, PromptOverrideScope.CrawlConfigScope, "AgenticLoopGuidance", "text"));
+            new PromptOverride(
+                ValidId,
+                ValidClientId,
+                null,
+                PromptOverrideScope.CrawlConfigScope,
+                "AgenticLoopGuidance",
+                "text"));
 
         Assert.Equal("crawlConfigId", ex.ParamName);
     }
@@ -182,7 +235,13 @@ public sealed class PromptOverrideDomainInvariantTests
     public void Constructor_ClientScopeWithNonNullCrawlConfigId_Throws()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            new PromptOverride(ValidId, ValidClientId, ValidCrawlConfigId, PromptOverrideScope.ClientScope, "AgenticLoopGuidance", "text"));
+            new PromptOverride(
+                ValidId,
+                ValidClientId,
+                ValidCrawlConfigId,
+                PromptOverrideScope.ClientScope,
+                "AgenticLoopGuidance",
+                "text"));
 
         Assert.Equal("crawlConfigId", ex.ParamName);
     }

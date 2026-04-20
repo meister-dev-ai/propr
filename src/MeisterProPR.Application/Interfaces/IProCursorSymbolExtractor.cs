@@ -13,6 +13,6 @@ public interface IProCursorSymbolExtractor
     /// <summary>Extracts symbol definitions and relationships for the given materialized source state.</summary>
     Task<ProCursorSymbolExtractionResult> ExtractAsync(
         ProCursorMaterializedSource materializedSource,
-    Guid snapshotId,
+        Guid snapshotId,
         CancellationToken ct = default);
 }

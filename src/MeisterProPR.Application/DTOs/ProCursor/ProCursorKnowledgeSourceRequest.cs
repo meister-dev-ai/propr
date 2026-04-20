@@ -12,8 +12,8 @@ namespace MeisterProPR.Application.DTOs.ProCursor;
 public sealed record ProCursorKnowledgeSourceRegistrationRequest(
     string DisplayName,
     ProCursorSourceKind SourceKind,
-    string? OrganizationUrl,
-    string ProjectId,
+    string? ProviderScopePath,
+    string ProviderProjectKey,
     string? RepositoryId,
     string DefaultBranch,
     string? RootPath,
@@ -29,8 +29,8 @@ public sealed record ProCursorKnowledgeSourceRegistrationRequest(
 public sealed record ProCursorKnowledgeSourceRequest(
     string DisplayName,
     ProCursorSourceKind SourceKind,
-    string? OrganizationUrl,
-    string ProjectId,
+    string? ProviderScopePath,
+    string ProviderProjectKey,
     string? RepositoryId,
     string DefaultBranch,
     string? RootPath,

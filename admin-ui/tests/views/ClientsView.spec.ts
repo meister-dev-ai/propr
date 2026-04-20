@@ -22,8 +22,8 @@ vi.mock('@/components/ClientTable.vue', () => ({
 }))
 
 const sampleClients = [
-  { id: '1', displayName: 'Acme Corp', isActive: true, hasAdoCredentials: true, createdAt: '2024-01-01T00:00:00Z' },
-  { id: '2', displayName: 'Beta Ltd', isActive: false, hasAdoCredentials: false, createdAt: '2024-02-01T00:00:00Z' },
+  { id: '1', displayName: 'Acme Corp', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
+  { id: '2', displayName: 'Beta Ltd', isActive: false, createdAt: '2024-02-01T00:00:00Z' },
 ]
 
 describe('ClientsView', () => {

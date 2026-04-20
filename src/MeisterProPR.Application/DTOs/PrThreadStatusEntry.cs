@@ -4,7 +4,8 @@
 namespace MeisterProPR.Application.DTOs;
 
 /// <summary>
-///     Lightweight projection of a single PR reviewer thread used by <see cref="MeisterProPR.Application.Interfaces.IReviewerThreadStatusFetcher" />.
+///     Lightweight projection of a single PR reviewer thread used by
+///     <see cref="MeisterProPR.Application.Interfaces.IReviewerThreadStatusFetcher" />.
 /// </summary>
 /// <param name="ThreadId">ADO thread identifier.</param>
 /// <param name="Status">Current ADO thread status string (e.g. <c>Active</c>, <c>Fixed</c>).</param>

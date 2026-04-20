@@ -19,7 +19,7 @@ public sealed class WaveRegistrationSafetyTests
     public void ReviewingModule_WithoutDatabaseConnectionString_StillRegistersFeatureBoundaries()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(withDatabaseConnectionString: false);
+        var configuration = CreateConfiguration(false);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -36,7 +36,7 @@ public sealed class WaveRegistrationSafetyTests
     public void ReviewingModule_WithDatabaseConnectionString_RegistersLegacyAndFeatureReviewingContractsTogether()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(withDatabaseConnectionString: true);
+        var configuration = CreateConfiguration(true);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -57,7 +57,9 @@ public sealed class WaveRegistrationSafetyTests
             ["ADO_SKIP_TOKEN_VALIDATION"] = "true",
             ["ADO_STUB_PR"] = "true",
             ["MEISTER_JWT_SECRET"] = "test-wave-registration-jwt-secret-32!",
-            ["DB_CONNECTION_STRING"] = withDatabaseConnectionString ? "Host=localhost;Database=meister;Username=test;Password=test" : null,
+            ["DB_CONNECTION_STRING"] = withDatabaseConnectionString
+                ? "Host=localhost;Database=meister;Username=test;Password=test"
+                : null,
         };
 
         return new ConfigurationBuilder()

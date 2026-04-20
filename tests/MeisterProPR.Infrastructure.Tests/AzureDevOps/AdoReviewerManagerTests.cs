@@ -4,7 +4,8 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
@@ -32,15 +33,111 @@ public sealed class AdoReviewerManagerTests
             new VssCredentials());
     }
 
-    private static AdoReviewerManager BuildSut(GitHttpClient gitClient)
+    private static AdoReviewerManager BuildSut(
+        GitHttpClient gitClient,
+        IClientScmConnectionRepository? connectionRepository = null,
+        IClientScmScopeRepository? scopeRepository = null)
     {
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var credRepo = Substitute.For<IClientAdoCredentialRepository>();
-        credRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-        var mgr = new AdoReviewerManager(factory, credRepo, NullLogger<AdoReviewerManager>.Instance);
+        connectionRepository ??= Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+        scopeRepository ??= Substitute.For<IClientScmScopeRepository>();
+        var mgr = new AdoReviewerManager(
+            factory,
+            connectionRepository,
+            scopeRepository,
+            NullLogger<AdoReviewerManager>.Instance);
         mgr.GitClientResolver = (_, _) => Task.FromResult(gitClient);
         return mgr;
+    }
+
+    [Fact]
+    public async Task AddOptionalReviewerAsync_ReviewOverload_UsesEnabledOrganizationScopeUrl()
+    {
+        var reviewerId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+        var gitClient = BuildGitClient();
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        var scopeRepository = Substitute.For<IClientScmScopeRepository>();
+
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+        connectionRepository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ClientScmConnectionDto(
+                    connectionId,
+                    clientId,
+                    ScmProvider.AzureDevOps,
+                    "https://dev.azure.com",
+                    ScmAuthenticationKind.OAuthClientCredentials,
+                    "Azure DevOps",
+                    true,
+                    "verified",
+                    null,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+            ]);
+        scopeRepository.GetByConnectionIdAsync(clientId, connectionId, Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ClientScmScopeDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    connectionId,
+                    "organization",
+                    "testorg",
+                    OrgUrl,
+                    "Test Org",
+                    "verified",
+                    true,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+            ]);
+
+        gitClient.GetPullRequestReviewersAsync(
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<IdentityRefWithVote>()));
+        gitClient.CreatePullRequestReviewerAsync(
+                Arg.Any<IdentityRefWithVote>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IdentityRefWithVote()));
+
+        var sut = BuildSut(gitClient, connectionRepository, scopeRepository);
+        string? resolvedOrganizationUrl = null;
+        sut.GitClientResolver = (organizationUrl, _) =>
+        {
+            resolvedOrganizationUrl = organizationUrl;
+            return Task.FromResult(gitClient);
+        };
+
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com");
+        var repository = new RepositoryRef(host, RepositoryId, ProjectId, ProjectId);
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, PrId.ToString(), PrId);
+        var reviewer = new ReviewerIdentity(host, reviewerId.ToString(), "bot@testorg", "Bot", true);
+
+        await sut.AddOptionalReviewerAsync(clientId, review, reviewer);
+
+        Assert.Equal(OrgUrl, resolvedOrganizationUrl);
     }
 
     [Fact]

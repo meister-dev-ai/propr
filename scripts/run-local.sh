@@ -21,6 +21,38 @@ ApiProject="$REPO_ROOT/src/MeisterProPR.Api/MeisterProPR.Api.csproj"
 ApiFolder="$REPO_ROOT/src/MeisterProPR.Api"
 UiFolder="$REPO_ROOT/admin-ui"
 EnvFile="$REPO_ROOT/.env"
+LogDir="${RUN_LOCAL_LOG_DIR:-$REPO_ROOT/logs/local}"
+LogFile="${RUN_LOCAL_LOG_FILE:-$LogDir/run-local-$(date +%Y%m%d-%H%M%S).log}"
+
+mkdir -p "$(dirname "$LogFile")"
+: > "$LogFile"
+
+write_status() {
+  local message="$1"
+  local timestamp
+  timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+  printf '%s %s\n' "$timestamp" "$message" | tee -a "$LogFile"
+}
+
+pipe_stream() {
+  local label="$1"
+  local pipe_path="$2"
+  local output_target="$3"
+  local timestamp
+  local formatted
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    formatted="$timestamp [$label] $line"
+    printf '%s\n' "$formatted" >> "$LogFile"
+
+    if [ "$output_target" = "stderr" ]; then
+      printf '%s\n' "$formatted" >&2
+    else
+      printf '%s\n' "$formatted"
+    fi
+  done < "$pipe_path"
+}
 
 # If DB connection string not provided, try dotnet user-secrets for the API project.
 if [ -z "$DB_CONNECTION_STRING" ]; then
@@ -90,7 +122,7 @@ build_env_array_api() {
   local -n out_arr=$1
   out_arr=()
   out_arr+=("DB_CONNECTION_STRING=$DB_CONNECTION_STRING")
-  out_arr+=("ASPNETCORE_URLS=http://localhost:$BACKEND_PORT")
+  out_arr+=("ASPNETCORE_URLS=http://0.0.0.0:$BACKEND_PORT")
   out_arr+=("ASPNETCORE_ENVIRONMENT=Development")
   out_arr+=("LOKI_URL=")
   for k in "${!DOTENV[@]}"; do
@@ -119,20 +151,20 @@ UI_ERR="$TMPDIR/ui.err"
 mkfifo "$API_OUT" "$API_ERR" "$UI_OUT" "$UI_ERR"
 
 # Start readers
-sed -u 's/^/[API] /' < "$API_OUT" &
+pipe_stream "API" "$API_OUT" "stdout" &
 API_OUT_READER=$!
-sed -u 's/^/[API] /' < "$API_ERR" >&2 &
+pipe_stream "API" "$API_ERR" "stderr" &
 API_ERR_READER=$!
 
-sed -u 's/^/[UI] /' < "$UI_OUT" &
+pipe_stream "UI" "$UI_OUT" "stdout" &
 UI_OUT_READER=$!
-sed -u 's/^/[UI] /' < "$UI_ERR" >&2 &
+pipe_stream "UI" "$UI_ERR" "stderr" &
 UI_ERR_READER=$!
 
 # Function to cleanup pipes and readers
 cleanup() {
   echo
-  echo "Shutting down child processes..."
+  write_status "Shutting down child processes..."
   set +e
   [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
   [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true
@@ -147,10 +179,10 @@ trap cleanup INT TERM
 build_env_array_ui ui_env_assign
 if [ "$SKIP_UI_INSTALL" = false ]; then
   if [ ! -d "$UiFolder/node_modules" ]; then
-    echo "Installing admin-ui dependencies (npm ci)..."
+    write_status "Installing admin-ui dependencies (npm ci)..."
     env "${ui_env_assign[@]}" npm ci --prefix "$UiFolder"
     if [ $? -ne 0 ]; then
-      echo "npm ci failed"
+      write_status "npm ci failed"
       cleanup
     fi
   fi
@@ -160,7 +192,8 @@ fi
 build_env_array_api api_env_assign
 build_env_array_ui ui_env_assign
 
-echo "Starting backend and admin UI in this terminal. Press Ctrl+C to stop both."
+write_status "Starting backend and admin UI in this terminal. Press Ctrl+C to stop both."
+write_status "Local run log: $LogFile"
 
 # Start API
 ( env "${api_env_assign[@]}" dotnet run --project "$ApiProject" --no-launch-profile ) > "$API_OUT" 2> "$API_ERR" &
@@ -170,9 +203,9 @@ API_PID=$!
 ( env "${ui_env_assign[@]}" npm run dev --prefix "$UiFolder" ) > "$UI_OUT" 2> "$UI_ERR" &
 UI_PID=$!
 
-echo "API PID: $API_PID"
-echo "UI  PID: $UI_PID"
-echo "API -> http://localhost:$BACKEND_PORT  Admin UI -> http://localhost:5173"
+write_status "API PID: $API_PID"
+write_status "UI  PID: $UI_PID"
+write_status "API -> http://localhost:$BACKEND_PORT  Admin UI -> http://localhost:5173"
 
 # Monitor children
 API_EXIT=0
@@ -192,14 +225,14 @@ done
 
 # If one exited with non-zero, kill the other and exit with its code
 if [ "$API_EXIT" -ne 0 ]; then
-  echo "API exited with code $API_EXIT"
+  write_status "API exited with code $API_EXIT"
   [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true
   wait "$UI_PID" 2>/dev/null || true
   exit "$API_EXIT"
 fi
 
 if [ "$UI_EXIT" -ne 0 ]; then
-  echo "UI exited with code $UI_EXIT"
+  write_status "UI exited with code $UI_EXIT"
   [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
   wait "$API_PID" 2>/dev/null || true
   exit "$UI_EXIT"

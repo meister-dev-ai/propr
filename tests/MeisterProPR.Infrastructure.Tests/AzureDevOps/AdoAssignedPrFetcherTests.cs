@@ -4,7 +4,8 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.AzureDevOps;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.VisualStudio.Services.Common;
@@ -22,6 +23,7 @@ public sealed class AdoAssignedPrFetcherTests
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         Guid.NewGuid(),
         Guid.NewGuid(),
+        ScmProvider.AzureDevOps,
         "https://dev.azure.com/testorg",
         "TestProject",
         Guid.NewGuid(),
@@ -33,10 +35,16 @@ public sealed class AdoAssignedPrFetcherTests
     private static AdoAssignedPrFetcher BuildSut(GitHttpClient gitClient)
     {
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var credRepo = Substitute.For<IClientAdoCredentialRepository>();
-        credRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-        var fetcher = new AdoAssignedPrFetcher(factory, credRepo, NullLogger<AdoAssignedPrFetcher>.Instance);
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+        var fetcher = new AdoAssignedPrFetcher(
+            factory,
+            connectionRepository,
+            NullLogger<AdoAssignedPrFetcher>.Instance);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
         return fetcher;
     }
@@ -69,7 +77,7 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var sut = BuildSut(gitClient);
-        var result = await sut.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        var result = await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
 
         Assert.Empty(result);
     }
@@ -120,11 +128,11 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequestIteration> { new() { Id = 2 } }));
 
         var sut = BuildSut(gitClient);
-        var result = await sut.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        var result = await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
 
         // Only the second PR is included; first is skipped due to exception
         Assert.Single(result);
-        Assert.Equal(22, result[0].PullRequestId);
+        Assert.Equal(22, result[0].CodeReview.Number);
     }
 
     // T035 — config with null ReviewerId is skipped and returns empty list
@@ -135,6 +143,7 @@ public sealed class AdoAssignedPrFetcherTests
         var configWithNullReviewer = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            ScmProvider.AzureDevOps,
             "https://dev.azure.com/testorg",
             "TestProject",
             null, // ReviewerId = null → should skip
@@ -148,7 +157,7 @@ public sealed class AdoAssignedPrFetcherTests
             new VssCredentials());
 
         var sut = BuildSut(gitClient);
-        var result = await sut.GetAssignedOpenPullRequestsAsync(configWithNullReviewer);
+        var result = await sut.ListAssignedOpenReviewsAsync(configWithNullReviewer);
 
         Assert.Empty(result);
         // ADO was never called since we short-circuit on null ReviewerId
@@ -194,10 +203,10 @@ public sealed class AdoAssignedPrFetcherTests
                     }));
 
         var sut = BuildSut(gitClient);
-        var result = await sut.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        var result = await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
 
         Assert.Single(result);
-        Assert.Equal(5, result[0].LatestIterationId);
+        Assert.Equal(5, result[0].RevisionId);
     }
 
     [Fact]
@@ -241,7 +250,7 @@ public sealed class AdoAssignedPrFetcherTests
                     }));
 
         var sut = BuildSut(gitClient);
-        var result = await sut.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        var result = await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
 
         Assert.Equal(2, result.Count);
         await gitClient.Received(2)
@@ -272,11 +281,11 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var sut = BuildSut(gitClient);
-        await sut.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
 
         await gitClient.Received(1)
             .GetPullRequestsByProjectAsync(
-                Arg.Is(DefaultConfig.ProjectId),
+                Arg.Is(DefaultConfig.ProviderProjectKey),
                 Arg.Is<GitPullRequestSearchCriteria>(c =>
                     c.ReviewerId == DefaultConfig.ReviewerId &&
                     c.Status == PullRequestStatus.Active),
@@ -290,10 +299,13 @@ public sealed class AdoAssignedPrFetcherTests
     [Fact]
     public async Task GetAssignedOpenPullRequestsAsync_WithNullCredentials_LooksUpCredentials()
     {
-        var credentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-        credentialRepository
-            .GetByClientIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(null));
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository
+            .GetOperationalConnectionAsync(
+                DefaultConfig.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
 
         var gitClient = Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
@@ -309,24 +321,49 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var fetcher = new AdoAssignedPrFetcher(factory, credentialRepository, NullLogger<AdoAssignedPrFetcher>.Instance);
+        var fetcher = new AdoAssignedPrFetcher(
+            factory,
+            connectionRepository,
+            NullLogger<AdoAssignedPrFetcher>.Instance);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
 
-        await fetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        await fetcher.ListAssignedOpenReviewsAsync(DefaultConfig);
 
-        // Credential repository must still be queried even when result is null
-        await credentialRepository.Received(1)
-            .GetByClientIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>());
+        // The provider-neutral connection lookup must still be queried even when nothing is configured.
+        await connectionRepository.Received(1)
+            .GetOperationalConnectionAsync(
+                DefaultConfig.ClientId,
+                Arg.Is<ProviderHostRef>(host =>
+                    host.Provider == ScmProvider.AzureDevOps &&
+                    host.HostBaseUrl == new ProviderHostRef(ScmProvider.AzureDevOps, DefaultConfig.ProviderScopePath)
+                        .HostBaseUrl),
+                Arg.Any<CancellationToken>());
     }
-
 
     [Fact]
     public async Task GetAssignedOpenPullRequestsAsync_WithPerClientCredentials_LooksUpCredentials()
     {
-        var credentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-        credentialRepository
-            .GetByClientIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ClientAdoCredentials?>(new ClientAdoCredentials("tenant", "client", "secret")));
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository
+            .GetOperationalConnectionAsync(
+                DefaultConfig.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<ClientScmConnectionCredentialDto?>(
+                    new ClientScmConnectionCredentialDto(
+                        Guid.NewGuid(),
+                        DefaultConfig.ClientId,
+                        ScmProvider.AzureDevOps,
+                        DefaultConfig.ProviderScopePath,
+                        ScmAuthenticationKind.OAuthClientCredentials,
+                        "ado connection",
+                        "secret",
+                        true)
+                    {
+                        OAuthTenantId = "tenant",
+                        OAuthClientId = "client",
+                    }));
 
         var gitClient = Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
@@ -342,14 +379,22 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
-        var fetcher = new AdoAssignedPrFetcher(factory, credentialRepository, NullLogger<AdoAssignedPrFetcher>.Instance);
+        var fetcher = new AdoAssignedPrFetcher(
+            factory,
+            connectionRepository,
+            NullLogger<AdoAssignedPrFetcher>.Instance);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
 
-        await fetcher.GetAssignedOpenPullRequestsAsync(DefaultConfig);
+        await fetcher.ListAssignedOpenReviewsAsync(DefaultConfig);
 
-        // Credential lookup for the config's ClientId must have been called
-        await credentialRepository.Received(1)
-            .GetByClientIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>());
+        await connectionRepository.Received(1)
+            .GetOperationalConnectionAsync(
+                DefaultConfig.ClientId,
+                Arg.Is<ProviderHostRef>(host =>
+                    host.Provider == ScmProvider.AzureDevOps &&
+                    host.HostBaseUrl == new ProviderHostRef(ScmProvider.AzureDevOps, DefaultConfig.ProviderScopePath)
+                        .HostBaseUrl),
+                Arg.Any<CancellationToken>());
     }
 
     // T037 — repo filter tests
@@ -401,7 +446,7 @@ public sealed class AdoAssignedPrFetcherTests
         };
         var sut = BuildSut(BuildGitClientWithPrs(prs));
 
-        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+        var result = await sut.ListAssignedOpenReviewsAsync(config);
 
         Assert.Equal(2, result.Count);
     }
@@ -419,10 +464,10 @@ public sealed class AdoAssignedPrFetcherTests
         };
         var sut = BuildSut(BuildGitClientWithPrs(prs));
 
-        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+        var result = await sut.ListAssignedOpenReviewsAsync(config);
 
         Assert.Single(result);
-        Assert.Equal(1, result[0].PullRequestId);
+        Assert.Equal(1, result[0].CodeReview.Number);
     }
 
     [Fact]
@@ -433,15 +478,15 @@ public sealed class AdoAssignedPrFetcherTests
         var config = DefaultConfig with { RepoFilters = [filter] };
         var prs = new[]
         {
-            MakePrFull(1, "repo-a", "refs/heads/main"),     // matches
-            MakePrFull(2, "repo-a", "refs/heads/develop"),  // excluded by branch filter
+            MakePrFull(1, "repo-a"), // matches
+            MakePrFull(2, "repo-a", "refs/heads/develop"), // excluded by branch filter
         };
         var sut = BuildSut(BuildGitClientWithPrs(prs));
 
-        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+        var result = await sut.ListAssignedOpenReviewsAsync(config);
 
         Assert.Single(result);
-        Assert.Equal(1, result[0].PullRequestId);
+        Assert.Equal(1, result[0].CodeReview.Number);
     }
 
     [Fact]
@@ -452,14 +497,14 @@ public sealed class AdoAssignedPrFetcherTests
         var config = DefaultConfig with { RepoFilters = [filter] };
         var prs = new[]
         {
-            MakePrFull(1, "repo-a", "refs/heads/release/2.1"),  // matches glob
-            MakePrFull(2, "repo-a", "refs/heads/main"),          // does not match
+            MakePrFull(1, "repo-a", "refs/heads/release/2.1"), // matches glob
+            MakePrFull(2, "repo-a"), // does not match
         };
         var sut = BuildSut(BuildGitClientWithPrs(prs));
 
-        var result = await sut.GetAssignedOpenPullRequestsAsync(config);
+        var result = await sut.ListAssignedOpenReviewsAsync(config);
 
         Assert.Single(result);
-        Assert.Equal(1, result[0].PullRequestId);
+        Assert.Equal(1, result[0].CodeReview.Number);
     }
 }

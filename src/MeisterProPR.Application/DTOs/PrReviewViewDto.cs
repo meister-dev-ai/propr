@@ -8,8 +8,8 @@ namespace MeisterProPR.Application.DTOs;
 
 /// <summary>Aggregated view of all review activity for a specific pull request.</summary>
 public sealed record PrReviewViewDto(
-    string OrganizationUrl,
-    string ProjectId,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     string RepositoryId,
     int PullRequestId,
     int TotalJobs,

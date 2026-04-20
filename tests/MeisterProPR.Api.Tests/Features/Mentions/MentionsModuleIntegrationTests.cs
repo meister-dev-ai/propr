@@ -21,7 +21,16 @@ public sealed class MentionsModuleIntegrationTests
         var scope = Substitute.For<IAsyncDisposable, IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
         var repo = Substitute.For<IMentionReplyJobRepository>();
-        var pendingJob = new MentionReplyJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 7, 3, 11, "@bot please help");
+        var pendingJob = new MentionReplyJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            7,
+            3,
+            11,
+            "@bot please help");
 
         ((IServiceScope)scope).ServiceProvider.Returns(serviceProvider);
         scopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope((IServiceScope)scope));
@@ -29,7 +38,11 @@ public sealed class MentionsModuleIntegrationTests
         serviceProvider.GetService(typeof(IMentionReplyJobRepository)).Returns(repo);
         serviceProvider.GetService(typeof(IMentionReplyService)).Returns((object?)null);
 
-        var worker = new MentionReplyWorker(channel.Reader, channel.Writer, scopeFactory, NullLogger<MentionReplyWorker>.Instance);
+        var worker = new MentionReplyWorker(
+            channel.Reader,
+            channel.Writer,
+            scopeFactory,
+            NullLogger<MentionReplyWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
         await Task.Delay(50, CancellationToken.None);
@@ -48,7 +61,16 @@ public sealed class MentionsModuleIntegrationTests
         var serviceProvider = Substitute.For<IServiceProvider>();
         var repo = Substitute.For<IMentionReplyJobRepository>();
         var replyService = Substitute.For<IMentionReplyService>();
-        var job = new MentionReplyJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 7, 3, 11, "@bot please help");
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            7,
+            3,
+            11,
+            "@bot please help");
 
         ((IServiceScope)scope).ServiceProvider.Returns(serviceProvider);
         scopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope((IServiceScope)scope));
@@ -56,7 +78,11 @@ public sealed class MentionsModuleIntegrationTests
         serviceProvider.GetService(typeof(IMentionReplyJobRepository)).Returns(repo);
         serviceProvider.GetService(typeof(IMentionReplyService)).Returns(replyService);
 
-        var worker = new MentionReplyWorker(channel.Reader, channel.Writer, scopeFactory, NullLogger<MentionReplyWorker>.Instance);
+        var worker = new MentionReplyWorker(
+            channel.Reader,
+            channel.Writer,
+            scopeFactory,
+            NullLogger<MentionReplyWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
         await channel.Writer.WriteAsync(job, CancellationToken.None);

@@ -14,8 +14,8 @@ let crawlConfigs = [
     id: 'config-1',
     clientId: '1',
     organizationScopeId: 'scope-1',
-    organizationUrl: 'https://dev.azure.com/meister-propr',
-    projectId: 'Meister-ProPR',
+    providerScopePath: 'https://dev.azure.com/meister-propr',
+    providerProjectKey: 'Meister-ProPR',
     crawlIntervalSeconds: 60,
     isActive: true,
     repoFilters: [
@@ -50,8 +50,8 @@ let crawlConfigs = [
     id: 'config-2',
     clientId: '2',
     organizationScopeId: 'scope-3',
-    organizationUrl: 'https://dev.azure.com/cloud-native',
-    projectId: 'Infrastructure',
+    providerScopePath: 'https://dev.azure.com/cloud-native',
+    providerProjectKey: 'Infrastructure',
     crawlIntervalSeconds: 300,
     isActive: false,
     repoFilters: [],
@@ -65,8 +65,8 @@ let crawlConfigs = [
     id: 'config-3',
     clientId: '1',
     organizationScopeId: 'scope-1',
-    organizationUrl: 'https://dev.azure.com/meister-propr',
-    projectId: 'Sandbox',
+    providerScopePath: 'https://dev.azure.com/meister-propr',
+    providerProjectKey: 'Sandbox',
     crawlIntervalSeconds: 120,
     isActive: true,
     repoFilters: [
@@ -92,6 +92,53 @@ let crawlConfigs = [
     updatedAt: '2024-01-15T14:00:00Z'
   }
 ]
+
+let webhookConfigs: any[] = [
+  {
+    id: 'webhook-config-1',
+    clientId: '1',
+    provider: 'azureDevOps',
+    organizationScopeId: 'scope-1',
+    providerScopePath: 'https://dev.azure.com/meister-propr',
+    providerProjectKey: 'Meister-ProPR',
+    isActive: true,
+    enabledEvents: ['pullRequestCreated', 'pullRequestUpdated', 'pullRequestCommented'],
+    repoFilters: [
+      {
+        id: 'webhook-filter-1',
+        repositoryName: 'meister-propr',
+        displayName: 'meister-propr',
+        canonicalSourceRef: {
+          provider: 'azureDevOps',
+          value: 'repo-1',
+        },
+        targetBranchPatterns: ['main'],
+      },
+    ],
+    listenerUrl: 'https://propr.example.com/webhooks/v1/providers/ado/mock-path-key-1',
+    createdAt: '2024-03-27T10:15:00Z',
+  },
+]
+
+const webhookDeliveryLogsByConfig: Record<string, any[]> = {
+  'webhook-config-1': [
+    {
+      id: 'webhook-log-1',
+      webhookConfigurationId: 'webhook-config-1',
+      receivedAt: '2024-03-27T10:20:00Z',
+      eventType: 'git.pullrequest.updated',
+      deliveryOutcome: 'accepted',
+      httpStatusCode: 200,
+      repositoryId: 'repo-1',
+      pullRequestId: 42,
+      sourceBranch: 'refs/heads/feature/mock',
+      targetBranch: 'refs/heads/main',
+      actionSummaries: ['Submitted review intake refresh'],
+      failureReason: null,
+      failureCategory: null,
+    },
+  ],
+}
 
 const adoOrganizationScopesByClient: Record<string, any[]> = {
   '1': [
@@ -225,8 +272,8 @@ let proCursorSourcesByClient: Record<string, any[]> = {
       sourceId: 'src-1',
       clientId: '1',
       organizationScopeId: 'scope-1',
-      organizationUrl: 'https://dev.azure.com/meister-propr',
-      projectId: 'Meister-ProPR',
+      providerScopePath: 'https://dev.azure.com/meister-propr',
+      providerProjectKey: 'Meister-ProPR',
       repositoryId: 'repo-1',
       sourceDisplayName: 'meister-propr',
       canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' },
@@ -251,8 +298,8 @@ let proCursorSourcesByClient: Record<string, any[]> = {
       sourceId: 'src-2',
       clientId: '1',
       organizationScopeId: 'scope-1',
-      organizationUrl: 'https://dev.azure.com/meister-propr',
-      projectId: 'Meister-ProPR',
+      providerScopePath: 'https://dev.azure.com/meister-propr',
+      providerProjectKey: 'Meister-ProPR',
       repositoryId: 'wiki-1',
       sourceDisplayName: 'Meister-ProPR.wiki',
       canonicalSourceRef: { provider: 'azureDevOps', value: 'wiki-1' },
@@ -277,8 +324,8 @@ let proCursorSourcesByClient: Record<string, any[]> = {
       sourceId: 'src-3',
       clientId: '1',
       organizationScopeId: 'scope-1',
-      organizationUrl: 'https://dev.azure.com/meister-propr',
-      projectId: 'Sandbox',
+      providerScopePath: 'https://dev.azure.com/meister-propr',
+      providerProjectKey: 'Sandbox',
       repositoryId: 'repo-3',
       sourceDisplayName: 'sandbox-service',
       canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-3' },
@@ -643,6 +690,85 @@ function getCrawlFilters(scopeId: string | null | undefined, projectId: string |
   return adoCrawlFiltersByProject[`${scopeId}::${projectId}`] ?? []
 }
 
+function getProviderConnection(clientId: string, connectionId: string | null | undefined) {
+  if (!connectionId) {
+    return null
+  }
+
+  return (providerConnectionsByClient[clientId] ?? [])
+    .filter((connection) => isProviderEnabled(connection.providerFamily))
+    .find((connection) => connection.id === connectionId) ?? null
+}
+
+function isProviderEnabled(providerFamily: string | null | undefined) {
+  return providerActivationStatuses.find((status) => status.providerFamily === providerFamily)?.isEnabled ?? true
+}
+
+function buildProviderAuditTrail(clientId: string) {
+  return (providerConnectionsByClient[clientId] ?? [])
+    .filter((connection) => isProviderEnabled(connection.providerFamily))
+    .flatMap((connection) => {
+      const entries = [
+        {
+          id: `${connection.id}:created`,
+          clientId,
+          connectionId: connection.id,
+          providerFamily: connection.providerFamily,
+          displayName: connection.displayName,
+          hostBaseUrl: connection.hostBaseUrl,
+          eventType: 'connectionCreated',
+          summary: `Connection created for ${connection.displayName}.`,
+          occurredAt: connection.createdAt,
+          status: 'info',
+          failureCategory: null,
+          detail: null,
+        },
+      ]
+
+      if (connection.updatedAt && connection.updatedAt !== connection.createdAt) {
+        entries.push({
+          id: `${connection.id}:updated`,
+          clientId,
+          connectionId: connection.id,
+          providerFamily: connection.providerFamily,
+          displayName: connection.displayName,
+          hostBaseUrl: connection.hostBaseUrl,
+          eventType: connection.isActive ? 'connectionUpdated' : 'connectionDisabled',
+          summary: connection.isActive
+            ? `Connection updated for ${connection.displayName}.`
+            : `Connection disabled for ${connection.displayName}.`,
+          occurredAt: connection.updatedAt,
+          status: connection.isActive ? 'info' : 'warning',
+          failureCategory: null,
+          detail: null,
+        })
+      }
+
+      if (connection.lastVerifiedAt) {
+        const isFailed = connection.verificationStatus?.toLowerCase() === 'failed'
+        entries.push({
+          id: `${connection.id}:verified`,
+          clientId,
+          connectionId: connection.id,
+          providerFamily: connection.providerFamily,
+          displayName: connection.displayName,
+          hostBaseUrl: connection.hostBaseUrl,
+          eventType: isFailed ? 'connectionVerificationFailed' : 'connectionVerified',
+          summary: isFailed
+            ? `Verification failed for ${connection.displayName}.`
+            : `Connection verified for ${connection.displayName}.`,
+          occurredAt: connection.lastVerifiedAt,
+          status: isFailed ? 'error' : 'success',
+          failureCategory: connection.lastVerificationFailureCategory ?? null,
+          detail: connection.lastVerificationError ?? null,
+        })
+      }
+
+      return entries
+    })
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
+}
+
 let dismissedFindings = [
   {
     id: 'd1',
@@ -714,6 +840,230 @@ let aiConnectionsByClient: Record<string, any[]> = {
       ],
       createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
       updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+  ],
+}
+
+let providerActivationStatuses = [
+  {
+    providerFamily: 'azureDevOps',
+    isEnabled: true,
+    baselineAdapterSetRegistered: true,
+    registeredCapabilities: ['repositoryDiscovery'],
+    supportClaimReadiness: 'workflowComplete',
+    supportClaimReason: 'Azure DevOps is fully supported.',
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  {
+    providerFamily: 'github',
+    isEnabled: false,
+    baselineAdapterSetRegistered: true,
+    registeredCapabilities: ['repositoryDiscovery'],
+    supportClaimReadiness: 'onboardingReady',
+    supportClaimReason: 'GitHub remains onboarding ready when enabled.',
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  {
+    providerFamily: 'gitLab',
+    isEnabled: true,
+    baselineAdapterSetRegistered: true,
+    registeredCapabilities: ['repositoryDiscovery'],
+    supportClaimReadiness: 'onboardingReady',
+    supportClaimReason: 'GitLab remains onboarding ready when enabled.',
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  {
+    providerFamily: 'forgejo',
+    isEnabled: false,
+    baselineAdapterSetRegistered: true,
+    registeredCapabilities: ['repositoryDiscovery'],
+    supportClaimReadiness: 'onboardingReady',
+    supportClaimReason: 'Forgejo remains onboarding ready when enabled.',
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+]
+
+let providerConnectionsByClient: Record<string, any[]> = {
+  '1': [
+    {
+      id: 'provider-conn-ado-1',
+      clientId: '1',
+      providerFamily: 'azureDevOps',
+      hostBaseUrl: 'https://dev.azure.com',
+      authenticationKind: 'oauthClientCredentials',
+      displayName: 'Meister Azure DevOps',
+      isActive: true,
+      verificationStatus: 'verified',
+      lastVerifiedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+      lastVerificationError: null,
+      lastVerificationFailureCategory: null,
+      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+    },
+    {
+      id: 'provider-conn-github-1',
+      clientId: '1',
+      providerFamily: 'github',
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'personalAccessToken',
+      displayName: 'Acme GitHub',
+      isActive: true,
+      verificationStatus: 'verified',
+      lastVerifiedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+      lastVerificationError: null,
+      lastVerificationFailureCategory: null,
+      createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    },
+  ],
+  '2': [
+    {
+      id: 'provider-conn-gitlab-1',
+      clientId: '2',
+      providerFamily: 'gitLab',
+      hostBaseUrl: 'https://gitlab.example.com',
+      authenticationKind: 'personalAccessToken',
+      displayName: 'Platform GitLab',
+      isActive: false,
+      verificationStatus: 'stale',
+      lastVerifiedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
+      lastVerificationError: 'Token missing read_api scope.',
+      lastVerificationFailureCategory: 'authentication',
+      createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+      updatedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
+    },
+  ],
+}
+
+let providerScopesByConnection: Record<string, any[]> = {
+  'provider-conn-ado-1': [
+    {
+      id: 'provider-scope-ado-1',
+      clientId: '1',
+      connectionId: 'provider-conn-ado-1',
+      scopeType: 'organization',
+      externalScopeId: 'meister-propr',
+      scopePath: 'meister-propr',
+      displayName: 'Meister Org',
+      verificationStatus: 'verified',
+      isEnabled: true,
+      lastVerifiedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+      lastVerificationError: null,
+      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+    },
+  ],
+  'provider-conn-github-1': [
+    {
+      id: 'provider-scope-github-1',
+      clientId: '1',
+      connectionId: 'provider-conn-github-1',
+      scopeType: 'organization',
+      externalScopeId: 'acme',
+      scopePath: 'acme',
+      displayName: 'Acme',
+      verificationStatus: 'verified',
+      isEnabled: true,
+      lastVerifiedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+      lastVerificationError: null,
+      createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    },
+  ],
+  'provider-conn-gitlab-1': [
+    {
+      id: 'provider-scope-gitlab-1',
+      clientId: '2',
+      connectionId: 'provider-conn-gitlab-1',
+      scopeType: 'group',
+      externalScopeId: 'acme/platform',
+      scopePath: 'acme/platform',
+      displayName: 'acme/platform',
+      verificationStatus: 'stale',
+      isEnabled: false,
+      lastVerifiedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
+      lastVerificationError: 'The scope is no longer reachable with the stored token.',
+      createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+      updatedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
+    },
+  ],
+}
+
+let providerReviewerIdentitiesByConnection: Record<string, any | null> = {
+  'provider-conn-ado-1': {
+    id: 'provider-reviewer-ado-1',
+    clientId: '1',
+    connectionId: 'provider-conn-ado-1',
+    providerFamily: 'azureDevOps',
+    externalUserId: 'ado-reviewer-1',
+    login: 'meister-bot',
+    displayName: 'Meister Bot',
+    isBot: true,
+    updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+  },
+  'provider-conn-github-1': {
+    id: 'provider-reviewer-github-1',
+    clientId: '1',
+    connectionId: 'provider-conn-github-1',
+    providerFamily: 'github',
+    externalUserId: 'github-reviewer-1',
+    login: 'meister-dev-bot',
+    displayName: 'Meister Dev Bot',
+    isBot: true,
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  'provider-conn-gitlab-1': null,
+}
+
+const providerReviewerIdentityCandidatesByConnection: Record<string, any[]> = {
+  'provider-conn-ado-1': [
+    {
+      id: 'provider-reviewer-ado-1',
+      clientId: '1',
+      connectionId: 'provider-conn-ado-1',
+      providerFamily: 'azureDevOps',
+      externalUserId: 'ado-reviewer-1',
+      login: 'meister-bot',
+      displayName: 'Meister Bot',
+      isBot: true,
+      updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+    },
+  ],
+  'provider-conn-github-1': [
+    {
+      id: 'provider-reviewer-github-1',
+      clientId: '1',
+      connectionId: 'provider-conn-github-1',
+      providerFamily: 'github',
+      externalUserId: 'github-reviewer-1',
+      login: 'meister-dev-bot',
+      displayName: 'Meister Dev Bot',
+      isBot: true,
+      updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    },
+    {
+      id: 'provider-reviewer-github-2',
+      clientId: '1',
+      connectionId: 'provider-conn-github-1',
+      providerFamily: 'github',
+      externalUserId: 'github-reviewer-2',
+      login: 'meister-maintainer',
+      displayName: 'Meister Maintainer',
+      isBot: false,
+      updatedAt: new Date(Date.now() - 6 * 3600000).toISOString(),
+    },
+  ],
+  'provider-conn-gitlab-1': [
+    {
+      id: 'provider-reviewer-gitlab-1',
+      clientId: '2',
+      connectionId: 'provider-conn-gitlab-1',
+      providerFamily: 'gitLab',
+      externalUserId: 'gitlab-reviewer-1',
+      login: 'meister-reviewer',
+      displayName: 'Meister Reviewer',
+      isBot: true,
+      updatedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
     },
   ],
 }
@@ -814,9 +1164,9 @@ export const handlers = [
   http.get(`${base}/clients`, async () => {
     await delay(300)
     return HttpResponse.json([
-      { id: '1', displayName: 'Acme Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520 },
-      { id: '2', displayName: 'Globex Inc', isActive: false, hasAdoCredentials: false, createdAt: new Date().toISOString(), recentUsageTokens: 0 },
-      { id: '3', displayName: 'Umbrella Corp', isActive: true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 89300 }
+      { id: '1', displayName: 'Acme Corp', isActive: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520 },
+      { id: '2', displayName: 'Globex Inc', isActive: false, createdAt: new Date().toISOString(), recentUsageTokens: 0 },
+      { id: '3', displayName: 'Umbrella Corp', isActive: true, createdAt: new Date().toISOString(), recentUsageTokens: 89300 }
     ])
   }),
 
@@ -826,7 +1176,6 @@ export const handlers = [
         id: params.id, 
         displayName: 'Mocked Client ' + params.id, 
         isActive: true, 
-        hasAdoCredentials: true, 
         createdAt: new Date().toISOString(), 
         recentUsageTokens: 14520,
         reviewerId: '0000-1111-2222-3333'
@@ -837,7 +1186,7 @@ export const handlers = [
     await delay(300)
     const body = await request.json() as any
     return HttpResponse.json({
-        id: '1', displayName: body.displayName ?? 'Mocked Client', isActive: body.isActive ?? true, hasAdoCredentials: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520
+      id: '1', displayName: body.displayName ?? 'Mocked Client', isActive: body.isActive ?? true, createdAt: new Date().toISOString(), recentUsageTokens: 14520
     })
   }),
 
@@ -966,8 +1315,8 @@ export const handlers = [
       sourceId: `src-${Math.random().toString(36).slice(2, 10)}`,
       clientId,
       organizationScopeId: body.organizationScopeId ?? null,
-      organizationUrl: scope?.organizationUrl ?? null,
-      projectId: body.projectId ?? null,
+      providerScopePath: scope?.organizationUrl ?? null,
+      providerProjectKey: body.providerProjectKey ?? null,
       repositoryId: body.canonicalSourceRef?.value ?? null,
       sourceDisplayName: body.sourceDisplayName ?? null,
       canonicalSourceRef: body.canonicalSourceRef ?? null,
@@ -1204,6 +1553,293 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  http.get(`${base}/admin/providers`, async () => {
+    await delay(180)
+    return HttpResponse.json(providerActivationStatuses)
+  }),
+
+  http.patch(`${base}/admin/providers/:provider`, async ({ params, request }) => {
+    await delay(220)
+    const providerFamily = String(params.provider)
+    const body = await request.json() as any
+    const index = providerActivationStatuses.findIndex((status) => status.providerFamily === providerFamily)
+
+    if (index === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    providerActivationStatuses[index] = {
+      ...providerActivationStatuses[index],
+      isEnabled: body.isEnabled !== false,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(providerActivationStatuses[index])
+  }),
+
+  http.get(`${base}/clients/:clientId/provider-connections`, async ({ params }) => {
+    await delay(220)
+    const clientId = String(params.clientId)
+    return HttpResponse.json((providerConnectionsByClient[clientId] ?? []).filter((connection) => isProviderEnabled(connection.providerFamily)))
+  }),
+
+  http.post(`${base}/clients/:clientId/provider-connections`, async ({ params, request }) => {
+    await delay(280)
+    const clientId = String(params.clientId)
+    const body = await request.json() as any
+
+    if (!isProviderEnabled(body.providerFamily)) {
+      return HttpResponse.json({ error: 'The selected provider family is currently disabled by system administration.' }, { status: 409 })
+    }
+
+    const connection = {
+      id: `provider-conn-${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      providerFamily: body.providerFamily ?? 'github',
+      hostBaseUrl: body.hostBaseUrl ?? 'https://github.com',
+      authenticationKind: body.authenticationKind ?? 'personalAccessToken',
+      displayName: body.displayName ?? 'New provider connection',
+      isActive: body.isActive ?? true,
+      verificationStatus: 'verified',
+      lastVerifiedAt: new Date().toISOString(),
+      lastVerificationError: null,
+      lastVerificationFailureCategory: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    providerConnectionsByClient[clientId] = [connection, ...(providerConnectionsByClient[clientId] ?? [])]
+    providerScopesByConnection[connection.id] = []
+    providerReviewerIdentitiesByConnection[connection.id] = null
+    providerReviewerIdentityCandidatesByConnection[connection.id] = []
+
+    return HttpResponse.json(connection, { status: 201 })
+  }),
+
+  http.get(`${base}/clients/:clientId/provider-operations/audit-trail`, async ({ params, request }) => {
+    await delay(180)
+    const clientId = String(params.clientId)
+    const url = new URL(request.url)
+    const take = Math.max(1, Number(url.searchParams.get('take') ?? '20'))
+
+    return HttpResponse.json(buildProviderAuditTrail(clientId).slice(0, take))
+  }),
+
+  http.patch(`${base}/clients/:clientId/provider-connections/:connectionId`, async ({ params, request }) => {
+    await delay(260)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const body = await request.json() as any
+    const connections = providerConnectionsByClient[clientId] ?? []
+    const index = connections.findIndex((connection) => connection.id === connectionId)
+
+    if (index === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    connections[index] = {
+      ...connections[index],
+      displayName: body.displayName ?? connections[index].displayName,
+      hostBaseUrl: body.hostBaseUrl ?? connections[index].hostBaseUrl,
+      authenticationKind: body.authenticationKind ?? connections[index].authenticationKind,
+      isActive: body.isActive ?? connections[index].isActive,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(connections[index])
+  }),
+
+  http.delete(`${base}/clients/:clientId/provider-connections/:connectionId`, async ({ params }) => {
+    await delay(220)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+
+    providerConnectionsByClient[clientId] = (providerConnectionsByClient[clientId] ?? [])
+      .filter((connection) => connection.id !== connectionId)
+    delete providerScopesByConnection[connectionId]
+    delete providerReviewerIdentitiesByConnection[connectionId]
+    delete providerReviewerIdentityCandidatesByConnection[connectionId]
+
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${base}/clients/:clientId/provider-connections/:connectionId/verify`, async ({ params }) => {
+    await delay(220)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const connection = getProviderConnection(clientId, connectionId)
+
+    if (!connection) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    connection.verificationStatus = 'verified'
+    connection.lastVerifiedAt = new Date().toISOString()
+    connection.lastVerificationError = null
+    connection.lastVerificationFailureCategory = null
+    connection.updatedAt = new Date().toISOString()
+
+    return HttpResponse.json(connection)
+  }),
+
+  http.get(`${base}/clients/:clientId/provider-connections/:connectionId/scopes`, async ({ params }) => {
+    await delay(220)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+
+    if (!getProviderConnection(clientId, connectionId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    return HttpResponse.json(providerScopesByConnection[connectionId] ?? [])
+  }),
+
+  http.post(`${base}/clients/:clientId/provider-connections/:connectionId/scopes`, async ({ params, request }) => {
+    await delay(260)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const connection = getProviderConnection(clientId, connectionId)
+
+    if (!connection) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    const scope = {
+      id: `provider-scope-${Math.random().toString(36).slice(2, 10)}`,
+      clientId,
+      connectionId,
+      scopeType: body.scopeType ?? 'organization',
+      externalScopeId: body.externalScopeId ?? body.scopePath ?? 'generated-scope',
+      scopePath: body.scopePath ?? body.externalScopeId ?? 'generated-scope',
+      displayName: body.displayName ?? 'Generated Scope',
+      verificationStatus: 'verified',
+      isEnabled: body.isEnabled ?? true,
+      lastVerifiedAt: new Date().toISOString(),
+      lastVerificationError: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    providerScopesByConnection[connectionId] = [scope, ...(providerScopesByConnection[connectionId] ?? [])]
+
+    return HttpResponse.json(scope, { status: 201 })
+  }),
+
+  http.patch(`${base}/clients/:clientId/provider-connections/:connectionId/scopes/:scopeId`, async ({ params, request }) => {
+    await delay(240)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const scopeId = String(params.scopeId)
+
+    if (!getProviderConnection(clientId, connectionId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const scopes = providerScopesByConnection[connectionId] ?? []
+    const index = scopes.findIndex((scope) => scope.id === scopeId)
+
+    if (index === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    scopes[index] = {
+      ...scopes[index],
+      displayName: body.displayName ?? scopes[index].displayName,
+      isEnabled: body.isEnabled ?? scopes[index].isEnabled,
+      verificationStatus: body.verificationStatus ?? scopes[index].verificationStatus,
+      lastVerificationError: body.lastVerificationError ?? scopes[index].lastVerificationError,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(scopes[index])
+  }),
+
+  http.get(`${base}/clients/:clientId/provider-connections/:connectionId/reviewer-identities/resolve`, async ({ params, request }) => {
+    await delay(220)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+
+    if (!getProviderConnection(clientId, connectionId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const url = new URL(request.url)
+    const search = url.searchParams.get('search')?.trim().toLowerCase()
+    const identities = providerReviewerIdentityCandidatesByConnection[connectionId] ?? []
+
+    if (!search) {
+      return HttpResponse.json(identities)
+    }
+
+    return HttpResponse.json(
+      identities.filter((identity) =>
+        identity.login.toLowerCase().includes(search) || identity.displayName.toLowerCase().includes(search)))
+  }),
+
+  http.get(`${base}/clients/:clientId/provider-connections/:connectionId/reviewer-identity`, async ({ params }) => {
+    await delay(180)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+
+    if (!getProviderConnection(clientId, connectionId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const identity = providerReviewerIdentitiesByConnection[connectionId]
+    if (!identity) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    return HttpResponse.json(identity)
+  }),
+
+  http.put(`${base}/clients/:clientId/provider-connections/:connectionId/reviewer-identity`, async ({ params, request }) => {
+    await delay(240)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+    const connection = getProviderConnection(clientId, connectionId)
+
+    if (!connection) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    const selectedIdentity =
+      (providerReviewerIdentityCandidatesByConnection[connectionId] ?? []).find((identity) =>
+        identity.externalUserId === body.externalUserId || identity.id === body.id) ?? {
+        id: `provider-reviewer-${Math.random().toString(36).slice(2, 10)}`,
+        clientId,
+        connectionId,
+        providerFamily: connection.providerFamily,
+        externalUserId: body.externalUserId ?? 'provider-reviewer',
+        login: body.login ?? 'provider-reviewer',
+        displayName: body.displayName ?? 'Provider Reviewer',
+        isBot: body.isBot ?? true,
+      }
+
+    providerReviewerIdentitiesByConnection[connectionId] = {
+      ...selectedIdentity,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(providerReviewerIdentitiesByConnection[connectionId])
+  }),
+
+  http.delete(`${base}/clients/:clientId/provider-connections/:connectionId/reviewer-identity`, async ({ params }) => {
+    await delay(180)
+    const clientId = String(params.clientId)
+    const connectionId = String(params.connectionId)
+
+    if (!getProviderConnection(clientId, connectionId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    providerReviewerIdentitiesByConnection[connectionId] = null
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.get(`${base}/admin/users`, async () => {
     await delay(400)
     return HttpResponse.json([
@@ -1249,10 +1885,10 @@ export const handlers = [
       items: [
         {
           id: 'job-123',
-          projectId: 'proj-x',
+          providerProjectKey: 'proj-x',
           repositoryId: 'backend-service',
           pullRequestId: 42,
-          organizationUrl: 'https://dev.azure.com/acme',
+          providerScopePath: 'https://dev.azure.com/acme',
           status: 'completed',
           iterationId: 2,
           submittedAt: new Date(Date.now() - 86400000).toISOString(),
@@ -1270,10 +1906,10 @@ export const handlers = [
         },
         {
           id: 'job-124',
-          projectId: 'proj-y',
+          providerProjectKey: 'proj-y',
           repositoryId: 'frontend-app',
           pullRequestId: 89,
-          organizationUrl: 'https://dev.azure.com/acme',
+          providerScopePath: 'https://dev.azure.com/acme',
           status: isCompleted ? 'completed' : 'processing',
           iterationId: Math.ceil(jobTick / 2) || 1,
           submittedAt: new Date(Date.now() - 1000000).toISOString(),
@@ -1293,10 +1929,10 @@ export const handlers = [
         },
         {
           id: 'job-125',
-          projectId: 'proj-z',
+          providerProjectKey: 'proj-z',
           repositoryId: 'infrastructure',
           pullRequestId: 12,
-          organizationUrl: 'https://dev.azure.com/acme',
+          providerScopePath: 'https://dev.azure.com/acme',
           status: 'failed',
           iterationId: 1,
           submittedAt: new Date(Date.now() - 200000000).toISOString(),
@@ -1496,7 +2132,7 @@ export const handlers = [
       return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
     }
 
-    const availableFilters = getCrawlFilters(body.organizationScopeId, body.projectId)
+    const availableFilters = getCrawlFilters(body.organizationScopeId, body.providerProjectKey)
     const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
       if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
         return false
@@ -1516,8 +2152,8 @@ export const handlers = [
       id: `config-${Math.random().toString(36).substr(2, 9)}`,
       clientId: body.clientId,
       organizationScopeId: body.organizationScopeId ?? null,
-      organizationUrl: scope?.organizationUrl ?? body.organizationUrl,
-      projectId: body.projectId,
+      providerScopePath: scope?.organizationUrl ?? body.providerScopePath,
+      providerProjectKey: body.providerProjectKey,
       crawlIntervalSeconds: body.crawlIntervalSeconds ?? 60,
       isActive: true,
       repoFilters: body.repoFilters ?? [],
@@ -1539,7 +2175,7 @@ export const handlers = [
     if (idx === -1) return new HttpResponse(null, { status: 404 })
 
     const existingConfig = crawlConfigs[idx]
-    const availableFilters = getCrawlFilters(existingConfig.organizationScopeId, existingConfig.projectId)
+    const availableFilters = getCrawlFilters(existingConfig.organizationScopeId, existingConfig.providerProjectKey)
     const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
       if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
         return false
@@ -1573,6 +2209,139 @@ export const handlers = [
     if (idx === -1) return new HttpResponse(null, { status: 404 })
     
     crawlConfigs.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // Webhook Configurations
+  http.get(`${base}/admin/webhook-configurations`, async () => {
+    await delay(300)
+    return HttpResponse.json(webhookConfigs.filter((config) => isProviderEnabled(config.provider)))
+  }),
+
+  http.get(`${base}/admin/webhook-configurations/:configId/deliveries`, async ({ params }) => {
+    await delay(250)
+    const configId = String(params.configId)
+    return HttpResponse.json({
+      items: webhookDeliveryLogsByConfig[configId] ?? [],
+    })
+  }),
+
+  http.post(`${base}/admin/webhook-configurations`, async ({ request }) => {
+    await delay(500)
+    const body = await request.json() as any
+    const scope = getScope(String(body.clientId), body.organizationScopeId)
+    const providerSegment = body.provider === 'azureDevOps'
+      ? 'ado'
+      : body.provider === 'gitLab'
+        ? 'gitlab'
+        : body.provider === 'forgejo'
+          ? 'forgejo'
+          : 'github'
+
+    if (!Array.isArray(body.enabledEvents) || body.enabledEvents.length === 0) {
+      return HttpResponse.json({ error: 'At least one enabled event is required.' }, { status: 400 })
+    }
+
+    if (!isProviderEnabled(body.provider)) {
+      return HttpResponse.json({ error: 'The selected provider family is currently disabled by system administration.' }, { status: 409 })
+    }
+
+    if (body.organizationScopeId && (!scope || scope.isEnabled === false)) {
+      return HttpResponse.json({ error: 'The selected Azure DevOps organization is no longer available for this client.' }, { status: 409 })
+    }
+
+    const availableFilters = getCrawlFilters(body.organizationScopeId, body.providerProjectKey)
+    const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
+      if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
+        return false
+      }
+
+      return !availableFilters.some((option: any) =>
+        option.canonicalSourceRef?.provider === filter.canonicalSourceRef.provider &&
+        option.canonicalSourceRef?.value === filter.canonicalSourceRef.value,
+      )
+    })
+
+    if (staleFilter) {
+      return HttpResponse.json({ error: 'The selected webhook filter is no longer available in Azure DevOps.' }, { status: 409 })
+    }
+
+    const created = {
+      id: `webhook-config-${Math.random().toString(36).slice(2, 9)}`,
+      clientId: body.clientId,
+      provider: body.provider ?? 'azureDevOps',
+      organizationScopeId: body.organizationScopeId ?? null,
+      providerScopePath: scope?.organizationUrl ?? body.providerScopePath,
+      providerProjectKey: body.providerProjectKey,
+      isActive: true,
+      enabledEvents: body.enabledEvents ?? [],
+      repoFilters: (body.repoFilters ?? []).map((filter: any, index: number) => ({
+        id: `webhook-filter-${index + 1}`,
+        repositoryName: filter.repositoryName ?? filter.displayName ?? filter.canonicalSourceRef?.value,
+        displayName: filter.displayName ?? filter.repositoryName ?? filter.canonicalSourceRef?.value,
+        canonicalSourceRef: filter.canonicalSourceRef ?? null,
+        targetBranchPatterns: filter.targetBranchPatterns ?? [],
+      })),
+      listenerUrl: `https://propr.example.com/webhooks/v1/providers/${providerSegment}/${Math.random().toString(16).slice(2, 18)}`,
+      generatedSecret: 'generated-secret',
+      createdAt: new Date().toISOString(),
+    }
+
+    webhookConfigs.unshift(created)
+    webhookDeliveryLogsByConfig[created.id] = []
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.patch(`${base}/admin/webhook-configurations/:configId`, async ({ params, request }) => {
+    await delay(450)
+    const configId = String(params.configId)
+    const idx = webhookConfigs.findIndex(config => config.id === configId)
+    if (idx === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    const existingConfig = webhookConfigs[idx]
+    if (body.enabledEvents !== undefined && (!Array.isArray(body.enabledEvents) || body.enabledEvents.length === 0)) {
+      return HttpResponse.json({ error: 'At least one enabled event is required.' }, { status: 400 })
+    }
+
+    const availableFilters = getCrawlFilters(existingConfig.organizationScopeId, existingConfig.providerProjectKey)
+    const staleFilter = (body.repoFilters ?? []).find((filter: any) => {
+      if (!filter?.canonicalSourceRef?.provider || !filter?.canonicalSourceRef?.value) {
+        return false
+      }
+
+      return !availableFilters.some((option: any) =>
+        option.canonicalSourceRef?.provider === filter.canonicalSourceRef.provider &&
+        option.canonicalSourceRef?.value === filter.canonicalSourceRef.value,
+      )
+    })
+
+    if (staleFilter) {
+      return HttpResponse.json({ error: 'The selected webhook filter is no longer available in Azure DevOps.' }, { status: 409 })
+    }
+
+    webhookConfigs[idx] = {
+      ...existingConfig,
+      ...body,
+      repoFilters: body.repoFilters ?? existingConfig.repoFilters,
+      generatedSecret: null,
+    }
+
+    return HttpResponse.json(webhookConfigs[idx])
+  }),
+
+  http.delete(`${base}/admin/webhook-configurations/:configId`, async ({ params }) => {
+    await delay(300)
+    const configId = String(params.configId)
+    const idx = webhookConfigs.findIndex(config => config.id === configId)
+    if (idx === -1) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    webhookConfigs.splice(idx, 1)
+    delete webhookDeliveryLogsByConfig[configId]
     return new HttpResponse(null, { status: 204 })
   }),
 
@@ -1722,8 +2491,8 @@ export const handlers = [
   http.get(`${base}/clients/:clientId/pr-view`, async ({ request, params }) => {
     await delay(500)
     const url = new URL(request.url)
-    const orgUrl = url.searchParams.get('orgUrl')
-    const project = url.searchParams.get('project')
+    const providerScopePath = url.searchParams.get('providerScopePath')
+    const providerProjectKey = url.searchParams.get('providerProjectKey')
     const repositoryId = url.searchParams.get('repositoryId')
     const pullRequestId = Number(url.searchParams.get('pullRequestId'))
     const clientId = params.clientId as string
@@ -1733,8 +2502,8 @@ export const handlers = [
 
     return HttpResponse.json({
         clientId,
-        organizationUrl: orgUrl || 'https://dev.azure.com/meister-propr',
-        projectId: project || 'Meister-ProPR',
+      providerScopePath: providerScopePath || 'https://dev.azure.com/meister-propr',
+      providerProjectKey: providerProjectKey || 'Meister-ProPR',
         repositoryId: repositoryId || 'ai-dev-days-local-test',
         pullRequestId: pullRequestId || 81,
         totalJobs: isSpecialPR ? 1 : 0,

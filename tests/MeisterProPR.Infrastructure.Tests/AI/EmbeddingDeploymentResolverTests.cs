@@ -18,18 +18,19 @@ public sealed class EmbeddingDeploymentResolverTests
     {
         var repository = Substitute.For<IAiConnectionRepository>();
         repository.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(new AiConnectionDto(
-                Guid.NewGuid(),
-                ClientId,
-                "Embedding",
-                "https://example.openai.azure.com",
-                ["text-embedding-3-small"],
-                false,
-                "text-embedding-3-small",
-                DateTimeOffset.UtcNow,
-                AiConnectionModelCategory.Embedding,
-                [],
-                "test-key"));
+            .Returns(
+                new AiConnectionDto(
+                    Guid.NewGuid(),
+                    ClientId,
+                    "Embedding",
+                    "https://example.openai.azure.com",
+                    ["text-embedding-3-small"],
+                    false,
+                    "text-embedding-3-small",
+                    DateTimeOffset.UtcNow,
+                    AiConnectionModelCategory.Embedding,
+                    [],
+                    "test-key"));
 
         var resolver = new EmbeddingDeploymentResolver(repository);
 
@@ -46,18 +47,19 @@ public sealed class EmbeddingDeploymentResolverTests
     {
         var repository = Substitute.For<IAiConnectionRepository>();
         repository.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(new AiConnectionDto(
-                Guid.NewGuid(),
-                ClientId,
-                "Embedding",
-                "https://example.openai.azure.com",
-                ["custom-embedding-deployment"],
-                false,
-                "custom-embedding-deployment",
-                DateTimeOffset.UtcNow,
-                AiConnectionModelCategory.Embedding,
-                [],
-                "test-key"));
+            .Returns(
+                new AiConnectionDto(
+                    Guid.NewGuid(),
+                    ClientId,
+                    "Embedding",
+                    "https://example.openai.azure.com",
+                    ["custom-embedding-deployment"],
+                    false,
+                    "custom-embedding-deployment",
+                    DateTimeOffset.UtcNow,
+                    AiConnectionModelCategory.Embedding,
+                    [],
+                    "test-key"));
 
         var resolver = new EmbeddingDeploymentResolver(repository);
 

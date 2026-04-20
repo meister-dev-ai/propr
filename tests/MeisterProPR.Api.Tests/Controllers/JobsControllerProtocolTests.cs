@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 
@@ -57,7 +57,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
         var response = await client.SendAsync(request);
@@ -93,7 +93,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -133,7 +133,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
         var response = await client.SendAsync(request);
@@ -172,7 +172,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
         var response = await client.SendAsync(request);
@@ -199,30 +199,32 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
             CompletedAt = DateTimeOffset.UtcNow,
             Outcome = "Completed",
         };
-        protocol.Events.Add(new ProtocolEvent
-        {
-            Id = Guid.NewGuid(),
-            ProtocolId = protocol.Id,
-            Kind = ProtocolEventKind.MemoryOperation,
-            Name = "dedup_summary",
-            OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-10),
-            InputTextSample = "{\"candidateCount\":2,\"suppressedCount\":1}",
-        });
-        protocol.Events.Add(new ProtocolEvent
-        {
-            Id = Guid.NewGuid(),
-            ProtocolId = protocol.Id,
-            Kind = ProtocolEventKind.MemoryOperation,
-            Name = "dedup_degraded_mode",
-            OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
-            InputTextSample = "{\"degradedComponents\":[\"thread_memory_embedding\"]}",
-        });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.MemoryOperation,
+                Name = "dedup_summary",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-10),
+                InputTextSample = "{\"candidateCount\":2,\"suppressedCount\":1}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.MemoryOperation,
+                Name = "dedup_degraded_mode",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                InputTextSample = "{\"degradedComponents\":[\"thread_memory_embedding\"]}",
+            });
         job.Protocols.Add(protocol);
         await jobRepo.AddAsync(job);
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Headers.Add("X-Client-Key", "test-key-123");
 
         var response = await client.SendAsync(request);
@@ -251,7 +253,8 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -279,10 +282,9 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 // InMemory EF Core DB + IJobRepository for test seeding and controller
                 services.AddDbContextFactory<MeisterProPRDbContext>(opts =>

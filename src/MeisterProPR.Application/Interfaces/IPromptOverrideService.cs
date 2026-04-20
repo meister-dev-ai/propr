@@ -18,7 +18,11 @@ public interface IPromptOverrideService
     /// <param name="promptKey">Named prompt segment.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The override text, or <see langword="null" /> if no override is defined.</returns>
-    Task<string?> GetOverrideAsync(Guid clientId, Guid? crawlConfigId, string promptKey, CancellationToken ct = default);
+    Task<string?> GetOverrideAsync(
+        Guid clientId,
+        Guid? crawlConfigId,
+        string promptKey,
+        CancellationToken ct = default);
 
     /// <summary>Lists all overrides for the given client.</summary>
     Task<IReadOnlyList<PromptOverrideDto>> ListByClientAsync(Guid clientId, CancellationToken ct = default);
@@ -32,9 +36,15 @@ public interface IPromptOverrideService
         string overrideText,
         CancellationToken ct = default);
 
-    /// <summary>Updates the override text for the given override. Returns the updated DTO, or <see langword="null" /> if not found or not owned by the client.</summary>
+    /// <summary>
+    ///     Updates the override text for the given override. Returns the updated DTO, or <see langword="null" /> if not
+    ///     found or not owned by the client.
+    /// </summary>
     Task<PromptOverrideDto?> UpdateAsync(Guid clientId, Guid id, string overrideText, CancellationToken ct = default);
 
-    /// <summary>Deletes the override with the given ID. Returns <see langword="false" /> if not found or not owned by the client.</summary>
+    /// <summary>
+    ///     Deletes the override with the given ID. Returns <see langword="false" /> if not found or not owned by the
+    ///     client.
+    /// </summary>
     Task<bool> DeleteAsync(Guid clientId, Guid id, CancellationToken ct = default);
 }

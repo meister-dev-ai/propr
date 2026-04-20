@@ -1,9 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -38,7 +38,7 @@ public sealed partial class ThreadMemoryEmbedder(
         var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
             clientId,
             options.Value.MemoryEmbeddingDimensions,
-            allowDefaultFallback: false,
+            false,
             ct);
 
         var tokenCount = EmbeddingTokenizerRegistry.CountTokens(
@@ -85,7 +85,9 @@ public sealed partial class ThreadMemoryEmbedder(
             }
 
             modelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault() ?? modelId;
-            effectiveChatClient = aiChatClientFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey);
+            effectiveChatClient = aiChatClientFactory.CreateClient(
+                activeConnection.EndpointUrl,
+                activeConnection.ApiKey);
         }
 
         try
@@ -93,7 +95,8 @@ public sealed partial class ThreadMemoryEmbedder(
             var prompt = BuildResolutionSummaryPrompt(filePath, changeExcerpt, commentHistory);
             var messages = new[]
             {
-                new ChatMessage(ChatRole.System,
+                new ChatMessage(
+                    ChatRole.System,
                     """
                     You are a code review analyst. Given a resolved PR review thread, write a concise 3-5 sentence summary that addresses ALL of the following:
                     1. What problem or concern was raised in the thread.
@@ -108,7 +111,7 @@ public sealed partial class ThreadMemoryEmbedder(
             var response = await effectiveChatClient.GetResponseAsync(
                 messages,
                 new ChatOptions { ModelId = modelId },
-                cancellationToken: ct);
+                ct);
             var text = response.Text;
             return string.IsNullOrWhiteSpace(text) ? FallbackSummary : text.Trim();
         }
@@ -124,7 +127,7 @@ public sealed partial class ThreadMemoryEmbedder(
         string? changeExcerpt,
         string commentHistory)
     {
-        var parts = new System.Text.StringBuilder();
+        var parts = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(filePath))
         {
             parts.AppendLine($"File: {filePath}");
@@ -137,7 +140,8 @@ public sealed partial class ThreadMemoryEmbedder(
         }
         else
         {
-            parts.AppendLine("Note: No diff excerpt is available. If no code change can be determined from the comments, state explicitly that the resolution did not involve a code change.");
+            parts.AppendLine(
+                "Note: No diff excerpt is available. If no code change can be determined from the comments, state explicitly that the resolution did not involve a code change.");
         }
 
         parts.AppendLine("Comment history:");

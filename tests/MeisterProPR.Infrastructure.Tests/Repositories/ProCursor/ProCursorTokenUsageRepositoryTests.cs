@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,7 @@ public sealed class ProCursorTokenUsageRepositoryTests
             "Platform Wiki",
             "pcidx:test:embedding:0",
             DateTimeOffset.UtcNow,
-            MeisterProPR.Domain.Enums.ProCursorTokenUsageCallType.Embedding,
+            ProCursorTokenUsageCallType.Embedding,
             "text-embedding-3-small",
             "text-embedding-3-small",
             "cl100k_base",
@@ -48,11 +49,17 @@ public sealed class ProCursorTokenUsageRepositoryTests
         Assert.Equal(1, await db.ProCursorTokenUsageEvents.CountAsync());
     }
 
-    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options) : IDbContextFactory<MeisterProPRDbContext>
+    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)
+        : IDbContextFactory<MeisterProPRDbContext>
     {
-        public MeisterProPRDbContext CreateDbContext() => new(options);
+        public MeisterProPRDbContext CreateDbContext()
+        {
+            return new MeisterProPRDbContext(options);
+        }
 
-        public Task<MeisterProPRDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MeisterProPRDbContext(options));
+        public Task<MeisterProPRDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new MeisterProPRDbContext(options));
+        }
     }
 }

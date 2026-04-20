@@ -9,7 +9,7 @@ instead of as a single long page.
 | Document | Focus |
 |----------|-------|
 | [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, worker execution, dedup, job lifecycle, and token optimization |
-| [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) | Guided Azure DevOps onboarding, crawl configuration, crawler behavior, and source-scope snapshotting |
+| [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) | Provider connection onboarding, mixed-provider webhook activation, Azure DevOps crawl compatibility, and operational audit |
 | [docs/architecture/security-and-access.md](architecture/security-and-access.md) | Login, PATs, request auth evaluation, and Azure credential resolution |
 | [docs/architecture/procursor.md](architecture/procursor.md) | ProCursor runtime boundary, refresh flow, and token reporting |
 | [docs/architecture/data-model.md](architecture/data-model.md) | Guided configuration, ProCursor persistence, and core operational ER diagrams |
@@ -18,14 +18,17 @@ instead of as a single long page.
 ## System Context
 
 The top-level runtime boundary is unchanged: the API is the main entry point, background workers
-perform review and crawl execution, PostgreSQL stores durable state, Azure DevOps is the source of
-pull-request and repository data, and Azure OpenAI / AI Foundry provides model execution.
+perform review and crawl execution, PostgreSQL stores durable state, and Azure OpenAI / AI Foundry
+provides model execution. Azure DevOps remains the guided-discovery, crawl, and ProCursor baseline,
+while GitHub, GitLab, and Forgejo-family hosts now plug into the same provider-neutral review,
+webhook, publication, and observability seams without forking lifecycle, mention, or audit logic.
 
 ```mermaid
 flowchart TD
-    ADO["Azure DevOps (PR + Comments)"]
+    ADO["Azure DevOps\n(Guided Discovery + Crawl Baseline)"]
+    SCM["GitHub / GitLab / Forgejo\n(Provider Adapters)"]
     AOAI["Azure OpenAI / AI Foundry"]
-    EXT["External Caller (ADO Extension / CI)"]
+    EXT["External Caller (Extension / CI)"]
     PG[("PostgreSQL")]
     ADMINUI["Admin UI (Vue 3 SPA)"]
 
@@ -41,15 +44,29 @@ flowchart TD
     API -- "persist job" --> PG
     WORKER -- "poll every 2 s" --> PG
     WORKER -- "fetch PR diff" --> ADO
+    WORKER -- "fetch PR diff + publish comments" --> SCM
     WORKER -- "AI review" --> AOAI
     WORKER -- "knowledge + symbol lookups" --> PROCURSOR
     WORKER -- "post comment threads" --> ADO
     CRAWLER -- "poll open PRs" --> ADO
     CRAWLER -- "enqueue jobs" --> PG
+    SCM -- "provider webhooks" --> API
     PROCURSOR -- "persist snapshots + jobs" --> PG
     PROCURSOR -- "materialize tracked branches" --> ADO
     PROCURSOR -- "embedding generation" --> AOAI
 ```
+
+## Provider-Neutral SCM Rollout
+
+- The shared review engine, crawl convergence, mention handling, and ProCursor boundary remain a
+    single-path application flow; provider families attach through capability interfaces rather than
+    separate workflow implementations.
+- Provider-specific behavior is being moved behind adapters for connection verification, discovery,
+    review query and publication, reviewer identity resolution, and webhook ingress.
+- Azure DevOps remains the guided-discovery and crawl baseline, while GitHub, GitLab, and
+    Forgejo-family adapters now use the same normalized review, webhook, and thread-memory flows.
+- Provider connections, scopes, repositories, reviews, revisions, threads, comments, and webhook
+    deliveries are the normalized vocabulary for future mixed-provider operation and reporting.
 
 ## Runtime Composition
 

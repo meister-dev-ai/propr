@@ -1,10 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.Clients;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Application.Tests.Features.Clients;
 
@@ -15,14 +19,15 @@ public sealed class ClientsModuleTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        db.Clients.Add(new ClientRecord
-        {
-            Id = clientId,
-            DisplayName = "Feature Client",
-            IsActive = true,
-            CustomSystemMessage = "keep me",
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                DisplayName = "Feature Client",
+                IsActive = true,
+                CustomSystemMessage = "keep me",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
 
         var sut = new ClientAdminService(db);
@@ -31,7 +36,10 @@ public sealed class ClientsModuleTests
 
         Assert.NotNull(result);
         Assert.Null(result!.CustomSystemMessage);
-        Assert.Null(await db.Clients.Where(record => record.Id == clientId).Select(record => record.CustomSystemMessage).SingleAsync());
+        Assert.Null(
+            await db.Clients.Where(record => record.Id == clientId)
+                .Select(record => record.CustomSystemMessage)
+                .SingleAsync());
     }
 
     [Fact]
@@ -40,13 +48,14 @@ public sealed class ClientsModuleTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
         var reviewerId = Guid.NewGuid();
-        db.Clients.Add(new ClientRecord
-        {
-            Id = clientId,
-            DisplayName = "Reviewer Client",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                DisplayName = "Reviewer Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         await db.SaveChangesAsync();
 
         var sut = new ClientAdminService(db);
@@ -54,7 +63,29 @@ public sealed class ClientsModuleTests
         var updated = await sut.SetReviewerIdentityAsync(clientId, reviewerId);
 
         Assert.True(updated);
-        Assert.Equal(reviewerId, await db.Clients.Where(record => record.Id == clientId).Select(record => record.ReviewerId).SingleAsync());
+        Assert.Equal(
+            reviewerId,
+            await db.Clients.Where(record => record.Id == clientId).Select(record => record.ReviewerId).SingleAsync());
+    }
+
+    [Fact]
+    public void AddClientsModule_WithDatabaseConnectionString_RegistersProviderReadinessServices()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["DB_CONNECTION_STRING"] = "Host=localhost;Database=meisterpropr;Username=test;Password=test",
+                })
+            .Build();
+
+        services.AddDataProtection();
+        services.AddClientsModule(configuration);
+
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IProviderReadinessProfileCatalog));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IProviderReadinessEvaluator));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IProviderOperationalStatusService));
     }
 
     private static MeisterProPRDbContext CreateContext()

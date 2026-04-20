@@ -5,6 +5,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,14 +20,17 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
     /// <summary>
     ///     Registers auth, credential bootstrap, and persistence services for user identity flows.
     /// </summary>
-    public static IServiceCollection AddIdentityAndAccessModule(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
+    public static IServiceCollection AddIdentityAndAccessModule(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IUserRepository, AppUserRepository>();
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
-            services.AddScoped<MeisterProPR.Infrastructure.Services.SecretBackfillService>();
+            services.AddScoped<SecretBackfillService>();
             services.AddTransient<AdminBootstrapService>();
         }
 

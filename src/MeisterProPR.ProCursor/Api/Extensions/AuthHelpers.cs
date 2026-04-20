@@ -36,7 +36,7 @@ public static class AuthHelpers
 
     /// <summary>
     ///     Returns <c>null</c> when the caller is a global admin or holds at least
-    ///     <paramref name="minRole"/> for the specified <paramref name="clientId"/>.
+    ///     <paramref name="minRole" /> for the specified <paramref name="clientId" />.
     /// </summary>
     public static IActionResult? RequireClientRole(HttpContext ctx, Guid clientId, ClientRole minRole)
     {

@@ -93,3 +93,4 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/MeisterProPR.Api
 ## Related docs
 
 - `docs/api.md` for admin API examples and scripting
+- `docs/provider-connections.md` for the supported provider auth modes, required fields, and where to obtain them

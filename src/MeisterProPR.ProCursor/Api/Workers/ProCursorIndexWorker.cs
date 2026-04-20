@@ -18,11 +18,11 @@ public sealed partial class ProCursorIndexWorker(
     IOptions<ProCursorOptions> options,
     ILogger<ProCursorIndexWorker> logger) : BackgroundService
 {
-    private readonly ProCursorOptions _options = options.Value;
     private readonly Dictionary<Guid, Task> _activeJobsBySource = [];
     private readonly Lock _activeJobsLock = new();
-    private bool _schedulerResolutionFailureLogged;
+    private readonly ProCursorOptions _options = options.Value;
     private bool _coordinatorResolutionFailureLogged;
+    private bool _schedulerResolutionFailureLogged;
 
     /// <summary>
     ///     Whether the worker loop has entered its running state.

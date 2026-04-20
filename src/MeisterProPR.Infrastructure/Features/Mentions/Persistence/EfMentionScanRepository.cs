@@ -15,7 +15,9 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class EfMentionScanRepository(MeisterProPRDbContext dbContext) : IMentionScanRepository
 {
     /// <inheritdoc />
-    public async Task<MentionProjectScan?> GetProjectScanAsync(Guid crawlConfigurationId, CancellationToken ct = default)
+    public async Task<MentionProjectScan?> GetProjectScanAsync(
+        Guid crawlConfigurationId,
+        CancellationToken ct = default)
     {
         return await dbContext.MentionProjectScans
             .AsNoTracking()

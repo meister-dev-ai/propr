@@ -47,7 +47,7 @@
     <div v-else class="sources-stack">
       <article
         v-for="source in sources"
-        :key="source.sourceId ?? source.displayName ?? source.repositoryId ?? source.projectId ?? 'source'"
+          :key="source.sourceId ?? source.displayName ?? source.repositoryId ?? source.providerProjectKey ?? 'source'"
         class="source-card"
       >
         <header class="source-card-header">
@@ -64,7 +64,7 @@
               </span>
             </div>
             <p class="source-card-subtitle">
-              {{ source.organizationUrl || 'No organization URL' }} / {{ source.projectId || 'No project' }} / {{ source.sourceDisplayName || source.repositoryId || 'No source selected' }}
+              {{ source.providerScopePath || 'No organization URL' }} / {{ source.providerProjectKey || 'No project' }} / {{ source.sourceDisplayName || source.repositoryId || 'No source selected' }}
             </p>
           </div>
 
@@ -1431,8 +1431,8 @@ async function handleCreateSource() {
   const request: ProCursorKnowledgeSourceRequest = {
     displayName,
     sourceKind: createSourceModal.sourceKind,
-    organizationUrl: organizationScope.organizationUrl ?? null,
-    projectId,
+    providerScopePath: organizationScope.organizationUrl ?? null,
+    providerProjectKey: projectId,
     repositoryId: canonicalSourceRef.value,
     defaultBranch,
     rootPath: trimOptional(createSourceModal.rootPath),

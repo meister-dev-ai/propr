@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -40,7 +41,7 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
 
@@ -92,7 +93,7 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await http.SendAsync(request);
 
@@ -145,7 +146,8 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
                 ]),
@@ -172,10 +174,9 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
             {
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-                services.AddSingleton(Substitute.For<IAdoTokenValidator>());
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedPrFetcher>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IJobRepository>());
 
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
@@ -190,11 +191,6 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
 
                 // Register the real ClientTokenUsageRepository backed by InMemory EF
                 services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
-
-                var adoCredRepo = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredRepo.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<MeisterProPR.Application.DTOs.ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredRepo);
             });
         }
 

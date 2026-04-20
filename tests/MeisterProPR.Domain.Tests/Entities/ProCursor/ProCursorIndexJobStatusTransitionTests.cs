@@ -8,8 +8,16 @@ namespace MeisterProPR.Domain.Tests.Entities.ProCursor;
 
 public sealed class ProCursorIndexJobStatusTransitionTests
 {
-    private static ProCursorIndexJob CreateJob() =>
-        new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "refresh", "source/branch/head");
+    private static ProCursorIndexJob CreateJob()
+    {
+        return new ProCursorIndexJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            null,
+            "refresh",
+            "source/branch/head");
+    }
 
     [Fact]
     public void Constructor_DefaultsStatusToPending()

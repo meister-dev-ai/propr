@@ -31,8 +31,8 @@ export interface TokenBreakdownEntry {
 export interface JobListItem {
   id: string
   clientId: string | null
-  organizationUrl: string
-  projectId: string
+  providerScopePath: string
+  providerProjectKey: string
   repositoryId: string
   pullRequestId: number
   iterationId: number
@@ -101,8 +101,8 @@ export interface ContributingMemorySummaryDto {
 }
 
 export interface PrReviewViewDto {
-  organizationUrl: string
-  projectId: string
+  providerScopePath: string
+  providerProjectKey: string
   repositoryId: string
   pullRequestId: number
   totalJobs: number
@@ -158,8 +158,8 @@ export async function getJobProtocol(id: string): Promise<unknown> {
 }
 
 export interface GetPrViewParams {
-  organizationUrl: string
-  projectId: string
+  providerScopePath: string
+  providerProjectKey: string
   repositoryId: string
   pullRequestId: number
   page?: number
@@ -172,8 +172,8 @@ export async function getPrView(
   params: GetPrViewParams,
 ): Promise<PrReviewViewDto> {
   const q = new URLSearchParams({
-    organizationUrl: params.organizationUrl,
-    projectId: params.projectId,
+    providerScopePath: params.providerScopePath,
+    providerProjectKey: params.providerProjectKey,
     repositoryId: params.repositoryId,
     pullRequestId: String(params.pullRequestId),
   })

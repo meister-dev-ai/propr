@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -11,6 +12,7 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -25,54 +27,147 @@ namespace MeisterProPR.Application.Tests.Services;
 /// </summary>
 public class ReviewOrchestrationServicePromptOverrideTests
 {
+    private static ICodeReviewPublicationService CreatePublicationService()
+    {
+        var publicationService = Substitute.For<ICodeReviewPublicationService>();
+        publicationService.Provider.Returns(ScmProvider.AzureDevOps);
+        publicationService.PublishReviewAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewRevision>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
+        return publicationService;
+    }
+
+    private static IReviewAssignmentService CreateReviewerManager()
+    {
+        var reviewerManager = Substitute.For<IReviewAssignmentService>();
+        reviewerManager.Provider.Returns(ScmProvider.AzureDevOps);
+        reviewerManager.AddOptionalReviewerAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return reviewerManager;
+    }
+
+    private static IReviewThreadStatusWriter CreateThreadStatusWriter()
+    {
+        var threadStatusWriter = Substitute.For<IReviewThreadStatusWriter>();
+        threadStatusWriter.Provider.Returns(ScmProvider.AzureDevOps);
+        threadStatusWriter.UpdateThreadStatusAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return threadStatusWriter;
+    }
+
+    private static IReviewThreadReplyPublisher CreateThreadReplyPublisher()
+    {
+        var threadReplyPublisher = Substitute.For<IReviewThreadReplyPublisher>();
+        threadReplyPublisher.Provider.Returns(ScmProvider.AzureDevOps);
+        threadReplyPublisher.ReplyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return threadReplyPublisher;
+    }
+
+    private static IScmProviderRegistry CreateProviderRegistry(ICodeReviewPublicationService commentPoster)
+    {
+        var reviewerManager = CreateReviewerManager();
+        var threadStatusWriter = CreateThreadStatusWriter();
+        var threadReplyPublisher = CreateThreadReplyPublisher();
+        var registry = Substitute.For<IScmProviderRegistry>();
+        registry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(commentPoster);
+        registry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
+        registry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);
+        registry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>()).Returns(threadReplyPublisher);
+        registry.GetRegisteredCapabilities(Arg.Any<ScmProvider>())
+            .Returns(
+            [
+                "reviewAssignment",
+                "reviewThreadStatus",
+                "reviewThreadReply",
+            ]);
+        return registry;
+    }
+
     private static ReviewOrchestrationService CreateService(
         IReviewJobExecutionStore jobs,
         IPullRequestFetcher prFetcher,
         IFileByFileReviewOrchestrator orchestrator,
-        IAdoCommentPoster commentPoster,
+        ICodeReviewPublicationService commentPoster,
         IClientRegistry clientRegistry,
         IReviewPrScanRepository prScanRepository,
         IPromptOverrideService promptOverrideService)
     {
-        var reviewerManager = Substitute.For<IAdoReviewerManager>();
-        var threadClient = Substitute.For<IAdoThreadClient>();
-        var threadReplier = Substitute.For<IAdoThreadReplier>();
+        var reviewerManager = CreateReviewerManager();
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         reviewContextToolsFactory
-            .Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<Guid?>())
+            .Create(Arg.Any<ReviewContextToolsRequest>())
             .Returns(Substitute.For<IReviewContextTools>());
 
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         instructionFetcher
-            .FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
 
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
         instructionEvaluator
-            .EvaluateRelevanceAsync(Arg.Any<IReadOnlyList<RepositoryInstruction>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .EvaluateRelevanceAsync(
+                Arg.Any<IReadOnlyList<RepositoryInstruction>>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
 
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         exclusionFetcher
-            .FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = new AiConnectionDto(Guid.NewGuid(), Guid.NewGuid(), "Test Connection", "https://api.test.com/", ["gpt-4o"], IsActive: true, ActiveModel: "gpt-4o", CreatedAt: DateTimeOffset.UtcNow);
+        var connDto = new AiConnectionDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Test Connection",
+            "https://api.test.com/",
+            ["gpt-4o"],
+            true,
+            "gpt-4o",
+            DateTimeOffset.UtcNow);
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
+        var providerRegistry = CreateProviderRegistry(commentPoster);
 
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
             orchestrator,
-            commentPoster,
-            reviewerManager,
+            providerRegistry,
             clientRegistry,
             prScanRepository,
-            threadClient,
-            threadReplier,
             resolutionCore,
             Substitute.For<IReviewProtocolRecorder>(),
             reviewContextToolsFactory,
@@ -83,10 +178,11 @@ public class ReviewOrchestrationServicePromptOverrideTests
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
             aiRepo,
             Substitute.For<IAiChatClientFactory>(),
-            promptOverrideService: promptOverrideService);
+            promptOverrideService);
     }
 
-    private static (ReviewJob job, IPullRequestFetcher prFetcher, IClientRegistry clientRegistry, IReviewPrScanRepository prScanRepository) BuildDefaults()
+    private static (ReviewJob job, IPullRequestFetcher prFetcher, IClientRegistry clientRegistry,
+        IReviewPrScanRepository prScanRepository) BuildDefaults()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         var prFetcher = Substitute.For<IPullRequestFetcher>();
@@ -103,13 +199,27 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(Task.FromResult<string?>(null));
 
         var pr = new PullRequest(
-            job.OrganizationUrl, job.ProjectId, job.RepositoryId,
-            job.RepositoryId, job.PullRequestId, job.IterationId, "Test PR", null, "feature/x", "main",
-            new List<ChangedFile>().AsReadOnly(), PrStatus.Active, null);
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "Test PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile>().AsReadOnly());
 
         prFetcher.FetchAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
             .Returns(pr);
 
         return (job, prFetcher, clientRegistry, prScanRepository);
@@ -126,21 +236,31 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .GetOverrideAsync(job.ClientId, null, "SynthesisSystemPrompt", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("Custom synthesis instructions"));
         promptOverrideService
-            .GetOverrideAsync(job.ClientId, null, Arg.Is<string>(k => k != "SynthesisSystemPrompt"), Arg.Any<CancellationToken>())
+            .GetOverrideAsync(
+                job.ClientId,
+                null,
+                Arg.Is<string>(k => k != "SynthesisSystemPrompt"),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
 
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         ReviewSystemContext? capturedContext = null;
         orchestrator
-            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+                Arg.Any<IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
-            Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            CreatePublicationService(),
+            clientRegistry,
+            prScanRepository,
             promptOverrideService);
 
         // Act
@@ -166,15 +286,21 @@ public class ReviewOrchestrationServicePromptOverrideTests
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         ReviewSystemContext? capturedContext = null;
         orchestrator
-            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+                Arg.Any<IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
-            Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            CreatePublicationService(),
+            clientRegistry,
+            prScanRepository,
             promptOverrideService);
 
         // Act
@@ -198,12 +324,21 @@ public class ReviewOrchestrationServicePromptOverrideTests
 
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         orchestrator
-            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
-            Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            CreatePublicationService(),
+            clientRegistry,
+            prScanRepository,
             promptOverrideService);
 
         // Act
@@ -231,15 +366,21 @@ public class ReviewOrchestrationServicePromptOverrideTests
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         ReviewSystemContext? capturedContext = null;
         orchestrator
-            .ReviewAsync(Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(),
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
                 Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<Microsoft.Extensions.AI.IChatClient?>())
+                Arg.Any<IChatClient?>())
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var service = CreateService(
-            Substitute.For<IReviewJobExecutionStore>(), prFetcher, orchestrator,
-            Substitute.For<IAdoCommentPoster>(), clientRegistry, prScanRepository,
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            CreatePublicationService(),
+            clientRegistry,
+            prScanRepository,
             promptOverrideService);
 
         // Act — must not throw

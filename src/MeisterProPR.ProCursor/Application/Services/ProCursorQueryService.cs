@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Security.Cryptography;
+using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -74,7 +76,13 @@ public sealed partial class ProCursorQueryService(
 
             foreach (var chunk in chunks)
             {
-                var score = ScoreChunk(questionTokens, queryEmbedding, chunk, source, trackedBranch, request.RepositoryContext);
+                var score = ScoreChunk(
+                    questionTokens,
+                    queryEmbedding,
+                    chunk,
+                    source,
+                    trackedBranch,
+                    request.RepositoryContext);
                 if (score.Score <= 0)
                 {
                     continue;
@@ -126,7 +134,10 @@ public sealed partial class ProCursorQueryService(
             .ToList()
             .AsReadOnly();
 
-        var status = orderedResults.Any(result => !string.Equals(result.FreshnessStatus, "fresh", StringComparison.OrdinalIgnoreCase))
+        var status = orderedResults.Any(result => !string.Equals(
+            result.FreshnessStatus,
+            "fresh",
+            StringComparison.OrdinalIgnoreCase))
             ? "stale"
             : "complete";
 
@@ -151,7 +162,7 @@ public sealed partial class ProCursorQueryService(
         var eligibleSources = await this.GetEligibleSymbolSourcesAsync(request.ClientId, request.SourceId, ct);
         if (eligibleSources.Count == 0)
         {
-            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, [], null);
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
 
         var maxRelations = Math.Clamp(
@@ -184,7 +195,8 @@ public sealed partial class ProCursorQueryService(
 
             var trackedBranch = source.TrackedBranches.FirstOrDefault(branch => branch.Id == snapshot.TrackedBranchId);
             var freshnessStatus = ProCursorFreshnessEvaluator.GetSnapshotFreshnessStatus(trackedBranch, snapshot);
-            var relations = (await symbolGraphRepository.ListEdgesAsync(snapshot.Id, symbol.SymbolKey, maxRelations, ct))
+            var relations =
+                (await symbolGraphRepository.ListEdgesAsync(snapshot.Id, symbol.SymbolKey, maxRelations, ct))
                 .Select(edge => MapRelation(edge, symbol.SymbolKey))
                 .ToList()
                 .AsReadOnly();
@@ -207,15 +219,15 @@ public sealed partial class ProCursorQueryService(
 
         if (!anyReadySnapshot)
         {
-            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, [], null);
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
 
         if (!anySupportedSnapshot)
         {
-            return new ProCursorSymbolInsightDto("unsupportedLanguage", null, false, false, null, [], null);
+            return new ProCursorSymbolInsightDto("unsupportedLanguage", null, false, false, null, []);
         }
 
-        return new ProCursorSymbolInsightDto("notFound", null, false, true, null, [], null);
+        return new ProCursorSymbolInsightDto("notFound", null, false, true, null, []);
     }
 
     private async Task<ProCursorSymbolInsightDto> GetReviewTargetSymbolInsightAsync(
@@ -225,13 +237,13 @@ public sealed partial class ProCursorQueryService(
         if (!string.Equals(request.StateMode, "reviewTarget", StringComparison.OrdinalIgnoreCase) ||
             miniIndexBuilder is null)
         {
-            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, [], null);
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
 
         var overlay = await miniIndexBuilder.BuildAsync(request, ct);
         if (overlay is null)
         {
-            return new ProCursorSymbolInsightDto("unavailable", null, true, false, null, [], null);
+            return new ProCursorSymbolInsightDto("unavailable", null, true, false, null, []);
         }
 
         if (!overlay.SupportsSymbolQueries)
@@ -345,7 +357,11 @@ public sealed partial class ProCursorQueryService(
             return await symbolGraphRepository.GetBySymbolKeyAsync(snapshotId, request.Symbol.Trim(), ct);
         }
 
-        var matches = await symbolGraphRepository.SearchAsync(snapshotId, request.Symbol.Trim(), this._options.MaxQueryResults, ct);
+        var matches = await symbolGraphRepository.SearchAsync(
+            snapshotId,
+            request.Symbol.Trim(),
+            this._options.MaxQueryResults,
+            ct);
         if (matches.Count == 0)
         {
             return null;
@@ -430,9 +446,18 @@ public sealed partial class ProCursorQueryService(
             var matchingSources = eligibleSources
                 .Where(source =>
                     source.SourceKind == ProCursorSourceKind.Repository &&
-                    string.Equals(source.OrganizationUrl, request.RepositoryContext.OrganizationUrl, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(source.ProjectId, request.RepositoryContext.ProjectId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(source.RepositoryId, request.RepositoryContext.RepositoryId, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(
+                        source.ProviderScopePath,
+                        request.RepositoryContext.ProviderScopePath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(
+                        source.ProviderProjectKey,
+                        request.RepositoryContext.ProviderProjectKey,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(
+                        source.RepositoryId,
+                        request.RepositoryContext.RepositoryId,
+                        StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             if (matchingSources.Count == 1)
@@ -446,7 +471,7 @@ public sealed partial class ProCursorQueryService(
 
     private static string ComputeStableHash(string value)
     {
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant()[..16];
     }
 
@@ -484,7 +509,7 @@ public sealed partial class ProCursorQueryService(
             }
         }
 
-        var lexicalScore = tokenMatches + (titleMatches * 0.8d) + (pathMatches * 0.5d);
+        var lexicalScore = tokenMatches + titleMatches * 0.8d + pathMatches * 0.5d;
         var semanticScore = ComputeSemanticScore(queryEmbedding, chunk.EmbeddingVector);
 
         if (lexicalScore <= 0 && semanticScore <= 0)
@@ -492,7 +517,7 @@ public sealed partial class ProCursorQueryService(
             return new ChunkScore(0, "keyword");
         }
 
-        var score = lexicalScore + (semanticScore * 1.2d);
+        var score = lexicalScore + semanticScore * 1.2d;
         if (RepositoryContextMatches(source, repositoryContext))
         {
             score += 1.5d;
@@ -522,9 +547,18 @@ public sealed partial class ProCursorQueryService(
             return false;
         }
 
-        return string.Equals(source.OrganizationUrl, repositoryContext.OrganizationUrl, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(source.ProjectId, repositoryContext.ProjectId, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(source.RepositoryId, repositoryContext.RepositoryId, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(
+                   source.ProviderScopePath,
+                   repositoryContext.ProviderScopePath,
+                   StringComparison.OrdinalIgnoreCase)
+               && string.Equals(
+                   source.ProviderProjectKey,
+                   repositoryContext.ProviderProjectKey,
+                   StringComparison.OrdinalIgnoreCase)
+               && string.Equals(
+                   source.RepositoryId,
+                   repositoryContext.RepositoryId,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildExcerpt(string contentText, IReadOnlyList<string> questionTokens)
@@ -548,7 +582,8 @@ public sealed partial class ProCursorQueryService(
             startIndex = Math.Max(0, contentText.Length - maxExcerptLength);
         }
 
-        var excerpt = contentText.Substring(startIndex, Math.Min(maxExcerptLength, contentText.Length - startIndex)).Trim();
+        var excerpt = contentText.Substring(startIndex, Math.Min(maxExcerptLength, contentText.Length - startIndex))
+            .Trim();
         return startIndex == 0 ? excerpt : $"...{excerpt}";
     }
 

@@ -64,13 +64,14 @@ public sealed class ProCursorIndexWorkerRegistrationTests
     private static IConfiguration CreateConfiguration()
     {
         return new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ADO_STUB_PR"] = "true",
-                ["MEISTER_JWT_SECRET"] = "test-procursor-jwt-secret-32chars!!",
-                ["PROCURSOR_REFRESH_POLL_SECONDS"] = "17",
-                ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "4",
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ADO_STUB_PR"] = "true",
+                    ["MEISTER_JWT_SECRET"] = "test-procursor-jwt-secret-32chars!!",
+                    ["PROCURSOR_REFRESH_POLL_SECONDS"] = "17",
+                    ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "4",
+                })
             .Build();
     }
 

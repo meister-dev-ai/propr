@@ -37,7 +37,9 @@ public sealed class ProCursorIndexJobRepository(MeisterProPRDbContext db) : IPro
     }
 
     /// <inheritdoc />
-    public async Task<ProCursorIndexJob?> GetNextPendingAsync(IReadOnlyCollection<Guid> excludedSourceIds, CancellationToken ct = default)
+    public async Task<ProCursorIndexJob?> GetNextPendingAsync(
+        IReadOnlyCollection<Guid> excludedSourceIds,
+        CancellationToken ct = default)
     {
         var query = db.ProCursorIndexJobs
             .Where(job => job.Status == ProCursorIndexJobStatus.Pending);
@@ -53,7 +55,9 @@ public sealed class ProCursorIndexJobRepository(MeisterProPRDbContext db) : IPro
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ProCursorIndexJob>> ListActiveAsync(Guid knowledgeSourceId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorIndexJob>> ListActiveAsync(
+        Guid knowledgeSourceId,
+        CancellationToken ct = default)
     {
         return await db.ProCursorIndexJobs
             .Where(job =>
@@ -66,10 +70,11 @@ public sealed class ProCursorIndexJobRepository(MeisterProPRDbContext db) : IPro
     /// <inheritdoc />
     public async Task<bool> HasActiveJobAsync(Guid trackedBranchId, string dedupKey, CancellationToken ct = default)
     {
-        return await db.ProCursorIndexJobs.AnyAsync(job =>
-            job.TrackedBranchId == trackedBranchId &&
-            job.DedupKey == dedupKey &&
-            (job.Status == ProCursorIndexJobStatus.Pending || job.Status == ProCursorIndexJobStatus.Processing),
+        return await db.ProCursorIndexJobs.AnyAsync(
+            job =>
+                job.TrackedBranchId == trackedBranchId &&
+                job.DedupKey == dedupKey &&
+                (job.Status == ProCursorIndexJobStatus.Pending || job.Status == ProCursorIndexJobStatus.Processing),
             ct);
     }
 

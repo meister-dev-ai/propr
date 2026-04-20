@@ -18,18 +18,23 @@ public sealed partial class AdminCrawlConfigsController(
     ICrawlConfigurationRepository crawlConfigRepo,
     IUserRepository userRepository,
     IClientAdminService clientAdminService,
-    IClientAdoOrganizationScopeRepository organizationScopeRepository,
-    IAdoDiscoveryService adoDiscoveryService,
+    IScmProviderRegistry providerRegistry,
     IProCursorKnowledgeSourceRepository proCursorKnowledgeSourceRepository,
-    ILogger<AdminCrawlConfigsController> logger) : ControllerBase
+    ILogger<AdminCrawlConfigsController> logger,
+    IProviderActivationService? providerActivationService = null) : ControllerBase
 {
-    private static CrawlConfigResponse ToCrawlConfigResponse(CrawlConfigurationDto c) =>
-        new(
+    private const string DisabledProviderMessage =
+        "The selected provider family is currently disabled by system administration.";
+
+    private static CrawlConfigResponse ToCrawlConfigResponse(CrawlConfigurationDto c)
+    {
+        return new CrawlConfigResponse(
             c.Id,
             c.ClientId,
+            c.Provider,
             c.OrganizationScopeId,
-            c.OrganizationUrl,
-            c.ProjectId,
+            c.ProviderScopePath,
+            c.ProviderProjectKey,
             c.CrawlIntervalSeconds,
             c.IsActive,
             c.CreatedAt,
@@ -45,6 +50,7 @@ public sealed partial class AdminCrawlConfigsController(
             c.ProCursorSourceScopeMode,
             c.ProCursorSourceIds,
             c.InvalidProCursorSourceIds);
+    }
 
     private IActionResult? Validate(ValidationResult result)
     {
@@ -57,6 +63,7 @@ public sealed partial class AdminCrawlConfigsController(
         {
             this.ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
         }
+
         return this.ValidationProblem();
     }
 
@@ -67,8 +74,15 @@ public sealed partial class AdminCrawlConfigsController(
         return AuthHelpers.RequireAuthenticated(this.HttpContext);
     }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private async Task<bool> IsProviderEnabledAsync(ScmProvider provider, CancellationToken ct)
+    {
+        return providerActivationService is null || await providerActivationService.IsEnabledAsync(provider, ct);
+    }
 
     private static IReadOnlyList<string> NormalizeBranchPatterns(IReadOnlyList<string>? targetBranchPatterns)
     {
@@ -83,40 +97,52 @@ public sealed partial class AdminCrawlConfigsController(
     private static string ResolveRepositoryName(CrawlRepoFilterRequest filter)
     {
         var repositoryName = NormalizeOptional(filter.RepositoryName)
-            ?? NormalizeOptional(filter.DisplayName)
-            ?? NormalizeOptional(filter.CanonicalSourceRef?.Value);
+                             ?? NormalizeOptional(filter.DisplayName)
+                             ?? NormalizeOptional(filter.CanonicalSourceRef?.Value);
 
         return repositoryName
-            ?? throw new InvalidOperationException("Each repository filter must include a repository name, display name, or canonical source reference.");
+               ?? throw new InvalidOperationException("Each repository filter must include a repository name, display name, or canonical source reference.");
     }
 
     private async Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
         Guid clientId,
+        ScmProvider provider,
         Guid? organizationScopeId,
         string? organizationUrl,
         CancellationToken ct)
     {
+        if (provider != ScmProvider.AzureDevOps)
+        {
+            var normalizedProviderOrganizationUrl = NormalizeOptional(organizationUrl)
+                                                    ?? throw new InvalidOperationException(
+                                                        "ProviderScopePath is required for non-Azure DevOps crawl configurations.");
+
+            return (null, normalizedProviderOrganizationUrl);
+        }
+
         if (organizationScopeId.HasValue)
         {
-            var scope = await organizationScopeRepository.GetByIdAsync(clientId, organizationScopeId.Value, ct)
-                ?? throw new InvalidOperationException("The selected Azure DevOps organization is no longer available for this client.");
+            var scope = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                            .GetScopeAsync(clientId, organizationScopeId.Value, ct)
+                        ?? throw new InvalidOperationException("The selected Azure DevOps organization is no longer available for this client.");
 
             if (!scope.IsEnabled)
             {
                 throw new InvalidOperationException("The selected Azure DevOps organization is disabled.");
             }
 
-            return (scope.Id, scope.OrganizationUrl);
+            return (scope.Id, scope.ScopePath);
         }
 
         var normalizedOrganizationUrl = NormalizeOptional(organizationUrl)
-            ?? throw new InvalidOperationException("OrganizationUrl is required when organizationScopeId is not provided.");
+                                        ?? throw new InvalidOperationException("ProviderScopePath is required when OrganizationScopeId is not provided.");
 
         return (null, normalizedOrganizationUrl);
     }
 
     private async Task<IReadOnlyList<CrawlRepoFilterDto>> ResolveRepoFiltersAsync(
         Guid clientId,
+        ScmProvider provider,
         Guid? organizationScopeId,
         string projectId,
         IReadOnlyList<CrawlRepoFilterRequest>? repoFilters,
@@ -130,13 +156,10 @@ public sealed partial class AdminCrawlConfigsController(
         var filterDtos = new List<CrawlRepoFilterDto>(repoFilters.Count);
         IReadOnlyList<AdoCrawlFilterOptionDto> availableFilters = [];
 
-        if (organizationScopeId.HasValue)
+        if (provider == ScmProvider.AzureDevOps && organizationScopeId.HasValue)
         {
-            availableFilters = await adoDiscoveryService.ListCrawlFiltersAsync(
-                clientId,
-                organizationScopeId.Value,
-                projectId,
-                ct);
+            availableFilters = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
+                .ListCrawlFiltersAsync(clientId, organizationScopeId.Value, projectId, ct);
         }
 
         foreach (var filter in repoFilters)
@@ -148,11 +171,18 @@ public sealed partial class AdminCrawlConfigsController(
             var repositoryName = ResolveRepositoryName(filter);
             var targetBranchPatterns = NormalizeBranchPatterns(filter.TargetBranchPatterns);
 
-            if (organizationScopeId.HasValue && normalizedProvider is not null && normalizedValue is not null)
+            if (provider == ScmProvider.AzureDevOps && organizationScopeId.HasValue && normalizedProvider is not null &&
+                normalizedValue is not null)
             {
                 var matchedFilter = availableFilters.FirstOrDefault(option =>
-                    string.Equals(option.CanonicalSourceRef.Provider, normalizedProvider, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(option.CanonicalSourceRef.Value, normalizedValue, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(
+                        option.CanonicalSourceRef.Provider,
+                        normalizedProvider,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(
+                        option.CanonicalSourceRef.Value,
+                        normalizedValue,
+                        StringComparison.OrdinalIgnoreCase));
 
                 if (matchedFilter is null)
                 {
@@ -160,23 +190,25 @@ public sealed partial class AdminCrawlConfigsController(
                         $"The selected crawl filter '{normalizedDisplayName ?? repositoryName}' is no longer available in Azure DevOps.");
                 }
 
-                filterDtos.Add(new CrawlRepoFilterDto(
-                    Guid.Empty,
-                    repositoryName,
-                    targetBranchPatterns,
-                    new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue),
-                    normalizedDisplayName ?? matchedFilter.DisplayName));
+                filterDtos.Add(
+                    new CrawlRepoFilterDto(
+                        Guid.Empty,
+                        repositoryName,
+                        targetBranchPatterns,
+                        new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue),
+                        normalizedDisplayName ?? matchedFilter.DisplayName));
                 continue;
             }
 
-            filterDtos.Add(new CrawlRepoFilterDto(
-                Guid.Empty,
-                repositoryName,
-                targetBranchPatterns,
-                normalizedProvider is not null && normalizedValue is not null
-                    ? new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue)
-                    : null,
-                normalizedDisplayName));
+            filterDtos.Add(
+                new CrawlRepoFilterDto(
+                    Guid.Empty,
+                    repositoryName,
+                    targetBranchPatterns,
+                    normalizedProvider is not null && normalizedValue is not null
+                        ? new CanonicalSourceReferenceDto(normalizedProvider, normalizedValue)
+                        : null,
+                    normalizedDisplayName));
         }
 
         return filterDtos.AsReadOnly();
@@ -200,19 +232,18 @@ public sealed partial class AdminCrawlConfigsController(
 
         if (selectedSourceIds.Count == 0)
         {
-            throw new InvalidOperationException(
-                "At least one ProCursor source must be selected when the crawl configuration uses selected sources.");
+            throw new InvalidOperationException("At least one ProCursor source must be selected when the crawl configuration uses selected sources.");
         }
 
         var availableSources = await proCursorKnowledgeSourceRepository.ListByClientAsync(clientId, ct);
         var invalidSourceIds = selectedSourceIds
-            .Where(selectedSourceId => !availableSources.Any(source => source.Id == selectedSourceId && source.IsEnabled))
+            .Where(selectedSourceId =>
+                !availableSources.Any(source => source.Id == selectedSourceId && source.IsEnabled))
             .ToList();
 
         if (invalidSourceIds.Count > 0)
         {
-            throw new InvalidOperationException(
-                "One or more selected ProCursor sources are no longer eligible for this client.");
+            throw new InvalidOperationException("One or more selected ProCursor sources are no longer eligible for this client.");
         }
 
         return selectedSourceIds.AsReadOnly();
@@ -293,7 +324,10 @@ public sealed partial class AdminCrawlConfigsController(
         if (!isAdmin)
         {
             // Non-Admin: require ClientAdministrator role for the target client
-            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, request.ClientId, ClientRole.ClientAdministrator);
+            var roleCheck = AuthHelpers.RequireClientRole(
+                this.HttpContext,
+                request.ClientId,
+                ClientRole.ClientAdministrator);
             if (roleCheck is not null)
             {
                 return roleCheck;
@@ -308,17 +342,24 @@ public sealed partial class AdminCrawlConfigsController(
             }
         }
 
+        if (!await this.IsProviderEnabledAsync(request.Provider, ct))
+        {
+            return this.Conflict(new { error = DisabledProviderMessage });
+        }
+
         try
         {
             var resolvedOrganization = await this.ResolveOrganizationSelectionAsync(
                 request.ClientId,
+                request.Provider,
                 request.OrganizationScopeId,
-                request.OrganizationUrl,
+                request.ProviderScopePath,
                 ct);
             var repoFilters = await this.ResolveRepoFiltersAsync(
                 request.ClientId,
+                request.Provider,
                 resolvedOrganization.OrganizationScopeId,
-                request.ProjectId.Trim(),
+                request.ProviderProjectKey.Trim(),
                 request.RepoFilters,
                 ct);
             var selectedProCursorSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
@@ -327,15 +368,22 @@ public sealed partial class AdminCrawlConfigsController(
                 request.ProCursorSourceIds,
                 ct);
 
-            if (await crawlConfigRepo.ExistsAsync(request.ClientId, resolvedOrganization.OrganizationUrl, request.ProjectId.Trim(), null, null, ct))
+            if (await crawlConfigRepo.ExistsAsync(
+                    request.ClientId,
+                    resolvedOrganization.OrganizationUrl,
+                    request.ProviderProjectKey.Trim(),
+                    null,
+                    null,
+                    ct))
             {
                 return this.Conflict(new { error = "A crawl configuration for this organisation and project already exists." });
             }
 
             var config = await crawlConfigRepo.AddAsync(
                 request.ClientId,
+                request.Provider,
                 resolvedOrganization.OrganizationUrl,
-                request.ProjectId.Trim(),
+                request.ProviderProjectKey.Trim(),
                 request.CrawlIntervalSeconds,
                 resolvedOrganization.OrganizationScopeId,
                 ct);
@@ -345,7 +393,8 @@ public sealed partial class AdminCrawlConfigsController(
                 await crawlConfigRepo.UpdateRepoFiltersAsync(config.Id, repoFilters, ct);
             }
 
-            if (request.ProCursorSourceScopeMode != ProCursorSourceScopeMode.AllClientSources || selectedProCursorSourceIds.Count > 0)
+            if (request.ProCursorSourceScopeMode != ProCursorSourceScopeMode.AllClientSources ||
+                selectedProCursorSourceIds.Count > 0)
             {
                 await crawlConfigRepo.UpdateSourceScopeAsync(
                     config.Id,
@@ -372,7 +421,7 @@ public sealed partial class AdminCrawlConfigsController(
             LogGuidedCrawlConfigCreateValidationFailed(
                 logger,
                 request.ClientId,
-                request.ProjectId.Trim(),
+                request.ProviderProjectKey.Trim(),
                 request.OrganizationScopeId,
                 ex.Message);
             return this.Conflict(new { error = ex.Message });
@@ -425,7 +474,10 @@ public sealed partial class AdminCrawlConfigsController(
         if (!isAdmin)
         {
             // Non-Admin: require ClientAdministrator role for the config's client
-            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, existing.ClientId, ClientRole.ClientAdministrator);
+            var roleCheck = AuthHelpers.RequireClientRole(
+                this.HttpContext,
+                existing.ClientId,
+                ClientRole.ClientAdministrator);
             if (roleCheck is not null)
             {
                 return roleCheck;
@@ -452,8 +504,9 @@ public sealed partial class AdminCrawlConfigsController(
             {
                 var filterDtos = await this.ResolveRepoFiltersAsync(
                     existing.ClientId,
+                    existing.Provider,
                     existing.OrganizationScopeId,
-                    existing.ProjectId,
+                    existing.ProviderProjectKey,
                     request.RepoFilters,
                     ct);
                 await crawlConfigRepo.UpdateRepoFiltersAsync(configId, filterDtos, ct);
@@ -462,9 +515,9 @@ public sealed partial class AdminCrawlConfigsController(
             if (request.ProCursorSourceScopeMode.HasValue || request.ProCursorSourceIds is not null)
             {
                 var effectiveScopeMode = request.ProCursorSourceScopeMode
-                    ?? (request.ProCursorSourceIds is not null
-                        ? ProCursorSourceScopeMode.SelectedSources
-                        : existing.ProCursorSourceScopeMode);
+                                         ?? (request.ProCursorSourceIds is not null
+                                             ? ProCursorSourceScopeMode.SelectedSources
+                                             : existing.ProCursorSourceScopeMode);
                 var validatedSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
                     existing.ClientId,
                     effectiveScopeMode,
@@ -525,7 +578,10 @@ public sealed partial class AdminCrawlConfigsController(
         if (!isAdmin)
         {
             // Non-Admin: require ClientAdministrator role for the config's client
-            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, existing.ClientId, ClientRole.ClientAdministrator);
+            var roleCheck = AuthHelpers.RequireClientRole(
+                this.HttpContext,
+                existing.ClientId,
+                ClientRole.ClientAdministrator);
             if (roleCheck is not null)
             {
                 return roleCheck;
@@ -541,9 +597,10 @@ public sealed partial class AdminCrawlConfigsController(
 /// <summary>Request body for creating an admin-managed crawl configuration.</summary>
 public sealed record CreateAdminCrawlConfigRequest(
     Guid ClientId,
-    Guid? OrganizationScopeId,
-    string? OrganizationUrl,
-    string ProjectId,
+    string ProviderProjectKey,
+    ScmProvider Provider = ScmProvider.AzureDevOps,
+    Guid? OrganizationScopeId = null,
+    string? ProviderScopePath = null,
     int CrawlIntervalSeconds = 60,
     IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,

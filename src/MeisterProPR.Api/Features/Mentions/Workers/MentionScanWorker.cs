@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
+using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 
@@ -14,6 +16,7 @@ namespace MeisterProPR.Api.Workers;
 /// </summary>
 public sealed partial class MentionScanWorker(
     IServiceScopeFactory scopeFactory,
+    ReviewJobMetrics metrics,
     IConfiguration configuration,
     ILogger<MentionScanWorker> logger) : BackgroundService
 {
@@ -46,21 +49,65 @@ public sealed partial class MentionScanWorker(
 
     private async Task ScanOnceAsync(CancellationToken stoppingToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = "completed";
+        var providerScope = "none";
+        var activeConfigCount = 0;
+        var activity = ReviewJobTelemetry.StartActivity("mention_scan.cycle");
+
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
+
+            var crawlConfigRepository = scope.ServiceProvider.GetService<ICrawlConfigurationRepository>();
+            if (crawlConfigRepository is not null)
+            {
+                var activeConfigs = await crawlConfigRepository.GetAllActiveAsync(stoppingToken);
+                activeConfigCount = activeConfigs.Count;
+                providerScope =
+                    ReviewJobTelemetry.DescribeProviderScope(activeConfigs.Select(config => config.Provider));
+            }
+
+            activity?.SetTag(ReviewJobTelemetry.ScmProviderTagName, providerScope);
+            activity?.SetTag("workflow.active_config_count", activeConfigCount);
+
+            using var logScope = logger.BeginScope(
+                new Dictionary<string, object?>
+                {
+                    [ReviewJobTelemetry.ScmProviderTagName] = providerScope,
+                    ["active_config_count"] = activeConfigCount,
+                });
+
             var scanService = scope.ServiceProvider.GetService<IMentionScanService>();
             if (scanService is null)
             {
+                outcome = "service_unavailable";
+                activity?.SetStatus(ActivityStatusCode.Error, "IMentionScanService not registered");
                 LogScanServiceUnavailable(logger);
                 return;
             }
 
             await scanService.ScanAsync(stoppingToken);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            outcome = "cancelled";
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            outcome = "failed";
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().FullName ?? ex.GetType().Name);
             LogScanCycleError(logger, ex);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            activity?.SetTag("workflow.outcome", outcome);
+            metrics.RecordMentionScanCycle(providerScope, stopwatch.Elapsed.TotalSeconds, outcome, activeConfigCount);
+            activity?.Dispose();
         }
     }
 

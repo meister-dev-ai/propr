@@ -8,6 +8,20 @@ namespace MeisterProPR.Domain.Entities;
 /// </summary>
 public sealed class ProCursorKnowledgeChunk
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeChunk"/> class.
+    /// </summary>
+    /// <param name="id">The unique identifier for the knowledge chunk.</param>
+    /// <param name="snapshotId">The unique identifier for the snapshot.</param>
+    /// <param name="sourcePath">The source file path.</param>
+    /// <param name="chunkKind">The kind of chunk.</param>
+    /// <param name="title">The optional title of the chunk.</param>
+    /// <param name="chunkOrdinal">The ordinal position of the chunk.</param>
+    /// <param name="lineStart">The optional starting line number.</param>
+    /// <param name="lineEnd">The optional ending line number.</param>
+    /// <param name="contentHash">The hash of the content.</param>
+    /// <param name="contentText">The text content of the chunk.</param>
+    /// <param name="embeddingVector">The embedding vector.</param>
     public ProCursorKnowledgeChunk(
         Guid id,
         Guid snapshotId,
@@ -31,10 +45,7 @@ public sealed class ProCursorKnowledgeChunk
             throw new ArgumentException("SnapshotId must not be empty.", nameof(snapshotId));
         }
 
-        if (chunkOrdinal < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(chunkOrdinal));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(chunkOrdinal);
 
         if (lineStart.HasValue && lineStart.Value < 1)
         {
@@ -70,32 +81,70 @@ public sealed class ProCursorKnowledgeChunk
         this.EmbeddingVector = [];
     }
 
+    /// <summary>
+    ///     Gets the unique identifier for the knowledge chunk.
+    /// </summary>
     public Guid Id { get; private set; }
 
+    /// <summary>
+    ///     Gets the unique identifier for the snapshot.
+    /// </summary>
     public Guid SnapshotId { get; private set; }
 
+    /// <summary>
+    ///     Gets the source file path.
+    /// </summary>
     public string SourcePath { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the kind of chunk.
+    /// </summary>
     public string ChunkKind { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the optional title of the chunk.
+    /// </summary>
     public string? Title { get; private set; }
 
+    /// <summary>
+    ///     Gets the ordinal position of the chunk.
+    /// </summary>
     public int ChunkOrdinal { get; private set; }
 
+    /// <summary>
+    ///     Gets the optional starting line number.
+    /// </summary>
     public int? LineStart { get; private set; }
 
+    /// <summary>
+    ///     Gets the optional ending line number.
+    /// </summary>
     public int? LineEnd { get; private set; }
 
+    /// <summary>
+    ///     Gets the hash of the content.
+    /// </summary>
     public string ContentHash { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the text content of the chunk.
+    /// </summary>
     public string ContentText { get; private set; } = string.Empty;
 
+    /// <summary>
+    ///     Gets the embedding vector.
+    /// </summary>
     public float[] EmbeddingVector { get; private set; }
 
+    /// <summary>
+    ///     Gets the creation timestamp.
+    /// </summary>
     public DateTimeOffset CreatedAt { get; private set; }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 
     private static string NormalizeRequired(string value, string paramName)
     {

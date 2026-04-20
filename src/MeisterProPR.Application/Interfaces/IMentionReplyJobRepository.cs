@@ -25,12 +25,14 @@ public interface IMentionReplyJobRepository
     ///     Used to prevent duplicate enqueuing.
     /// </summary>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="repositoryId">Provider-native repository identifier.</param>
     /// <param name="pullRequestId">ADO pull request number.</param>
     /// <param name="threadId">ADO thread ID.</param>
     /// <param name="commentId">ADO comment ID.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task<bool> ExistsForCommentAsync(
         Guid clientId,
+        string repositoryId,
         int pullRequestId,
         int threadId,
         int commentId,

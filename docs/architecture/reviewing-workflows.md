@@ -1,7 +1,7 @@
 # Reviewing Workflows
 
-This page covers the runtime path from review submission to posted Azure DevOps comments, plus the
-dedup and token-control mechanics that keep the review loop safe and efficient.
+This page covers the runtime path from provider-neutral review submission to posted provider-native
+comments, plus the dedup and token-control mechanics that keep the review loop safe and efficient.
 
 ## Review Submission And Execution
 
@@ -12,15 +12,15 @@ sequenceDiagram
     participant RC as ReviewJobsController
     participant JR as JobRepository
     participant WK as ReviewJobWorker
-    participant PF as AdoPullRequestFetcher
+    participant PF as ICodeReviewQueryService
     participant AI as AgentAiReviewCore
-    participant CP as AdoCommentPoster
+    participant CP as ICodeReviewPublicationService
 
-    Caller->>MW: POST /clients/{clientId}/reviewing/jobs (JWT or X-User-Pat, X-Ado-Token)
+    Caller->>MW: POST /clients/{clientId}/reviewing/jobs
     MW->>MW: resolve UserId, IsAdmin, ClientRoles
     MW->>RC: forward request
     RC->>RC: require ClientAdministrator for {clientId}
-    RC->>RC: verify X-Ado-Token (identity check)
+    RC->>RC: verify X-Ado-Token for Azure DevOps compatibility requests
     RC->>JR: FindActiveJob()/AddAsync()
     JR-->>RC: jobId (new or existing)
     RC-->>Caller: 202 Accepted { jobId }
@@ -39,9 +39,17 @@ sequenceDiagram
 ```
 
 Review submission depends on the caller identity resolved in [security-and-access.md](security-and-access.md)
-plus `X-Ado-Token` validation for Azure DevOps identity checks. The intake controller persists a
-job, the worker claims it, the orchestrator fetches the PR state, runs the AI review, and posts
-comment threads back to Azure DevOps.
+plus optional `X-Ado-Token` validation for Azure DevOps identity checks. The intake controller now
+accepts provider-neutral repository, review, and revision identities for Azure DevOps, GitHub,
+GitLab, and Forgejo-family reviews. The worker claims the job, resolves the provider-specific query
+and publication adapters through the shared provider registry, runs the AI review, and posts
+comment threads back to the originating provider.
+
+Provider operational readiness is evaluated separately from onboarding verification. A provider
+connection may be verified and ready for onboarding while still lacking workflow-complete proof,
+such as a configured reviewer identity, enabled scope, or full host-variant support evidence.
+Those readiness states now drive the admin provider-operations view and the health surface instead
+of treating `verificationStatus == verified` as the final support label.
 
 ## Incremental Dedup And Publication
 
@@ -51,9 +59,11 @@ comment threads back to Azure DevOps.
    results from synthesis summaries, cross-file deduplication, and quality-filter input, while
    preserving `CarriedForwardFilePaths` and a carried-forward skip count on the final `ReviewResult`.
 3. `ReviewOrchestrationService.PublishReviewResultAsync(...)` opens a dedicated
-   `ReviewJobProtocol` pass labeled `posting`, calls `IAdoCommentPoster.PostAsync(...)`, persists
-   the posted `ReviewResult`, and records aggregate duplicate-suppression diagnostics.
-4. `AdoCommentPoster` evaluates each candidate finding against existing bot-authored PR threads
+    `ReviewJobProtocol` pass labeled `posting`, calls the provider-specific
+    `ICodeReviewPublicationService`, persists the posted `ReviewResult`, and records aggregate
+    duplicate-suppression diagnostics.
+4. The active publication service evaluates each candidate finding against existing bot-authored PR
+    threads
    using normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text
    matching, pull-request-scoped thread memory similarity, and a deterministic text-similarity
    fallback when historical signals are degraded.
@@ -61,7 +71,7 @@ comment threads back to Azure DevOps.
    only when historical duplicate protection had to fall back to reduced checks.
 
 This keeps incremental reviews additive: unchanged findings remain visible in stored review history,
-but only genuinely fresh findings are allowed to create new Azure DevOps threads.
+but only genuinely fresh findings are allowed to create new provider-native threads.
 
 ## Job State Machine
 
@@ -69,17 +79,17 @@ but only genuinely fresh findings are allowed to create new Azure DevOps threads
 stateDiagram-v2
     [*] --> Pending : POST /reviews (job created)
     Pending --> Processing : Worker dequeues job
-    Processing --> Completed : AI review posted to ADO
-    Processing --> Failed : Exception / ADO error
+    Processing --> Completed : AI review posted to provider
+    Processing --> Failed : Exception / provider query or publication error
     Failed --> Pending : Retry (if retry count < max)
     Processing --> Failed : Stuck - no heartbeat > StuckJobTimeoutMinutes
     Completed --> [*]
     Failed --> [*] : Max retries exceeded
 
     note right of Processing
-        AdoPullRequestFetcher
+        ICodeReviewQueryService
         FileByFileReviewOrchestrator
-        AdoCommentPoster
+        ICodeReviewPublicationService
     end note
 
     note left of Failed

@@ -6,9 +6,7 @@ using DotNet.Testcontainers.Containers;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Pgvector.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
-using Xunit;
 
 namespace MeisterProPR.Api.Tests.Fixtures;
 
@@ -20,9 +18,8 @@ namespace MeisterProPR.Api.Tests.Fixtures;
 /// </summary>
 public sealed class PostgresContainerFixture : IAsyncLifetime
 {
-    private PostgreSqlContainer? _postgres;
-
     private string? _connectionString;
+    private PostgreSqlContainer? _postgres;
     private string? _skipReason;
 
     private bool _startedContainer;
@@ -30,12 +27,7 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
     public bool IsAvailable => this._skipReason is null;
 
     public string ConnectionString => this._connectionString
-        ?? throw new InvalidOperationException("Postgres container fixture has not been initialized.");
-
-    public void SkipIfUnavailable()
-    {
-        Skip.If(this._skipReason is not null, this._skipReason);
-    }
+                                      ?? throw new InvalidOperationException("Postgres container fixture has not been initialized.");
 
     public async Task InitializeAsync()
     {
@@ -80,7 +72,22 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
             }
         }
 
-        await this.TryMigrateAsync(throwOnFailure: true);
+        await this.TryMigrateAsync(true);
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (!this._startedContainer || this._postgres is null)
+        {
+            return;
+        }
+
+        await this._postgres.DisposeAsync();
+    }
+
+    public void SkipIfUnavailable()
+    {
+        Skip.If(this._skipReason is not null, this._skipReason);
     }
 
     private async Task<bool> TryMigrateAsync(bool throwOnFailure = false)
@@ -104,16 +111,6 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         {
             return false;
         }
-    }
-
-    public async Task DisposeAsync()
-    {
-        if (!this._startedContainer || this._postgres is null)
-        {
-            return;
-        }
-
-        await this._postgres.DisposeAsync();
     }
 }
 

@@ -3,7 +3,6 @@
 
 using Azure.Core;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.AzureDevOps;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -21,7 +20,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("**/Migrations/*.cs\nsrc/Generated/**\n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.Equal(2, result.Patterns.Count);
         Assert.Contains("**/Migrations/*.cs", result.Patterns);
@@ -35,7 +40,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetFileAbsent();
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.True(result.IsDefault);
     }
@@ -46,7 +57,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent(string.Empty);
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // File is present but has no usable patterns — must map to Empty, NOT Default.
         Assert.False(result.IsDefault);
@@ -59,7 +76,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("# This is a comment\n\n# Another comment\n   \n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // File is present but contains only comments/whitespace — explicit empty rules, not default.
         Assert.False(result.IsDefault);
@@ -72,7 +95,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("   \n\t\n  ");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Whitespace-only file: present + no usable patterns — returns Empty (no exclusions), not Default.
         Assert.False(result.IsDefault);
@@ -85,7 +114,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("# Exclude generated migrations\n**/Migrations/*.Designer.cs\n\n# Ignore snapshots\n**/Migrations/*ModelSnapshot.cs\n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.Equal(2, result.Patterns.Count);
         Assert.DoesNotContain(result.Patterns, p => p.StartsWith('#'));
@@ -97,7 +132,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("**/Migrations/*.Designer.cs\n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.True(result.Matches("src/Infrastructure/Migrations/20260101_Init.Designer.cs"));
         Assert.False(result.Matches("src/Infrastructure/Migrations/20260101_Init.cs"));
@@ -111,7 +152,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("openapi.json\n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.True(result.Matches("/openapi.json"));
         Assert.False(result.Matches("/src/openapi.json"));
@@ -123,7 +170,13 @@ public class AdoRepositoryExclusionFetcherTests
         var sut = new TestableAdoRepositoryExclusionFetcher();
         sut.SetContent("**/Migrations/*.Designer.cs\n");
 
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         Assert.True(result.Matches("/src/Infrastructure/Migrations/20260101_Init.Designer.cs"));
         Assert.False(result.Matches("/src/Infrastructure/Migrations/20260101_Init.cs"));
@@ -134,13 +187,13 @@ public class AdoRepositoryExclusionFetcherTests
     /// </summary>
     private sealed class TestableAdoRepositoryExclusionFetcher : AdoRepositoryExclusionFetcher
     {
-        private string? _content = null;
+        private string? _content;
         private bool _fileExists = true;
 
         public TestableAdoRepositoryExclusionFetcher()
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
+                Substitute.For<IClientScmConnectionRepository>(),
                 Substitute.For<ILogger<AdoRepositoryExclusionFetcher>>())
         {
         }

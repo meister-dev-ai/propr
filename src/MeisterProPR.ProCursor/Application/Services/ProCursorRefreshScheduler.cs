@@ -3,7 +3,6 @@
 
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -29,7 +28,8 @@ public sealed partial class ProCursorRefreshScheduler(
         foreach (var source in sources)
         {
             foreach (var trackedBranch in source.TrackedBranches
-                         .Where(branch => branch.IsEnabled && branch.RefreshTriggerMode == ProCursorRefreshTriggerMode.BranchUpdate)
+                         .Where(branch =>
+                             branch.IsEnabled && branch.RefreshTriggerMode == ProCursorRefreshTriggerMode.BranchUpdate)
                          .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase))
             {
                 try
@@ -41,12 +41,18 @@ public sealed partial class ProCursorRefreshScheduler(
                     }
 
                     var normalizedCommitSha = latestCommitSha.Trim();
-                    if (string.Equals(trackedBranch.LastIndexedCommitSha, normalizedCommitSha, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(
+                            trackedBranch.LastIndexedCommitSha,
+                            normalizedCommitSha,
+                            StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
 
-                    if (!string.Equals(trackedBranch.LastSeenCommitSha, normalizedCommitSha, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(
+                            trackedBranch.LastSeenCommitSha,
+                            normalizedCommitSha,
+                            StringComparison.OrdinalIgnoreCase))
                     {
                         trackedBranch.RecordSeenCommit(normalizedCommitSha);
                         await knowledgeSourceRepository.UpdateAsync(source, ct);
@@ -57,8 +63,7 @@ public sealed partial class ProCursorRefreshScheduler(
                         source.Id,
                         new ProCursorRefreshRequest(
                             trackedBranch.Id,
-                            normalizedCommitSha,
-                            "refresh"),
+                            normalizedCommitSha),
                         ct);
                     queuedCount++;
                 }

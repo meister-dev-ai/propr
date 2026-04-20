@@ -3,13 +3,17 @@
 
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>Database-backed provider for per-client review settings.</summary>
-public sealed class DbClientRegistry(MeisterProPRDbContext dbContext) : IClientRegistry
+public sealed class DbClientRegistry(
+    MeisterProPRDbContext dbContext,
+    IClientScmConnectionRepository connectionRepository,
+    IClientReviewerIdentityRepository reviewerIdentityRepository) : IClientRegistry
 {
     /// <inheritdoc />
     public async Task<Guid?> GetReviewerIdAsync(Guid clientId, CancellationToken ct = default)
@@ -21,7 +25,37 @@ public sealed class DbClientRegistry(MeisterProPRDbContext dbContext) : IClientR
     }
 
     /// <inheritdoc />
-    public async Task<CommentResolutionBehavior> GetCommentResolutionBehaviorAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<ReviewerIdentity?> GetReviewerIdentityAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+
+        var connection = await connectionRepository.GetOperationalConnectionAsync(clientId, host, ct);
+        if (connection is null)
+        {
+            return null;
+        }
+
+        var identity = await reviewerIdentityRepository.GetByConnectionIdAsync(clientId, connection.Id, ct);
+        if (identity is null)
+        {
+            return null;
+        }
+
+        return new ReviewerIdentity(
+            host,
+            identity.ExternalUserId,
+            identity.Login,
+            identity.DisplayName,
+            identity.IsBot);
+    }
+
+    /// <inheritdoc />
+    public async Task<CommentResolutionBehavior> GetCommentResolutionBehaviorAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
         return await dbContext.Clients
             .Where(c => c.Id == clientId)

@@ -70,4 +70,13 @@ public interface IClientAdminService
     /// <param name="ids">Collection of client identifiers to look up.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ClientDto>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
+
+    /// <summary>Returns the most recent provider-connection audit entries for the given client.</summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="take">Maximum number of entries to return.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<ProviderConnectionAuditEntryDto>> GetProviderConnectionAuditTrailAsync(
+        Guid clientId,
+        int take = 20,
+        CancellationToken ct = default);
 }

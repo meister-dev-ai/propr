@@ -21,8 +21,8 @@ public sealed class AdoWikiRepositoryResolverTests
 
         source.UpdateDefinition(
             source.DisplayName,
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             "legacy-repository-id",
             source.DefaultBranch,
             source.RootPath,
@@ -62,12 +62,14 @@ public sealed class AdoWikiRepositoryResolverTests
 
         var resolvedRepositoryId = AdoWikiRepositoryResolver.ResolveRepositoryId(
             source,
-            [new WikiV2
-            {
-                Id = Guid.Parse("30000000-0000-0000-0000-000000000074"),
-                Name = "Meister DEV Wiki",
-                RepositoryId = repositoryId,
-            }]);
+            [
+                new WikiV2
+                {
+                    Id = Guid.Parse("30000000-0000-0000-0000-000000000074"),
+                    Name = "Meister DEV Wiki",
+                    RepositoryId = repositoryId,
+                },
+            ]);
 
         Assert.Equal(repositoryId.ToString(), resolvedRepositoryId);
     }
@@ -94,12 +96,14 @@ public sealed class AdoWikiRepositoryResolverTests
 
         var resolvedRepositoryId = AdoWikiRepositoryResolver.ResolveRepositoryId(
             source,
-            [new WikiV2
-            {
-                Id = Guid.Parse("30000000-0000-0000-0000-000000000076"),
-                Name = "Project Wiki",
-                RepositoryId = repositoryId,
-            }]);
+            [
+                new WikiV2
+                {
+                    Id = Guid.Parse("30000000-0000-0000-0000-000000000076"),
+                    Name = "Project Wiki",
+                    RepositoryId = repositoryId,
+                },
+            ]);
 
         Assert.Equal(repositoryId.ToString(), resolvedRepositoryId);
     }

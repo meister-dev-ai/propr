@@ -120,7 +120,10 @@ public sealed class AdminUsersController(
     /// <summary>Assigns a client role to a user.</summary>
     [HttpPost("/admin/identity/users/{id:guid}/clients")]
     [HttpPost("/admin/users/{id:guid}/clients")]
-    public async Task<IActionResult> AssignClientRole(Guid id, [FromBody] AssignClientRoleRequest request, CancellationToken ct)
+    public async Task<IActionResult> AssignClientRole(
+        Guid id,
+        [FromBody] AssignClientRoleRequest request,
+        CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
         if (auth is not null)
@@ -168,12 +171,22 @@ public sealed class AdminUsersController(
         return this.NoContent();
     }
 
-    private static UserResponse MapToResponse(AppUser u) =>
-        new(u.Id, u.Username, u.GlobalRole, u.IsActive, u.CreatedAt);
+    private static UserResponse MapToResponse(AppUser u)
+    {
+        return new UserResponse(u.Id, u.Username, u.GlobalRole, u.IsActive, u.CreatedAt);
+    }
 
-    private static UserDetailResponse MapToDetailResponse(AppUser u) =>
-        new(u.Id, u.Username, u.GlobalRole, u.IsActive, u.CreatedAt,
-            u.ClientAssignments.Select(a => new ClientAssignmentResponse(a.Id, a.ClientId, a.Role, a.AssignedAt)).ToList());
+    private static UserDetailResponse MapToDetailResponse(AppUser u)
+    {
+        return new UserDetailResponse(
+            u.Id,
+            u.Username,
+            u.GlobalRole,
+            u.IsActive,
+            u.CreatedAt,
+            u.ClientAssignments.Select(a => new ClientAssignmentResponse(a.Id, a.ClientId, a.Role, a.AssignedAt))
+                .ToList());
+    }
 }
 
 /// <summary>Create-user request.</summary>
@@ -183,10 +196,25 @@ public sealed record CreateUserRequest(string Username, string Password, AppUser
 public sealed record AssignClientRoleRequest(Guid ClientId, ClientRole Role);
 
 /// <summary>User response DTO.</summary>
-public sealed record UserResponse(Guid Id, string Username, AppUserRole GlobalRole, bool IsActive, DateTimeOffset CreatedAt);
+public sealed record UserResponse(
+    Guid Id,
+    string Username,
+    AppUserRole GlobalRole,
+    bool IsActive,
+    DateTimeOffset CreatedAt);
 
 /// <summary>User detail response DTO including client role assignments.</summary>
-public sealed record UserDetailResponse(Guid Id, string Username, AppUserRole GlobalRole, bool IsActive, DateTimeOffset CreatedAt, IReadOnlyList<ClientAssignmentResponse> Assignments);
+public sealed record UserDetailResponse(
+    Guid Id,
+    string Username,
+    AppUserRole GlobalRole,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<ClientAssignmentResponse> Assignments);
 
 /// <summary>Client role assignment DTO.</summary>
-public sealed record ClientAssignmentResponse(Guid AssignmentId, Guid ClientId, ClientRole Role, DateTimeOffset AssignedAt);
+public sealed record ClientAssignmentResponse(
+    Guid AssignmentId,
+    Guid ClientId,
+    ClientRole Role,
+    DateTimeOffset AssignedAt);

@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
@@ -14,6 +16,7 @@ namespace MeisterProPR.Api.Workers;
 public sealed partial class ReviewJobWorker(
     IServiceScopeFactory scopeFactory,
     IOptions<WorkerOptions> workerOptions,
+    ReviewJobMetrics metrics,
     ILogger<ReviewJobWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, Task> _inflight = new();
@@ -104,6 +107,24 @@ public sealed partial class ReviewJobWorker(
     /// <summary>Processes a single job safely, handling exceptions and cancellations.</summary>
     private async Task ProcessJobSafeAsync(ReviewJob job, CancellationToken stoppingToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = "completed";
+        using var activity = ReviewJobTelemetry.StartActivity(
+            "review_job.process",
+            provider: job.Provider,
+            clientId: job.ClientId);
+        activity?.SetTag("review_job.id", job.Id.ToString("D"));
+        activity?.SetTag("review_job.pull_request_id", job.PullRequestId);
+        activity?.SetTag("review_job.iteration_id", job.IterationId);
+
+        using var logScope = logger.BeginScope(
+            new Dictionary<string, object?>
+            {
+                [ReviewJobTelemetry.ScmProviderTagName] = ReviewJobTelemetry.ToProviderTag(job.Provider),
+                [ReviewJobTelemetry.ClientIdTagName] = job.ClientId.ToString("D"),
+                ["review_job_id"] = job.Id.ToString("D"),
+            });
+
         using var scope = scopeFactory.CreateScope();
         var jobRepository = scope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
 
@@ -111,15 +132,26 @@ public sealed partial class ReviewJobWorker(
         {
             var orchestrator = scope.ServiceProvider.GetRequiredService<IReviewJobProcessor>();
             await orchestrator.ProcessAsync(job, stoppingToken);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (OperationCanceledException)
         {
+            outcome = "cancelled";
             await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, stoppingToken);
         }
         catch (Exception ex)
         {
+            outcome = "failed";
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().FullName ?? ex.GetType().Name);
             LogJobProcessingError(logger, job.Id, ex);
             await jobRepository.SetFailedAsync(job.Id, ex.Message, stoppingToken);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            activity?.SetTag("review_job.outcome", outcome);
+            metrics.RecordJobDuration(job.Provider, stopwatch.Elapsed.TotalSeconds, outcome);
         }
     }
 
@@ -135,7 +167,10 @@ public sealed partial class ReviewJobWorker(
     [LoggerMessage(Level = LogLevel.Error, Message = "ReviewJobWorker: unhandled exception processing job {JobId}")]
     private static partial void LogJobProcessingError(ILogger logger, Guid jobId, Exception ex);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "ReviewJobWorker: transitioning stuck job {JobId} (in Processing since {ProcessingStartedAt}) to Failed")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "ReviewJobWorker: transitioning stuck job {JobId} (in Processing since {ProcessingStartedAt}) to Failed")]
     private static partial void LogStuckJobDetected(ILogger logger, Guid jobId, DateTimeOffset? processingStartedAt);
 
     /// <summary>Finds jobs stuck in <c>Processing</c> and marks them <c>Failed</c>.</summary>

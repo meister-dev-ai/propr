@@ -17,7 +17,10 @@ public sealed class AppUser
     /// <summary>BCrypt hash of the user's password.</summary>
     public string PasswordHash { get; set; } = string.Empty;
 
-    /// <summary>Global role. Admins have access across all clients; other users are scoped via <see cref="ClientAssignments"/>.</summary>
+    /// <summary>
+    ///     Global role. Admins have access across all clients; other users are scoped via
+    ///     <see cref="ClientAssignments" />.
+    /// </summary>
     public AppUserRole GlobalRole { get; set; } = AppUserRole.User;
 
     /// <summary>Whether the account is active. Disabled users cannot authenticate.</summary>
@@ -26,7 +29,7 @@ public sealed class AppUser
     /// <summary>When the account was created.</summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    /// <summary>Per-client role assignments. Only used when <see cref="GlobalRole"/> is <see cref="AppUserRole.User"/>.</summary>
+    /// <summary>Per-client role assignments. Only used when <see cref="GlobalRole" /> is <see cref="AppUserRole.User" />.</summary>
     public ICollection<UserClientRole> ClientAssignments { get; } = [];
 
     /// <summary>Personal access tokens issued by this user.</summary>

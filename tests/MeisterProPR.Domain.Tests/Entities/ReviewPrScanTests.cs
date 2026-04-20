@@ -50,7 +50,7 @@ public class ReviewPrScanTests
     [Fact]
     public void Constructor_ThrowsOnEmptyId()
     {
-        Assert.Throws<ArgumentException>(() => CreateScan(id: Guid.Empty));
+        Assert.Throws<ArgumentException>(() => CreateScan(Guid.Empty));
     }
 
     [Fact]

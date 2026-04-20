@@ -14,15 +14,21 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 /// </summary>
 public partial class AdoRepositoryMaterializer(
     VssConnectionFactory connectionFactory,
-    IClientAdoCredentialRepository credentialRepository,
+    IClientScmConnectionRepository connectionRepository,
     IOptions<ProCursorOptions> options,
     ILogger<AdoRepositoryMaterializer> logger)
-    : AdoGitProCursorMaterializerBase(connectionFactory, credentialRepository, options, logger)
+    : AdoGitProCursorMaterializerBase(connectionFactory, connectionRepository, options, logger)
 {
     /// <inheritdoc />
     public override ProCursorSourceKind SourceKind => ProCursorSourceKind.Repository;
 
-    protected override void LogMaterializedSource(ILogger logger, Guid sourceId, string branchName, string commitSha, int fileCount)
+    /// <inheritdoc />
+    protected override void LogMaterializedSource(
+        ILogger logger,
+        Guid sourceId,
+        string branchName,
+        string commitSha,
+        int fileCount)
     {
         LogMaterializedRepositorySource(logger, sourceId, branchName, commitSha, fileCount);
     }

@@ -3,7 +3,6 @@
 
 using Azure.Core;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Infrastructure.AzureDevOps;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -22,7 +21,10 @@ public class AdoRepositoryInstructionFetcherTests
                                        \"\"\"
                                        """;
 
-    private static string BuildInstructionContent(string description, string whenToUse, string body = "Apply naming rules.")
+    private static string BuildInstructionContent(
+        string description,
+        string whenToUse,
+        string body = "Apply naming rules.")
     {
         return $"\"\"\"\ndescription: {description}\nwhen-to-use: {whenToUse}\n\"\"\"\n{body}";
     }
@@ -32,10 +34,18 @@ public class AdoRepositoryInstructionFetcherTests
     {
         // Arrange
         var sut = new TestableAdoRepositoryInstructionFetcher();
-        sut.AddFile("instructions-naming.md", BuildInstructionContent("Enforce naming conventions", "When reviewing C# files"));
+        sut.AddFile(
+            "instructions-naming.md",
+            BuildInstructionContent("Enforce naming conventions", "When reviewing C# files"));
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.Single(result);
@@ -52,7 +62,13 @@ public class AdoRepositoryInstructionFetcherTests
         sut.AddFile("instructions-no-header.md", "This file has no header at all. Just some text.");
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert — silently ignored, returns empty list
         Assert.Empty(result);
@@ -66,7 +82,13 @@ public class AdoRepositoryInstructionFetcherTests
         // No files added — _files is empty
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert — no exception, empty result
         Assert.Empty(result);
@@ -80,7 +102,13 @@ public class AdoRepositoryInstructionFetcherTests
         sut.SetFolderAbsent();
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert — graceful, returns empty list
         Assert.Empty(result);
@@ -96,7 +124,13 @@ public class AdoRepositoryInstructionFetcherTests
         sut.AddFile("instructions-mm-middle.md", BuildInstructionContent("MM middle", "Always"));
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert — alphabetical by file name
         Assert.Equal(3, result.Count);
@@ -115,7 +149,13 @@ public class AdoRepositoryInstructionFetcherTests
         sut.AddFile("instructions-empty.md", "");
 
         // Act
-        var result = await sut.FetchAsync("https://dev.azure.com/org", "proj", "repo", "main", null, CancellationToken.None);
+        var result = await sut.FetchAsync(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "main",
+            null,
+            CancellationToken.None);
 
         // Assert — only the valid file returned
         Assert.Single(result);
@@ -133,7 +173,7 @@ public class AdoRepositoryInstructionFetcherTests
         public TestableAdoRepositoryInstructionFetcher()
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientAdoCredentialRepository>(),
+                Substitute.For<IClientScmConnectionRepository>(),
                 Substitute.For<ILogger<AdoRepositoryInstructionFetcher>>())
         {
         }

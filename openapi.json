@@ -10,7 +10,7 @@
         "tags": [
           "AdminCrawlConfigs"
         ],
-        "summary": "Lists all accessible crawl configurations.\r\nAdmins receive all configs; non-Admin users receive only configs for their assigned clients.",
+        "summary": "Lists all accessible crawl configurations.\nAdmins receive all configs; non-Admin users receive only configs for their assigned clients.",
         "responses": {
           "200": {
             "description": "List of crawl configurations.",
@@ -67,7 +67,7 @@
         "tags": [
           "AdminCrawlConfigs"
         ],
-        "summary": "Creates a new crawl configuration.\r\nAdmins may create for any client; non-Admin users may only create for their assigned clients.",
+        "summary": "Creates a new crawl configuration.\nAdmins may create for any client; non-Admin users may only create for their assigned clients.",
         "requestBody": {
           "description": "Crawl configuration details.",
           "content": {
@@ -217,7 +217,7 @@
         "tags": [
           "AdminCrawlConfigs"
         ],
-        "summary": "Applies partial updates to a crawl configuration.\r\nAdmins may update any config; non-Admin users may only update configs for their clients.",
+        "summary": "Applies partial updates to a crawl configuration.\nAdmins may update any config; non-Admin users may only update configs for their clients.",
         "parameters": [
           {
             "name": "configId",
@@ -357,7 +357,7 @@
         "tags": [
           "AdminCrawlConfigs"
         ],
-        "summary": "Deletes a crawl configuration.\r\nAdmins may delete any config; non-Admin users may only delete configs for their clients.",
+        "summary": "Deletes a crawl configuration.\nAdmins may delete any config; non-Admin users may only delete configs for their clients.",
         "parameters": [
           {
             "name": "configId",
@@ -433,6 +433,172 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/admin/providers": {
+      "get": {
+        "tags": [
+          "AdminProviders"
+        ],
+        "summary": "Returns the activation status for every supported provider family.",
+        "responses": {
+          "200": {
+            "description": "Returns the activation status for all supported provider families.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider activation services are unavailable."
+          }
+        }
+      }
+    },
+    "/admin/providers/{provider}": {
+      "patch": {
+        "tags": [
+          "AdminProviders"
+        ],
+        "summary": "Updates whether one provider family is enabled for this installation.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "The provider family to update.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ScmProvider"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The requested activation state.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminProviderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminProviderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminProviderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns the updated activation state for the provider family.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderActivationStatusDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a global administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider activation services are unavailable."
           }
         }
       }
@@ -767,12 +933,576 @@
         }
       }
     },
+    "/admin/webhook-configurations": {
+      "get": {
+        "tags": [
+          "AdminWebhookConfigs"
+        ],
+        "summary": "Lists all webhook configurations visible to the caller.",
+        "responses": {
+          "200": {
+            "description": "List of webhook configurations.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminWebhookConfigs"
+        ],
+        "summary": "Creates a new webhook configuration and returns the one-time secret.",
+        "requestBody": {
+          "description": "Webhook configuration details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminWebhookConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminWebhookConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminWebhookConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Configuration created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the target client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Selected guided scope is no longer valid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-configurations/{configId}/deliveries": {
+      "get": {
+        "tags": [
+          "AdminWebhookConfigs"
+        ],
+        "summary": "Lists recent delivery-log entries for one webhook configuration.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "Webhook configuration identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "description": "Maximum number of entries to return.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent delivery-log entries.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryHistoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryHistoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the target client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-configurations/{configId}": {
+      "patch": {
+        "tags": [
+          "AdminWebhookConfigs"
+        ],
+        "summary": "Applies partial updates to a webhook configuration.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "Webhook configuration identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Fields to update; omit a field to leave it unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminWebhookConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminWebhookConfigRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminWebhookConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookConfigurationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the target client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Selected guided scope is no longer valid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminWebhookConfigs"
+        ],
+        "summary": "Deletes a webhook configuration.",
+        "parameters": [
+          {
+            "name": "configId",
+            "in": "path",
+            "description": "Webhook configuration identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Configuration deleted."
+          },
+          "401": {
+            "description": "No valid credentials provided.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the target client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Configuration not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/clients/{clientId}/ado/discovery/projects": {
       "get": {
         "tags": [
           "AdoDiscovery"
         ],
-        "summary": "Lists projects available within one configured Azure DevOps organization scope.\r\nRequires global admin or `ClientUser` access for the specified client.",
+        "summary": "Lists projects available within one configured Azure DevOps organization scope.\nRequires global admin or `ClientUser` access for the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -912,7 +1642,7 @@
         "tags": [
           "AdoDiscovery"
         ],
-        "summary": "Lists repositories or wikis available within one configured Azure DevOps project.\r\nRequires global admin or `ClientUser` access for the specified client.",
+        "summary": "Lists repositories or wikis available within one configured Azure DevOps project.\nRequires global admin or `ClientUser` access for the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -1068,7 +1798,7 @@
         "tags": [
           "AdoDiscovery"
         ],
-        "summary": "Lists branches available for one discovered repository or wiki source.\r\nRequires global admin or `ClientUser` access for the specified client.",
+        "summary": "Lists branches available for one discovered repository or wiki source.\nRequires global admin or `ClientUser` access for the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -1240,7 +1970,7 @@
         "tags": [
           "AdoDiscovery"
         ],
-        "summary": "Lists repository options and branch suggestions suitable for crawl-filter configuration.\r\nRequires global admin or `ClientUser` access for the specified client.",
+        "summary": "Lists repository options and branch suggestions suitable for crawl-filter configuration.\nRequires global admin or `ClientUser` access for the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -2185,7 +2915,7 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Probes the given endpoint URL with the supplied API key and returns the list of available\r\nmodel deployment names. Returns an empty list when the endpoint is unreachable or returns\r\nno deployments — the caller should surface this as a warning, not an error.",
+        "summary": "Probes the given endpoint URL with the supplied API key and returns the list of available\nmodel deployment names. Returns an empty list when the endpoint is unreachable or returns\nno deployments — the caller should surface this as a warning, not an error.",
         "parameters": [
           {
             "name": "clientId",
@@ -2281,6 +3011,2187 @@
           },
           "403": {
             "description": "Caller does not own this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections": {
+      "get": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Lists provider connections configured for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider connections found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmConnectionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmConnectionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmConnectionDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Creates a provider connection for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Provider-connection details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderConnectionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderConnectionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Provider connection created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A provider connection already exists for the same provider family and host.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}": {
+      "get": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Gets one provider connection configured for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider connection found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client or provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Applies partial updates to one provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Fields to update; omit a field to leave it unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderConnectionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderConnectionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider connection updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client or provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A provider connection already exists for the same provider family and host.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Deletes one provider connection from a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Provider connection deleted."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client or provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-operations/status": {
+      "get": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Lists authoritative provider operational status for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider operational status found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderOperationalStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderOperationalStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderOperationalStatusDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-operations/audit-trail": {
+      "get": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Lists recent provider-connection operational audit entries for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "description": "Maximum number of entries to return.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider audit entries found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderConnectionAuditEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderConnectionAuditEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderConnectionAuditEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}/verify": {
+      "post": {
+        "tags": [
+          "ClientProviderConnections"
+        ],
+        "summary": "Verifies one provider connection has the onboarding capabilities required for this client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider connection verification state updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmConnectionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client or provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}/scopes": {
+      "get": {
+        "tags": [
+          "ClientProviderScopes"
+        ],
+        "summary": "Lists provider scopes configured for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider scopes found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmScopeDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmScopeDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientScmScopeDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClientProviderScopes"
+        ],
+        "summary": "Creates one provider scope selection for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Provider-scope details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderScopeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderScopeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientProviderScopeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Provider scope created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A provider scope already exists for the same external scope in this connection.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}/scopes/{scopeId}": {
+      "get": {
+        "tags": [
+          "ClientProviderScopes"
+        ],
+        "summary": "Gets one provider scope configured for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "path",
+            "description": "Provider-scope identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider scope found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection or scope not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "ClientProviderScopes"
+        ],
+        "summary": "Applies partial updates to one provider scope selection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "path",
+            "description": "Provider-scope identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Fields to update; omit a field to leave it unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderScopeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderScopeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchClientProviderScopeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider scope updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientScmScopeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection or scope not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClientProviderScopes"
+        ],
+        "summary": "Deletes one provider scope selection from one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "path",
+            "description": "Provider-scope identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Provider scope deleted."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection or scope not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}/reviewer-identities/resolve": {
+      "get": {
+        "tags": [
+          "ClientReviewerIdentities"
+        ],
+        "summary": "Resolves candidate reviewer identities for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search text used to find reviewer identities.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reviewer identity candidates found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResolvedReviewerIdentityResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResolvedReviewerIdentityResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResolvedReviewerIdentityResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Search text is missing.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The provider onboarding identity capability is not registered.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/provider-connections/{connectionId}/reviewer-identity": {
+      "get": {
+        "tags": [
+          "ClientReviewerIdentities"
+        ],
+        "summary": "Gets the configured reviewer identity for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configured reviewer identity found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection or reviewer identity not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ClientReviewerIdentities"
+        ],
+        "summary": "Creates or replaces the configured reviewer identity for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Reviewer identity details.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetClientReviewerIdentityRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetClientReviewerIdentityRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetClientReviewerIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reviewer identity stored.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewerIdentityDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClientReviewerIdentities"
+        ],
+        "summary": "Clears the configured reviewer identity for one client provider connection.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "description": "Provider-connection identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Reviewer identity cleared."
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client provider connection not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2415,7 +5326,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Lists registered clients.\r\nAdmins receive all clients.\r\nNon-admin users receive only clients for their assigned roles.\r\nRequires a valid JWT bearer token or `X-User-Pat`.",
+        "summary": "Lists registered clients.\nAdmins receive all clients.\nNon-admin users receive only clients for their assigned roles.\nRequires a valid JWT bearer token or `X-User-Pat`.",
         "responses": {
           "200": {
             "description": "List of clients.",
@@ -2469,180 +5380,12 @@
         }
       }
     },
-    "/clients/{clientId}/ado-credentials": {
-      "delete": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Removes ADO service principal credentials from a client.\r\nRequires a global admin JWT or `X-User-Pat`.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Credentials removed (or client had no credentials — idempotent)."
-          },
-          "401": {
-            "description": "Missing or invalid admin credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Sets or replaces ADO service principal credentials for a client.\r\nRequires a global admin JWT or `X-User-Pat`.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "ADO credential details — all three fields required.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetAdoCredentialsRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetAdoCredentialsRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetAdoCredentialsRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Credentials stored."
-          },
-          "400": {
-            "description": "One or more fields are missing or blank.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid admin credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/clients/{clientId}": {
       "delete": {
         "tags": [
           "Clients"
         ],
-        "summary": "Deletes a client and all its crawl configurations.\r\nRequires a global admin JWT or `X-User-Pat`.",
+        "summary": "Deletes a client and all its crawl configurations.\nRequires a global admin JWT or `X-User-Pat`.",
         "parameters": [
           {
             "name": "clientId",
@@ -2705,7 +5448,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Gets a single client by ID.\r\nRequires valid user authentication and access to the requested client.",
+        "summary": "Gets a single client by ID.\nRequires valid user authentication and access to the requested client.",
         "parameters": [
           {
             "name": "clientId",
@@ -2805,7 +5548,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Updates one or more fields of a client (display name, active status, custom system message).\r\nRequires a global admin JWT or `X-User-Pat`.",
+        "summary": "Updates one or more fields of a client (display name, active status, custom system message).\nRequires a global admin JWT or `X-User-Pat`.",
         "parameters": [
           {
             "name": "clientId",
@@ -2927,7 +5670,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Sets or replaces the ADO reviewer identity GUID for a client.\r\nRequires global admin or `ClientAdministrator` role for the specified client.\r\nUntil this is set, review jobs for the client will be rejected.",
+        "summary": "Sets or replaces the ADO reviewer identity GUID for a client.\nRequires global admin or `ClientAdministrator` role for the specified client.\nUntil this is set, review jobs for the client will be rejected.",
         "parameters": [
           {
             "name": "clientId",
@@ -3026,652 +5769,6 @@
           },
           "404": {
             "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/{clientId}/ado-organization-scopes": {
-      "get": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Lists Azure DevOps organization scopes configured for a client.\r\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Organization scopes found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Creates an Azure DevOps organization scope for a client.\r\nRequires global admin or `ClientAdministrator` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "Organization-scope details.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateClientAdoOrganizationScopeRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateClientAdoOrganizationScopeRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateClientAdoOrganizationScopeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Organization scope created.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failure.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "An organization scope for the URL already exists.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/{clientId}/ado-organization-scopes/{scopeId}": {
-      "get": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Gets one Azure DevOps organization scope configured for a client.\r\nRequires global admin or `ClientUser` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "scopeId",
-            "in": "path",
-            "description": "Organization-scope identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Organization scope found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client or organization scope not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Applies partial updates to an Azure DevOps organization scope.\r\nRequires global admin or `ClientAdministrator` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "scopeId",
-            "in": "path",
-            "description": "Organization-scope identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "Fields to update; omit a field to leave it unchanged.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PatchClientAdoOrganizationScopeRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PatchClientAdoOrganizationScopeRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/PatchClientAdoOrganizationScopeRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Organization scope updated.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientAdoOrganizationScopeDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failure.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client or organization scope not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "An organization scope for the URL already exists.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Deletes an Azure DevOps organization scope from a client.\r\nRequires global admin or `ClientAdministrator` access for the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "scopeId",
-            "in": "path",
-            "description": "Organization-scope identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Organization scope deleted."
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required client access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client or organization scope not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3816,8 +5913,17 @@
         "tags": [
           "Identities"
         ],
-        "summary": "Resolves ADO identities matching the given display name within an organisation.\r\nReturns the VSS identity GUID required for the client's `reviewerId` setting.\r\nWorks for users, service principals, and managed identities.\r\nRequires either a global admin or a user with `ClientAdministrator` access for at least one client,\r\nauthenticated via JWT bearer token or `X-User-Pat`.",
+        "summary": "Resolves ADO identities matching the given display name within an organisation.\nReturns the VSS identity GUID required for the client's `reviewerId` setting.\nWhen a client ID is supplied, the resolver uses that client's configured ADO credentials.\nWorks for users, service principals, and managed identities.\nRequires either a global admin or a user with `ClientAdministrator` access for the specified client,\nauthenticated via JWT bearer token or `X-User-Pat`.",
         "parameters": [
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Client identifier whose ADO credentials should be used for the lookup.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           {
             "name": "orgUrl",
             "in": "query",
@@ -3906,7 +6012,7 @@
             }
           },
           "403": {
-            "description": "Caller is authenticated but lacks `ClientAdministrator` access.",
+            "description": "Caller is authenticated but lacks `ClientAdministrator` access for the requested client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3953,7 +6059,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns all review jobs across all clients, newest first.\r\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
+        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
         "parameters": [
           {
             "name": "limit",
@@ -4051,7 +6157,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns all review jobs across all clients, newest first.\r\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
+        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
         "parameters": [
           {
             "name": "limit",
@@ -4659,7 +6765,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\r\nRequires valid user authentication and access to the specified client.",
+        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -4672,17 +6778,17 @@
             }
           },
           {
-            "name": "organizationUrl",
+            "name": "providerScopePath",
             "in": "query",
-            "description": "ADO organization base URL.",
+            "description": "Provider scope path or host-qualified namespace for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "projectId",
+            "name": "providerProjectKey",
             "in": "query",
-            "description": "ADO project identifier.",
+            "description": "Provider project, owner, or namespace key for the repository.",
             "schema": {
               "type": "string"
             }
@@ -4794,7 +6900,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\r\nRequires valid user authentication and access to the specified client.",
+        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
         "parameters": [
           {
             "name": "clientId",
@@ -4807,17 +6913,17 @@
             }
           },
           {
-            "name": "organizationUrl",
+            "name": "providerScopePath",
             "in": "query",
-            "description": "ADO organization base URL.",
+            "description": "Provider scope path or host-qualified namespace for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "projectId",
+            "name": "providerProjectKey",
             "in": "query",
-            "description": "ADO project identifier.",
+            "description": "Provider project, owner, or namespace key for the repository.",
             "schema": {
               "type": "string"
             }
@@ -7233,6 +9339,130 @@
         }
       }
     },
+    "/webhooks/v1/providers/{provider}/{pathKey}": {
+      "post": {
+        "tags": [
+          "ProviderWebhookReceiver"
+        ],
+        "summary": "Receives one provider-scoped webhook delivery for a resolved webhook configuration.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "The normalized provider family segment or compatibility alias.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pathKey",
+            "in": "path",
+            "description": "Opaque public path key that resolves the target webhook configuration.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Raw provider webhook payload.",
+          "content": {
+            "application/json": {
+              "schema": { }
+            },
+            "text/json": {
+              "schema": { }
+            },
+            "application/*+json": {
+              "schema": { }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delivery was accepted for downstream processing or intentionally ignored.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload was malformed or missing required fields.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Provider verification material was missing or invalid.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The provider segment or path key was unknown.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewing/jobs/{jobId}/status": {
       "get": {
         "tags": [
@@ -7240,22 +9470,6 @@
         ],
         "summary": "Get the status and result of a review job.",
         "parameters": [
-          {
-            "name": "X-Ado-Token",
-            "in": "header",
-            "description": "ADO personal access token used solely to verify the requesting user is an authenticated ADO\r\norganisation member.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Ado-Org-Url",
-            "in": "header",
-            "description": "ADO organisation URL (e.g. https://dev.azure.com/myorg). Required when using browser-extension\r\nsession tokens; omit for PATs.",
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "jobId",
             "in": "path",
@@ -7289,7 +9503,27 @@
             }
           },
           "401": {
-            "description": "Invalid or missing ADO token.",
+            "description": "Missing or invalid app authentication.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's owning client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7339,22 +9573,6 @@
         "summary": "Get the status and result of a review job.",
         "parameters": [
           {
-            "name": "X-Ado-Token",
-            "in": "header",
-            "description": "ADO personal access token used solely to verify the requesting user is an authenticated ADO\r\norganisation member.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Ado-Org-Url",
-            "in": "header",
-            "description": "ADO organisation URL (e.g. https://dev.azure.com/myorg). Required when using browser-extension\r\nsession tokens; omit for PATs.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "jobId",
             "in": "path",
             "description": "The job identifier returned from POST /clients/{clientId}/reviewing/jobs.",
@@ -7387,7 +9605,27 @@
             }
           },
           "401": {
-            "description": "Invalid or missing ADO token.",
+            "description": "Missing or invalid app authentication.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's owning client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7445,14 +9683,6 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "name": "X-Ado-Token",
-            "in": "header",
-            "description": "Azure DevOps personal access token for ADO API operations. Must never be logged or persisted.",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -7460,17 +9690,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             }
           }
@@ -7684,14 +9914,6 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "name": "X-Ado-Token",
-            "in": "header",
-            "description": "Azure DevOps personal access token for ADO API operations. Must never be logged or persisted.",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -7699,17 +9921,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitReviewJobRequestDto"
+                "$ref": "#/components/schemas/SubmitReviewRequest"
               }
             }
           }
@@ -7912,7 +10134,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Returns a paginated list of stored thread memory embeddings for the given client.\r\nOptionally filters by a search term matched against file path, repository ID, or resolution summary.",
+        "summary": "Returns a paginated list of stored thread memory embeddings for the given client.\nOptionally filters by a search term matched against file path, repository ID, or resolution summary.",
         "parameters": [
           {
             "name": "clientId",
@@ -8021,7 +10243,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Returns a paginated list of stored thread memory embeddings for the given client.\r\nOptionally filters by a search term matched against file path, repository ID, or resolution summary.",
+        "summary": "Returns a paginated list of stored thread memory embeddings for the given client.\nOptionally filters by a search term matched against file path, repository ID, or resolution summary.",
         "parameters": [
           {
             "name": "clientId",
@@ -8130,7 +10352,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Deletes the stored embedding with the given ID (scoped to the owning client).\r\nAlso resets `last_seen_status` to null on the corresponding scan thread\r\nso the next crawl cycle will re-evaluate the thread.\r\nIdempotent — returns 204 even if the record does not exist.",
+        "summary": "Deletes the stored embedding with the given ID (scoped to the owning client).\nAlso resets `last_seen_status` to null on the corresponding scan thread\nso the next crawl cycle will re-evaluate the thread.\nIdempotent — returns 204 even if the record does not exist.",
         "parameters": [
           {
             "name": "id",
@@ -8184,7 +10406,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Deletes the stored embedding with the given ID (scoped to the owning client).\r\nAlso resets `last_seen_status` to null on the corresponding scan thread\r\nso the next crawl cycle will re-evaluate the thread.\r\nIdempotent — returns 204 even if the record does not exist.",
+        "summary": "Deletes the stored embedding with the given ID (scoped to the owning client).\nAlso resets `last_seen_status` to null on the corresponding scan thread\nso the next crawl cycle will re-evaluate the thread.\nIdempotent — returns 204 even if the record does not exist.",
         "parameters": [
           {
             "name": "id",
@@ -8238,7 +10460,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\r\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
+        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
         "parameters": [
           {
             "name": "clientId",
@@ -8340,7 +10562,7 @@
         "tags": [
           "ThreadMemory"
         ],
-        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\r\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
+        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
         "parameters": [
           {
             "name": "clientId",
@@ -8965,17 +11187,6 @@
         "additionalProperties": false,
         "description": "A crawl-filter option discovered for one project."
       },
-      "AdoOrganizationVerificationStatus": {
-        "enum": [
-          "unknown",
-          "verified",
-          "unauthorized",
-          "unreachable",
-          "stale"
-        ],
-        "type": "string",
-        "description": "Verification state for one client-scoped Azure DevOps organization scope."
-      },
       "AdoProjectOptionDto": {
         "type": "object",
         "properties": {
@@ -9159,7 +11370,7 @@
           "default"
         ],
         "type": "string",
-        "description": "Model category tag for an `AiConnection`.\r\nAllows clients to configure a dedicated AI endpoint per file complexity tier.\r\nWhen a connection with a matching category is present, the orchestrator uses it\r\ninstead of the default active connection for that tier."
+        "description": "Model category tag for an `AiConnection`.\nAllows clients to configure a dedicated AI endpoint per file complexity tier.\nWhen a connection with a matching category is present, the orchestrator uses it\ninstead of the default active connection for that tier."
       },
       "AppUserRole": {
         "enum": [
@@ -9213,7 +11424,41 @@
         "additionalProperties": false,
         "description": "Password change request payload."
       },
-      "ClientAdoOrganizationScopeDto": {
+      "ClientResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "commentResolutionBehavior": {
+            "$ref": "#/components/schemas/CommentResolutionBehavior"
+          },
+          "customSystemMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client response — key, ADO secret, and credential metadata are never included."
+      },
+      "ClientReviewerIdentityDto": {
         "type": "object",
         "properties": {
           "id": {
@@ -9224,7 +11469,18 @@
             "type": "string",
             "format": "uuid"
           },
-          "organizationUrl": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "externalUserId": {
+            "type": "string",
+            "nullable": true
+          },
+          "login": {
             "type": "string",
             "nullable": true
           },
@@ -9232,11 +11488,145 @@
             "type": "string",
             "nullable": true
           },
-          "isEnabled": {
+          "isBot": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client-scoped provider reviewer identity returned by admin APIs."
+      },
+      "ClientRole": {
+        "enum": [
+          "clientUser",
+          "clientAdministrator"
+        ],
+        "type": "string",
+        "description": "Role a user holds within a specific client."
+      },
+      "ClientScmConnectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "authenticationKind": {
+            "$ref": "#/components/schemas/ScmAuthenticationKind"
+          },
+          "oAuthTenantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "oAuthClientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
             "type": "boolean"
           },
           "verificationStatus": {
-            "$ref": "#/components/schemas/AdoOrganizationVerificationStatus"
+            "type": "string",
+            "nullable": true
+          },
+          "lastVerifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastVerificationError": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastVerificationFailureCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readinessLevel": {
+            "$ref": "#/components/schemas/ProviderConnectionReadinessLevel"
+          },
+          "readinessReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "hostVariant": {
+            "type": "string",
+            "nullable": true
+          },
+          "missingReadinessCriteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client-scoped SCM provider connection metadata returned by admin APIs."
+      },
+      "ClientScmScopeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalScopeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "verificationStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean"
           },
           "lastVerifiedAt": {
             "type": "string",
@@ -9257,52 +11647,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Client-scoped organization option and verification state used by guided Azure DevOps configuration."
-      },
-      "ClientResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "hasAdoCredentials": {
-            "type": "boolean"
-          },
-          "reviewerId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "commentResolutionBehavior": {
-            "$ref": "#/components/schemas/CommentResolutionBehavior"
-          },
-          "customSystemMessage": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Client response — key, ADO secret, and credential metadata are never included."
-      },
-      "ClientRole": {
-        "enum": [
-          "clientUser",
-          "clientAdministrator"
-        ],
-        "type": "string",
-        "description": "Role a user holds within a specific client."
+        "description": "Client-scoped SCM provider scope metadata returned by admin APIs."
       },
       "ClientTokenUsageDto": {
         "type": "object",
@@ -9360,6 +11705,14 @@
         },
         "additionalProperties": false,
         "description": "A single (model, day) token usage data point returned by the token-usage dashboard endpoint."
+      },
+      "CodeReviewPlatformKind": {
+        "enum": [
+          "pullRequest",
+          "mergeRequest"
+        ],
+        "type": "string",
+        "description": "The native review surface used by a provider."
       },
       "CommentResolutionBehavior": {
         "enum": [
@@ -9427,16 +11780,19 @@
             "type": "string",
             "format": "uuid"
           },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
           "organizationScopeId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -9542,16 +11898,19 @@
             "type": "string",
             "format": "uuid"
           },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
           "organizationScopeId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
           },
-          "organizationUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "projectId": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
@@ -9580,6 +11939,47 @@
         },
         "additionalProperties": false,
         "description": "Request body for creating an admin-managed crawl configuration."
+      },
+      "CreateAdminWebhookConfigRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/WebhookProviderType"
+          },
+          "organizationScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "enabledEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            },
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookRepoFilterRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating an admin-managed webhook configuration."
       },
       "CreateAiConnectionRequest": {
         "type": "object",
@@ -9617,20 +12017,67 @@
         "additionalProperties": false,
         "description": "Request body for creating a new AI connection."
       },
-      "CreateClientAdoOrganizationScopeRequest": {
+      "CreateClientProviderConnectionRequest": {
         "type": "object",
         "properties": {
-          "organizationUrl": {
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "authenticationKind": {
+            "$ref": "#/components/schemas/ScmAuthenticationKind"
+          },
+          "oAuthTenantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "oAuthClientId": {
             "type": "string",
             "nullable": true
           },
           "displayName": {
             "type": "string",
             "nullable": true
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
-        "description": "Request body for creating a client-scoped Azure DevOps organization scope."
+        "description": "Request body for creating a client-scoped provider connection."
+      },
+      "CreateClientProviderScopeRequest": {
+        "type": "object",
+        "properties": {
+          "scopeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalScopeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating a client-scoped provider scope selection."
       },
       "CreateClientRequest": {
         "type": "object",
@@ -9842,11 +12289,11 @@
             "format": "uuid",
             "nullable": true
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -10017,7 +12464,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "For no-ops: `already_resolved` or `still_active`.\r\nFor admin deletes: `admin_deleted`.\r\nFor failures: brief error summary.\r\nNull for successful store/remove actions.",
+            "description": "For no-ops: `already_resolved` or `still_active`.\nFor admin deletes: `admin_deleted`.\nFor failures: brief error summary.\nNull for successful store/remove actions.",
             "nullable": true
           },
           "occurredAt": {
@@ -10027,7 +12474,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Append-only crawl-side audit record.  One row per state machine evaluation per thread per crawl cycle.\r\nPersisted in the `memory_activity_log` table — never updated or deleted by the system."
+        "description": "Append-only crawl-side audit record.  One row per state machine evaluation per thread per crawl cycle.\nPersisted in the `memory_activity_log` table — never updated or deleted by the system."
       },
       "MemoryActivityLogEntryPagedResult": {
         "type": "object",
@@ -10095,15 +12542,81 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching an admin-managed crawl configuration.\r\nOmit a field to leave it unchanged."
+        "description": "Request body for patching an admin-managed crawl configuration.\nOmit a field to leave it unchanged."
       },
-      "PatchClientAdoOrganizationScopeRequest": {
+      "PatchAdminProviderRequest": {
         "type": "object",
         "properties": {
-          "organizationUrl": {
+          "isEnabled": {
+            "type": "boolean",
+            "description": "Whether the provider family should be enabled installation-wide."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for updating one provider family's activation state."
+      },
+      "PatchAdminWebhookConfigRequest": {
+        "type": "object",
+        "properties": {
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enabledEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            },
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookRepoFilterRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for patching an admin-managed webhook configuration."
+      },
+      "PatchClientProviderConnectionRequest": {
+        "type": "object",
+        "properties": {
+          "hostBaseUrl": {
             "type": "string",
             "nullable": true
           },
+          "authenticationKind": {
+            "$ref": "#/components/schemas/ScmAuthenticationKind"
+          },
+          "oAuthTenantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "oAuthClientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for patching a client-scoped provider connection."
+      },
+      "PatchClientProviderScopeRequest": {
+        "type": "object",
+        "properties": {
           "displayName": {
             "type": "string",
             "nullable": true
@@ -10114,7 +12627,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client-scoped Azure DevOps organization scope.\r\nOmit a field to leave it unchanged."
+        "description": "Request body for patching a client-scoped provider scope selection."
       },
       "PatchClientRequest": {
         "type": "object",
@@ -10136,7 +12649,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\r\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value."
       },
       "PrJobSummaryDto": {
         "type": "object",
@@ -10186,11 +12699,11 @@
       "PrReviewViewDto": {
         "type": "object",
         "properties": {
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -10267,11 +12780,11 @@
           "sourceKind": {
             "$ref": "#/components/schemas/ProCursorSourceKind"
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -10328,11 +12841,11 @@
           "sourceKind": {
             "$ref": "#/components/schemas/ProCursorSourceKind"
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -11195,6 +13708,275 @@
         "type": "string",
         "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
       },
+      "ProviderActivationStatusDto": {
+        "type": "object",
+        "properties": {
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "baselineAdapterSetRegistered": {
+            "type": "boolean"
+          },
+          "registeredCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "supportClaimReadiness": {
+            "$ref": "#/components/schemas/ProviderConnectionReadinessLevel"
+          },
+          "supportClaimReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Global provider-family activation status for installation-wide administration."
+      },
+      "ProviderConnectionAuditEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Append-only operational audit entry for one provider connection change or verification result."
+      },
+      "ProviderConnectionOperationalStatusDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "hostVariant": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "verificationStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "readinessLevel": {
+            "$ref": "#/components/schemas/ProviderConnectionReadinessLevel"
+          },
+          "readinessReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "missingReadinessCriteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "health": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastCheckedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failureCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Operator-facing operational status for one provider connection."
+      },
+      "ProviderConnectionReadinessLevel": {
+        "enum": [
+          "unknown",
+          "configured",
+          "degraded",
+          "onboardingReady",
+          "workflowComplete"
+        ],
+        "type": "string",
+        "description": "Represents the current readiness level of a provider connection or provider family."
+      },
+      "ProviderFamilyOperationalStatusDto": {
+        "type": "object",
+        "properties": {
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "baselineAdapterSetRegistered": {
+            "type": "boolean"
+          },
+          "leastReadyLevel": {
+            "$ref": "#/components/schemas/ProviderConnectionReadinessLevel"
+          },
+          "summaryReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "unknownCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "configuredCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onboardingReadyCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workflowCompleteCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "degradedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hostVariants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderHostVariantOperationalStatusDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Operator-facing readiness summary for one provider family."
+      },
+      "ProviderHostVariantOperationalStatusDto": {
+        "type": "object",
+        "properties": {
+          "hostVariant": {
+            "type": "string",
+            "nullable": true
+          },
+          "leastReadyLevel": {
+            "$ref": "#/components/schemas/ProviderConnectionReadinessLevel"
+          },
+          "summaryReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "unknownCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "configuredCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onboardingReadyCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workflowCompleteCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "degradedCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Operator-facing readiness summary for one provider family host variant."
+      },
+      "ProviderOperationalStatusDto": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderConnectionOperationalStatusDto"
+            },
+            "nullable": true
+          },
+          "providerFamilies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderFamilyOperationalStatusDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Operator-facing provider operational status response."
+      },
       "RefreshRequest": {
         "type": "object",
         "properties": {
@@ -11205,6 +13987,57 @@
         },
         "additionalProperties": false,
         "description": "Refresh token request payload."
+      },
+      "ResolvedReviewerIdentityResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerFamily": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "externalUserId": {
+            "type": "string",
+            "nullable": true
+          },
+          "login": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isBot": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Resolved reviewer identity candidate returned by provider onboarding APIs."
+      },
+      "ReviewCodeReviewRefDto": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/CodeReviewPlatformKind"
+          },
+          "externalReviewId": {
+            "type": "string",
+            "nullable": true
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Provider-neutral code review identity supplied by review intake clients."
       },
       "ReviewCommentDto": {
         "type": "object",
@@ -11239,6 +14072,22 @@
           "status": {
             "type": "string",
             "nullable": true
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "repository": {
+            "$ref": "#/components/schemas/ReviewRepositoryRefDto"
+          },
+          "codeReview": {
+            "$ref": "#/components/schemas/ReviewCodeReviewRefDto"
+          },
+          "reviewRevision": {
+            "$ref": "#/components/schemas/ReviewRevisionRefDto"
           }
         },
         "additionalProperties": false,
@@ -11379,11 +14228,11 @@
           "status": {
             "$ref": "#/components/schemas/JobStatus"
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -11407,10 +14256,46 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "description": "Normalized provider host base URL for the review job.",
+            "nullable": true
+          },
+          "repository": {
+            "$ref": "#/components/schemas/ReviewRepositoryRefDto"
+          },
+          "codeReview": {
+            "$ref": "#/components/schemas/ReviewCodeReviewRefDto"
+          },
+          "reviewRevision": {
+            "$ref": "#/components/schemas/ReviewRevisionRefDto"
           }
         },
         "additionalProperties": false,
         "description": "List item for a review job."
+      },
+      "ReviewRepositoryRefDto": {
+        "type": "object",
+        "properties": {
+          "externalRepositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerOrNamespace": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectPath": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Provider-neutral repository identity supplied by review intake clients."
       },
       "ReviewResultDto": {
         "type": "object",
@@ -11430,6 +14315,55 @@
         "additionalProperties": false,
         "description": "DTO representing the textual review result and comments."
       },
+      "ReviewReviewerIdentityDto": {
+        "type": "object",
+        "properties": {
+          "externalUserId": {
+            "type": "string",
+            "nullable": true
+          },
+          "login": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isBot": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Provider-neutral reviewer identity supplied by review intake clients."
+      },
+      "ReviewRevisionRefDto": {
+        "type": "object",
+        "properties": {
+          "headSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "baseSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "startSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerRevisionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "patchIdentity": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Provider-neutral review revision identity supplied by review intake clients."
+      },
       "ReviewStatusResponse": {
         "type": "object",
         "properties": {
@@ -11440,11 +14374,11 @@
           "status": {
             "$ref": "#/components/schemas/JobStatus"
           },
-          "organizationUrl": {
+          "providerScopePath": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
+          "providerProjectKey": {
             "type": "string",
             "nullable": true
           },
@@ -11475,29 +14409,68 @@
           "error": {
             "type": "string",
             "nullable": true
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
+            "type": "string",
+            "description": "Normalized provider host base URL for the review job.",
+            "nullable": true
+          },
+          "repository": {
+            "$ref": "#/components/schemas/ReviewRepositoryRefDto"
+          },
+          "codeReview": {
+            "$ref": "#/components/schemas/ReviewCodeReviewRefDto"
+          },
+          "reviewRevision": {
+            "$ref": "#/components/schemas/ReviewRevisionRefDto"
           }
         },
         "additionalProperties": false,
         "description": "Detailed status response for a review job."
       },
-      "SetAdoCredentialsRequest": {
+      "ScmAuthenticationKind": {
+        "enum": [
+          "oauthClientCredentials",
+          "personalAccessToken",
+          "appInstallation"
+        ],
+        "type": "string",
+        "description": "Credential models supported by SCM provider connections."
+      },
+      "ScmProvider": {
+        "enum": [
+          "azureDevOps",
+          "github",
+          "gitLab",
+          "forgejo"
+        ],
+        "type": "string",
+        "description": "Supported source-control provider families."
+      },
+      "SetClientReviewerIdentityRequest": {
         "type": "object",
         "properties": {
-          "tenantId": {
+          "externalUserId": {
             "type": "string",
             "nullable": true
           },
-          "clientId": {
+          "login": {
             "type": "string",
             "nullable": true
           },
-          "secret": {
+          "displayName": {
             "type": "string",
             "nullable": true
+          },
+          "isBot": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
-        "description": "Request body for setting ADO service principal credentials."
+        "description": "Request body for setting a client-scoped provider reviewer identity."
       },
       "SetReviewerIdentityRequest": {
         "type": "object",
@@ -11510,32 +14483,31 @@
         "additionalProperties": false,
         "description": "Request body for setting the ADO reviewer identity on a client."
       },
-      "SubmitReviewJobRequestDto": {
+      "SubmitReviewRequest": {
         "type": "object",
         "properties": {
-          "organizationUrl": {
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "hostBaseUrl": {
             "type": "string",
             "nullable": true
           },
-          "projectId": {
-            "type": "string",
-            "nullable": true
+          "repository": {
+            "$ref": "#/components/schemas/ReviewRepositoryRefDto"
           },
-          "repositoryId": {
-            "type": "string",
-            "nullable": true
+          "codeReview": {
+            "$ref": "#/components/schemas/ReviewCodeReviewRefDto"
           },
-          "pullRequestId": {
-            "type": "integer",
-            "format": "int32"
+          "reviewRevision": {
+            "$ref": "#/components/schemas/ReviewRevisionRefDto"
           },
-          "iterationId": {
-            "type": "integer",
-            "format": "int32"
+          "requestedReviewerIdentity": {
+            "$ref": "#/components/schemas/ReviewReviewerIdentityDto"
           }
         },
         "additionalProperties": false,
-        "description": "Request payload for submitting a pull request review job."
+        "description": "Request payload for provider-neutral review intake."
       },
       "ThreadMemoryRecordDto": {
         "type": "object",
@@ -11668,7 +14640,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.\r\nStored as a JSONB array in the `review_jobs.token_breakdown` column."
+        "description": "Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.\nStored as a JSONB array in the `review_jobs.token_breakdown` column."
       },
       "UpdateAiConnectionRequest": {
         "type": "object",
@@ -11714,6 +14686,236 @@
         },
         "additionalProperties": false,
         "description": "Request to replace the override text of an existing prompt override."
+      },
+      "WebhookConfigurationResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/WebhookProviderType"
+          },
+          "organizationScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "enabledEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            },
+            "nullable": true
+          },
+          "repoFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookRepoFilterResponse"
+            },
+            "nullable": true
+          },
+          "listenerUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "generatedSecret": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response payload for one webhook configuration."
+      },
+      "WebhookDeliveryHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliveryLogEntryResponse"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response payload for recent delivery-history entries."
+      },
+      "WebhookDeliveryLogEntryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "webhookConfigurationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true
+          },
+          "deliveryOutcome": {
+            "$ref": "#/components/schemas/WebhookDeliveryOutcome"
+          },
+          "httpStatusCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "sourceBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "actionSummaries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCategory": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response payload for one delivery-history entry."
+      },
+      "WebhookDeliveryOutcome": {
+        "enum": [
+          "accepted",
+          "ignored",
+          "rejected",
+          "failed"
+        ],
+        "type": "string",
+        "description": "Final durable outcome recorded for a webhook delivery."
+      },
+      "WebhookDeliveryResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response payload for acknowledged webhook deliveries."
+      },
+      "WebhookEventType": {
+        "enum": [
+          "pullRequestCreated",
+          "pullRequestUpdated",
+          "pullRequestCommented"
+        ],
+        "type": "string",
+        "description": "Webhook-triggered PR events supported by the system."
+      },
+      "WebhookProviderType": {
+        "enum": [
+          "azureDevOps",
+          "github",
+          "gitLab",
+          "forgejo"
+        ],
+        "type": "string",
+        "description": "Supported webhook providers."
+      },
+      "WebhookRepoFilterRequest": {
+        "type": "object",
+        "properties": {
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "canonicalSourceRef": {
+            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A single repo filter entry in a webhook create or patch request."
+      },
+      "WebhookRepoFilterResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetBranchPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "canonicalSourceRef": {
+            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response payload for one webhook repository filter."
       }
     }
   },
@@ -11722,7 +14924,13 @@
       "name": "AdminCrawlConfigs"
     },
     {
+      "name": "AdminProviders"
+    },
+    {
       "name": "AdminUsers"
+    },
+    {
+      "name": "AdminWebhookConfigs"
     },
     {
       "name": "AdoDiscovery"
@@ -11732,6 +14940,15 @@
     },
     {
       "name": "ClientAiConnections"
+    },
+    {
+      "name": "ClientProviderConnections"
+    },
+    {
+      "name": "ClientProviderScopes"
+    },
+    {
+      "name": "ClientReviewerIdentities"
     },
     {
       "name": "Clients"
@@ -11753,6 +14970,9 @@
     },
     {
       "name": "PromptOverrides"
+    },
+    {
+      "name": "ProviderWebhookReceiver"
     },
     {
       "name": "ReviewJobs"

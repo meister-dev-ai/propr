@@ -8,6 +8,13 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum ProCursorSourceKind
 {
+    /// <summary>
+    ///     Git repository source.
+    /// </summary>
     Repository = 0,
+
+    /// <summary>
+    ///     Azure DevOps wiki source.
+    /// </summary>
     AdoWiki = 1,
 }

@@ -23,8 +23,8 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     private static readonly Guid ClientId = Guid.Parse("cccccccc-1000-0000-0000-000000000001");
 
     private MeisterProPRDbContext _db = null!;
-    private ProCursorKnowledgeSourceRepository _knowledgeSources = null!;
     private ProCursorIndexJobRepository _jobs = null!;
+    private ProCursorKnowledgeSourceRepository _knowledgeSources = null!;
     private ProCursorIndexSnapshotRepository _snapshots = null!;
     private ProCursorSymbolGraphRepository _symbolGraph = null!;
 
@@ -39,13 +39,14 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
 
         if (!await this._db.Clients.AnyAsync(client => client.Id == ClientId))
         {
-            this._db.Clients.Add(new ClientRecord
-            {
-                Id = ClientId,
-                DisplayName = "ProCursor Test Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            this._db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = ClientId,
+                    DisplayName = "ProCursor Test Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             await this._db.SaveChangesAsync();
         }
 
@@ -123,12 +124,16 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     {
         var snapshot = await this.PersistReadySnapshotAsync();
 
-        await this._snapshots.ReplaceKnowledgeChunksAsync(snapshot.Id, [
-            CreateChunk(snapshot.Id, 0, "docs/first.md", V(1f, 0f)),
-        ]);
-        await this._snapshots.ReplaceKnowledgeChunksAsync(snapshot.Id, [
-            CreateChunk(snapshot.Id, 0, "docs/second.md", V(0f, 1f)),
-        ]);
+        await this._snapshots.ReplaceKnowledgeChunksAsync(
+            snapshot.Id,
+            [
+                CreateChunk(snapshot.Id, 0, "docs/first.md", V(1f, 0f)),
+            ]);
+        await this._snapshots.ReplaceKnowledgeChunksAsync(
+            snapshot.Id,
+            [
+                CreateChunk(snapshot.Id, 0, "docs/second.md", V(0f, 1f)),
+            ]);
 
         var chunks = await this._db.ProCursorKnowledgeChunks
             .Where(chunk => chunk.SnapshotId == snapshot.Id)
@@ -142,10 +147,12 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     public async Task ProCursorKnowledgeChunks_SupportCosineOrderingAgainstPersistedVectors()
     {
         var snapshot = await this.PersistReadySnapshotAsync();
-        await this._snapshots.ReplaceKnowledgeChunksAsync(snapshot.Id, [
-            CreateChunk(snapshot.Id, 0, "docs/near.md", V(1f, 0f, 0f)),
-            CreateChunk(snapshot.Id, 1, "docs/far.md", V(0f, 0f, 1f)),
-        ]);
+        await this._snapshots.ReplaceKnowledgeChunksAsync(
+            snapshot.Id,
+            [
+                CreateChunk(snapshot.Id, 0, "docs/near.md", V(1f, 0f, 0f)),
+                CreateChunk(snapshot.Id, 1, "docs/far.md", V(0f, 0f, 1f)),
+            ]);
 
         var queryVector = new Vector(V(0.99f, 0.01f, 0f));
 
@@ -221,7 +228,12 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     {
         var source = await this.PersistSourceWithBranchAsync();
         var branch = source.TrackedBranches.Single();
-        var snapshot = new ProCursorIndexSnapshot(Guid.NewGuid(), source.Id, branch.Id, Guid.NewGuid().ToString("N"), "full");
+        var snapshot = new ProCursorIndexSnapshot(
+            Guid.NewGuid(),
+            source.Id,
+            branch.Id,
+            Guid.NewGuid().ToString("N"),
+            "full");
         snapshot.MarkReady(1, 0, 0, false);
         await this._snapshots.AddAsync(snapshot);
         return snapshot;

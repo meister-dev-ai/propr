@@ -16,19 +16,25 @@ namespace MeisterProPR.Api.Tests;
 public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
     public Task DisposeAsync()
-        => Task.CompletedTask;
+    {
+        return Task.CompletedTask;
+    }
 
     public Task InitializeAsync()
-        => Task.CompletedTask;
+    {
+        return Task.CompletedTask;
+    }
 
     [SkippableFact]
-    public async Task Startup_PlaintextSecretsInDatabase_UpgradesRowsBeforeServingRequests()
+    public async Task Startup_PlaintextAiConnectionSecretsInDatabase_UpgradesRowsBeforeServingRequests()
     {
         fixture.SkipIfUnavailable();
 
         var clientId = Guid.NewGuid();
         var connectionId = Guid.NewGuid();
-        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterProPR.SecretEncryptionStartupTests.{Guid.NewGuid():N}");
+        var keysDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"MeisterProPR.SecretEncryptionStartupTests.{Guid.NewGuid():N}");
 
         Directory.CreateDirectory(keysDirectory);
 
@@ -40,27 +46,26 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
 
             await using (var db = new MeisterProPRDbContext(options))
             {
-                db.Clients.Add(new ClientRecord
-                {
-                    Id = clientId,
-                    DisplayName = $"Legacy Startup Client {clientId:N}",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    AdoTenantId = "tenant-id",
-                    AdoClientId = "client-id",
-                    AdoClientSecret = "legacy-ado-secret",
-                });
+                db.Clients.Add(
+                    new ClientRecord
+                    {
+                        Id = clientId,
+                        DisplayName = $"Legacy Startup Client {clientId:N}",
+                        IsActive = true,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
 
-                db.AiConnections.Add(new AiConnectionRecord
-                {
-                    Id = connectionId,
-                    ClientId = clientId,
-                    DisplayName = $"Legacy Startup Connection {connectionId:N}",
-                    EndpointUrl = "https://fake.openai.azure.com/",
-                    Models = ["gpt-4o"],
-                    ApiKey = "legacy-ai-key",
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
+                db.AiConnections.Add(
+                    new AiConnectionRecord
+                    {
+                        Id = connectionId,
+                        ClientId = clientId,
+                        DisplayName = $"Legacy Startup Connection {connectionId:N}",
+                        EndpointUrl = "https://fake.openai.azure.com/",
+                        Models = ["gpt-4o"],
+                        ApiKey = "legacy-ai-key",
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
 
                 await db.SaveChangesAsync();
             }
@@ -83,26 +88,20 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
 
             using var scope = factory.Services.CreateScope();
             var runtimeDb = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var credentialRepository = scope.ServiceProvider.GetRequiredService<IClientAdoCredentialRepository>();
             var aiConnectionRepository = scope.ServiceProvider.GetRequiredService<IAiConnectionRepository>();
 
-            var client = await runtimeDb.Clients.AsNoTracking().FirstAsync(c => c.Id == clientId);
             var connection = await runtimeDb.AiConnections.AsNoTracking().FirstAsync(c => c.Id == connectionId);
-            var credentials = await credentialRepository.GetByClientIdAsync(clientId, CancellationToken.None);
             var aiConnection = await aiConnectionRepository.GetByIdAsync(connectionId, CancellationToken.None);
 
-            Assert.NotNull(credentials);
             Assert.NotNull(aiConnection);
-            Assert.NotEqual("legacy-ado-secret", client.AdoClientSecret);
             Assert.NotEqual("legacy-ai-key", connection.ApiKey);
-            Assert.Equal("legacy-ado-secret", credentials.Secret);
             Assert.Equal("legacy-ai-key", aiConnection.ApiKey);
         }
         finally
         {
             if (Directory.Exists(keysDirectory))
             {
-                Directory.Delete(keysDirectory, recursive: true);
+                Directory.Delete(keysDirectory, true);
             }
         }
     }

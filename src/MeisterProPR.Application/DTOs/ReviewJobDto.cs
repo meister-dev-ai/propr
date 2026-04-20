@@ -20,8 +20,14 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="ProcessingStartedAt">When the job began processing, if applicable.</param>
 /// <param name="CompletedAt">When the job completed, if applicable.</param>
 /// <param name="ErrorMessage">Error message if the job failed.</param>
-/// <param name="TotalInputTokens">Total input tokens consumed across all AI calls in this review, from the protocol record.</param>
-/// <param name="TotalOutputTokens">Total output tokens generated across all AI calls in this review, from the protocol record.</param>
+/// <param name="TotalInputTokens">
+///     Total input tokens consumed across all AI calls in this review, from the protocol
+///     record.
+/// </param>
+/// <param name="TotalOutputTokens">
+///     Total output tokens generated across all AI calls in this review, from the protocol
+///     record.
+/// </param>
 public sealed record ReviewJobDto(
     Guid Id,
     Guid ClientId,

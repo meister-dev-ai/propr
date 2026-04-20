@@ -21,7 +21,7 @@ public sealed class AdminBootstrapService(
     /// <summary>
     ///     Creates the admin user from <c>MEISTER_BOOTSTRAP_ADMIN_USER</c> /
     ///     <c>MEISTER_BOOTSTRAP_ADMIN_PASSWORD</c> when no admin exists.
-    ///     Throws <see cref="InvalidOperationException"/> if the vars are absent and no admin user exists.
+    ///     Throws <see cref="InvalidOperationException" /> if the vars are absent and no admin user exists.
     /// </summary>
     public async Task SeedAsync(CancellationToken ct = default)
     {

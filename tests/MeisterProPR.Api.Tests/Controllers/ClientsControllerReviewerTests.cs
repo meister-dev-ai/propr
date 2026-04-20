@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -38,7 +39,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.OtherClientId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -53,7 +54,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientId}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
 
         var response = await httpClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -68,7 +69,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.Empty });
 
         var response = await httpClient.SendAsync(request);
@@ -81,7 +82,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{Guid.NewGuid()}/reviewer-identity");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.NewGuid() });
 
         var response = await httpClient.SendAsync(request);
@@ -95,7 +96,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         var reviewerId = Guid.NewGuid();
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
         request.Content = JsonContent.Create(new { reviewerId });
 
         var response = await httpClient.SendAsync(request);
@@ -122,7 +123,9 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         var reviewerId = Guid.NewGuid();
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.ClientId}/reviewer-identity");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
         request.Content = JsonContent.Create(new { reviewerId });
 
         var response = await httpClient.SendAsync(request);
@@ -135,8 +138,12 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
     {
         await factory.ResetReviewersAsync();
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"/clients/{factory.OtherClientId}/reviewer-identity");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"/clients/{factory.OtherClientId}/reviewer-identity");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
         request.Content = JsonContent.Create(new { reviewerId = Guid.NewGuid() });
 
         var response = await httpClient.SendAsync(request);
@@ -214,20 +221,21 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
-                ReplaceService(services, Substitute.For<IAdoTokenValidator>());
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
-                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientId, ClientRole.ClientAdministrator },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientId, ClientRole.ClientAdministrator },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != clientAdministratorUserId),
                         Arg.Any<CancellationToken>())
@@ -239,14 +247,6 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
 
-                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                adoCredentialRepository.UpsertAsync(Arg.Any<Guid>(), Arg.Any<ClientAdoCredentials>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                adoCredentialRepository.ClearAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.CompletedTask);
-                services.AddSingleton(adoCredentialRepository);
                 services.AddSingleton(Substitute.For<IJobRepository>());
             });
         }
@@ -283,7 +283,8 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", globalRole.ToString()),
                 ]),

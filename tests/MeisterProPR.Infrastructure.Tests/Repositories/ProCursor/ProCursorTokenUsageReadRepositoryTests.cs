@@ -2,7 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
-
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -25,9 +26,27 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(CreateEvent(clientId, sourceId, "Platform Wiki", "pcidx:test:embedding:0", new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero), 120, 0, 0.00012m));
-        db.ProCursorTokenUsageEvents.Add(CreateEvent(clientId, sourceId, "Platform Wiki", "pcidx:test:embedding:1", new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero), 80, 0, 0.00008m));
+        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        db.ProCursorTokenUsageEvents.Add(
+            CreateEvent(
+                clientId,
+                sourceId,
+                "Platform Wiki",
+                "pcidx:test:embedding:0",
+                new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                120,
+                0,
+                0.00012m));
+        db.ProCursorTokenUsageEvents.Add(
+            CreateEvent(
+                clientId,
+                sourceId,
+                "Platform Wiki",
+                "pcidx:test:embedding:1",
+                new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero),
+                80,
+                0,
+                0.00008m));
         await db.SaveChangesAsync();
 
         var repository = new ProCursorTokenUsageReadRepository(db);
@@ -36,7 +55,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
             clientId,
             new DateOnly(2026, 4, 4),
             new DateOnly(2026, 4, 4),
-            MeisterProPR.Domain.Enums.ProCursorTokenUsageGranularity.Daily,
+            ProCursorTokenUsageGranularity.Daily,
             "source");
 
         Assert.Equal(200, result.Totals.TotalTokens);
@@ -58,8 +77,24 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
             CreateSource(dominantSourceId, clientId, "Dominant Source", "repo-dominant"),
             CreateSource(smallerSourceId, clientId, "Smaller Source", "repo-smaller"));
         db.ProCursorTokenUsageEvents.AddRange(
-            CreateEvent(clientId, dominantSourceId, "Dominant Source", "top-source:0", new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero), 300, 0, 0.0003m),
-            CreateEvent(clientId, smallerSourceId, "Smaller Source", "top-source:1", new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero), 100, 0, 0.0001m));
+            CreateEvent(
+                clientId,
+                dominantSourceId,
+                "Dominant Source",
+                "top-source:0",
+                new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                300,
+                0,
+                0.0003m),
+            CreateEvent(
+                clientId,
+                smallerSourceId,
+                "Smaller Source",
+                "top-source:1",
+                new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero),
+                100,
+                0,
+                0.0001m));
         await db.SaveChangesAsync();
 
         var repository = new ProCursorTokenUsageReadRepository(db);
@@ -83,7 +118,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
+        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
         db.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
@@ -94,7 +129,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 120,
                 0,
                 0.00012m,
-                sourcePath: "/docs/intro.md"),
+                "/docs/intro.md"),
             CreateEvent(
                 clientId,
                 sourceId,
@@ -104,7 +139,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 60,
                 0,
                 0.00006m,
-                sourcePath: "/docs/setup.md"));
+                "/docs/setup.md"));
         await db.SaveChangesAsync();
 
         var repository = new ProCursorTokenUsageReadRepository(db);
@@ -131,8 +166,8 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         var otherSourceId = Guid.NewGuid();
 
         db.ProCursorKnowledgeSources.AddRange(
-            CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki),
-            CreateSource(otherSourceId, clientId, "Ignored Source", "wiki-b", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
+            CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki),
+            CreateSource(otherSourceId, clientId, "Ignored Source", "wiki-b", ProCursorSourceKind.AdoWiki));
         db.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
@@ -172,7 +207,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
             sourceId,
             new DateOnly(2026, 4, 4),
             new DateOnly(2026, 4, 4),
-            MeisterProPR.Domain.Enums.ProCursorTokenUsageGranularity.Daily);
+            ProCursorTokenUsageGranularity.Daily);
 
         Assert.NotNull(result);
         Assert.Equal("Platform Wiki", result!.SourceDisplayName);
@@ -183,7 +218,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         Assert.Equal("text-embedding-3-small", result.ByModel[1].ModelName);
         Assert.Single(result.Series);
         Assert.Equal(2, result.Series[0].Breakdown.Count);
-        Assert.Contains($"/admin/clients/{clientId}/procursor/sources/{sourceId}/token-usage/events", result.RecentEventsHref, StringComparison.Ordinal);
+        Assert.Contains(
+            $"/admin/clients/{clientId}/procursor/sources/{sourceId}/token-usage/events",
+            result.RecentEventsHref,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -194,7 +232,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         var sourceId = Guid.NewGuid();
         var chunkId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
+        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
         db.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
@@ -205,7 +243,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 120,
                 0,
                 0.00012m,
-                sourcePath: "/docs/intro.md",
+                "/docs/intro.md",
                 resourceId: "ado://wiki/intro",
                 knowledgeChunkId: chunkId),
             CreateEvent(
@@ -217,7 +255,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 60,
                 10,
                 0.00007m,
-                sourcePath: "/docs/setup.md",
+                "/docs/setup.md",
                 resourceId: "ado://wiki/setup"));
         await db.SaveChangesAsync();
 
@@ -242,17 +280,18 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         var sourceId = Guid.NewGuid();
         const string safeMetadataMarker = "private-safe-metadata-marker";
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(CreateEvent(
-            clientId,
-            sourceId,
-            "Platform Wiki",
-            "recent-events:safe-metadata",
-            new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
-            120,
-            0,
-            0.00012m,
-            safeMetadataJson: $"{{\"traceId\":\"{safeMetadataMarker}\"}}"));
+        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        db.ProCursorTokenUsageEvents.Add(
+            CreateEvent(
+                clientId,
+                sourceId,
+                "Platform Wiki",
+                "recent-events:safe-metadata",
+                new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                120,
+                0,
+                0.00012m,
+                safeMetadataJson: $"{{\"traceId\":\"{safeMetadataMarker}\"}}"));
         await db.SaveChangesAsync();
 
         var repository = new ProCursorTokenUsageReadRepository(db);
@@ -272,16 +311,17 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(CreateEvent(
-            clientId,
-            sourceId,
-            "Platform Wiki",
-            "recent-events:zero-limit",
-            new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
-            120,
-            0,
-            0.00012m));
+        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        db.ProCursorTokenUsageEvents.Add(
+            CreateEvent(
+                clientId,
+                sourceId,
+                "Platform Wiki",
+                "recent-events:zero-limit",
+                new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+                120,
+                0,
+                0.00012m));
         await db.SaveChangesAsync();
 
         var repository = new ProCursorTokenUsageReadRepository(db);
@@ -292,14 +332,14 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         Assert.Empty(result!.Items);
     }
 
-    private static MeisterProPR.Domain.Entities.ProCursorKnowledgeSource CreateSource(
+    private static ProCursorKnowledgeSource CreateSource(
         Guid sourceId,
         Guid clientId,
         string displayName,
         string repositoryId,
-        MeisterProPR.Domain.Enums.ProCursorSourceKind sourceKind = MeisterProPR.Domain.Enums.ProCursorSourceKind.Repository)
+        ProCursorSourceKind sourceKind = ProCursorSourceKind.Repository)
     {
-        return new MeisterProPR.Domain.Entities.ProCursorKnowledgeSource(
+        return new ProCursorKnowledgeSource(
             sourceId,
             clientId,
             displayName,
@@ -307,13 +347,13 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
             "https://dev.azure.com/test-org",
             "project-a",
             repositoryId,
-            sourceKind == MeisterProPR.Domain.Enums.ProCursorSourceKind.AdoWiki ? "wikiMain" : "main",
+            sourceKind == ProCursorSourceKind.AdoWiki ? "wikiMain" : "main",
             null,
             true,
             "auto");
     }
 
-    private static MeisterProPR.Domain.Entities.ProCursorTokenUsageEvent CreateEvent(
+    private static ProCursorTokenUsageEvent CreateEvent(
         Guid clientId,
         Guid sourceId,
         string sourceDisplayName,
@@ -328,14 +368,14 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
         Guid? knowledgeChunkId = null,
         string? safeMetadataJson = null)
     {
-        return new MeisterProPR.Domain.Entities.ProCursorTokenUsageEvent(
+        return new ProCursorTokenUsageEvent(
             Guid.NewGuid(),
             clientId,
             sourceId,
             sourceDisplayName,
             requestId,
             occurredAtUtc,
-            MeisterProPR.Domain.Enums.ProCursorTokenUsageCallType.Embedding,
+            ProCursorTokenUsageCallType.Embedding,
             modelName,
             modelName,
             "cl100k_base",

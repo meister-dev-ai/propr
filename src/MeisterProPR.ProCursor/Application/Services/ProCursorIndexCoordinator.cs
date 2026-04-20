@@ -89,7 +89,11 @@ public sealed partial class ProCursorIndexCoordinator(
 
             await embeddingService.EnsureConfigurationAsync(source.ClientId, ct);
 
-            var materializedSource = await materializer.MaterializeAsync(source, trackedBranch, job.RequestedCommitSha, ct);
+            var materializedSource = await materializer.MaterializeAsync(
+                source,
+                trackedBranch,
+                job.RequestedCommitSha,
+                ct);
             materializedRootDirectory = materializedSource.RootDirectory;
 
             trackedBranch.RecordSeenCommit(materializedSource.CommitSha);
@@ -97,7 +101,10 @@ public sealed partial class ProCursorIndexCoordinator(
 
             var existingSnapshot = await snapshotRepository.GetLatestReadyAsync(source.Id, trackedBranch.Id, ct);
             if (existingSnapshot is not null &&
-                string.Equals(existingSnapshot.CommitSha, materializedSource.CommitSha, StringComparison.OrdinalIgnoreCase))
+                string.Equals(
+                    existingSnapshot.CommitSha,
+                    materializedSource.CommitSha,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 trackedBranch.RecordIndexedCommit(materializedSource.CommitSha);
                 await knowledgeSourceRepository.UpdateAsync(source, ct);
@@ -132,8 +139,7 @@ public sealed partial class ProCursorIndexCoordinator(
 
             if (embeddings.Count != normalizedChunks.Count)
             {
-                throw new InvalidOperationException(
-                    $"Expected {normalizedChunks.Count} ProCursor embeddings but received {embeddings.Count}.");
+                throw new InvalidOperationException($"Expected {normalizedChunks.Count} ProCursor embeddings but received {embeddings.Count}.");
             }
 
             snapshot = new ProCursorIndexSnapshot(
@@ -226,7 +232,9 @@ public sealed partial class ProCursorIndexCoordinator(
         var trackedBranch = ResolveTrackedBranch(source, request.TrackedBranchId);
         await embeddingService.EnsureConfigurationAsync(source.ClientId, ct);
         var jobKind = string.IsNullOrWhiteSpace(request.JobKind) ? "refresh" : request.JobKind.Trim();
-        var requestedCommitSha = string.IsNullOrWhiteSpace(request.RequestedCommitSha) ? null : request.RequestedCommitSha.Trim();
+        var requestedCommitSha = string.IsNullOrWhiteSpace(request.RequestedCommitSha)
+            ? null
+            : request.RequestedCommitSha.Trim();
         var dedupKey = BuildDedupKey(source.Id, trackedBranch.Id, jobKind, requestedCommitSha);
 
         if (await indexJobRepository.HasActiveJobAsync(trackedBranch.Id, dedupKey, ct))
@@ -266,18 +274,19 @@ public sealed partial class ProCursorIndexCoordinator(
         for (var index = 0; index < extractedChunks.Count; index++)
         {
             var extractedChunk = extractedChunks[index];
-            knowledgeChunks.Add(new ProCursorKnowledgeChunk(
-                Guid.NewGuid(),
-                snapshotId,
-                extractedChunk.SourcePath,
-                extractedChunk.ChunkKind,
-                extractedChunk.Title,
-                extractedChunk.ChunkOrdinal,
-                extractedChunk.LineStart,
-                extractedChunk.LineEnd,
-                extractedChunk.ContentHash,
-                extractedChunk.ContentText,
-                embeddings[index]));
+            knowledgeChunks.Add(
+                new ProCursorKnowledgeChunk(
+                    Guid.NewGuid(),
+                    snapshotId,
+                    extractedChunk.SourcePath,
+                    extractedChunk.ChunkKind,
+                    extractedChunk.Title,
+                    extractedChunk.ChunkOrdinal,
+                    extractedChunk.LineStart,
+                    extractedChunk.LineEnd,
+                    extractedChunk.ContentHash,
+                    extractedChunk.ContentText,
+                    embeddings[index]));
         }
 
         return knowledgeChunks.AsReadOnly();

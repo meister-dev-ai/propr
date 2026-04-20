@@ -2,35 +2,23 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ClientModel;
+using System.Globalization;
 using Azure.AI.OpenAI;
 using Azure.Core;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
-using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Infrastructure.AI;
-using MeisterProPR.Infrastructure.Auth;
-using MeisterProPR.Infrastructure.AzureDevOps;
-using MeisterProPR.Infrastructure.AzureDevOps.Stub;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Options;
+using MeisterProPR.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Pgvector.EntityFrameworkCore;
-using ApplicationIAiReviewCore = MeisterProPR.Application.Interfaces.IAiReviewCore;
-using NoOpAdoCommentPoster = MeisterProPR.Infrastructure.AzureDevOps.Stub.NoOpAdoCommentPoster;
-using StubActivePrFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubActivePrFetcher;
-using StubAdoThreadClient = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadClient;
-using StubAdoThreadReplier = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubAdoThreadReplier;
-using StubPrStatusFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubPrStatusFetcher;
-using StubPullRequestFetcher = MeisterProPR.Infrastructure.AzureDevOps.Stub.StubPullRequestFetcher;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
 
@@ -48,7 +36,10 @@ public static class InfrastructureServiceExtensions
         return !string.IsNullOrWhiteSpace(configuration["DB_CONNECTION_STRING"]);
     }
 
-    public static IServiceCollection AddInfrastructureSupport(this IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
+    public static IServiceCollection AddInfrastructureSupport(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         var dbConnectionString = configuration["DB_CONNECTION_STRING"];
         var hasDatabaseConnectionString = configuration.HasDatabaseConnectionString();
@@ -63,8 +54,8 @@ public static class InfrastructureServiceExtensions
                         // EF tools 9.x generate snapshots that EF runtime 10.x flags as pending;
                         // the schema is correct — suppress the spurious warning.
                         .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
-                contextLifetime: ServiceLifetime.Scoped,
-                optionsLifetime: ServiceLifetime.Singleton);
+                ServiceLifetime.Scoped,
+                ServiceLifetime.Singleton);
 
             // Protocol recorder uses a factory so it can open short-lived contexts per event write.
             services.AddDbContextFactory<MeisterProPRDbContext>(options =>
@@ -73,63 +64,13 @@ public static class InfrastructureServiceExtensions
                     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
         }
 
-        services.AddSingleton<ISecretProtectionCodec, MeisterProPR.Infrastructure.Services.SecretProtectionCodec>();
+        services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
         services.AddScoped<EmbeddingDeploymentResolver>();
 
-        // ADO token validation (identity verification only).
-        // Set ADO_SKIP_TOKEN_VALIDATION=true in user secrets to bypass the real
-        // VSS endpoint during local development / testbed usage.
-        if (configuration.GetValue<bool>("ADO_SKIP_TOKEN_VALIDATION"))
-        {
-            services.AddSingleton<IAdoTokenValidator, PassThroughAdoTokenValidator>();
-        }
-        else
-        {
-            // Credential is needed for server-side JWT validation regardless of ADO_STUB_PR.
-            var validatorCredential = ResolveCredential(configuration);
-            services.AddHttpClient("AdoTokenValidator");
-            services.AddSingleton<IAdoTokenValidator>(sp =>
-                new AdoTokenValidator(
-                    sp.GetRequiredService<IHttpClientFactory>(),
-                    validatorCredential,
-                    sp.GetRequiredService<ILogger<AdoTokenValidator>>()));
-        }
-
-        // ADO operations
-        // Set ADO_STUB_PR=true in user secrets to use a fake PR and skip ADO comment posting
-        // during local development. The real AI endpoint is still called.
-        if (configuration.GetValue<bool>("ADO_STUB_PR"))
-        {
-            services.AddScoped<IPullRequestFetcher, StubPullRequestFetcher>();
-            services.AddScoped<IAdoCommentPoster, NoOpAdoCommentPoster>();
-            services.AddScoped<IAssignedPrFetcher, StubAssignedPrFetcher>();
-            services.AddScoped<IPrStatusFetcher, StubPrStatusFetcher>();
-            services.AddScoped<IIdentityResolver, StubIdentityResolver>();
-            services.AddScoped<IAdoReviewerManager, StubAdoReviewerManager>();
-            services.AddScoped<IActivePrFetcher, StubActivePrFetcher>();
-            services.AddScoped<IAdoThreadReplier, StubAdoThreadReplier>();
-            services.AddScoped<IAdoThreadClient, StubAdoThreadClient>();
-        }
-        else
-        {
-            var credential = ResolveCredential(configuration);
-            services.AddSingleton<VssConnectionFactory>(_ => new VssConnectionFactory(credential));
-            services.AddScoped<IPullRequestFetcher, AdoPrFetcher>();
-            services.AddScoped<IAdoCommentPoster, AdoCommentPoster>();
-            services.AddScoped<IAssignedPrFetcher, AdoAssignedPrFetcher>();
-            services.AddScoped<IPrStatusFetcher, AdoPrStatusFetcher>();
-            services.AddHttpClient("AdoIdentity");
-            services.AddScoped<IIdentityResolver>(sp =>
-                new AdoIdentityResolver(
-                    credential,
-                    sp.GetRequiredService<IHttpClientFactory>(),
-                    sp.GetRequiredService<IClientAdoCredentialRepository>()));
-            services.AddScoped<IAdoReviewerManager, AdoReviewerManager>();
-            services.AddScoped<IActivePrFetcher, AdoActivePrFetcher>();
-            services.AddScoped<IAdoThreadReplier, AdoThreadReplier>();
-            services.AddScoped<IAdoThreadClient, AdoThreadClient>();
-            services.AddScoped<IReviewerThreadStatusFetcher, AdoReviewerThreadStatusFetcher>();
-        }
+        // ADO operational services are composed behind provider-local registration.
+        var adoOperationalCredential =
+            configuration.GetValue<bool>("ADO_STUB_PR") ? null : ResolveCredential(configuration);
+        services.AddAzureDevOpsInfrastructureServices(configuration, adoOperationalCredential);
 
         // AiReviewOptions — bound from individual env vars (not a config section)
         services.AddOptions<AiReviewOptions>()
@@ -210,8 +151,11 @@ public static class InfrastructureServiceExtensions
                     opts.MemoryTopN = memTopN;
                 }
 
-                if (float.TryParse(configuration["AI_MEMORY_MIN_SIMILARITY"], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var memMinSim))
+                if (float.TryParse(
+                        configuration["AI_MEMORY_MIN_SIMILARITY"],
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out var memMinSim))
                 {
                     opts.MemoryMinSimilarity = memMinSim;
                 }
@@ -259,6 +203,7 @@ public static class InfrastructureServiceExtensions
                 (_, _) =>
                     CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"]));
         }
+
         services.AddSingleton<IAiEmbeddingGeneratorFactory, AiEmbeddingGeneratorFactory>();
 
         // Per-client AI connection factory (singleton — stateless, creates new clients on demand)

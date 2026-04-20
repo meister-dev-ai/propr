@@ -96,23 +96,25 @@ public sealed partial class ProCursorKnowledgeSourcesController(
                 new ProCursorKnowledgeSourceRegistrationRequest(
                     request.DisplayName,
                     request.SourceKind,
-                    request.OrganizationUrl,
-                    request.ProjectId,
+                    request.ProviderScopePath,
+                    request.ProviderProjectKey,
                     request.RepositoryId,
                     request.DefaultBranch,
                     request.RootPath,
                     request.SymbolMode,
                     request.TrackedBranches.Select(branch => new ProCursorTrackedBranchCreateRequest(
-                        branch.BranchName,
-                        branch.RefreshTriggerMode,
-                        branch.MiniIndexEnabled)).ToList().AsReadOnly(),
+                            branch.BranchName,
+                            branch.RefreshTriggerMode,
+                            branch.MiniIndexEnabled))
+                        .ToList()
+                        .AsReadOnly(),
                     request.OrganizationScopeId,
                     request.CanonicalSourceRef,
                     request.SourceDisplayName),
                 ct);
 
             LogSourceCreated(logger, clientId, source.Id);
-            return this.CreatedAtAction(nameof(ListSources), new { clientId }, MapSource(source));
+            return this.CreatedAtAction(nameof(this.ListSources), new { clientId }, MapSource(source));
         }
         catch (KeyNotFoundException)
         {
@@ -156,7 +158,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
 
         try
         {
-            var job = await proCursorGateway.QueueRefreshAsync(clientId, sourceId, request ?? new ProCursorRefreshRequest(), ct);
+            var job = await proCursorGateway.QueueRefreshAsync(
+                clientId,
+                sourceId,
+                request ?? new ProCursorRefreshRequest(),
+                ct);
             return this.Accepted(MapRefresh(job));
         }
         catch (KeyNotFoundException)
@@ -336,7 +342,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RemoveTrackedBranch(Guid clientId, Guid sourceId, Guid branchId, CancellationToken ct = default)
+    public async Task<IActionResult> RemoveTrackedBranch(
+        Guid clientId,
+        Guid sourceId,
+        Guid branchId,
+        CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
         if (auth is not null)
@@ -371,11 +381,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             this.ModelState.AddModelError(nameof(request.DisplayName), "DisplayName is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.OrganizationUrl))
+        if (string.IsNullOrWhiteSpace(request.ProviderScopePath))
         {
-            if (string.IsNullOrWhiteSpace(request.ProjectId))
+            if (string.IsNullOrWhiteSpace(request.ProviderProjectKey))
             {
-                this.ModelState.AddModelError(nameof(request.ProjectId), "ProjectId is required.");
+                this.ModelState.AddModelError(nameof(request.ProviderProjectKey), "ProviderProjectKey is required.");
             }
         }
 
@@ -397,36 +407,46 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         {
             if (!request.OrganizationScopeId.HasValue)
             {
-                this.ModelState.AddModelError(nameof(request.OrganizationScopeId), "OrganizationScopeId is required for guided source selection.");
+                this.ModelState.AddModelError(
+                    nameof(request.OrganizationScopeId),
+                    "OrganizationScopeId is required for guided source selection.");
             }
 
             if (request.CanonicalSourceRef is null)
             {
-                this.ModelState.AddModelError(nameof(request.CanonicalSourceRef), "CanonicalSourceRef is required for guided source selection.");
+                this.ModelState.AddModelError(
+                    nameof(request.CanonicalSourceRef),
+                    "CanonicalSourceRef is required for guided source selection.");
             }
             else
             {
                 if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Provider))
                 {
-                    this.ModelState.AddModelError(nameof(request.CanonicalSourceRef.Provider), "CanonicalSourceRef.Provider is required.");
+                    this.ModelState.AddModelError(
+                        nameof(request.CanonicalSourceRef.Provider),
+                        "CanonicalSourceRef.Provider is required.");
                 }
 
                 if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Value))
                 {
-                    this.ModelState.AddModelError(nameof(request.CanonicalSourceRef.Value), "CanonicalSourceRef.Value is required.");
+                    this.ModelState.AddModelError(
+                        nameof(request.CanonicalSourceRef.Value),
+                        "CanonicalSourceRef.Value is required.");
                 }
             }
 
             if (string.IsNullOrWhiteSpace(request.SourceDisplayName))
             {
-                this.ModelState.AddModelError(nameof(request.SourceDisplayName), "SourceDisplayName is required for guided source selection.");
+                this.ModelState.AddModelError(
+                    nameof(request.SourceDisplayName),
+                    "SourceDisplayName is required for guided source selection.");
             }
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(request.OrganizationUrl))
+            if (string.IsNullOrWhiteSpace(request.ProviderScopePath))
             {
-                this.ModelState.AddModelError(nameof(request.OrganizationUrl), "OrganizationUrl is required.");
+                this.ModelState.AddModelError(nameof(request.ProviderScopePath), "ProviderScopePath is required.");
             }
 
             if (string.IsNullOrWhiteSpace(request.RepositoryId))
@@ -444,20 +464,22 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             source.Id,
             source.DisplayName,
             source.SourceKind,
-            source.OrganizationUrl,
-            source.ProjectId,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
             source.RepositoryId,
             source.DefaultBranch,
             source.RootPath,
             source.SymbolMode,
             source.IsEnabled ? "enabled" : "disabled",
-            source.LatestSnapshot is null ? null : new ProCursorLatestSnapshotResponse(
-                source.LatestSnapshot.Id,
-                source.LatestSnapshot.BranchName,
-                source.LatestSnapshot.CommitSha,
-                source.LatestSnapshot.SupportsSymbolQueries,
-                source.LatestSnapshot.FreshnessStatus,
-                source.LatestSnapshot.CompletedAt),
+            source.LatestSnapshot is null
+                ? null
+                : new ProCursorLatestSnapshotResponse(
+                    source.LatestSnapshot.Id,
+                    source.LatestSnapshot.BranchName,
+                    source.LatestSnapshot.CommitSha,
+                    source.LatestSnapshot.SupportsSymbolQueries,
+                    source.LatestSnapshot.FreshnessStatus,
+                    source.LatestSnapshot.CompletedAt),
             source.OrganizationScopeId,
             source.CanonicalSourceRef,
             source.SourceDisplayName);
@@ -498,8 +520,8 @@ public sealed record ProCursorKnowledgeSourceResponse(
     Guid SourceId,
     string DisplayName,
     ProCursorSourceKind SourceKind,
-    string OrganizationUrl,
-    string ProjectId,
+    string ProviderScopePath,
+    string ProviderProjectKey,
     string RepositoryId,
     string DefaultBranch,
     string? RootPath,

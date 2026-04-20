@@ -13,8 +13,8 @@ public interface IJwtTokenService
     string GenerateAccessToken(AppUser user);
 
     /// <summary>
-    ///     Validates an access token and returns the associated <see cref="ClaimsPrincipal"/>,
-    ///     or <see langword="null"/> if the token is invalid or expired.
+    ///     Validates an access token and returns the associated <see cref="ClaimsPrincipal" />,
+    ///     or <see langword="null" /> if the token is invalid or expired.
     /// </summary>
     ClaimsPrincipal? ValidateAccessToken(string token);
 }

@@ -8,6 +8,12 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// </summary>
 public sealed record CanonicalSourceReference
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="CanonicalSourceReference"/> class.
+    /// </summary>
+    /// <param name="provider">The provider name.</param>
+    /// <param name="value">The reference value.</param>
+    /// <exception cref="ArgumentException">Thrown when provider or value is null or whitespace.</exception>
     public CanonicalSourceReference(string provider, string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
@@ -17,7 +23,13 @@ public sealed record CanonicalSourceReference
         this.Value = value.Trim();
     }
 
+    /// <summary>
+    ///     Gets the provider name.
+    /// </summary>
     public string Provider { get; }
 
+    /// <summary>
+    ///     Gets the reference value.
+    /// </summary>
     public string Value { get; }
 }

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
 
@@ -16,6 +17,18 @@ public interface IClientRegistry
     ///     or null if not configured or client not found.
     /// </summary>
     Task<Guid?> GetReviewerIdAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the configured provider reviewer identity for the given client and provider host,
+    ///     or <see langword="null" /> when no active connection or reviewer identity is configured.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="host">Normalized provider host for the active connection lookup.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ReviewerIdentity?> GetReviewerIdentityAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Returns the <see cref="CommentResolutionBehavior" /> configured for the given client,

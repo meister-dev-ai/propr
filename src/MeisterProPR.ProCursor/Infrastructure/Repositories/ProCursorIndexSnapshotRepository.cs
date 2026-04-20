@@ -67,7 +67,9 @@ public sealed class ProCursorIndexSnapshotRepository(MeisterProPRDbContext db) :
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ProCursorKnowledgeChunk>> ListKnowledgeChunksAsync(Guid snapshotId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorKnowledgeChunk>> ListKnowledgeChunksAsync(
+        Guid snapshotId,
+        CancellationToken ct = default)
     {
         return await db.ProCursorKnowledgeChunks
             .Where(chunk => chunk.SnapshotId == snapshotId)
@@ -77,7 +79,9 @@ public sealed class ProCursorIndexSnapshotRepository(MeisterProPRDbContext db) :
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(Guid knowledgeSourceId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProCursorIndexSnapshot>> ListBySourceAsync(
+        Guid knowledgeSourceId,
+        CancellationToken ct = default)
     {
         return await db.ProCursorIndexSnapshots
             .Where(snapshot => snapshot.KnowledgeSourceId == knowledgeSourceId)

@@ -3,6 +3,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -30,36 +31,67 @@ namespace MeisterProPR.Api.Tests.Controllers;
 public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.ReviewsApiFactory factory)
     : IClassFixture<ReviewsControllerPostTests.ReviewsApiFactory>
 {
-    private HttpRequestMessage CreateValidRequest(Guid clientId, string? token, string adoToken = "valid-ado-token")
+    private HttpRequestMessage CreateValidRequest(Guid clientId, string? token)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{clientId}/reviewing/jobs");
         if (!string.IsNullOrWhiteSpace(token))
         {
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        request.Headers.Add("X-Ado-Token", adoToken);
-        request.Content = JsonContent.Create(new
-        {
-            organizationUrl = "https://dev.azure.com/myorg",
-            projectId = "my-project",
-            repositoryId = "my-repo",
-            pullRequestId = 42,
-            iterationId = 1,
-        });
+        request.Content = JsonContent.Create(
+            new
+            {
+                provider = "azureDevOps",
+                hostBaseUrl = "https://dev.azure.com/myorg",
+                repository = new
+                {
+                    externalRepositoryId = "my-repo",
+                    ownerOrNamespace = "my-project",
+                    projectPath = "my-project",
+                },
+                codeReview = new
+                {
+                    platform = "pullRequest",
+                    externalReviewId = "42",
+                    number = 42,
+                },
+                reviewRevision = new
+                {
+                    headSha = "head-sha",
+                    baseSha = "base-sha",
+                    startSha = "base-sha",
+                    providerRevisionId = "1",
+                    patchIdentity = "base-sha...head-sha",
+                },
+            });
         return request;
     }
 
     [Fact]
-    public async Task PostReviews_InvalidAdoToken_Returns401()
+    public async Task PostReviews_LegacyAdoShape_Returns400()
     {
         await factory.ClearJobsAsync();
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        using var request = this.CreateValidRequest(factory.ClientId, factory.GenerateUserToken(factory.ClientAdministratorUserId), adoToken: "invalid-token");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{factory.ClientId}/reviewing/jobs");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(factory.ClientAdministratorUserId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                provider = "azureDevOps",
+                hostBaseUrl = "https://dev.azure.com/myorg",
+                organizationUrl = "https://dev.azure.com/myorg",
+                projectId = "my-project",
+                repositoryId = "my-repo",
+                pullRequestId = 42,
+                iterationId = 1,
+            });
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -68,7 +100,7 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
         await factory.ClearJobsAsync();
         var client = factory.CreateClient();
 
-        using var request = this.CreateValidRequest(factory.ClientId, token: null);
+        using var request = this.CreateValidRequest(factory.ClientId, null);
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -80,7 +112,9 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
         await factory.ClearJobsAsync();
         var client = factory.CreateClient();
 
-        using var request = this.CreateValidRequest(factory.ClientId, factory.GenerateUserToken(factory.ClientUserUserId));
+        using var request = this.CreateValidRequest(
+            factory.ClientId,
+            factory.GenerateUserToken(factory.ClientUserUserId));
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -115,7 +149,9 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
         await factory.ClearJobsAsync();
         var client = factory.CreateClient();
 
-        using var request = this.CreateValidRequest(factory.ClientId, factory.GenerateUserToken(factory.ClientAdministratorUserId));
+        using var request = this.CreateValidRequest(
+            factory.ClientId,
+            factory.GenerateUserToken(factory.ClientAdministratorUserId));
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -131,7 +167,9 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
         await prContextFactory.ClearJobsAsync();
         var client = prContextFactory.CreateClient();
 
-        using var request = this.CreateValidRequest(prContextFactory.ClientId, prContextFactory.GenerateUserToken(prContextFactory.ClientAdministratorUserId));
+        using var request = this.CreateValidRequest(
+            prContextFactory.ClientId,
+            prContextFactory.GenerateUserToken(prContextFactory.ClientAdministratorUserId));
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
@@ -151,7 +189,9 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
         await throwingFactory.ClearJobsAsync();
         var client = throwingFactory.CreateClient();
 
-        using var request = this.CreateValidRequest(throwingFactory.ClientId, throwingFactory.GenerateUserToken(throwingFactory.ClientAdministratorUserId));
+        using var request = this.CreateValidRequest(
+            throwingFactory.ClientId,
+            throwingFactory.GenerateUserToken(throwingFactory.ClientAdministratorUserId));
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
@@ -191,7 +231,8 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
             var descriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity([
+                Subject = new ClaimsIdentity(
+                [
                     new Claim("sub", userId.ToString()),
                     new Claim("global_role", AppUserRole.User.ToString()),
                 ]),
@@ -224,31 +265,28 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IJobRepository, JobRepository>();
 
-                var adoValidator = Substitute.For<IAdoTokenValidator>();
-                adoValidator.IsValidAsync("valid-ado-token", Arg.Any<string?>(), Arg.Any<CancellationToken>())
-                    .Returns(true);
-                adoValidator.IsValidAsync(Arg.Is<string>(value => value != "valid-ado-token"), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-                    .Returns(false);
-
-                ReplaceService(services, adoValidator);
                 ReplaceService(services, this.CreatePullRequestFetcher());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
-                ReplaceService(services, Substitute.For<IAssignedPrFetcher>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientId, ClientRole.ClientAdministrator },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientId, ClientRole.ClientAdministrator },
+                            }));
                 userRepo.GetUserClientRolesAsync(clientUserUserId, Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>
-                    {
-                        { clientId, ClientRole.ClientUser },
-                    }));
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientId, ClientRole.ClientUser },
+                            }));
                 userRepo.GetUserClientRolesAsync(
                         Arg.Is<Guid>(id => id != clientAdministratorUserId && id != clientUserUserId),
                         Arg.Any<CancellationToken>())
@@ -259,11 +297,6 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
-
-                var adoCredentialRepository = Substitute.For<IClientAdoCredentialRepository>();
-                adoCredentialRepository.GetByClientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<ClientAdoCredentials?>(null));
-                services.AddSingleton(adoCredentialRepository);
             });
         }
 
@@ -273,13 +306,14 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
 
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(new ClientRecord
-            {
-                Id = this.ClientId,
-                DisplayName = "Review Trigger Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = this.ClientId,
+                    DisplayName = "Review Trigger Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
             db.SaveChanges();
 
             return host;
@@ -317,18 +351,20 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
                     Arg.Any<int?>(),
                     Arg.Any<Guid?>(),
                     Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult(new PullRequest(
-                    "https://dev.azure.com/myorg",
-                    "my-project",
-                    "my-repo",
-                    "my-repo",
-                    77,
-                    1,
-                    "Add feature X",
-                    null,
-                    "feature/add-x",
-                    "main",
-                    [])));
+                .Returns(
+                    Task.FromResult(
+                        new PullRequest(
+                            "https://dev.azure.com/myorg",
+                            "my-project",
+                            "my-repo",
+                            "my-repo",
+                            77,
+                            1,
+                            "Add feature X",
+                            null,
+                            "feature/add-x",
+                            "main",
+                            [])));
             return prFetcher;
         }
     }

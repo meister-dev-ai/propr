@@ -4,9 +4,9 @@
 namespace MeisterProPR.Domain.Entities;
 
 /// <summary>
-///     Tracks the last processed commit (ADO iteration ID stored as a string) for a pull request
-///     per client, enabling the system to skip re-evaluation when no new commits have been pushed
-///     and to detect when thread replies require a conversational response (FR-001, FR-005).
+///     Tracks the last processed provider revision key for a pull request per client, enabling the
+///     system to skip re-evaluation when no new commits have been pushed and to detect when thread
+///     replies require a conversational response (FR-001, FR-005).
 ///     One row per (ClientId, RepositoryId, PullRequestId) triple.
 /// </summary>
 public sealed class ReviewPrScan
@@ -19,8 +19,9 @@ public sealed class ReviewPrScan
     /// <param name="repositoryId">ADO repository identifier — must not be null or whitespace.</param>
     /// <param name="pullRequestId">ADO pull request number — must be greater than zero.</param>
     /// <param name="lastProcessedCommitId">
-    ///     The identifier of the last commit (ADO iteration ID) processed for comment resolution.
-    ///     Must not be null or empty.
+    ///     The identifier of the last processed revision key. Azure DevOps stores the iteration ID
+    ///     string (for example, "3"), while provider-neutral flows may persist a non-numeric
+    ///     provider revision identifier or patch identity.
     /// </param>
     public ReviewPrScan(
         Guid id,
@@ -51,7 +52,9 @@ public sealed class ReviewPrScan
 
         if (string.IsNullOrEmpty(lastProcessedCommitId))
         {
-            throw new ArgumentException("LastProcessedCommitId must not be null or empty.", nameof(lastProcessedCommitId));
+            throw new ArgumentException(
+                "LastProcessedCommitId must not be null or empty.",
+                nameof(lastProcessedCommitId));
         }
 
         this.Id = id;
@@ -75,10 +78,10 @@ public sealed class ReviewPrScan
     public int PullRequestId { get; init; }
 
     /// <summary>
-    ///     The identifier of the last commit processed for comment resolution.
-    ///     Stored as the ADO iteration ID string (e.g. "3"). If the current PR iteration
-    ///     differs from this value, new commits have been pushed and comment resolution
-    ///     should be re-evaluated.
+    ///     The identifier of the last processed revision key.
+    ///     Azure DevOps stores the iteration ID string (for example, "3"); provider-neutral flows
+    ///     may persist a non-numeric provider revision identifier or patch identity. If the current
+    ///     pull request revision differs from this value, comment resolution should be re-evaluated.
     /// </summary>
     public string LastProcessedCommitId { get; set; }
 
