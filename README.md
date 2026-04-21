@@ -136,6 +136,7 @@ token refresh automatically.
 |------------------------------------|---------------|---------------------------------------------------------------------------------|
 | `DB_CONNECTION_STRING`             | Yes           | PostgreSQL connection string; required for all persistent state                 |
 | `MEISTER_DATA_PROTECTION_KEYS_PATH`| Docker default| File-system path used for the ASP.NET Core Data Protection key ring             |
+| `MEISTER_PUBLIC_BASE_URL`          | Optional      | Public external base URL used when generating webhook listener URLs behind proxies |
 | `MEISTER_JWT_SECRET`               | Yes           | HS256 signing secret — minimum 32 characters                                    |
 | `MEISTER_BOOTSTRAP_ADMIN_USER`     | Yes           | Username for the initial admin account seeded on first startup                  |
 | `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Yes           | Password for the initial admin account                                          |

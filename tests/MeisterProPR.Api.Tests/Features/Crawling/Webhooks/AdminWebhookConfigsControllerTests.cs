@@ -92,6 +92,49 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
         Assert.Equal(1, body.GetProperty("repoFilters").GetArrayLength());
     }
 
+    [Fact]
+    public async Task PostWebhookConfiguration_WithPublicBaseUrl_ReturnsProxyListenerUrl()
+    {
+        using var customFactory = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("MEISTER_PUBLIC_BASE_URL", "https://propr.example.com"));
+        var client = customFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/webhook-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(
+            new
+            {
+                clientId = factory.TestClientId,
+                provider = "azureDevOps",
+                organizationScopeId = factory.GuidedOrganizationScopeId,
+                providerProjectKey = "GuidedProject",
+                enabledEvents = new[] { "pullRequestCreated" },
+                repoFilters = new[]
+                {
+                    new
+                    {
+                        displayName = "Repository One",
+                        canonicalSourceRef = new
+                        {
+                            provider = "azureDevOps",
+                            value = "repo-1",
+                        },
+                        targetBranchPatterns = new[] { "main" },
+                    },
+                },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.StartsWith(
+            "https://propr.example.com/webhooks/v1/providers/ado/",
+            body.GetProperty("listenerUrl").GetString(),
+            StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("gitLab", "https://gitlab.example.com", "acme/platform", "gitlab")]
     [InlineData("forgejo", "https://codeberg.org", "acme-labs", "forgejo")]

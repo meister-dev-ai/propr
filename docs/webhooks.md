@@ -30,6 +30,8 @@ Create the webhook configuration (ProPR Admin UI)
 6. Select which events to enable (Pull Request Created, Updated, Commented).  
 7. Create the configuration. The UI returns a **listener URL** and a one-time **generated secret** — copy the generated secret now (it is shown only once).  
 
+If ProPR runs behind a reverse proxy and the generated `listenerUrl` points at an internal backend host, set `MEISTER_PUBLIC_BASE_URL` on the API to the public proxy base URL so newly generated listener URLs use the externally reachable host.
+
 Register the service hook in Azure DevOps
 
 1. In Azure DevOps, open the target project and go to **Project settings → Service hooks**.  
@@ -147,6 +149,7 @@ Troubleshooting (common issues & fixes)
 
 - Authorization failed / missing: verify the Azure DevOps service hook is configured to use Basic auth and that the password equals the ProPR generated secret, or verify the GitLab webhook is using the Secret token field so GitLab sends `X-Gitlab-Token`. You can re-generate a secret in the Admin UI and update the webhook if needed.  
 - Listener unreachable: ensure your ProPR instance is reachable from Azure DevOps (public URL, correct port, HTTPS).  
+- Listener URL shows the backend host instead of the public proxy: set `MEISTER_PUBLIC_BASE_URL` on the API to the public reverse-proxy base URL and recreate or update the webhook using the newly generated listener URL.  
 - "A project name is required…": see the section above about repo vs project identifiers. Use canonical repository GUIDs when possible.  
 - No review jobs queued: confirm ProPR has a working database and the background workers are running (the Admin UI and `/healthz` endpoint help verify).  
 - Check deliveries: open **Admin → Webhook Configurations → {your config} → Deliveries** to see recent webhook deliveries, outcomes, and failure reasons.

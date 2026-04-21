@@ -10,6 +10,7 @@ using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -23,6 +24,7 @@ public sealed partial class AdminWebhookConfigsController(
     IScmProviderRegistry providerRegistry,
     IWebhookSecretGenerator webhookSecretGenerator,
     ISecretProtectionCodec secretProtectionCodec,
+    IConfiguration configuration,
     ILogger<AdminWebhookConfigsController> logger,
     IProviderActivationService? providerActivationService = null) : ControllerBase
 {
@@ -149,15 +151,26 @@ public sealed partial class AdminWebhookConfigsController(
 
     private string BuildListenerUrl(WebhookProviderType provider, string pathKey)
     {
-        var pathBase = this.Request.PathBase.HasValue ? this.Request.PathBase.Value : string.Empty;
         var providerSegment = GetProviderPathSegment(provider);
-        if (string.IsNullOrWhiteSpace(this.Request.Scheme) || !this.Request.Host.HasValue)
+        var listenerPath = $"/webhooks/v1/providers/{providerSegment}/{pathKey}";
+        var publicBaseUrl = configuration["MEISTER_PUBLIC_BASE_URL"];
+
+        if (Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var publicBaseUri))
         {
-            return $"{pathBase}/webhooks/v1/providers/{providerSegment}/{pathKey}";
+            var normalizedBaseUrl = publicBaseUri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
+                ? publicBaseUri.AbsoluteUri
+                : publicBaseUri.AbsoluteUri + "/";
+
+            return new Uri(new Uri(normalizedBaseUrl, UriKind.Absolute), listenerPath.TrimStart('/')).ToString();
         }
 
-        return
-            $"{this.Request.Scheme}://{this.Request.Host}{pathBase}/webhooks/v1/providers/{providerSegment}/{pathKey}";
+        var pathBase = this.Request.PathBase.HasValue ? this.Request.PathBase.Value : string.Empty;
+        if (string.IsNullOrWhiteSpace(this.Request.Scheme) || !this.Request.Host.HasValue)
+        {
+            return $"{pathBase}{listenerPath}";
+        }
+
+        return $"{this.Request.Scheme}://{this.Request.Host}{pathBase}{listenerPath}";
     }
 
     private async Task<(Guid? OrganizationScopeId, string OrganizationUrl)> ResolveOrganizationSelectionAsync(
