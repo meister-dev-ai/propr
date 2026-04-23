@@ -90,10 +90,10 @@ public sealed class ProCursorEmbeddingService(
             ct);
 
         var generator = embeddingGeneratorFactory.CreateGenerator(
-            deployment.Connection.EndpointUrl,
+            deployment.Connection.BaseUrl,
             deployment.DeploymentName,
-            deployment.Connection.ApiKey,
-            deployment.Capability.EmbeddingDimensions);
+            deployment.Connection.Secret,
+            deployment.Model.EmbeddingDimensions ?? deployment.Capability.EmbeddingDimensions);
 
         var embeddings = new List<float[]>(inputs.Count);
         var currentBatch = new List<string>();

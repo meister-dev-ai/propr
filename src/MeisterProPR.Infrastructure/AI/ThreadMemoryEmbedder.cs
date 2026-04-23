@@ -4,6 +4,7 @@
 using System.Text;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,8 @@ public sealed partial class ThreadMemoryEmbedder(
     IOptions<AiReviewOptions> options,
     IChatClient? chatClient = null,
     IAiChatClientFactory? aiChatClientFactory = null,
-    ILogger<ThreadMemoryEmbedder>? logger = null) : IThreadMemoryEmbedder
+    ILogger<ThreadMemoryEmbedder>? logger = null,
+    IAiRuntimeResolver? aiRuntimeResolver = null) : IThreadMemoryEmbedder
 {
     private const string FallbackSummary =
         "Thread was resolved. No AI-generated summary could be produced at this time.";
@@ -51,9 +53,9 @@ public sealed partial class ThreadMemoryEmbedder(
         }
 
         var generator = embeddingGeneratorFactory.CreateGenerator(
-            deployment.Connection.EndpointUrl,
+            deployment.Connection.BaseUrl,
             deployment.DeploymentName,
-            deployment.Connection.ApiKey,
+            deployment.Connection.Secret,
             deployment.Capability.EmbeddingDimensions);
 
         var result = await generator.GenerateAsync([compositeText], cancellationToken: ct);
@@ -73,21 +75,35 @@ public sealed partial class ThreadMemoryEmbedder(
 
         if (effectiveChatClient is null)
         {
-            if (aiChatClientFactory is null)
+            if (aiRuntimeResolver is not null)
+            {
+                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+                    clientId,
+                    AiPurpose.MemoryReconsideration,
+                    ct);
+                modelId = runtime.Model.RemoteModelId;
+                effectiveChatClient = runtime.ChatClient;
+            }
+            else if (aiChatClientFactory is null)
             {
                 return FallbackSummary;
             }
 
-            var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
-            if (activeConnection is null)
+            if (effectiveChatClient is null)
             {
-                return FallbackSummary;
-            }
+                var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
+                if (activeConnection is null)
+                {
+                    return FallbackSummary;
+                }
 
-            modelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault() ?? modelId;
-            effectiveChatClient = aiChatClientFactory.CreateClient(
-                activeConnection.EndpointUrl,
-                activeConnection.ApiKey);
+                modelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration)
+                          ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
+                          ?? modelId;
+                effectiveChatClient = aiChatClientFactory!.CreateClient(
+                    activeConnection.BaseUrl,
+                    activeConnection.Secret);
+            }
         }
 
         try

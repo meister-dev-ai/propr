@@ -3,10 +3,10 @@
 
 <template>
   <div class="provider-tab-layout">
-    <section class="section-card provider-connections-card">
+    <div v-if="!selectedConnectionId" class="section-card provider-connections-card">
       <div class="section-card-header">
         <div>
-          <h3>Provider Connections</h3>
+          <h3>SCM Providers</h3>
           <p class="section-subtitle">Manage connection hosts, verification status, selected scopes, and reviewer identities for enabled provider families on this client.</p>
         </div>
         <div class="section-card-header-actions">
@@ -20,127 +20,184 @@
         <p v-if="providerOptionsError" class="error provider-options-note">{{ providerOptionsError }}</p>
         <p v-else-if="!hasEnabledProviderOptions" class="muted provider-options-note">No provider families are currently enabled for new client connections.</p>
         <ProviderConnectionForm
-        v-if="showCreateForm"
-        mode="create"
-        :form="createForm"
-        :provider-options="providerOptions"
-        :busy="saving"
-        :error="createError"
-        submit-label="Save Connection"
-        busy-label="Saving…"
-        submit-button-class="btn-primary provider-create-submit"
-        @submit="handleCreateConnection"
-      />
+          v-if="showCreateForm"
+          mode="create"
+          :form="createForm"
+          :provider-options="providerOptions"
+          :busy="saving"
+          :error="createError"
+          submit-label="Save Connection"
+          busy-label="Saving…"
+          submit-button-class="btn-primary provider-create-submit"
+          @submit="handleCreateConnection"
+        />
 
-      <div v-if="loading" class="loading-state">
-        <span>Loading provider connections…</span>
-      </div>
-      <div v-else-if="error" class="error-state">
-        <p>{{ error }}</p>
-        <button class="btn-secondary" @click="loadConnections">Try Again</button>
-      </div>
-      <div v-else-if="connections.length === 0" class="empty-state compact-empty-state">
-        <h3>No provider connections yet</h3>
-        <p>Add the first enabled provider connection for this client.</p>
-      </div>
-      <div v-else class="provider-connection-list">
-        <article
-          v-for="connection in connections"
-          :key="connection.id"
-          class="provider-connection-item"
-          :class="{ selected: connection.id === selectedConnectionId }"
-        >
-          <div class="provider-connection-main" @click="selectedConnectionId = selectedConnectionId === connection.id ? null : connection.id">
-            <div class="provider-connection-heading">
-              <div>
-                <h4>{{ connection.displayName }}</h4>
-                <p>{{ connection.hostBaseUrl }}</p>
-              </div>
-              <div class="provider-connection-chips">
-                <span class="chip chip-muted chip-sm">{{ formatProvider(connection.providerFamily) }}</span>
-                <span :class="['chip', connection.isActive ? 'chip-success' : 'chip-muted', 'chip-sm']">
-                  {{ connection.isActive ? 'Active' : 'Inactive' }}
-                </span>
-                <span :class="['chip', verificationChipClass(connection.verificationStatus), 'chip-sm']">
-                  {{ formatVerification(connection.verificationStatus) }}
-                </span>
-                <span :class="['chip', readinessChipClass(connection.readinessLevel ?? 'unknown'), 'chip-sm']">
-                  {{ formatReadiness(connection.readinessLevel ?? 'unknown') }}
-                </span>
+        <div v-if="loading" class="loading-state">
+          <span>Loading provider connections…</span>
+        </div>
+        <div v-else-if="error" class="error-state">
+          <p>{{ error }}</p>
+          <button class="btn-secondary" @click="loadConnections">Try Again</button>
+        </div>
+        <div v-else-if="connections.length === 0" class="empty-state compact-empty-state">
+          <h3>No SCM provider connections yet</h3>
+          <p>Add the first enabled provider connection for this client.</p>
+        </div>
+        <div v-else class="provider-connection-list">
+          <article
+            v-for="connection in connections"
+            :key="connection.id"
+            class="provider-connection-item compact-provider-card"
+            @click="openConnectionDetail(connection.id)"
+          >
+            <div class="provider-connection-main">
+              <div class="provider-connection-heading">
+                <div>
+                  <h4>{{ connection.displayName }}</h4>
+                  <p class="provider-url">{{ connection.hostBaseUrl }}</p>
+                </div>
+                <div class="provider-connection-chips">
+                  <span class="chip chip-muted chip-sm">{{ formatProvider(connection.providerFamily) }}</span>
+                  <span :class="['chip', connection.isActive ? 'chip-success' : 'chip-muted', 'chip-sm']">
+                    {{ connection.isActive ? 'Active' : 'Inactive' }}
+                  </span>
+                  <span :class="['chip', verificationChipClass(connection.verificationStatus), 'chip-sm']">
+                    {{ formatVerification(connection.verificationStatus) }}
+                  </span>
+                  <span :class="['chip', readinessChipClass(connection.readinessLevel ?? 'unknown'), 'chip-sm']">
+                    {{ formatReadiness(connection.readinessLevel ?? 'unknown') }}
+                  </span>
+                </div>
               </div>
             </div>
-            <p v-if="connection.readinessReason" class="provider-inline-readiness">{{ connection.readinessReason }}</p>
-            <ul v-if="connection.missingReadinessCriteria?.length" class="provider-inline-readiness-list">
-              <li v-for="criterion in connection.missingReadinessCriteria" :key="criterion">{{ criterion }}</li>
-            </ul>
-            <p v-if="connection.lastVerificationError" class="error provider-inline-error">{{ connection.lastVerificationError }}</p>
-          </div>
-          <div class="provider-connection-actions">
-            <button class="btn-secondary btn-sm" @click="startEdit(connection)">Edit</button>
-            <button class="btn-secondary btn-sm" :disabled="busyConnectionId === connection.id" @click="handleVerifyConnection(connection.id)">
-              Verify
-            </button>
-            <button class="btn-danger btn-sm" :disabled="busyConnectionId === connection.id" @click="handleDeleteConnection(connection.id)">
-              Delete
-            </button>
-          </div>
-
-          <ProviderConnectionForm
-            v-if="editingConnectionId === connection.id"
-            mode="edit"
-            :form="editForm"
-            :busy="busyConnectionId === connection.id"
-            :error="editError"
-            submit-label="Save Changes"
-            busy-label="Saving…"
-            submit-button-class="btn-primary btn-sm"
-            :show-cancel="true"
-            @submit="handleSaveConnectionEdit(connection.id)"
-            @cancel="cancelEdit"
-          />
-        </article>
-      </div>
-      </div>
-    </section>
-
-    <section v-if="selectedConnection" class="section-card provider-detail-card">
-      <div class="section-card-header">
-        <div>
-          <h3>{{ selectedConnection.displayName }}</h3>
-          <p class="section-subtitle">Selected scopes and reviewer identity for {{ selectedConnection.hostBaseUrl }}.</p>
+          </article>
         </div>
       </div>
+    </div>
 
-      <div class="section-card-body">
-        <div class="provider-detail-grid">
-        <ProviderScopePicker
-          :scopes="scopes"
-          :form="scopeForm"
-          :provider-family="selectedConnection.providerFamily"
-          :loading="scopesLoading"
-          :saving="scopeSaving"
-          :error="scopeError"
-          @create="handleCreateScope"
-          @toggle="toggleScope"
-          @delete="handleDeleteScope"
-        />
+    <div v-else class="provider-detail-shell">
+      <Teleport to="#provider-sidebar-target">
+        <button class="back-link" @click="closeConnectionDetail" style="background: none; border: none; padding: 0; cursor: pointer; text-align: left; margin-bottom: 2rem;">
+          <i class="fi fi-rr-arrow-left"></i> Back to list
+        </button>
 
-        <ReviewerIdentityPicker
-          :reviewer-identity="reviewerIdentity"
-          :reviewer-candidates="reviewerCandidates"
-          :reviewer-search="reviewerSearch"
-          :selected-reviewer-external-user-id="selectedReviewerExternalUserId"
-          :busy="reviewerLoading"
-          :error="reviewerError"
-          @update:reviewer-search="reviewerSearch = $event"
-          @update:selected-reviewer-external-user-id="selectedReviewerExternalUserId = $event"
-          @resolve="resolveReviewerCandidatesForSelectedConnection"
-          @clear="handleClearReviewerIdentity"
-          @save="handleSaveReviewerIdentity"
-        />
-      </div>
-      </div>
-    </section>
+        <div class="detail-page-title" style="margin-bottom: 1.5rem;">
+          <h2 style="font-size: 1.25rem; margin-bottom: 0.25rem;">{{ selectedConnection?.displayName || 'Unknown' }}</h2>
+          <p class="detail-page-subtitle" style="font-size: 0.85rem; margin: 0; color: var(--color-text-muted);">{{ selectedConnection?.hostBaseUrl }}</p>
+        </div>
+
+        <div class="sidebar-nav">
+          <div class="sidebar-nav-group">
+            <h4>Configuration</h4>
+            <button class="sidebar-nav-link" :class="{ active: detailActiveTab === 'settings' }" @click="detailActiveTab = 'settings'">
+              <i class="fi fi-rr-settings"></i> Settings
+            </button>
+            <button class="sidebar-nav-link" :class="{ active: detailActiveTab === 'scopes' }" @click="detailActiveTab = 'scopes'">
+              <i class="fi fi-rr-folder"></i> Scopes
+            </button>
+            <button class="sidebar-nav-link" :class="{ active: detailActiveTab === 'identity' }" @click="detailActiveTab = 'identity'">
+              <i class="fi fi-rr-user"></i> Reviewer Identity
+            </button>
+            <button class="sidebar-nav-link" :class="{ active: detailActiveTab === 'audit' }" @click="detailActiveTab = 'audit'">
+              <i class="fi fi-rr-list-check"></i> Audit & Status
+            </button>
+          </div>
+        </div>
+      </Teleport>
+
+      <main class="provider-detail-content">
+        <div v-show="detailActiveTab === 'settings'">
+          <section class="section-card provider-detail-card">
+            <div class="section-card-header">
+              <div>
+                <h3>Connection Settings</h3>
+                <p class="section-subtitle">Update connection host, credentials, and activation state.</p>
+              </div>
+            </div>
+            <div class="section-card-body">
+              <ProviderConnectionForm
+                mode="edit"
+                :form="editForm"
+                :busy="busyConnectionId === selectedConnectionId"
+                :error="editError"
+                submit-label="Save Changes"
+                busy-label="Saving…"
+                submit-button-class="btn-primary btn-sm"
+                :show-cancel="false"
+                @submit="handleSaveConnectionEdit(selectedConnectionId)"
+              />
+              
+              <hr class="provider-divider" />
+              
+              <div class="provider-actions-row">
+                <button class="btn-secondary btn-sm" :disabled="busyConnectionId === selectedConnectionId" @click="handleVerifyConnection(selectedConnectionId)">
+                  Verify Connection
+                </button>
+                <button class="btn-danger btn-sm" :disabled="busyConnectionId === selectedConnectionId" @click="handleDeleteConnection(selectedConnectionId)">
+                  Delete Connection
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div v-show="detailActiveTab === 'scopes'">
+          <section class="section-card provider-detail-card">
+            <div class="section-card-header">
+              <div>
+                <h3>Scopes</h3>
+                <p class="section-subtitle">Manage selected scopes for {{ selectedConnection?.hostBaseUrl }}.</p>
+              </div>
+            </div>
+            <div class="section-card-body">
+              <ProviderScopePicker
+                v-if="selectedConnection"
+                :scopes="scopes"
+                :form="scopeForm"
+                :provider-family="selectedConnection.providerFamily"
+                :loading="scopesLoading"
+                :saving="scopeSaving"
+                :error="scopeError"
+                @create="handleCreateScope"
+                @toggle="toggleScope"
+                @delete="handleDeleteScope"
+              />
+            </div>
+          </section>
+        </div>
+
+        <div v-show="detailActiveTab === 'identity'">
+          <section class="section-card provider-detail-card">
+            <div class="section-card-header">
+              <div>
+                <h3>Reviewer Identity</h3>
+                <p class="section-subtitle">Assign a reviewer identity for {{ selectedConnection?.hostBaseUrl }}.</p>
+              </div>
+            </div>
+            <div class="section-card-body">
+              <ReviewerIdentityPicker
+                :reviewer-identity="reviewerIdentity"
+                :reviewer-candidates="reviewerCandidates"
+                :reviewer-search="reviewerSearch"
+                :selected-reviewer-external-user-id="selectedReviewerExternalUserId"
+                :busy="reviewerLoading"
+                :error="reviewerError"
+                @update:reviewer-search="reviewerSearch = $event"
+                @update:selected-reviewer-external-user-id="selectedReviewerExternalUserId = $event"
+                @resolve="resolveReviewerCandidatesForSelectedConnection"
+                @clear="handleClearReviewerIdentity"
+                @save="handleSaveReviewerIdentity"
+              />
+            </div>
+          </section>
+        </div>
+
+        <div v-show="detailActiveTab === 'audit'" class="provider-operations-stack">
+            <ProviderConnectionStatusList :clientId="clientId" :connectionId="selectedConnectionId" />
+            <ProviderConnectionAuditTrail :clientId="clientId" :connectionId="selectedConnectionId" />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -183,6 +240,10 @@ const props = defineProps<{
   clientId: string
 }>()
 
+const emit = defineEmits<{
+  (e: 'update:isDetailOpen', value: boolean): void
+}>()
+
 const { notify } = useNotification()
 
 const connections = ref<ClientScmConnectionDto[]>([])
@@ -208,6 +269,23 @@ const selectedConnectionId = ref<string | null>(null)
 const editingConnectionId = ref<string | null>(null)
 const reviewerSearch = ref('')
 const selectedReviewerExternalUserId = ref<string | null>(null)
+const detailActiveTab = ref('settings')
+
+function openConnectionDetail(connectionId: string) {
+  selectedConnectionId.value = connectionId
+  detailActiveTab.value = 'settings'
+  emit('update:isDetailOpen', true)
+  const connection = connections.value.find((c) => c.id === connectionId)
+  if (connection) {
+    startEdit(connection)
+  }
+}
+
+function closeConnectionDetail() {
+  selectedConnectionId.value = null
+  emit('update:isDetailOpen', false)
+  cancelEdit()
+}
 let scopesLoadRequestVersion = 0
 let reviewerIdentityLoadRequestVersion = 0
 
@@ -363,9 +441,6 @@ async function loadConnections() {
 
   try {
     connections.value = await listProviderConnections(props.clientId)
-    if (!selectedConnectionId.value || !connections.value.some(connection => connection.id === selectedConnectionId.value)) {
-      selectedConnectionId.value = connections.value[0]?.id ?? null
-    }
   } catch (loadError) {
     error.value = loadError instanceof Error ? loadError.message : 'Failed to load provider connections.'
   } finally {
@@ -748,6 +823,71 @@ function readinessChipClass(readinessLevel: ProviderConnectionReadinessLevel): s
 </script>
 
 <style scoped>
+.provider-detail-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.provider-detail-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.provider-detail-nav-copy {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.provider-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.provider-operations-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.compact-provider-card {
+  padding: 1rem 1.25rem;
+  transition: background 0.2s, transform 0.1s;
+  cursor: pointer;
+}
+
+.compact-provider-card:hover {
+  background: var(--color-surface-hover);
+}
+
+.provider-url {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
+  margin-bottom: 0;
+}
+
+.provider-divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5rem 0;
+}
+
+.provider-actions-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .provider-detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .provider-tab-layout {
   display: grid;
   gap: 1rem;

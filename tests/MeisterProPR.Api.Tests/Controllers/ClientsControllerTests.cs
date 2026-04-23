@@ -354,6 +354,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
+                services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
 
                 // IUserRepository stub (GetClients now injects it for non-admin JWT users)
                 var userRepo = Substitute.For<IUserRepository>();

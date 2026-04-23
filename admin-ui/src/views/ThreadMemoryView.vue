@@ -2,34 +2,28 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
 <template>
-  <div class="page-view thread-memory-view">
-    <div class="view-header">
-      <h2 class="view-title gradient-text">Memory</h2>
-      <p class="view-subtitle">Manage resolved PR comment threads and vector embeddings.</p>
-    </div>
+  <div class="page-with-sidebar thread-memory-view">
+    <aside class="page-sidebar">
+      <div class="detail-page-title" style="margin-bottom: 1.5rem;">
+        <h2 class="view-title gradient-text" style="font-size: 1.75rem; margin-bottom: 0;">Memory</h2>
+        <p class="detail-page-subtitle" style="margin-top: 0.25rem;">Manage resolved PR comment threads and vector embeddings.</p>
+      </div>
 
-    <!-- Segmented Tab Navigation -->
-    <div class="segmented-control glass">
-      <button 
-        class="segmented-btn" 
-        :class="{ active: activeTab === 'embeddings' }" 
-        @click="activeTab = 'embeddings'"
-      >
-        <i class="fi fi-rr-brain"></i> 
-        <span>Stored Embeddings</span>
-      </button>
-      <button 
-        class="segmented-btn" 
-        :class="{ active: activeTab === 'log' }" 
-        @click="activeTab = 'log'"
-      >
-        <i class="fi fi-rr-list-check"></i> 
-        <span>Activity Log</span>
-      </button>
-      <div class="segmented-slider" :style="{ left: activeTab === 'embeddings' ? '4px' : 'calc(50% + 2px)' }"></div>
-    </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-nav-group">
+          <h4>Memory Data</h4>
+          <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'embeddings' }" @click="activeTab = 'embeddings'">
+            <i class="fi fi-rr-brain"></i> Stored Embeddings
+          </button>
+          <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'log' }" @click="activeTab = 'log'">
+            <i class="fi fi-rr-list-check"></i> Activity Log
+          </button>
+        </div>
+      </div>
+    </aside>
 
-    <div class="main-layout">
+    <main class="page-main-content">
+      <div class="main-layout">
       <div class="content-area">
         <!-- Stored Embeddings Tab -->
         <Transition name="fade-slide" mode="out-in">
@@ -321,7 +315,8 @@
           </div>
         </div>
       </Transition>
-    </div>
+      </div>
+    </main>
 
     <!-- Delete Confirm -->
     <ConfirmDialog
@@ -489,10 +484,7 @@ function formatDateShort(iso: string): string {
 
 <style scoped>
 .thread-memory-view {
-  display: flex;
-  flex-direction: column;
   height: 100%;
-  max-width: 1200px;
 }
 
 .view-header {

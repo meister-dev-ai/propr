@@ -25,7 +25,7 @@
     </div>
     <div v-else class="status-list">
       <article
-        v-for="item in items"
+        v-for="item in filteredItems"
         :key="item.connectionId"
         :data-testid="`provider-status-row-${item.connectionId}`"
         class="status-item"
@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   listProviderOperationalStatus,
   type ProviderConnectionStatusItem,
@@ -75,15 +75,20 @@ import type { ScmProviderFamily } from '@/services/providerConnectionsService'
 
 const props = defineProps<{
   clientId: string
+  connectionId?: string
 }>()
 
 const items = ref<ProviderConnectionStatusItem[]>([])
+const filteredItems = computed(() => {
+  if (!props.connectionId) return items.value
+  return items.value.filter((i) => i.connectionId === props.connectionId)
+})
 const loading = ref(false)
 const error = ref('')
 
 watch(
-  () => props.clientId,
-  clientId => {
+  () => [props.clientId, props.connectionId],
+  ([clientId]) => {
     if (!clientId) {
       items.value = []
       return

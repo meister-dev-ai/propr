@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MeisterProPR.Api.Tests;
 using MeisterProPR.Api.Tests.Controllers;
 
 namespace MeisterProPR.Api.Tests.Features.Clients;
@@ -56,7 +57,6 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
                 clientId = "client-id-abc",
                 secret = "super-secret-value",
             });
-
         var putResponse = await http.SendAsync(putRequest);
 
         Assert.Equal(HttpStatusCode.NotFound, putResponse.StatusCode);
@@ -74,9 +74,10 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
     }
 }
 
-public sealed class ClientsAiConnectionsModuleIntegrationTests(ClientAiConnectionsControllerTests.AiConnectionsApiFactory factory)
-    : IClassFixture<ClientAiConnectionsControllerTests.AiConnectionsApiFactory>
+public sealed class ClientsAiConnectionsModuleIntegrationTests(ClientsControllerTests.ClientsApiFactory factory)
+    : IClassFixture<ClientsControllerTests.ClientsApiFactory>
 {
+
     [Fact]
     public async Task CreateAiConnection_ThenListConnections_ReturnsPersistedSanitizedConnection()
     {
@@ -91,9 +92,49 @@ public sealed class ClientsAiConnectionsModuleIntegrationTests(ClientAiConnectio
             new
             {
                 displayName,
-                endpointUrl = "https://fake.openai.azure.com/",
-                models = new[] { "gpt-4o" },
-                apiKey = "sk-test-secret",
+                providerKind = "azureOpenAi",
+                baseUrl = "https://azure.example/openai/",
+                auth = new
+                {
+                    mode = "apiKey",
+                    apiKey = "top-secret",
+                },
+                discoveryMode = "manualOnly",
+                configuredModels = new object[]
+                {
+                    new
+                    {
+                        remoteModelId = "gpt-4o",
+                        displayName = "gpt-4o",
+                        operationKinds = new[] { "chat" },
+                        supportedProtocolModes = new[] { "auto", "responses", "chatCompletions" },
+                        supportsStructuredOutput = true,
+                        supportsToolUse = true,
+                        source = "manual",
+                    },
+                    new
+                    {
+                        remoteModelId = "text-embedding-3-large",
+                        displayName = "text-embedding-3-large",
+                        operationKinds = new[] { "embedding" },
+                        supportedProtocolModes = new[] { "auto", "embeddings" },
+                        tokenizerName = "cl100k_base",
+                        maxInputTokens = 8192,
+                        embeddingDimensions = 3072,
+                        supportsStructuredOutput = false,
+                        supportsToolUse = false,
+                        source = "manual",
+                    },
+                },
+                purposeBindings = new object[]
+                {
+                    new { purpose = "reviewDefault", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                    new { purpose = "reviewLowEffort", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                    new { purpose = "reviewMediumEffort", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                    new { purpose = "reviewHighEffort", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                    new { purpose = "memoryReconsideration", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                    new { purpose = "embeddingDefault", remoteModelId = "text-embedding-3-large", protocolMode = "embeddings", isEnabled = true },
+                },
             });
 
         var createResponse = await http.SendAsync(createRequest);

@@ -30,7 +30,8 @@ public sealed partial class ThreadMemoryService(
     ILogger<ThreadMemoryService> logger,
     IChatClient? chatClient = null,
     IAiConnectionRepository? aiConnectionRepository = null,
-    IAiChatClientFactory? aiChatClientFactory = null) : IThreadMemoryService
+    IAiChatClientFactory? aiChatClientFactory = null,
+    IAiRuntimeResolver? aiRuntimeResolver = null) : IThreadMemoryService
 {
     private const double HistoricalTextFallbackThreshold = 0.72;
     private const string EmbeddingDegradedComponent = "thread_memory_embedding";
@@ -553,22 +554,36 @@ public sealed partial class ThreadMemoryService(
 
         if (effectiveChatClient is null)
         {
-            if (aiConnectionRepository is null || aiChatClientFactory is null)
+            if (aiRuntimeResolver is not null)
+            {
+                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+                    clientId,
+                    AiPurpose.MemoryReconsideration,
+                    ct);
+                effectiveModelId = runtime.Model.RemoteModelId;
+                effectiveChatClient = runtime.ChatClient;
+            }
+
+            if (effectiveChatClient is null && (aiConnectionRepository is null || aiChatClientFactory is null))
             {
                 return null;
             }
 
-            var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
-            if (activeConnection is null)
+            if (effectiveChatClient is null)
             {
-                return null;
-            }
+                var activeConnection = await aiConnectionRepository!.GetActiveForClientAsync(clientId, ct);
+                if (activeConnection is null)
+                {
+                    return null;
+                }
 
-            effectiveModelId = activeConnection.ActiveModel ??
-                               activeConnection.Models.FirstOrDefault() ?? effectiveModelId;
-            effectiveChatClient = aiChatClientFactory.CreateClient(
-                activeConnection.EndpointUrl,
-                activeConnection.ApiKey);
+                effectiveModelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration) ??
+                                   activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId ??
+                                   effectiveModelId;
+                effectiveChatClient = aiChatClientFactory!.CreateClient(
+                    activeConnection.BaseUrl,
+                    activeConnection.Secret);
+            }
         }
 
         try

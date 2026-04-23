@@ -241,7 +241,8 @@ public class ReviewOrchestrationServiceTests
         ICodeReviewQueryService? queryService = null,
         IReviewThreadStatusWriter? threadStatusWriter = null,
         IReviewThreadReplyPublisher? threadReplyPublisher = null,
-        IProviderActivationService? providerActivationService = null)
+        IProviderActivationService? providerActivationService = null,
+        IAiRuntimeResolver? aiRuntimeResolver = null)
     {
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
@@ -275,7 +276,8 @@ public class ReviewOrchestrationServiceTests
             logger,
             aiDependencies.aiRepo,
             aiDependencies.chatFactory,
-            providerActivationService: providerActivationService);
+            providerActivationService: providerActivationService,
+            aiRuntimeResolver: aiRuntimeResolver);
     }
 
     private static Task AssertReviewPublishedAsync(
@@ -380,15 +382,7 @@ public class ReviewOrchestrationServiceTests
     private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
     {
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = new AiConnectionDto(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "Test Connection",
-            "https://api.test.com/",
-            ["gpt-4o"],
-            true,
-            "gpt-4o",
-            DateTimeOffset.UtcNow);
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), modelId: "gpt-4o");
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
 
@@ -572,21 +566,18 @@ public class ReviewOrchestrationServiceTests
             .Returns(CreateReviewResult());
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var activeConnection = new AiConnectionDto(
-            Guid.NewGuid(),
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
+        var activeConnection = AiConnectionTestFactory.CreateConnection(
             job.ClientId,
-            "Client Connection",
-            "https://api.test.com/",
-            ["gpt-4.1"],
-            true,
-            null,
-            DateTimeOffset.UtcNow);
+            [model],
+            [],
+            displayName: "Client Connection");
         aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(activeConnection));
 
         var chatClient = Substitute.For<IChatClient>();
         var chatFactory = Substitute.For<IAiChatClientFactory>();
-        chatFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey).Returns(chatClient);
+        chatFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret).Returns(chatClient);
 
         var service = CreateService(
             jobs,
@@ -611,6 +602,75 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_WithRuntimeResolver_UsesResolvedRuntimeWithoutReadingActiveConnection()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var aiRepo = Substitute.For<IAiConnectionRepository>();
+        var chatClient = Substitute.For<IChatClient>();
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model);
+        var connection = AiConnectionTestFactory.CreateConnection(job.ClientId, [model], [binding]);
+        var resolvedRuntime = Substitute.For<IResolvedAiChatRuntime>();
+        resolvedRuntime.Connection.Returns(connection);
+        resolvedRuntime.Model.Returns(model);
+        resolvedRuntime.Binding.Returns(binding);
+        resolvedRuntime.ChatClient.Returns(chatClient);
+
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(resolvedRuntime);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            aiRepo: aiRepo,
+            chatFactory: Substitute.For<IAiChatClientFactory>(),
+            aiRuntimeResolver: aiRuntimeResolver);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await aiRuntimeResolver.Received(1)
+            .ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>());
+        await aiRepo.DidNotReceive().GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .UpdateAiConfigAsync(job.Id, connection.Id, model.RemoteModelId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_ActiveConnectionWithoutAnyAvailableModel_FailsJobBeforeReviewDispatch()
     {
         // Arrange
@@ -625,15 +685,7 @@ public class ReviewOrchestrationServiceTests
         aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<AiConnectionDto?>(
-                    new AiConnectionDto(
-                        Guid.NewGuid(),
-                        job.ClientId,
-                        "Broken Connection",
-                        "https://api.test.com/",
-                        [],
-                        true,
-                        null,
-                        DateTimeOffset.UtcNow)));
+                    AiConnectionTestFactory.CreateConnection(job.ClientId, [], [], displayName: "Broken Connection")));
 
         var chatFactory = Substitute.For<IAiChatClientFactory>();
 

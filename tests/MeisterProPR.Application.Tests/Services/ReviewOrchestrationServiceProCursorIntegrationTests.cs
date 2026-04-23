@@ -217,16 +217,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(
-                new AiConnectionDto(
-                    Guid.NewGuid(),
-                    job.ClientId,
-                    "Test Connection",
-                    "https://ai.test.local",
-                    ["gpt-4o"],
-                    true,
-                    "gpt-4o",
-                    DateTimeOffset.UtcNow));
+            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, modelId: "gpt-4o", baseUrl: "https://ai.test.local"));
 
         var chatClientFactory = Substitute.For<IAiChatClientFactory>();
         chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())

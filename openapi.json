@@ -2195,12 +2195,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Lists all AI connections for the specified client.",
+        "summary": "Lists all AI connection profiles for the specified client.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2210,7 +2209,7 @@
         ],
         "responses": {
           "200": {
-            "description": "List of AI connections (API keys are never returned).",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2239,7 +2238,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2259,7 +2258,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2284,12 +2283,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Creates a new AI connection for the specified client.",
+        "summary": "Creates a new AI connection profile for the specified client.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2298,7 +2296,6 @@
           }
         ],
         "requestBody": {
-          "description": "AI connection details.",
           "content": {
             "application/json": {
               "schema": {
@@ -2319,7 +2316,7 @@
         },
         "responses": {
           "201": {
-            "description": "AI connection created.",
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2339,7 +2336,7 @@
             }
           },
           "400": {
-            "description": "Validation failure.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2359,7 +2356,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2379,7 +2376,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2406,12 +2403,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Updates non-null fields of an AI connection.",
+        "summary": "Updates an existing AI connection profile for the specified client.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2421,7 +2417,6 @@
           {
             "name": "connectionId",
             "in": "path",
-            "description": "AI connection identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2430,7 +2425,6 @@
           }
         ],
         "requestBody": {
-          "description": "Fields to update; omit a field to leave it unchanged.",
           "content": {
             "application/json": {
               "schema": {
@@ -2451,7 +2445,7 @@
         },
         "responses": {
           "200": {
-            "description": "AI connection updated.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2471,7 +2465,7 @@
             }
           },
           "400": {
-            "description": "Validation failure.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2491,7 +2485,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2511,7 +2505,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2531,7 +2525,7 @@
             }
           },
           "404": {
-            "description": "AI connection not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2556,12 +2550,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Deletes an AI connection.",
+        "summary": "Deletes an AI connection profile.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2571,7 +2564,6 @@
           {
             "name": "connectionId",
             "in": "path",
-            "description": "AI connection identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2581,10 +2573,10 @@
         ],
         "responses": {
           "204": {
-            "description": "AI connection deleted."
+            "description": "No Content"
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2604,7 +2596,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2624,7 +2616,7 @@
             }
           },
           "404": {
-            "description": "AI connection not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2651,12 +2643,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Activates the specified AI connection with the given model deployment.",
+        "summary": "Activates a verified AI connection profile after validating the minimum runtime bindings.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2666,7 +2657,6 @@
           {
             "name": "connectionId",
             "in": "path",
-            "description": "AI connection identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2674,29 +2664,9 @@
             }
           }
         ],
-        "requestBody": {
-          "description": "Activation request containing the model to use.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ActivateAiConnectionRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ActivateAiConnectionRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ActivateAiConnectionRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "AI connection activated.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2716,7 +2686,7 @@
             }
           },
           "400": {
-            "description": "Model not in the connection's model list.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2736,7 +2706,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2756,7 +2726,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2776,7 +2746,7 @@
             }
           },
           "404": {
-            "description": "AI connection not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2803,12 +2773,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Deactivates the specified AI connection.",
+        "summary": "Deactivates an AI connection profile.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2818,7 +2787,6 @@
           {
             "name": "connectionId",
             "in": "path",
-            "description": "AI connection identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -2828,7 +2796,7 @@
         ],
         "responses": {
           "200": {
-            "description": "AI connection deactivated.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2848,7 +2816,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2868,7 +2836,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2888,7 +2856,117 @@
             }
           },
           "404": {
-            "description": "AI connection not found.",
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/ai-connections/{connectionId}/verify": {
+      "post": {
+        "tags": [
+          "ClientAiConnections"
+        ],
+        "summary": "Verifies the saved provider profile and updates its verification snapshot.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2915,12 +2993,11 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Probes the given endpoint URL with the supplied API key and returns the list of available\nmodel deployment names. Returns an empty list when the endpoint is unreachable or returns\nno deployments — the caller should surface this as a warning, not an error.",
+        "summary": "Discovers provider models using the supplied unsaved profile settings.",
         "parameters": [
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier (used for auth).",
             "required": true,
             "schema": {
               "type": "string",
@@ -2929,7 +3006,6 @@
           }
         ],
         "requestBody": {
-          "description": "Endpoint URL and API key to probe.",
           "content": {
             "application/json": {
               "schema": {
@@ -2950,27 +3026,27 @@
         },
         "responses": {
           "200": {
-            "description": "List of model deployment names (may be empty).",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiscoverModelsResponse"
+                  "$ref": "#/components/schemas/AiModelDiscoveryResultDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiscoverModelsResponse"
+                  "$ref": "#/components/schemas/AiModelDiscoveryResultDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiscoverModelsResponse"
+                  "$ref": "#/components/schemas/AiModelDiscoveryResultDto"
                 }
               }
             }
           },
           "400": {
-            "description": "Validation failure.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2990,7 +3066,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3010,7 +3086,7 @@
             }
           },
           "403": {
-            "description": "Caller does not own this client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6059,7 +6135,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
+        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client\naccess.",
         "parameters": [
           {
             "name": "limit",
@@ -6157,7 +6233,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.",
+        "summary": "Returns all review jobs across all clients, newest first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client\naccess.",
         "parameters": [
           {
             "name": "limit",
@@ -11141,17 +11217,6 @@
   },
   "components": {
     "schemas": {
-      "ActivateAiConnectionRequest": {
-        "type": "object",
-        "properties": {
-          "model": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Request body for activating an AI connection with a specific model."
-      },
       "AdoBranchOptionDto": {
         "type": "object",
         "properties": {
@@ -11228,6 +11293,190 @@
         "additionalProperties": false,
         "description": "A repository or wiki option discovered for one project."
       },
+      "AiAuthMode": {
+        "enum": [
+          "apiKey",
+          "azureIdentity"
+        ],
+        "type": "string",
+        "description": "Authentication modes supported by AI providers."
+      },
+      "AiConfiguredModelDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "remoteModelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "operationKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiOperationKind"
+            },
+            "nullable": true
+          },
+          "supportedProtocolModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProtocolMode"
+            },
+            "nullable": true
+          },
+          "tokenizerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxInputTokens": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "embeddingDimensions": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "supportsStructuredOutput": {
+            "type": "boolean"
+          },
+          "supportsToolUse": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AiConfiguredModelSource"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "inputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "outputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "supportsChat": {
+            "type": "boolean",
+            "description": "Returns true when the model supports chat workloads.",
+            "readOnly": true
+          },
+          "supportsEmbedding": {
+            "type": "boolean",
+            "description": "Returns true when the model supports embeddings.",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One configured or discovered model that belongs to an AI connection profile."
+      },
+      "AiConfiguredModelRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "operationKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiOperationKind"
+            },
+            "nullable": true
+          },
+          "supportedProtocolModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProtocolMode"
+            },
+            "nullable": true
+          },
+          "tokenizerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxInputTokens": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "embeddingDimensions": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "supportsStructuredOutput": {
+            "type": "boolean"
+          },
+          "supportsToolUse": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AiConfiguredModelSource"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "inputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "outputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Configured model payload item for create, update, and discovery flows."
+      },
+      "AiConfiguredModelSource": {
+        "enum": [
+          "discovered",
+          "manual",
+          "knownCatalog"
+        ],
+        "type": "string",
+        "description": "Origin of a configured model entry."
+      },
+      "AiConnectionAuthRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/AiAuthMode"
+          },
+          "apiKey": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Authentication settings for one AI connection profile request."
+      },
       "AiConnectionDto": {
         "type": "object",
         "properties": {
@@ -11246,119 +11495,72 @@
             "description": "Human-readable display name.",
             "nullable": true
           },
-          "endpointUrl": {
+          "providerKind": {
+            "$ref": "#/components/schemas/AiProviderKind"
+          },
+          "baseUrl": {
             "type": "string",
-            "description": "Azure OpenAI or AI Foundry endpoint URL.",
+            "description": "Exact configured provider base URL.",
             "nullable": true
           },
-          "models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Available model deployment names.",
-            "nullable": true
+          "authMode": {
+            "$ref": "#/components/schemas/AiAuthMode"
+          },
+          "discoveryMode": {
+            "$ref": "#/components/schemas/AiDiscoveryMode"
           },
           "isActive": {
             "type": "boolean",
-            "description": "Whether this is the active connection for the client."
+            "description": "Whether this is the active profile for the client."
           },
-          "activeModel": {
-            "type": "string",
-            "description": "Selected model when active; null otherwise.",
+          "configuredModels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConfiguredModelDto"
+            },
+            "description": "Configured models owned by this profile.",
             "nullable": true
+          },
+          "purposeBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiPurposeBindingDto"
+            },
+            "description": "Purpose bindings owned by this profile.",
+            "nullable": true
+          },
+          "verification": {
+            "$ref": "#/components/schemas/AiVerificationResultDto"
           },
           "createdAt": {
             "type": "string",
             "description": "When created.",
             "format": "date-time"
           },
-          "modelCategory": {
-            "$ref": "#/components/schemas/AiConnectionModelCategory"
+          "updatedAt": {
+            "type": "string",
+            "description": "When last updated.",
+            "format": "date-time"
           },
-          "modelCapabilities": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConnectionModelCapabilityDto"
+          "defaultHeaders": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
             },
-            "description": "Optional per-deployment embedding capability metadata.",
+            "description": "Optional default headers appended by the driver.",
+            "nullable": true
+          },
+          "defaultQueryParams": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Optional default query parameters appended by the driver.",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Data transfer object for an AI connection. The API key is excluded from JSON serialization."
-      },
-      "AiConnectionModelCapabilityDto": {
-        "type": "object",
-        "properties": {
-          "modelName": {
-            "type": "string",
-            "description": "Deployment/model name as configured on the AI connection.",
-            "nullable": true
-          },
-          "tokenizerName": {
-            "type": "string",
-            "description": "Tokenizer family used to count embedding input tokens.",
-            "nullable": true
-          },
-          "maxInputTokens": {
-            "type": "integer",
-            "description": "Maximum total input tokens allowed per embedding request.",
-            "format": "int32"
-          },
-          "embeddingDimensions": {
-            "type": "integer",
-            "description": "Embedding vector width returned by the deployment.",
-            "format": "int32"
-          },
-          "inputCostPer1MUsd": {
-            "type": "number",
-            "description": "Optional USD price per one million prompt/input tokens.",
-            "format": "double",
-            "nullable": true
-          },
-          "outputCostPer1MUsd": {
-            "type": "number",
-            "description": "Optional USD price per one million completion/output tokens.",
-            "format": "double",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Per-deployment embedding capability metadata configured for an AI connection."
-      },
-      "AiConnectionModelCapabilityRequest": {
-        "type": "object",
-        "properties": {
-          "modelName": {
-            "type": "string",
-            "nullable": true
-          },
-          "tokenizerName": {
-            "type": "string",
-            "nullable": true
-          },
-          "maxInputTokens": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "embeddingDimensions": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "inputCostPer1MUsd": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "outputCostPer1MUsd": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "One per-deployment embedding capability payload item for create or update requests."
+        "description": "Data transfer object for a provider-neutral AI connection profile."
       },
       "AiConnectionModelCategory": {
         "enum": [
@@ -11371,6 +11573,211 @@
         ],
         "type": "string",
         "description": "Model category tag for an `AiConnection`.\nAllows clients to configure a dedicated AI endpoint per file complexity tier.\nWhen a connection with a matching category is present, the orchestrator uses it\ninstead of the default active connection for that tier."
+      },
+      "AiDiscoveryMode": {
+        "enum": [
+          "providerCatalog",
+          "manualOnly"
+        ],
+        "type": "string",
+        "description": "Controls whether operators rely on provider discovery or manual model entry."
+      },
+      "AiModelDiscoveryResultDto": {
+        "type": "object",
+        "properties": {
+          "discoveryStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "manualEntryAllowed": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConfiguredModelDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Normalized model discovery payload returned by provider drivers."
+      },
+      "AiOperationKind": {
+        "enum": [
+          "chat",
+          "embedding"
+        ],
+        "type": "string",
+        "description": "Supported AI operation categories."
+      },
+      "AiProtocolMode": {
+        "enum": [
+          "auto",
+          "responses",
+          "chatCompletions",
+          "embeddings"
+        ],
+        "type": "string",
+        "description": "Provider protocol mode used for a configured model binding."
+      },
+      "AiProviderKind": {
+        "enum": [
+          "azureOpenAi",
+          "openAi",
+          "liteLlm"
+        ],
+        "type": "string",
+        "description": "Supported AI provider families."
+      },
+      "AiPurpose": {
+        "enum": [
+          "reviewDefault",
+          "reviewLowEffort",
+          "reviewMediumEffort",
+          "reviewHighEffort",
+          "memoryReconsideration",
+          "embeddingDefault"
+        ],
+        "type": "string",
+        "description": "Product-owned AI purposes that resolve to configured models."
+      },
+      "AiPurposeBindingDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/AiPurpose"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/AiProtocolMode"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One configured AI purpose binding for an AI connection profile."
+      },
+      "AiPurposeBindingRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/AiPurpose"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/AiProtocolMode"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Purpose binding payload item for create and update flows."
+      },
+      "AiVerificationFailureCategory": {
+        "enum": [
+          "credentials",
+          "endpointReachability",
+          "authorization",
+          "providerRejected",
+          "capabilityMismatch",
+          "unknown"
+        ],
+        "type": "string",
+        "description": "Normalized failure categories for provider verification and runtime diagnostics."
+      },
+      "AiVerificationResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/AiVerificationStatus"
+          },
+          "failureCategory": {
+            "$ref": "#/components/schemas/AiVerificationFailureCategory"
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "actionHint": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "driverMetadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Normalized verification result for one AI connection profile."
+      },
+      "AiVerificationStatus": {
+        "enum": [
+          "neverVerified",
+          "verified",
+          "failed"
+        ],
+        "type": "string",
+        "description": "Latest verification state for one AI connection profile."
       },
       "AppUserRole": {
         "enum": [
@@ -11988,34 +12395,50 @@
             "type": "string",
             "nullable": true
           },
-          "endpointUrl": {
+          "providerKind": {
+            "$ref": "#/components/schemas/AiProviderKind"
+          },
+          "baseUrl": {
             "type": "string",
             "nullable": true
           },
-          "models": {
-            "type": "array",
-            "items": {
+          "auth": {
+            "$ref": "#/components/schemas/AiConnectionAuthRequest"
+          },
+          "discoveryMode": {
+            "$ref": "#/components/schemas/AiDiscoveryMode"
+          },
+          "defaultHeaders": {
+            "type": "object",
+            "additionalProperties": {
               "type": "string"
             },
             "nullable": true
           },
-          "apiKey": {
-            "type": "string",
-            "nullable": true
-          },
-          "modelCapabilities": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiConnectionModelCapabilityRequest"
+          "defaultQueryParams": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
             },
             "nullable": true
           },
-          "modelCategory": {
-            "$ref": "#/components/schemas/AiConnectionModelCategory"
+          "configuredModels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiConfiguredModelRequest"
+            },
+            "nullable": true
+          },
+          "purposeBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiPurposeBindingRequest"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for creating a new AI connection."
+        "description": "Request body for creating a provider-neutral AI connection profile."
       },
       "CreateClientProviderConnectionRequest": {
         "type": "object",
@@ -12155,31 +12578,33 @@
       "DiscoverModelsRequest": {
         "type": "object",
         "properties": {
-          "endpointUrl": {
+          "providerKind": {
+            "$ref": "#/components/schemas/AiProviderKind"
+          },
+          "baseUrl": {
             "type": "string",
             "nullable": true
           },
-          "apiKey": {
-            "type": "string",
+          "auth": {
+            "$ref": "#/components/schemas/AiConnectionAuthRequest"
+          },
+          "defaultHeaders": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
             "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Request body for probing an AI endpoint to discover available model deployments."
-      },
-      "DiscoverModelsResponse": {
-        "type": "object",
-        "properties": {
-          "models": {
-            "type": "array",
-            "items": {
+          },
+          "defaultQueryParams": {
+            "type": "object",
+            "additionalProperties": {
               "type": "string"
             },
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Response from the discover-models probe."
+        "description": "Request body for model discovery against a provider without persisting a profile."
       },
       "DismissFindingRequest": {
         "type": "object",
@@ -12419,7 +12844,7 @@
           "noOp"
         ],
         "type": "string",
-        "description": "Describes the outcome of a single thread-lifecycle state machine evaluation recorded in `memory_activity_log`."
+        "description": "Describes the outcome of a single thread-lifecycle state machine evaluation recorded in\n`memory_activity_log`."
       },
       "MemoryActivityLogEntry": {
         "type": "object",
@@ -14649,31 +15074,50 @@
             "type": "string",
             "nullable": true
           },
-          "endpointUrl": {
+          "providerKind": {
+            "$ref": "#/components/schemas/AiProviderKind"
+          },
+          "baseUrl": {
             "type": "string",
             "nullable": true
           },
-          "models": {
-            "type": "array",
-            "items": {
+          "auth": {
+            "$ref": "#/components/schemas/AiConnectionAuthRequest"
+          },
+          "discoveryMode": {
+            "$ref": "#/components/schemas/AiDiscoveryMode"
+          },
+          "defaultHeaders": {
+            "type": "object",
+            "additionalProperties": {
               "type": "string"
             },
             "nullable": true
           },
-          "apiKey": {
-            "type": "string",
+          "defaultQueryParams": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
             "nullable": true
           },
-          "modelCapabilities": {
+          "configuredModels": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiConnectionModelCapabilityRequest"
+              "$ref": "#/components/schemas/AiConfiguredModelRequest"
+            },
+            "nullable": true
+          },
+          "purposeBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiPurposeBindingRequest"
             },
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for updating an AI connection. All fields are optional — omit to leave unchanged."
+        "description": "Request body for updating an existing provider-neutral AI connection profile."
       },
       "UpdatePromptOverrideRequest": {
         "type": "object",

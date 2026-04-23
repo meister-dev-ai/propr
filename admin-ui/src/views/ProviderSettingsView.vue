@@ -2,7 +2,7 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
 <template>
-  <div class="provider-settings-view">
+  <div class="page-view provider-settings-view">
     <section class="section-card provider-settings-intro">
       <div class="section-card-header">
         <div>
@@ -26,7 +26,7 @@
       </div>
     </div>
 
-    <div v-else class="provider-settings-grid">
+    <div v-else class="provider-settings-list">
       <section v-for="status in providerStatuses" :key="status.providerFamily" class="section-card provider-settings-card">
         <div class="section-card-header provider-settings-card-header">
           <div>
@@ -56,9 +56,9 @@
             <span class="chip chip-muted chip-sm">{{ status.registeredCapabilities.length }} capabilities</span>
           </div>
 
-          <ul v-if="status.registeredCapabilities.length" class="provider-capability-list">
-            <li v-for="capability in status.registeredCapabilities" :key="capability">{{ capability }}</li>
-          </ul>
+          <div v-if="status.registeredCapabilities.length" class="provider-capability-list">
+            <span v-for="capability in status.registeredCapabilities" :key="capability" class="capability-tag">{{ capability }}</span>
+          </div>
 
           <p class="provider-settings-note">
             {{ status.isEnabled
@@ -186,10 +186,10 @@ function formatTimestamp(value: string): string {
   padding: 1.25rem;
 }
 
-.provider-settings-grid {
-  display: grid;
+.provider-settings-list {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .provider-settings-card-header {
@@ -223,9 +223,20 @@ function formatTimestamp(value: string): string {
 }
 
 .provider-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin: 0;
-  padding-left: 1rem;
+}
+
+.capability-tag {
+  font-family: monospace;
+  font-size: 0.75rem;
   color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
 }
 
 .provider-settings-note,

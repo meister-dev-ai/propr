@@ -6,6 +6,9 @@
     <AppHeader v-if="isAuthenticated" />
     <RouterView />
     <AppNotification />
+    <footer v-if="isAuthenticated" class="app-footer">
+      Powered by <a href="https://meister-dev.ai" target="_blank" rel="noopener noreferrer" class="footer-link">meister-dev.ai</a>
+    </footer>
   </div>
 </template>
 
@@ -17,3 +20,28 @@ import { useSession } from '@/composables/useSession'
 
 const { isAuthenticated } = useSession()
 </script>
+
+<style scoped>
+.app-footer {
+  text-align: center;
+  padding: 1rem 2rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-top: auto;
+}
+
+.footer-link {
+  color: var(--color-accent);
+  text-decoration: none;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.footer-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+</style>
+

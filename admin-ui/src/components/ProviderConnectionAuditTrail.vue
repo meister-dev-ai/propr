@@ -25,7 +25,7 @@
     </div>
     <div v-else class="audit-list">
       <article
-        v-for="entry in entries"
+        v-for="entry in filteredEntries"
         :key="entry.id"
         :data-testid="`provider-audit-entry-${entry.id}`"
         class="audit-entry"
@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   listProviderAuditTrail,
   type ProviderAuditStatus,
@@ -65,15 +65,20 @@ import type { ScmProviderFamily } from '@/services/providerConnectionsService'
 
 const props = defineProps<{
   clientId: string
+  connectionId?: string
 }>()
 
 const entries = ref<ProviderConnectionAuditEntry[]>([])
+const filteredEntries = computed(() => {
+  if (!props.connectionId) return entries.value
+  return entries.value.filter((e) => e.connectionId === props.connectionId)
+})
 const loading = ref(false)
 const error = ref('')
 
 watch(
-  () => props.clientId,
-  clientId => {
+  () => [props.clientId, props.connectionId],
+  ([clientId]) => {
     if (!clientId) {
       entries.value = []
       return

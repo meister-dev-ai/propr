@@ -9,9 +9,20 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     One validated embedding deployment selection ready for runtime use.
 /// </summary>
 /// <param name="Connection">Owning AI connection DTO.</param>
-/// <param name="DeploymentName">Selected deployment/model name.</param>
-/// <param name="Capability">Validated capability metadata for the selected deployment.</param>
+/// <param name="Model">Selected configured model.</param>
 public sealed record ValidatedEmbeddingDeployment(
     AiConnectionDto Connection,
-    string DeploymentName,
-    AiConnectionModelCapabilityDto Capability);
+    AiConfiguredModelDto Model)
+{
+    /// <summary>Gets the selected deployment/model name.</summary>
+    public string DeploymentName => this.Model.RemoteModelId;
+
+    /// <summary>Gets the validated capability metadata for the selected deployment.</summary>
+    public AiConnectionModelCapabilityDto Capability => new(
+        this.Model.RemoteModelId,
+        this.Model.TokenizerName ?? string.Empty,
+        this.Model.MaxInputTokens ?? 0,
+        this.Model.EmbeddingDimensions ?? 0,
+        this.Model.InputCostPer1MUsd,
+        this.Model.OutputCostPer1MUsd);
+}

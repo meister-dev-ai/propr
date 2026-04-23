@@ -84,10 +84,17 @@ function createDeferred<T>() {
 
 async function mountTab() {
   const { default: ClientProviderConnectionsTab } = await import('@/components/ClientProviderConnectionsTab.vue')
+  if (!document.getElementById('provider-sidebar-target')) {
+    const el = document.createElement('div')
+    el.id = 'provider-sidebar-target'
+    document.body.appendChild(el)
+  }
+
   return mount(ClientProviderConnectionsTab, {
     props: {
       clientId: 'client-1',
     },
+    attachTo: document.body
   })
 }
 
@@ -159,10 +166,15 @@ describe('ClientProviderConnectionsTab', () => {
     await flushPromises()
 
     expect(listProviderConnectionsMock).toHaveBeenCalledWith('client-1')
+    
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
     expect(listProviderScopesMock).toHaveBeenCalledWith('client-1', 'provider-conn-1')
     expect(getReviewerIdentityMock).toHaveBeenCalledWith('client-1', 'provider-conn-1')
-    expect(wrapper.text()).toContain('GitHub Cloud')
-    expect(wrapper.text()).toContain('Workflow Complete')
+    expect(document.getElementById('provider-sidebar-target')?.textContent).toContain('GitHub Cloud')
+    
+    // The scopes and reviewers should be in the DOM because of v-show
     expect(wrapper.text()).toContain('Acme')
     expect(wrapper.text()).toContain('Meister Review Bot')
   })
@@ -222,7 +234,7 @@ describe('ClientProviderConnectionsTab', () => {
       secret: 'glpat-test',
     }))
     expect(notifyMock).toHaveBeenCalledWith('Provider connection created.')
-    expect(wrapper.text()).toContain('GitLab Self-Hosted')
+    expect(document.getElementById('provider-sidebar-target')?.textContent).toContain('GitLab Self-Hosted')
   })
 
   it('resolves reviewer candidates and saves the selected reviewer identity', async () => {
@@ -251,6 +263,12 @@ describe('ClientProviderConnectionsTab', () => {
 
     const wrapper = await mountTab()
     await flushPromises()
+
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
+    const identityTab = wrapper.findAll('li').find(el => el.text() === 'Reviewer Identity')
+    if (identityTab) await identityTab.trigger('click')
 
     await wrapper.find('input[placeholder="Search login or bot account"]').setValue('meister')
     await wrapper.get('.provider-reviewer-resolve').trigger('click')
@@ -330,7 +348,7 @@ describe('ClientProviderConnectionsTab', () => {
     const wrapper = await mountTab()
     await flushPromises()
 
-    const connectionItems = wrapper.findAll('.provider-connection-main')
+    const connectionItems = wrapper.findAll('.provider-connection-item')
     await connectionItems[1].trigger('click')
 
     secondScopes.resolve([

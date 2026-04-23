@@ -10,5 +10,10 @@ namespace MeisterProPR.Application.Interfaces;
 /// </summary>
 public interface IProCursorTokenUsageRetentionService
 {
+    /// <summary>
+    ///     Purges expired ProCursor token usage records asynchronously.
+    /// </summary>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The result of the purge operation.</returns>
     Task<ProCursorTokenUsageRetentionResult> PurgeExpiredAsync(CancellationToken ct = default);
 }

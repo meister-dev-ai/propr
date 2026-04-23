@@ -95,7 +95,7 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
 
             Assert.NotNull(aiConnection);
             Assert.NotEqual("legacy-ai-key", connection.ApiKey);
-            Assert.Equal("legacy-ai-key", aiConnection.ApiKey);
+            Assert.Equal("legacy-ai-key", aiConnection.Secret);
         }
         finally
         {

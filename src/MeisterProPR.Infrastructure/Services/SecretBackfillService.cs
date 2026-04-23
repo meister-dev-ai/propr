@@ -18,6 +18,21 @@ public sealed class SecretBackfillService(
     {
         var changesMade = false;
 
+        var aiConnectionProfiles = await dbContext.AiConnectionProfiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.ProtectedSecret))
+            .ToListAsync(ct);
+
+        foreach (var profile in aiConnectionProfiles)
+        {
+            if (profile.ProtectedSecret is null || secretProtectionCodec.IsProtected(profile.ProtectedSecret))
+            {
+                continue;
+            }
+
+            profile.ProtectedSecret = secretProtectionCodec.Protect(profile.ProtectedSecret, AiConnectionPurpose);
+            changesMade = true;
+        }
+
         var aiConnections = await dbContext.AiConnections
             .Where(connection => !string.IsNullOrWhiteSpace(connection.ApiKey))
             .ToListAsync(ct);

@@ -1,160 +1,56 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.AI.Providers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
-/// <summary>Manages per-client AI connection configurations.</summary>
+/// <summary>Manages provider-neutral AI connection profiles for a client.</summary>
 [ApiController]
 public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
-    IAiChatClientFactory aiChatClientFactory,
+    IAiProviderDriverRegistry providerDrivers,
     ILogger<ClientAiConnectionsController> logger) : ControllerBase
 {
     private static readonly StringComparer ModelNameComparer = StringComparer.OrdinalIgnoreCase;
 
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "AI connection {ConnectionId} created for client {ClientId}")]
+    private static readonly AiPurpose[] RequiredPurposes =
+    [
+        AiPurpose.ReviewDefault,
+        AiPurpose.MemoryReconsideration,
+        AiPurpose.EmbeddingDefault,
+    ];
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} created for client {ClientId}")]
     private static partial void LogConnectionCreated(ILogger logger, Guid connectionId, Guid clientId);
 
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "AI connection {ConnectionId} deleted for client {ClientId}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} updated for client {ClientId}")]
+    private static partial void LogConnectionUpdated(ILogger logger, Guid connectionId, Guid clientId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} deleted for client {ClientId}")]
     private static partial void LogConnectionDeleted(ILogger logger, Guid connectionId, Guid clientId);
 
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "AI connection {ConnectionId} activated with model {Model} for client {ClientId}")]
-    private static partial void LogConnectionActivated(ILogger logger, Guid connectionId, string model, Guid clientId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} activated for client {ClientId}")]
+    private static partial void LogConnectionActivated(ILogger logger, Guid connectionId, Guid clientId);
 
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "AI connection {ConnectionId} deactivated for client {ClientId}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} deactivated for client {ClientId}")]
     private static partial void LogConnectionDeactivated(ILogger logger, Guid connectionId, Guid clientId);
 
-    /// <summary>Validates that the caller has ClientAdministrator access for the specified client (or is a global admin).</summary>
-    /// <returns>Null when access is granted; an <see cref="IActionResult" /> to return when denied.</returns>
+    [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} verified for client {ClientId} with status {Status}")]
+    private static partial void LogConnectionVerified(ILogger logger, Guid connectionId, Guid clientId, AiVerificationStatus status);
+
     private IActionResult? AuthorizeClientAccessAsync(Guid clientId)
     {
         return AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
     }
 
-    private static IReadOnlyList<string> NormalizeModels(IReadOnlyList<string> models)
-    {
-        return models
-            .Select(model => model.Trim())
-            .Where(model => !string.IsNullOrWhiteSpace(model))
-            .Distinct(ModelNameComparer)
-            .ToList()
-            .AsReadOnly();
-    }
-
-    private static IReadOnlyList<AiConnectionModelCapabilityDto> NormalizeModelCapabilities(IReadOnlyList<AiConnectionModelCapabilityRequest> modelCapabilities)
-    {
-        return modelCapabilities
-            .Select(capability => new AiConnectionModelCapabilityDto(
-                capability.ModelName.Trim(),
-                capability.TokenizerName.Trim(),
-                capability.MaxInputTokens,
-                capability.EmbeddingDimensions,
-                capability.InputCostPer1MUsd,
-                capability.OutputCostPer1MUsd))
-            .ToList()
-            .AsReadOnly();
-    }
-
-    private bool ValidateModelCapabilities(
-        IReadOnlyList<string> models,
-        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities,
-        bool requireComplete,
-        string memberName)
-    {
-        var modelSet = models.ToHashSet(ModelNameComparer);
-        var seenModels = new HashSet<string>(ModelNameComparer);
-
-        foreach (var capability in modelCapabilities ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(capability.ModelName))
-            {
-                this.ModelState.AddModelError(memberName, "Each model capability must include modelName.");
-                continue;
-            }
-
-            if (!modelSet.Contains(capability.ModelName))
-            {
-                this.ModelState.AddModelError(
-                    memberName,
-                    $"Model capability '{capability.ModelName}' does not match any configured model.");
-            }
-
-            if (!seenModels.Add(capability.ModelName))
-            {
-                this.ModelState.AddModelError(
-                    memberName,
-                    $"Model capability '{capability.ModelName}' is duplicated.");
-            }
-
-            if (!EmbeddingTokenizerRegistry.IsSupported(capability.TokenizerName))
-            {
-                this.ModelState.AddModelError(
-                    memberName,
-                    $"Tokenizer '{capability.TokenizerName}' is not supported.");
-            }
-
-            if (capability.MaxInputTokens <= 0)
-            {
-                this.ModelState.AddModelError(memberName, "MaxInputTokens must be greater than zero.");
-            }
-
-            if (capability.EmbeddingDimensions is < 64 or > 4096)
-            {
-                this.ModelState.AddModelError(memberName, "EmbeddingDimensions must be between 64 and 4096.");
-            }
-
-            if (capability.InputCostPer1MUsd.HasValue && capability.InputCostPer1MUsd.Value < 0)
-            {
-                this.ModelState.AddModelError(
-                    memberName,
-                    "InputCostPer1MUsd must be greater than or equal to zero when provided.");
-            }
-
-            if (capability.OutputCostPer1MUsd.HasValue && capability.OutputCostPer1MUsd.Value < 0)
-            {
-                this.ModelState.AddModelError(
-                    memberName,
-                    "OutputCostPer1MUsd must be greater than or equal to zero when provided.");
-            }
-        }
-
-        if (requireComplete)
-        {
-            foreach (var model in models)
-            {
-                if (!seenModels.Contains(model))
-                {
-                    this.ModelState.AddModelError(
-                        memberName,
-                        $"Embedding connections must define capability metadata for model '{model}'.");
-                }
-            }
-        }
-
-        return this.ModelState.IsValid;
-    }
-
-    /// <summary>Lists all AI connections for the specified client.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">List of AI connections (API keys are never returned).</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
+    /// <summary>Lists all AI connection profiles for the specified client.</summary>
     [HttpGet("clients/{clientId:guid}/ai-connections")]
     [ProducesResponseType(typeof(IReadOnlyList<AiConnectionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -167,18 +63,10 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
-        var connections = await aiConnections.GetByClientAsync(clientId, ct);
-        return this.Ok(connections);
+        return this.Ok(await aiConnections.GetByClientAsync(clientId, ct));
     }
 
-    /// <summary>Creates a new AI connection for the specified client.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">AI connection details.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="201">AI connection created.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
+    /// <summary>Creates a new AI connection profile for the specified client.</summary>
     [HttpPost("clients/{clientId:guid}/ai-connections")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -195,79 +83,18 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
-        if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 200)
-        {
-            this.ModelState.AddModelError(
-                nameof(request.DisplayName),
-                "displayName is required and must be ≤200 characters.");
-            return this.ValidationProblem();
-        }
-
-        if (string.IsNullOrWhiteSpace(request.EndpointUrl) || request.EndpointUrl.Length > 500 ||
-            !Uri.TryCreate(request.EndpointUrl, UriKind.Absolute, out _))
-        {
-            this.ModelState.AddModelError(
-                nameof(request.EndpointUrl),
-                "endpointUrl is required, must be a valid absolute URL, and ≤500 characters.");
-            return this.ValidationProblem();
-        }
-
-        if (request.Models is null || request.Models.Count == 0)
-        {
-            this.ModelState.AddModelError(nameof(request.Models), "models must be a non-empty array.");
-            return this.ValidationProblem();
-        }
-
-        var normalizedModels = NormalizeModels(request.Models);
-        if (normalizedModels.Count == 0)
-        {
-            this.ModelState.AddModelError(nameof(request.Models), "models must contain at least one non-empty value.");
-            return this.ValidationProblem();
-        }
-
-        IReadOnlyList<AiConnectionModelCapabilityDto>? normalizedCapabilities = null;
-        if (request.ModelCapabilities is not null)
-        {
-            normalizedCapabilities = NormalizeModelCapabilities(request.ModelCapabilities);
-        }
-
-        if (!this.ValidateModelCapabilities(
-                normalizedModels,
-                normalizedCapabilities,
-                request.ModelCategory == AiConnectionModelCategory.Embedding,
-                nameof(request.ModelCapabilities)))
+        var writeRequest = this.TryBuildWriteRequest(request);
+        if (writeRequest is null)
         {
             return this.ValidationProblem();
         }
 
-        var connection = await aiConnections.AddAsync(
-            clientId,
-            request.DisplayName,
-            request.EndpointUrl,
-            normalizedModels,
-            request.ApiKey,
-            normalizedCapabilities,
-            request.ModelCategory,
-            ct);
-
+        var connection = await aiConnections.AddAsync(clientId, writeRequest, ct);
         LogConnectionCreated(logger, connection.Id, clientId);
-
-        return this.CreatedAtAction(
-            nameof(this.GetAiConnections),
-            new { clientId },
-            connection);
+        return this.CreatedAtAction(nameof(this.GetAiConnections), new { clientId }, connection);
     }
 
-    /// <summary>Updates non-null fields of an AI connection.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="connectionId">AI connection identifier.</param>
-    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">AI connection updated.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">AI connection not found.</response>
+    /// <summary>Updates an existing AI connection profile for the specified client.</summary>
     [HttpPatch("clients/{clientId:guid}/ai-connections/{connectionId:guid}")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -286,102 +113,35 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
-        // Validate that the connection belongs to the specified client.
         var existing = await aiConnections.GetByIdAsync(connectionId, ct);
         if (existing is null || existing.ClientId != clientId)
         {
             return this.NotFound();
         }
 
-        if (request.DisplayName is not null &&
-            (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 200))
-        {
-            this.ModelState.AddModelError(
-                nameof(request.DisplayName),
-                "displayName must be non-empty and ≤200 characters when provided.");
-            return this.ValidationProblem();
-        }
-
-        if (request.EndpointUrl is not null &&
-            (string.IsNullOrWhiteSpace(request.EndpointUrl) || request.EndpointUrl.Length > 500 ||
-             !Uri.TryCreate(request.EndpointUrl, UriKind.Absolute, out _)))
-        {
-            this.ModelState.AddModelError(
-                nameof(request.EndpointUrl),
-                "endpointUrl must be a valid absolute URL and ≤500 characters when provided.");
-            return this.ValidationProblem();
-        }
-
-        if (request.Models is not null && request.Models.Count == 0)
-        {
-            this.ModelState.AddModelError(nameof(request.Models), "models must be a non-empty array when provided.");
-            return this.ValidationProblem();
-        }
-
-        var normalizedModels = request.Models is null ? existing.Models : NormalizeModels(request.Models);
-        if (normalizedModels.Count == 0)
-        {
-            this.ModelState.AddModelError(nameof(request.Models), "models must contain at least one non-empty value.");
-            return this.ValidationProblem();
-        }
-
-        if (!string.IsNullOrWhiteSpace(existing.ActiveModel) &&
-            !normalizedModels.Contains(existing.ActiveModel, ModelNameComparer))
-        {
-            this.ModelState.AddModelError(nameof(request.Models), "models must include the currently active model.");
-            return this.ValidationProblem();
-        }
-
-        var normalizedCapabilities = existing.ModelCapabilities;
-        if (request.ModelCapabilities is not null)
-        {
-            normalizedCapabilities = NormalizeModelCapabilities(request.ModelCapabilities);
-        }
-
-        if (!this.ValidateModelCapabilities(
-                normalizedModels,
-                normalizedCapabilities,
-                existing.ModelCategory == AiConnectionModelCategory.Embedding,
-                nameof(request.ModelCapabilities)))
+        var writeRequest = this.TryBuildWriteRequest(existing, request);
+        if (writeRequest is null)
         {
             return this.ValidationProblem();
         }
 
-        var updated = await aiConnections.UpdateAsync(
-            connectionId,
-            request.DisplayName,
-            request.EndpointUrl,
-            request.Models is null ? null : normalizedModels,
-            request.ApiKey,
-            request.ModelCapabilities is null ? null : normalizedCapabilities,
-            ct);
-
-        if (!updated)
+        if (!await aiConnections.UpdateAsync(connectionId, writeRequest, ct))
         {
             return this.NotFound();
         }
 
         var refreshed = await aiConnections.GetByIdAsync(connectionId, ct);
+        LogConnectionUpdated(logger, connectionId, clientId);
         return this.Ok(refreshed);
     }
 
-    /// <summary>Deletes an AI connection.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="connectionId">AI connection identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">AI connection deleted.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">AI connection not found.</response>
+    /// <summary>Deletes an AI connection profile.</summary>
     [HttpDelete("clients/{clientId:guid}/ai-connections/{connectionId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAiConnection(
-        Guid clientId,
-        Guid connectionId,
-        CancellationToken ct = default)
+    public async Task<IActionResult> DeleteAiConnection(Guid clientId, Guid connectionId, CancellationToken ct = default)
     {
         var authResult = this.AuthorizeClientAccessAsync(clientId);
         if (authResult is not null)
@@ -400,27 +160,14 @@ public sealed partial class ClientAiConnectionsController(
         return this.NoContent();
     }
 
-    /// <summary>Activates the specified AI connection with the given model deployment.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="connectionId">AI connection identifier.</param>
-    /// <param name="request">Activation request containing the model to use.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">AI connection activated.</response>
-    /// <response code="400">Model not in the connection's model list.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">AI connection not found.</response>
+    /// <summary>Activates a verified AI connection profile after validating the minimum runtime bindings.</summary>
     [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/activate")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ActivateAiConnection(
-        Guid clientId,
-        Guid connectionId,
-        [FromBody] ActivateAiConnectionRequest request,
-        CancellationToken ct = default)
+    public async Task<IActionResult> ActivateAiConnection(Guid clientId, Guid connectionId, CancellationToken ct = default)
     {
         var authResult = this.AuthorizeClientAccessAsync(clientId);
         if (authResult is not null)
@@ -434,41 +181,26 @@ public sealed partial class ClientAiConnectionsController(
             return this.NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(request.Model))
+        if (!await aiConnections.ActivateAsync(connectionId, ct))
         {
-            this.ModelState.AddModelError(nameof(request.Model), "model is required.");
-            return this.ValidationProblem();
-        }
-
-        var activated = await aiConnections.ActivateAsync(connectionId, request.Model, ct);
-        if (!activated)
-        {
-            // ActivateAsync returns false when model not in list.
-            return this.BadRequest(new { error = $"Model '{request.Model}' is not in the connection's model list." });
+            return this.BadRequest(new
+            {
+                error = "Activation requires a freshly verified profile with valid Review Default, Memory Reconsideration, and Embedding Default bindings. Re-verify the profile after connectivity, auth, model, or binding edits.",
+            });
         }
 
         var refreshed = await aiConnections.GetByIdAsync(connectionId, ct);
-        LogConnectionActivated(logger, connectionId, request.Model, clientId);
+        LogConnectionActivated(logger, connectionId, clientId);
         return this.Ok(refreshed);
     }
 
-    /// <summary>Deactivates the specified AI connection.</summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="connectionId">AI connection identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">AI connection deactivated.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
-    /// <response code="404">AI connection not found.</response>
+    /// <summary>Deactivates an AI connection profile.</summary>
     [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/deactivate")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeactivateAiConnection(
-        Guid clientId,
-        Guid connectionId,
-        CancellationToken ct = default)
+    public async Task<IActionResult> DeactivateAiConnection(Guid clientId, Guid connectionId, CancellationToken ct = default)
     {
         var authResult = this.AuthorizeClientAccessAsync(clientId);
         if (authResult is not null)
@@ -488,20 +220,53 @@ public sealed partial class ClientAiConnectionsController(
         return this.Ok(refreshed);
     }
 
-    /// <summary>
-    ///     Probes the given endpoint URL with the supplied API key and returns the list of available
-    ///     model deployment names. Returns an empty list when the endpoint is unreachable or returns
-    ///     no deployments — the caller should surface this as a warning, not an error.
-    /// </summary>
-    /// <param name="clientId">Client identifier (used for auth).</param>
-    /// <param name="request">Endpoint URL and API key to probe.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">List of model deployment names (may be empty).</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not own this client.</response>
+    /// <summary>Verifies the saved provider profile and updates its verification snapshot.</summary>
+    [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/verify")]
+    [ProducesResponseType(typeof(AiVerificationResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> VerifyAiConnection(Guid clientId, Guid connectionId, CancellationToken ct = default)
+    {
+        var authResult = this.AuthorizeClientAccessAsync(clientId);
+        if (authResult is not null)
+        {
+            return authResult;
+        }
+
+        var existing = await aiConnections.GetByIdAsync(connectionId, ct);
+        if (existing is null || existing.ClientId != clientId)
+        {
+            return this.NotFound();
+        }
+
+        var driver = providerDrivers.GetRequired(existing.ProviderKind);
+        var verification = await driver.VerifyAsync(ToProbeOptions(existing), ct);
+
+        if (verification.Status == AiVerificationStatus.Verified)
+        {
+            var bindingFailure = this.ValidateRequiredBindings(existing);
+            if (bindingFailure is not null)
+            {
+                verification = new AiVerificationResultDto(
+                    AiVerificationStatus.Failed,
+                    AiVerificationFailureCategory.CapabilityMismatch,
+                    bindingFailure,
+                    "Complete the Review Default, Memory Reconsideration, and Embedding Default bindings and ensure each selected model supports the bound workload.",
+                    DateTimeOffset.UtcNow,
+                    verification.Warnings,
+                    verification.DriverMetadata);
+            }
+        }
+
+        await aiConnections.SaveVerificationAsync(connectionId, verification, ct);
+        LogConnectionVerified(logger, connectionId, clientId, verification.Status);
+        return this.Ok(verification);
+    }
+
+    /// <summary>Discovers provider models using the supplied unsaved profile settings.</summary>
     [HttpPost("clients/{clientId:guid}/ai-connections/discover-models")]
-    [ProducesResponseType(typeof(DiscoverModelsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AiModelDiscoveryResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -516,55 +281,564 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
-        if (string.IsNullOrWhiteSpace(request.EndpointUrl) ||
-            !Uri.TryCreate(request.EndpointUrl, UriKind.Absolute, out _))
+        var probeOptions = this.TryBuildProbeOptions(request.ProviderKind, request.BaseUrl, request.Auth, request.DefaultHeaders, request.DefaultQueryParams);
+        if (probeOptions is null)
         {
-            this.ModelState.AddModelError(nameof(request.EndpointUrl), "endpointUrl must be a valid absolute URL.");
             return this.ValidationProblem();
         }
 
-        if (string.IsNullOrWhiteSpace(request.ApiKey))
+        var driver = providerDrivers.GetRequired(request.ProviderKind);
+        return this.Ok(await driver.DiscoverModelsAsync(probeOptions, ct));
+    }
+
+    private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)
+    {
+        return new AiConnectionProbeOptionsDto(
+            connection.ProviderKind,
+            connection.BaseUrl,
+            connection.AuthMode,
+            connection.Secret,
+            connection.DefaultHeaders,
+            connection.DefaultQueryParams);
+    }
+
+    private string? ValidateRequiredBindings(AiConnectionDto connection)
+    {
+        foreach (var purpose in RequiredPurposes)
         {
-            this.ModelState.AddModelError(nameof(request.ApiKey), "apiKey is required.");
-            return this.ValidationProblem();
+            var binding = FindBinding(connection, purpose);
+            if (binding is null)
+            {
+                return $"Required binding '{purpose}' is missing or disabled.";
+            }
+
+            var model = connection.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId)
+                        ?? connection.ConfiguredModels.FirstOrDefault(candidate =>
+                            string.Equals(candidate.RemoteModelId, binding.RemoteModelId, StringComparison.OrdinalIgnoreCase));
+            if (model is null)
+            {
+                return $"Required binding '{purpose}' references an unknown configured model.";
+            }
+
+            if (purpose == AiPurpose.EmbeddingDefault)
+            {
+                if (!model.SupportsEmbedding || string.IsNullOrWhiteSpace(model.TokenizerName) || !model.EmbeddingDimensions.HasValue)
+                {
+                    return $"Binding '{purpose}' must target a model with embedding capability metadata.";
+                }
+
+                if (binding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
+                {
+                    return $"Binding '{purpose}' must use the embeddings protocol or automatic mode.";
+                }
+
+                continue;
+            }
+
+            if (!model.SupportsChat)
+            {
+                return $"Binding '{purpose}' must target a chat-capable model.";
+            }
+
+            if (binding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(binding.ProtocolMode))
+            {
+                return $"Binding '{purpose}' uses protocol '{binding.ProtocolMode}' which is not supported by model '{model.RemoteModelId}'.";
+            }
         }
 
-        var models = await aiChatClientFactory.ProbeDeploymentsAsync(request.EndpointUrl, request.ApiKey, ct);
-        return this.Ok(new DiscoverModelsResponse(models));
+        return null;
+    }
+
+    private static AiPurposeBindingDto? FindBinding(AiConnectionDto connection, AiPurpose purpose)
+    {
+        var binding = connection.PurposeBindings.FirstOrDefault(candidate => candidate.Purpose == purpose && candidate.IsEnabled);
+
+        if (binding is not null || !IsReviewEffortOverride(purpose))
+        {
+            return binding;
+        }
+
+        return connection.PurposeBindings.FirstOrDefault(candidate =>
+            candidate.Purpose == AiPurpose.ReviewDefault && candidate.IsEnabled);
+    }
+
+    private static bool IsReviewEffortOverride(AiPurpose purpose)
+    {
+        return purpose is AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
+    }
+
+    private AiConnectionWriteRequestDto? TryBuildWriteRequest(CreateAiConnectionRequest request)
+    {
+        var probeOptions = this.TryBuildProbeOptions(
+            request.ProviderKind,
+            request.BaseUrl,
+            request.Auth,
+            request.DefaultHeaders,
+            request.DefaultQueryParams);
+
+        if (probeOptions is null)
+        {
+            return null;
+        }
+
+        var displayName = NormalizeDisplayName(request.DisplayName);
+        if (displayName is null)
+        {
+            this.ModelState.AddModelError(nameof(request.DisplayName), "displayName is required and must be 200 characters or fewer.");
+            return null;
+        }
+
+        var configuredModels = this.NormalizeConfiguredModels(request.ConfiguredModels);
+        var purposeBindings = this.NormalizePurposeBindings(request.PurposeBindings, configuredModels);
+
+        if (!this.ModelState.IsValid)
+        {
+            return null;
+        }
+
+        return new AiConnectionWriteRequestDto(
+            displayName,
+            request.ProviderKind,
+            probeOptions.BaseUrl,
+            probeOptions.AuthMode,
+            request.DiscoveryMode,
+            configuredModels,
+            purposeBindings,
+            NormalizeMap(request.DefaultHeaders),
+            NormalizeMap(request.DefaultQueryParams),
+            probeOptions.Secret);
+    }
+
+    private AiConnectionWriteRequestDto? TryBuildWriteRequest(AiConnectionDto existing, UpdateAiConnectionRequest request)
+    {
+        var providerKind = request.ProviderKind ?? existing.ProviderKind;
+        var auth = request.Auth is null
+            ? new AiConnectionAuthRequest(existing.AuthMode, existing.Secret)
+            : new AiConnectionAuthRequest(
+                request.Auth.Mode,
+                string.IsNullOrWhiteSpace(request.Auth.ApiKey) ? existing.Secret : request.Auth.ApiKey);
+        var baseUrl = request.BaseUrl ?? existing.BaseUrl;
+        var defaultHeaders = request.DefaultHeaders ?? existing.DefaultHeaders;
+        var defaultQueryParams = request.DefaultQueryParams ?? existing.DefaultQueryParams;
+        var discoveryMode = request.DiscoveryMode ?? existing.DiscoveryMode;
+
+        var probeOptions = this.TryBuildProbeOptions(providerKind, baseUrl, auth, defaultHeaders, defaultQueryParams);
+        if (probeOptions is null)
+        {
+            return null;
+        }
+
+        var displayName = NormalizeDisplayName(request.DisplayName ?? existing.DisplayName);
+        if (displayName is null)
+        {
+            this.ModelState.AddModelError(nameof(request.DisplayName), "displayName is required and must be 200 characters or fewer.");
+            return null;
+        }
+
+        var configuredModels = this.NormalizeConfiguredModels(request.ConfiguredModels ?? existing.ConfiguredModels.Select(ToConfiguredModelRequest).ToList());
+        var purposeBindings = this.NormalizePurposeBindings(request.PurposeBindings ?? existing.PurposeBindings.Select(ToBindingRequest).ToList(), configuredModels);
+
+        if (!this.ModelState.IsValid)
+        {
+            return null;
+        }
+
+        return new AiConnectionWriteRequestDto(
+            displayName,
+            providerKind,
+            probeOptions.BaseUrl,
+            probeOptions.AuthMode,
+            discoveryMode,
+            configuredModels,
+            purposeBindings,
+            NormalizeMap(defaultHeaders),
+            NormalizeMap(defaultQueryParams),
+            probeOptions.Secret);
+    }
+
+    private AiConnectionProbeOptionsDto? TryBuildProbeOptions(
+        AiProviderKind providerKind,
+        string? baseUrl,
+        AiConnectionAuthRequest? auth,
+        IReadOnlyDictionary<string, string>? defaultHeaders,
+        IReadOnlyDictionary<string, string>? defaultQueryParams)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl) || baseUrl.Length > 1000 || !Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
+        {
+            this.ModelState.AddModelError(nameof(baseUrl), "baseUrl is required, must be an absolute URL, and must be 1000 characters or fewer.");
+            return null;
+        }
+
+        if (auth is null)
+        {
+            this.ModelState.AddModelError(nameof(auth), "auth is required.");
+            return null;
+        }
+
+        if (providerKind == AiProviderKind.AzureOpenAi && auth.Mode == AiAuthMode.AzureIdentity)
+        {
+            return new AiConnectionProbeOptionsDto(providerKind, baseUrl.Trim(), auth.Mode, null, NormalizeMap(defaultHeaders), NormalizeMap(defaultQueryParams));
+        }
+
+        if (auth.Mode != AiAuthMode.ApiKey || string.IsNullOrWhiteSpace(auth.ApiKey))
+        {
+            this.ModelState.AddModelError(nameof(auth.ApiKey), "An API key is required for this provider and auth mode.");
+            return null;
+        }
+
+        return new AiConnectionProbeOptionsDto(providerKind, baseUrl.Trim(), auth.Mode, auth.ApiKey.Trim(), NormalizeMap(defaultHeaders), NormalizeMap(defaultQueryParams));
+    }
+
+    private IReadOnlyList<AiConfiguredModelDto> NormalizeConfiguredModels(IReadOnlyList<AiConfiguredModelRequest>? requestModels)
+    {
+        if (requestModels is null || requestModels.Count == 0)
+        {
+            this.ModelState.AddModelError(nameof(requestModels), "configuredModels must contain at least one model.");
+            return [];
+        }
+
+        var models = new List<AiConfiguredModelDto>();
+        var seen = new HashSet<string>(ModelNameComparer);
+
+        foreach (var requestModel in requestModels)
+        {
+            if (string.IsNullOrWhiteSpace(requestModel.RemoteModelId))
+            {
+                this.ModelState.AddModelError(nameof(requestModels), "Each configured model requires remoteModelId.");
+                continue;
+            }
+
+            var remoteModelId = requestModel.RemoteModelId.Trim();
+            if (!seen.Add(remoteModelId))
+            {
+                this.ModelState.AddModelError(nameof(requestModels), $"Configured model '{remoteModelId}' is duplicated.");
+                continue;
+            }
+
+            var inferredEmbedding = IsEmbeddingModel(remoteModelId, requestModel);
+            var operationKinds = requestModel.OperationKinds is { Count: > 0 }
+                ? requestModel.OperationKinds.Distinct().ToList().AsReadOnly()
+                : inferredEmbedding
+                    ? new List<AiOperationKind> { AiOperationKind.Embedding }.AsReadOnly()
+                    : new List<AiOperationKind> { AiOperationKind.Chat }.AsReadOnly();
+
+            var protocolModes = requestModel.SupportedProtocolModes is { Count: > 0 }
+                ? requestModel.SupportedProtocolModes.Distinct().ToList().AsReadOnly()
+                : operationKinds.Contains(AiOperationKind.Embedding) && !operationKinds.Contains(AiOperationKind.Chat)
+                    ? new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Embeddings }.AsReadOnly()
+                    : new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions }.AsReadOnly();
+
+            if (operationKinds.Contains(AiOperationKind.Embedding))
+            {
+                if (string.IsNullOrWhiteSpace(requestModel.TokenizerName))
+                {
+                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires tokenizerName.");
+                }
+
+                if (!requestModel.MaxInputTokens.HasValue || requestModel.MaxInputTokens.Value <= 0)
+                {
+                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
+                }
+
+                if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
+                {
+                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
+                }
+            }
+
+            if (protocolModes.Contains(AiProtocolMode.Embeddings) && !operationKinds.Contains(AiOperationKind.Embedding))
+            {
+                this.ModelState.AddModelError(nameof(requestModels), $"Model '{remoteModelId}' cannot declare the embeddings protocol without embedding capability.");
+            }
+
+            if ((protocolModes.Contains(AiProtocolMode.ChatCompletions) || protocolModes.Contains(AiProtocolMode.Responses)) &&
+                !operationKinds.Contains(AiOperationKind.Chat))
+            {
+                this.ModelState.AddModelError(nameof(requestModels), $"Model '{remoteModelId}' cannot declare chat protocols without chat capability.");
+            }
+
+            models.Add(new AiConfiguredModelDto(
+                requestModel.Id ?? Guid.Empty,
+                remoteModelId,
+                string.IsNullOrWhiteSpace(requestModel.DisplayName) ? remoteModelId : requestModel.DisplayName.Trim(),
+                operationKinds,
+                protocolModes,
+                string.IsNullOrWhiteSpace(requestModel.TokenizerName) ? null : requestModel.TokenizerName.Trim(),
+                requestModel.MaxInputTokens,
+                requestModel.EmbeddingDimensions,
+                requestModel.SupportsStructuredOutput,
+                requestModel.SupportsToolUse,
+                requestModel.Source ?? AiConfiguredModelSource.Manual,
+                requestModel.LastSeenAt,
+                requestModel.InputCostPer1MUsd,
+                requestModel.OutputCostPer1MUsd));
+        }
+
+        return models.AsReadOnly();
+    }
+
+    private IReadOnlyList<AiPurposeBindingDto> NormalizePurposeBindings(
+        IReadOnlyList<AiPurposeBindingRequest>? requestBindings,
+        IReadOnlyList<AiConfiguredModelDto> configuredModels)
+    {
+        if (requestBindings is null || requestBindings.Count == 0)
+        {
+            this.ModelState.AddModelError(nameof(requestBindings), "purposeBindings must contain at least one binding.");
+            return [];
+        }
+
+        var modelsById = configuredModels
+            .Where(model => model.Id != Guid.Empty)
+            .ToDictionary(model => model.Id);
+        var modelsByRemoteModelId = configuredModels.ToDictionary(model => model.RemoteModelId, ModelNameComparer);
+        var bindings = new List<AiPurposeBindingDto>();
+        var seenPurposes = new HashSet<AiPurpose>();
+
+        foreach (var requestBinding in requestBindings)
+        {
+            if (!seenPurposes.Add(requestBinding.Purpose))
+            {
+                this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' is duplicated.");
+                continue;
+            }
+
+            AiConfiguredModelDto? model = null;
+            if (requestBinding.ConfiguredModelId.HasValue && requestBinding.ConfiguredModelId.Value != Guid.Empty)
+            {
+                modelsById.TryGetValue(requestBinding.ConfiguredModelId.Value, out model);
+            }
+
+            if (model is null && !string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
+            {
+                modelsByRemoteModelId.TryGetValue(requestBinding.RemoteModelId.Trim(), out model);
+            }
+
+            if (model is null)
+            {
+                this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' references an unknown configured model.");
+                continue;
+            }
+
+            if (requestBinding.Purpose == AiPurpose.EmbeddingDefault)
+            {
+                if (!model.SupportsEmbedding)
+                {
+                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' requires an embedding-capable model.");
+                }
+
+                if (requestBinding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
+                {
+                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' must use the embeddings protocol or automatic mode.");
+                }
+            }
+            else
+            {
+                if (!model.SupportsChat)
+                {
+                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' requires a chat-capable model.");
+                }
+
+                if (requestBinding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(requestBinding.ProtocolMode))
+                {
+                    this.ModelState.AddModelError(nameof(requestBindings), $"Model '{model.RemoteModelId}' does not support protocol '{requestBinding.ProtocolMode}'.");
+                }
+            }
+
+            bindings.Add(new AiPurposeBindingDto(
+                requestBinding.Id ?? Guid.Empty,
+                requestBinding.Purpose,
+                model.Id == Guid.Empty ? null : model.Id,
+                model.RemoteModelId,
+                requestBinding.ProtocolMode,
+                requestBinding.IsEnabled));
+        }
+
+        return bindings.AsReadOnly();
+    }
+
+    private static bool IsEmbeddingModel(string remoteModelId, AiConfiguredModelRequest requestModel)
+    {
+        return remoteModelId.Contains("embedding", StringComparison.OrdinalIgnoreCase)
+               || !string.IsNullOrWhiteSpace(requestModel.TokenizerName)
+               || requestModel.EmbeddingDimensions.HasValue;
+    }
+
+    private static string? NormalizeDisplayName(string? displayName)
+    {
+        return string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 200
+            ? null
+            : displayName.Trim();
+    }
+
+    private static Dictionary<string, string> NormalizeMap(IReadOnlyDictionary<string, string>? source)
+    {
+        return source is null
+            ? []
+            : source
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+                .GroupBy(pair => pair.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.First().Key.Trim(), group => group.First().Value.Trim(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static AiConfiguredModelRequest ToConfiguredModelRequest(AiConfiguredModelDto model)
+    {
+        return new AiConfiguredModelRequest(
+            model.Id,
+            model.RemoteModelId,
+            model.DisplayName,
+            model.OperationKinds,
+            model.SupportedProtocolModes,
+            model.TokenizerName,
+            model.MaxInputTokens,
+            model.EmbeddingDimensions,
+            model.SupportsStructuredOutput,
+            model.SupportsToolUse,
+            model.Source,
+            model.LastSeenAt,
+            model.InputCostPer1MUsd,
+            model.OutputCostPer1MUsd);
+    }
+
+    private static AiPurposeBindingRequest ToBindingRequest(AiPurposeBindingDto binding)
+    {
+        return new AiPurposeBindingRequest(
+            binding.Id,
+            binding.Purpose,
+            binding.ConfiguredModelId,
+            binding.RemoteModelId,
+            binding.ProtocolMode,
+            binding.IsEnabled);
     }
 }
 
-/// <summary>Request body for creating a new AI connection.</summary>
-public sealed record CreateAiConnectionRequest(
-    string DisplayName,
-    string EndpointUrl,
-    IReadOnlyList<string> Models,
-    string? ApiKey = null,
-    IReadOnlyList<AiConnectionModelCapabilityRequest>? ModelCapabilities = null,
-    AiConnectionModelCategory? ModelCategory = null);
+/// <summary>Authentication settings for one AI connection profile request.</summary>
+public sealed record AiConnectionAuthRequest(AiAuthMode Mode, string? ApiKey = null);
 
-/// <summary>Request body for updating an AI connection. All fields are optional — omit to leave unchanged.</summary>
-public sealed record UpdateAiConnectionRequest(
+/// <summary>Configured model payload item for create, update, and discovery flows.</summary>
+public sealed record AiConfiguredModelRequest(
+    Guid? Id,
+    string RemoteModelId,
     string? DisplayName = null,
-    string? EndpointUrl = null,
-    IReadOnlyList<string>? Models = null,
-    string? ApiKey = null,
-    IReadOnlyList<AiConnectionModelCapabilityRequest>? ModelCapabilities = null);
-
-/// <summary>One per-deployment embedding capability payload item for create or update requests.</summary>
-public sealed record AiConnectionModelCapabilityRequest(
-    string ModelName,
-    string TokenizerName,
-    int MaxInputTokens,
-    int EmbeddingDimensions,
+    IReadOnlyList<AiOperationKind>? OperationKinds = null,
+    IReadOnlyList<AiProtocolMode>? SupportedProtocolModes = null,
+    string? TokenizerName = null,
+    int? MaxInputTokens = null,
+    int? EmbeddingDimensions = null,
+    bool SupportsStructuredOutput = false,
+    bool SupportsToolUse = false,
+    AiConfiguredModelSource? Source = null,
+    DateTimeOffset? LastSeenAt = null,
     decimal? InputCostPer1MUsd = null,
     decimal? OutputCostPer1MUsd = null);
 
-/// <summary>Request body for activating an AI connection with a specific model.</summary>
-public sealed record ActivateAiConnectionRequest(string Model);
+/// <summary>Purpose binding payload item for create and update flows.</summary>
+public sealed record AiPurposeBindingRequest(
+    Guid? Id,
+    AiPurpose Purpose,
+    Guid? ConfiguredModelId = null,
+    string? RemoteModelId = null,
+    AiProtocolMode ProtocolMode = AiProtocolMode.Auto,
+    bool IsEnabled = true);
 
-/// <summary>Request body for probing an AI endpoint to discover available model deployments.</summary>
-public sealed record DiscoverModelsRequest(string EndpointUrl, string ApiKey);
+/// <summary>Request body for creating a provider-neutral AI connection profile.</summary>
+public sealed record CreateAiConnectionRequest(
+    string DisplayName,
+    AiProviderKind ProviderKind,
+    string BaseUrl,
+    AiConnectionAuthRequest Auth,
+    AiDiscoveryMode DiscoveryMode = AiDiscoveryMode.ProviderCatalog,
+    IReadOnlyDictionary<string, string>? DefaultHeaders = null,
+    IReadOnlyDictionary<string, string>? DefaultQueryParams = null,
+    IReadOnlyList<AiConfiguredModelRequest>? ConfiguredModels = null,
+    IReadOnlyList<AiPurposeBindingRequest>? PurposeBindings = null)
+{
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string EndpointUrl => this.BaseUrl ?? string.Empty;
 
-/// <summary>Response from the discover-models probe.</summary>
-public sealed record DiscoverModelsResponse(IReadOnlyList<string> Models);
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> Models => (this.ConfiguredModels ?? []).Select(model => model.RemoteModelId).ToList().AsReadOnly();
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string? ApiKey => this.Auth?.ApiKey;
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<AiConnectionModelCapabilityDto> ModelCapabilities => (this.ConfiguredModels ?? [])
+        .Where(model => !string.IsNullOrWhiteSpace(model.TokenizerName) && model.MaxInputTokens.HasValue && model.EmbeddingDimensions.HasValue)
+        .Select(model => new AiConnectionModelCapabilityDto(
+            model.RemoteModelId,
+            model.TokenizerName!,
+            model.MaxInputTokens!.Value,
+            model.EmbeddingDimensions!.Value,
+            model.InputCostPer1MUsd,
+            model.OutputCostPer1MUsd))
+        .ToList()
+        .AsReadOnly();
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public AiConnectionModelCategory? ModelCategory => null;
+}
+
+/// <summary>Request body for updating an existing provider-neutral AI connection profile.</summary>
+public sealed record UpdateAiConnectionRequest(
+    string? DisplayName = null,
+    AiProviderKind? ProviderKind = null,
+    string? BaseUrl = null,
+    AiConnectionAuthRequest? Auth = null,
+    AiDiscoveryMode? DiscoveryMode = null,
+    IReadOnlyDictionary<string, string>? DefaultHeaders = null,
+    IReadOnlyDictionary<string, string>? DefaultQueryParams = null,
+    IReadOnlyList<AiConfiguredModelRequest>? ConfiguredModels = null,
+    IReadOnlyList<AiPurposeBindingRequest>? PurposeBindings = null)
+{
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string? EndpointUrl => this.BaseUrl;
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string>? Models => this.ConfiguredModels?.Select(model => model.RemoteModelId).ToList().AsReadOnly();
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string? ApiKey => this.Auth?.ApiKey;
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<AiConnectionModelCapabilityDto>? ModelCapabilities => this.ConfiguredModels?
+        .Where(model => !string.IsNullOrWhiteSpace(model.TokenizerName) && model.MaxInputTokens.HasValue && model.EmbeddingDimensions.HasValue)
+        .Select(model => new AiConnectionModelCapabilityDto(
+            model.RemoteModelId,
+            model.TokenizerName!,
+            model.MaxInputTokens!.Value,
+            model.EmbeddingDimensions!.Value,
+            model.InputCostPer1MUsd,
+            model.OutputCostPer1MUsd))
+        .ToList()
+        .AsReadOnly();
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public AiConnectionModelCategory? ModelCategory => null;
+}
+
+/// <summary>Request body for model discovery against a provider without persisting a profile.</summary>
+public sealed record DiscoverModelsRequest(
+    AiProviderKind ProviderKind,
+    string BaseUrl,
+    AiConnectionAuthRequest Auth,
+    IReadOnlyDictionary<string, string>? DefaultHeaders = null,
+    IReadOnlyDictionary<string, string>? DefaultQueryParams = null)
+{
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string EndpointUrl => this.BaseUrl ?? string.Empty;
+
+    /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
+    [JsonIgnore]
+    public string? ApiKey => this.Auth?.ApiKey;
+}

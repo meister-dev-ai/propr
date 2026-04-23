@@ -263,3 +263,51 @@ Check these in order:
   "isEnabled": true
 }
 ```
+
+## AI Provider Profiles
+
+AI profiles are configured separately from source-control provider connections. They control which AI
+provider ProPR uses for review, memory, and embedding workloads for a client.
+
+### Common AI Profile Fields
+
+| Field | Meaning | Notes |
+|---|---|---|
+| `displayName` | Friendly profile label | Shown in the Admin UI profile list |
+| `providerKind` | AI provider family | Currently `azureOpenAi`, `openAi`, or `liteLlm` |
+| `baseUrl` | Exact provider endpoint or gateway URL | Preserved exactly as entered |
+| `auth.mode` | Authentication mode | Usually `apiKey`; Azure-hosted profiles can also use `azureIdentity` |
+| `configuredModels` | Models available under this profile | Chat and embedding models are stored together |
+| `purposeBindings` | Runtime purpose-to-model mapping | Drives review, memory, and embedding resolution |
+| `discoveryMode` | Model onboarding mode | `providerCatalog` or `manualOnly` |
+| `defaultHeaders` | Optional request header overrides | Advanced setting for gateway or proxy-specific requirements |
+| `defaultQueryParams` | Optional query-string overrides | Advanced setting for fixed provider or gateway parameters such as `api-version` |
+
+### Which AI Bindings Are Required?
+
+An AI profile is activation-ready when these bindings are valid and enabled:
+
+1. `reviewDefault`
+2. `memoryReconsideration`
+3. `embeddingDefault`
+
+The effort-specific review bindings are optional overrides:
+
+- `reviewLowEffort`
+- `reviewMediumEffort`
+- `reviewHighEffort`
+
+If one of those effort-specific bindings is missing or disabled, ProPR falls back to `reviewDefault`
+at runtime instead of forcing duplicate configuration.
+
+### When Are Default Headers Or Query Parameters Needed?
+
+Most standard Azure OpenAI, OpenAI, and LiteLLM profiles do not need either field.
+
+Use them only when the provider endpoint or gateway requires request-shaping overrides such as:
+
+1. A fixed query parameter like `api-version=2024-10-21`
+2. A custom proxy or gateway header
+3. A self-hosted compatibility layer that expects additional static request metadata
+
+Treat both fields as advanced settings, not mandatory setup steps.

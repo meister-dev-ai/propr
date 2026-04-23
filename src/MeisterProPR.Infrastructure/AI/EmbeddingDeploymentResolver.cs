@@ -10,7 +10,9 @@ namespace MeisterProPR.Infrastructure.AI;
 /// <summary>
 ///     Resolves and validates the embedding deployment configuration used at runtime.
 /// </summary>
-public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnectionRepository)
+public sealed class EmbeddingDeploymentResolver(
+    IAiConnectionRepository aiConnectionRepository,
+    IAiRuntimeResolver? aiRuntimeResolver = null)
 {
     /// <summary>
     ///     Resolves the embedding deployment for the given client and validates that the selected
@@ -22,23 +24,27 @@ public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnec
         bool allowDefaultFallback,
         CancellationToken ct = default)
     {
-        var connection = await aiConnectionRepository.GetForTierAsync(
-            clientId,
-            AiConnectionModelCategory.Embedding,
-            ct);
+        _ = allowDefaultFallback;
 
-        if (connection is null && allowDefaultFallback)
+        if (aiRuntimeResolver is not null)
         {
-            connection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
+            var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
+                clientId,
+                AiPurpose.EmbeddingDefault,
+                expectedDimensions,
+                ct);
+
+            return this.Resolve(runtime.Connection, runtime.Model.RemoteModelId, expectedDimensions);
         }
+
+        var connection = await aiConnectionRepository.GetForTierAsync(clientId, AiConnectionModelCategory.Embedding, ct);
 
         if (connection is null)
         {
             throw new InvalidOperationException("no_embedding_connection_configured");
         }
 
-        var deploymentName = connection.ActiveModel
-                             ?? connection.Models.FirstOrDefault()
+        var deploymentName = connection.GetBoundModelId(AiPurpose.EmbeddingDefault)
                              ?? throw new InvalidOperationException("no_embedding_model_configured");
 
         return this.Resolve(connection, deploymentName, expectedDimensions);
@@ -55,11 +61,22 @@ public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnec
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentException.ThrowIfNullOrWhiteSpace(deploymentName);
 
-        var capability = (connection.ModelCapabilities ?? [])
-            .FirstOrDefault(candidate =>
-                string.Equals(candidate.ModelName, deploymentName, StringComparison.OrdinalIgnoreCase));
+        var existingModel = connection.ConfiguredModels.FirstOrDefault(candidate =>
+            string.Equals(candidate.RemoteModelId, deploymentName, StringComparison.OrdinalIgnoreCase));
 
-        capability ??= KnownEmbeddingModelCapabilities.Get(deploymentName);
+        if (existingModel is null)
+        {
+            throw new InvalidOperationException(
+                $"Embedding deployment '{deploymentName}' configured for AI connection '{connection.DisplayName}' was not found among the connection's configured models.");
+        }
+
+        var capability = new AiConnectionModelCapabilityDto(
+                existingModel.RemoteModelId,
+                existingModel.TokenizerName!,
+                existingModel.MaxInputTokens ?? 8192,
+                existingModel.EmbeddingDimensions ?? 1536,
+                existingModel.InputCostPer1MUsd,
+                existingModel.OutputCostPer1MUsd);
 
         if (capability is null)
         {
@@ -85,6 +102,27 @@ public sealed class EmbeddingDeploymentResolver(IAiConnectionRepository aiConnec
                 $"Embedding deployment '{deploymentName}' on AI connection '{connection.DisplayName}' returns {capability.EmbeddingDimensions} dimensions, but {expectedDimensions} are required.");
         }
 
-        return new ValidatedEmbeddingDeployment(connection, deploymentName, capability);
+        var model = existingModel is not null &&
+                    !string.IsNullOrWhiteSpace(existingModel.TokenizerName) &&
+                    existingModel.MaxInputTokens.HasValue &&
+                    existingModel.EmbeddingDimensions.HasValue
+            ? existingModel
+            : new AiConfiguredModelDto(
+                existingModel?.Id ?? Guid.Empty,
+                deploymentName,
+                existingModel?.DisplayName ?? deploymentName,
+                [AiOperationKind.Embedding],
+                [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                capability.TokenizerName,
+                capability.MaxInputTokens,
+                capability.EmbeddingDimensions,
+                false,
+                false,
+                existingModel?.Source ?? AiConfiguredModelSource.KnownCatalog,
+                existingModel?.LastSeenAt,
+                capability.InputCostPer1MUsd,
+                capability.OutputCostPer1MUsd);
+
+        return new ValidatedEmbeddingDeployment(connection, model);
     }
 }

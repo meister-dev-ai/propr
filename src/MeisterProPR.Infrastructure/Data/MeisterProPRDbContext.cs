@@ -72,6 +72,18 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     public DbSet<AiConnectionModelCapabilityRecord> AiConnectionModelCapabilities =>
         this.Set<AiConnectionModelCapabilityRecord>();
 
+    /// <summary>Provider-neutral AI connection profiles.</summary>
+    public DbSet<AiConnectionProfileRecord> AiConnectionProfiles => this.Set<AiConnectionProfileRecord>();
+
+    /// <summary>Configured models under provider-neutral AI connection profiles.</summary>
+    public DbSet<AiConfiguredModelRecord> AiConfiguredModels => this.Set<AiConfiguredModelRecord>();
+
+    /// <summary>AI purpose bindings under provider-neutral AI connection profiles.</summary>
+    public DbSet<AiPurposeBindingRecord> AiPurposeBindings => this.Set<AiPurposeBindingRecord>();
+
+    /// <summary>Latest verification snapshots for provider-neutral AI connection profiles.</summary>
+    public DbSet<AiVerificationSnapshotRecord> AiVerificationSnapshots => this.Set<AiVerificationSnapshotRecord>();
+
     /// <summary>Repository-scope filters for crawl configurations.</summary>
     public DbSet<CrawlRepoFilterRecord> CrawlRepoFilters => this.Set<CrawlRepoFilterRecord>();
 

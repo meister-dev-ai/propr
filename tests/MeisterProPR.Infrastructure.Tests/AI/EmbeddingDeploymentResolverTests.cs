@@ -14,23 +14,11 @@ public sealed class EmbeddingDeploymentResolverTests
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
 
     [Fact]
-    public async Task ResolveForClientAsync_LegacyConnectionWithoutCapabilities_UsesKnownModelDefaults()
+    public async Task ResolveForClientAsync_ConfiguredEmbeddingBinding_UsesProviderNeutralModelMetadata()
     {
         var repository = Substitute.For<IAiConnectionRepository>();
         repository.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(
-                new AiConnectionDto(
-                    Guid.NewGuid(),
-                    ClientId,
-                    "Embedding",
-                    "https://example.openai.azure.com",
-                    ["text-embedding-3-small"],
-                    false,
-                    "text-embedding-3-small",
-                    DateTimeOffset.UtcNow,
-                    AiConnectionModelCategory.Embedding,
-                    [],
-                    "test-key"));
+            .Returns(AiConnectionTestFactory.CreateEmbeddingConnection(ClientId));
 
         var resolver = new EmbeddingDeploymentResolver(repository);
 
@@ -43,29 +31,20 @@ public sealed class EmbeddingDeploymentResolverTests
     }
 
     [Fact]
-    public async Task ResolveForClientAsync_UnknownLegacyConnectionWithoutCapabilities_StillThrows()
+    public async Task ResolveForClientAsync_DoesNotFallBackToGenericActiveProfile_WhenEmbeddingBindingMissing()
     {
         var repository = Substitute.For<IAiConnectionRepository>();
         repository.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(
-                new AiConnectionDto(
-                    Guid.NewGuid(),
-                    ClientId,
-                    "Embedding",
-                    "https://example.openai.azure.com",
-                    ["custom-embedding-deployment"],
-                    false,
-                    "custom-embedding-deployment",
-                    DateTimeOffset.UtcNow,
-                    AiConnectionModelCategory.Embedding,
-                    [],
-                    "test-key"));
+            .Returns((AiConnectionDto?)null);
+        repository.GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(AiConnectionTestFactory.CreateEmbeddingConnection(ClientId));
 
         var resolver = new EmbeddingDeploymentResolver(repository);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            resolver.ResolveForClientAsync(ClientId, 1536, false, CancellationToken.None));
+            resolver.ResolveForClientAsync(ClientId, 1536, true, CancellationToken.None));
 
-        Assert.Contains("missing capability metadata", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("no_embedding_connection_configured", exception.Message);
+        await repository.DidNotReceive().GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>());
     }
 }

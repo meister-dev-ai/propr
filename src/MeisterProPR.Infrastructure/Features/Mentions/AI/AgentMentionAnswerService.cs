@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -19,7 +20,8 @@ namespace MeisterProPR.Infrastructure.AI;
 internal sealed partial class AgentMentionAnswerService(
     IAiConnectionRepository aiConnectionRepository,
     IAiChatClientFactory aiChatClientFactory,
-    ILogger<AgentMentionAnswerService> logger) : IMentionAnswerService
+    ILogger<AgentMentionAnswerService> logger,
+    IAiRuntimeResolver? aiRuntimeResolver = null) : IMentionAnswerService
 {
     private const string SystemPrompt =
         "You are a PR review assistant. Answer the developer's question concisely and directly, " +
@@ -47,13 +49,26 @@ internal sealed partial class AgentMentionAnswerService(
         var cleanQuestion = MentionPrefixRegex.Replace(question, string.Empty).Trim();
         var userMessage = BuildUserMessage(pullRequest, cleanQuestion, threadId);
 
-        var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, cancellationToken)
-                               ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
+        string modelId;
+        IChatClient chatClient;
 
-        var modelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault()
-            ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
+        if (aiRuntimeResolver is not null)
+        {
+            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, cancellationToken);
+            modelId = runtime.Model.RemoteModelId;
+            chatClient = runtime.ChatClient;
+        }
+        else
+        {
+            var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, cancellationToken)
+                                   ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
 
-        var chatClient = aiChatClientFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey);
+            modelId = activeConnection.GetBoundModelId(AiPurpose.ReviewDefault)
+                ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
+                ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
+
+            chatClient = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
+        }
 
         var messages = new List<ChatMessage>
         {

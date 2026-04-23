@@ -3,13 +3,13 @@
 
 <template>
   <header class="app-header">
-    <div class="app-brand">
+    <a href="https://meister-dev.ai" target="_blank" rel="noopener noreferrer" class="app-brand">
       <img :src="icon" alt="" aria-hidden="true" class="app-icon"/>
       <div>
-        <span class="app-title">Meister DEV</span>
-        <span class="app-subtitle">ProPR Admin Console</span>
+        <span class="app-title">ProPR</span>
+        <span class="app-subtitle">Admin Console</span>
       </div>
-    </div>
+    </a>
     <nav class="app-nav">
       <RouterLink v-if="isClientAdmin" to="/clients" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
       <RouterLink to="/reviews" class="nav-link" :class="{ 'router-link-active': $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
@@ -19,7 +19,7 @@
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
-          <RouterLink to="/provider-settings" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> Providers</RouterLink>
+          <RouterLink to="/provider-settings" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
           <RouterLink to="/users" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
           <RouterLink to="/thread-memory" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
         </div>

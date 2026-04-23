@@ -568,16 +568,11 @@ public class FileByFileReviewOrchestratorTests
         var aiClientFactory = Substitute.For<IAiChatClientFactory>();
         aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
 
-        var tierDto = new AiConnectionDto(
-            Guid.NewGuid(),
+        var tierDto = AiConnectionTestFactory.CreateChatConnection(
             job.ClientId,
-            "Tier High",
-            "https://high.openai.azure.com/",
-            ["gpt-4o-high"],
-            true,
-            "gpt-4o-high",
-            DateTimeOffset.UtcNow,
-            AiConnectionModelCategory.HighEffort);
+            modelId: "gpt-4o-high",
+            purpose: AiPurpose.ReviewHighEffort,
+            baseUrl: "https://high.openai.azure.com/");
         var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepo.GetForTierAsync(
                 job.ClientId,

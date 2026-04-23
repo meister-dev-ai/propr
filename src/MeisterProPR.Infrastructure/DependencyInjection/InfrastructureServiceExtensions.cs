@@ -9,6 +9,11 @@ using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.AI.OpenAiCompatible;
+using MeisterProPR.Infrastructure.AI.Providers;
+using MeisterProPR.Infrastructure.AI.Providers.AzureOpenAi;
+using MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
+using MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Options;
@@ -66,6 +71,7 @@ public static class InfrastructureServiceExtensions
 
         services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
         services.AddScoped<EmbeddingDeploymentResolver>();
+        services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
 
         // ADO operational services are composed behind provider-local registration.
         var adoOperationalCredential =
@@ -212,6 +218,17 @@ public static class InfrastructureServiceExtensions
             {
                 // Probe requests are outbound only — standard TLS validation applies.
             });
+        services.AddHttpClient("AiProviderAdmin")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // Provider admin operations are outbound only — standard TLS validation applies.
+            });
+        services.AddSingleton<OpenAiCompatibleRequestFactory>();
+        services.AddSingleton<OpenAiCompatibleTransport>();
+        services.AddSingleton<IAiProviderDriver, AzureOpenAiProviderDriver>();
+        services.AddSingleton<IAiProviderDriver, OpenAiProviderDriver>();
+        services.AddSingleton<IAiProviderDriver, LiteLlmProviderDriver>();
+        services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 
         return services;

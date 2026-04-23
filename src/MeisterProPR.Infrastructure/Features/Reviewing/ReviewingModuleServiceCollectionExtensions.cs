@@ -77,7 +77,8 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
             sp.GetService<IAiConnectionRepository>(),
             sp.GetService<IAiChatClientFactory>(),
-            sp.GetService<IThreadMemoryService>()));
+            sp.GetService<IThreadMemoryService>(),
+            sp.GetService<IAiRuntimeResolver>()));
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
         services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
         services.AddScoped<IThreadMemoryService, ThreadMemoryService>();

@@ -27,10 +27,9 @@ public sealed partial class FileByFileReviewOrchestrator(
     ILogger<FileByFileReviewOrchestrator> logger,
     IAiConnectionRepository? aiConnectionRepository = null,
     IAiChatClientFactory? aiClientFactory = null,
-    IThreadMemoryService? memoryService = null) : IFileByFileReviewOrchestrator
+    IThreadMemoryService? memoryService = null,
+    IAiRuntimeResolver? aiRuntimeResolver = null) : IFileByFileReviewOrchestrator
 {
-    // ── Post-processing filters (feature 023) ────────────────────────────────────
-
     /// <summary>
     ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
     ///     A comment containing any of these is speculative and must be discarded.
@@ -167,7 +166,6 @@ public sealed partial class FileByFileReviewOrchestrator(
             throw new PartialReviewFailureException(exceptions.Count, pr.ChangedFiles.Count, exceptions, partialResult);
         }
 
-        // US2: Synthesis
         return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
     }
 
@@ -248,7 +246,7 @@ public sealed partial class FileByFileReviewOrchestrator(
             await jobRepository.AddFileResultAsync(fileResult, ct);
         }
 
-        // US4: Classify file complexity early so we can record tier in the protocol
+        // Classify file complexity early so we can record tier in the protocol
         var tier = ClassifyTier(file);
         var tierCategory = tier switch
         {
@@ -258,15 +256,42 @@ public sealed partial class FileByFileReviewOrchestrator(
             _ => AiConnectionModelCategory.MediumEffort,
         };
 
-        // US4: Resolve tier-specific IChatClient if configured
+        var tierPurpose = tier switch
+        {
+            FileComplexityTier.Low => AiPurpose.ReviewLowEffort,
+            FileComplexityTier.Medium => AiPurpose.ReviewMediumEffort,
+            FileComplexityTier.High => AiPurpose.ReviewHighEffort,
+            _ => AiPurpose.ReviewMediumEffort,
+        };
+
+        // Resolve tier-specific IChatClient if configured
         IChatClient? tierClient = null;
         AiConnectionDto? tierDto = null;
-        if (aiConnectionRepository is not null && aiClientFactory is not null)
+        string? tierModelId = null;
+        if (aiRuntimeResolver is not null)
+        {
+            try
+            {
+                var tierRuntime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, tierPurpose, ct);
+                tierDto = tierRuntime.Connection;
+                tierClient = tierRuntime.ChatClient;
+                tierModelId = tierRuntime.Model.RemoteModelId;
+            }
+            catch
+            {
+                tierDto = null;
+                tierClient = null;
+                tierModelId = null;
+            }
+        }
+        else if (aiConnectionRepository is not null && aiClientFactory is not null)
         {
             tierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, tierCategory, ct);
             if (tierDto is not null)
             {
-                tierClient = aiClientFactory.CreateClient(tierDto.EndpointUrl, tierDto.ApiKey);
+                tierClient = aiClientFactory.CreateClient(tierDto.BaseUrl, tierDto.Secret);
+                tierModelId = tierDto.GetBoundModelId(tierPurpose)
+                              ?? tierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
             }
         }
 
@@ -279,7 +304,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 file.Path,
                 fileResult.Id,
                 tierCategory,
-                tierDto?.ActiveModel,
+                tierModelId,
                 ct);
         }
         catch (Exception ex)
@@ -290,7 +315,7 @@ public sealed partial class FileByFileReviewOrchestrator(
         ReviewSystemContext? fileContext = null;
         try
         {
-            // US3: Filter threads for this file
+            // Filter threads for this file
             var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
 
             var filePr = new PullRequest(
@@ -332,7 +357,7 @@ public sealed partial class FileByFileReviewOrchestrator(
             {
                 ActiveProtocolId = protocolId,
                 ProtocolRecorder = protocolId.HasValue ? protocolRecorder : null,
-                // US4: Set per-file hint so ToolAwareAiReviewCore uses per-file prompts
+                // Set per-file hint so ToolAwareAiReviewCore uses per-file prompts
                 PerFileHint = new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries)
                 {
                     ComplexityTier = tier,
@@ -340,18 +365,18 @@ public sealed partial class FileByFileReviewOrchestrator(
                 },
                 ExclusionRules = baseContext.ExclusionRules,
                 DismissedPatterns = baseContext.DismissedPatterns,
-                ModelId = tierDto?.ActiveModel ?? tierDto?.Models.FirstOrDefault() ?? baseContext.ModelId,
-                // US4: Tier-specific client wins; fall back to per-client active connection so the
+                ModelId = tierModelId ?? baseContext.ModelId,
+                // Tier-specific client wins; fall back to per-client active connection so the
                 // global default chatClient is never used when a per-client connection is configured.
                 TierChatClient = tierClient ?? effectiveClient,
             };
 
             LogDismissalsInjected(logger, fileContext.DismissedPatterns?.Count ?? 0, file.Path, job.Id);
 
-            // US4: Custom prompts — driven by PerFileHint set above
+            // Custom prompts — driven by PerFileHint set above
             var result = await aiCore.ReviewAsync(filePr, fileContext, ct);
 
-            // US5 (feature 023): Apply confidence-gated severity floor first, so that downgraded
+            // Apply confidence-gated severity floor first, so that downgraded
             // severities are visible to the SUGGESTION-specific vague-phrase filter below.
             var commentsBeforeConfidenceFloor = result.Comments;
             result = ApplyConfidenceFloor(result, fileContext.LoopMetrics?.FinalConfidence, this._opts);
@@ -361,7 +386,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 LogSeverityDowngraded(logger, confidenceDroppedCount, file.Path, job.Id);
             }
 
-            // US1 (feature 023): Discard speculative/hedge-phrase comments.
+            // Discard speculative/hedge-phrase comments.
             var beforeHedge = result.Comments.Count;
             result = FilterSpeculativeComments(result);
             var hedgeDropped = beforeHedge - result.Comments.Count;
@@ -370,7 +395,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 LogSpeculativeCommentsDropped(logger, hedgeDropped, file.Path, job.Id);
             }
 
-            // US2 (feature 023): Strip INFO-severity comments — they belong in the summary only.
+            // Strip INFO-severity comments — they belong in the summary only.
             var beforeInfo = result.Comments.Count;
             result = StripInfoComments(result);
             var infoDropped = beforeInfo - result.Comments.Count;
@@ -379,7 +404,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 LogInfoCommentsDropped(logger, infoDropped, file.Path, job.Id);
             }
 
-            // US3 (feature 023): Discard vague SUGGESTION comments that lack a concrete alternative.
+            // Discard vague SUGGESTION comments that lack a concrete alternative.
             var beforeVague = result.Comments.Count;
             result = FilterVagueSuggestions(result);
             var vagueDropped = beforeVague - result.Comments.Count;
@@ -388,7 +413,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 LogVagueSuggestionsDropped(logger, vagueDropped, file.Path, job.Id);
             }
 
-            // Feature 026: Memory-augmented reconsideration — query historical thread embeddings and
+            // Memory-augmented reconsideration — query historical thread embeddings and
             // reconsider findings in light of past resolutions. Falls through unchanged on any failure.
             if (memoryService is not null)
             {
@@ -470,22 +495,39 @@ public sealed partial class FileByFileReviewOrchestrator(
             .SelectMany(r => r.Comments!)
             .ToList();
 
-        // US2: Synthesis AI call — resolve per-client connection the same way per-file reviews do
+        // Synthesis AI call — resolve per-client connection the same way per-file reviews do
         AiConnectionDto? synthTierDto = null;
-        if (aiConnectionRepository is not null && aiClientFactory is not null)
+        string? synthesisModelId = null;
+        if (aiRuntimeResolver is not null)
         {
-            synthTierDto = await aiConnectionRepository.GetForTierAsync(
-                job.ClientId,
-                AiConnectionModelCategory.HighEffort,
-                ct);
+            try
+            {
+                var synthesisRuntime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+                    job.ClientId,
+                    AiPurpose.ReviewHighEffort,
+                    ct);
+                synthTierDto = synthesisRuntime.Connection;
+                effectiveClient = synthesisRuntime.ChatClient;
+                synthesisModelId = synthesisRuntime.Model.RemoteModelId;
+            }
+            catch
+            {
+                synthTierDto = null;
+                synthesisModelId = null;
+            }
+        }
+        else if (aiConnectionRepository is not null && aiClientFactory is not null)
+        {
+            synthTierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, AiConnectionModelCategory.HighEffort, ct);
             if (synthTierDto is not null)
             {
-                effectiveClient = aiClientFactory.CreateClient(synthTierDto.EndpointUrl, synthTierDto.ApiKey);
+                effectiveClient = aiClientFactory.CreateClient(synthTierDto.BaseUrl, synthTierDto.Secret);
+                synthesisModelId = synthTierDto.GetBoundModelId(AiPurpose.ReviewHighEffort)
+                                   ?? synthTierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
             }
         }
 
-        baseContext.ModelId = synthTierDto?.ActiveModel
-                              ?? synthTierDto?.Models.FirstOrDefault()
+        baseContext.ModelId = synthesisModelId
                               ?? baseContext.ModelId
                               ?? job.AiModel
                               ?? this._opts.ModelId;
@@ -501,7 +543,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 "synthesis",
                 null,
                 AiConnectionModelCategory.HighEffort,
-                synthTierDto?.ActiveModel,
+                synthesisModelId,
                 ct);
         }
         catch (Exception ex)
@@ -786,8 +828,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         return allThreads.Where(t => t.FilePath == filePath || t.FilePath == null).ToList();
     }
 
-    // ─── IMP-08: cross-file quality-filter AI pass ───────────────────────────────
-
     /// <summary>
     ///     Parses the JSON response from the cross-file quality-filter AI call.
     ///     Returns an empty list on any parse failure (fallback: keep original comments).
@@ -890,8 +930,6 @@ public sealed partial class FileByFileReviewOrchestrator(
             return comments;
         }
     }
-
-    // ─── T035: complexity tier classification ────────────────────────────────────
 
     /// <summary>
     ///     Classifies a changed file into a complexity tier based on changed-line count.<br />

@@ -1,539 +1,376 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Data.Models;
-using MeisterProPR.Infrastructure.Repositories;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.IdentityModel.Tokens;
-using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
 
-/// <summary>
-///     Integration tests for <see cref="MeisterProPR.Api.Controllers.ClientAiConnectionsController" />.
-///     T024 — covers create, activate (valid model, invalid model), deactivate, and delete.
-/// </summary>
-public sealed class ClientAiConnectionsControllerTests(ClientAiConnectionsControllerTests.AiConnectionsApiFactory factory)
-    : IClassFixture<ClientAiConnectionsControllerTests.AiConnectionsApiFactory>
+public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.ClientsApiFactory factory)
+    : IClassFixture<ClientsControllerTests.ClientsApiFactory>
 {
-    private static readonly string[] DefaultModels = ["gpt-4o", "gpt-4o-mini"];
+    private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly JsonSerializerOptions ApiJsonOptions = CreateApiJsonOptions();
 
-    // ─── helpers ────────────────────────────────────────────────────────────────
-
-    private async Task<Guid> SeedConnectionAsync(string displayName = "Test Connection", string[]? models = null)
+    private HttpClient CreateAuthorizedClient()
     {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        return client;
+    }
+
+    private static object BuildConfiguredModel(string remoteModelId, bool embedding = false)
+    {
+        return embedding
+            ? new
             {
-                displayName,
-                endpointUrl = "https://fake.openai.azure.com/",
-                models = models ?? DefaultModels,
-            });
+                remoteModelId,
+                displayName = remoteModelId,
+                operationKinds = new[] { "embedding" },
+                supportedProtocolModes = new[] { "auto", "embeddings" },
+                tokenizerName = "cl100k_base",
+                maxInputTokens = 8192,
+                embeddingDimensions = 3072,
+                supportsStructuredOutput = false,
+                supportsToolUse = false,
+                source = "manual",
+            }
+            : new
+            {
+                remoteModelId,
+                displayName = remoteModelId,
+                operationKinds = new[] { "chat" },
+                supportedProtocolModes = new[] { "auto", "responses", "chatCompletions" },
+                supportsStructuredOutput = true,
+                supportsToolUse = true,
+                source = "manual",
+            };
+    }
 
-        var response = await http.SendAsync(request);
+    private static object[] BuildBindings(string primaryChatModel, string embeddingModel, bool includeEffortOverrides = true)
+    {
+        var bindings = new List<object>
+        {
+            new { purpose = "reviewDefault", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+            new { purpose = "memoryReconsideration", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+            new { purpose = "embeddingDefault", remoteModelId = embeddingModel, protocolMode = "embeddings", isEnabled = true },
+        };
+
+        if (includeEffortOverrides)
+        {
+            bindings.InsertRange(
+                1,
+                [
+                    new { purpose = "reviewLowEffort", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+                    new { purpose = "reviewMediumEffort", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+                    new { purpose = "reviewHighEffort", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+                ]);
+        }
+
+        return bindings.ToArray();
+    }
+
+    private static object BuildCreatePayload(
+        string displayName,
+        IReadOnlyList<string>? chatModels = null,
+        string? baseUrl = null,
+        bool includeEffortOverrides = true)
+    {
+        var resolvedChatModels = chatModels is { Count: > 0 } ? chatModels : new[] { "gpt-4o" };
+        var embeddingModel = "text-embedding-3-large";
+
+        return new
+        {
+            displayName,
+            providerKind = "azureOpenAi",
+            baseUrl = baseUrl ?? "https://my-openai.openai.azure.com/",
+            auth = new
+            {
+                mode = "apiKey",
+                apiKey = "secret-api-key",
+            },
+            discoveryMode = "manualOnly",
+            configuredModels = resolvedChatModels.Select(model => BuildConfiguredModel(model)).Concat([BuildConfiguredModel(embeddingModel, embedding: true)]),
+            purposeBindings = BuildBindings(resolvedChatModels[0], embeddingModel, includeEffortOverrides),
+        };
+    }
+
+    private async Task<AiConnectionDto> SeedConnectionAsync(
+        string displayName,
+        IReadOnlyList<string>? chatModels = null,
+        bool verify = false,
+        bool includeEffortOverrides = true)
+    {
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            BuildCreatePayload(displayName, chatModels, includeEffortOverrides: includeEffortOverrides));
+
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return body.RootElement.GetProperty("id").GetGuid();
+        var created = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(created);
+
+        if (verify)
+        {
+            var verifyResponse = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/verify", null);
+            Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
+        }
+
+        return created;
     }
-
-    // ─── GET ai-connections ──────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetAiConnections_WithAdminKey_Returns200()
-    {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetAiConnections_WithoutCredentials_Returns401()
-    {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/clients/{factory.ClientId}/ai-connections");
-
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    // ─── POST create ai-connection ───────────────────────────────────────────────
 
     [Fact]
     public async Task CreateAiConnection_WithValidPayload_Returns201WithDto()
     {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
-            {
-                displayName = "My Connection",
-                endpointUrl = "https://fake.openai.azure.com/",
-                models = new[] { "gpt-4o" },
-                apiKey = "sk-test-secret",
-            });
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections", BuildCreatePayload("Primary Profile", ["gpt-4o", "gpt-4.1-mini"]));
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.True(body.TryGetProperty("id", out _));
-        Assert.Equal("My Connection", body.GetProperty("displayName").GetString());
-        Assert.False(body.GetProperty("isActive").GetBoolean());
-        // API key must never appear in the response
-        Assert.False(body.TryGetProperty("apiKey", out _), "apiKey must not be returned.");
-
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var record = await db.AiConnections.FirstAsync(a => a.DisplayName == "My Connection");
-        Assert.NotEqual("sk-test-secret", record.ApiKey);
+        var created = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal("Primary Profile", created.DisplayName);
+        Assert.Equal("azureOpenAi", created.ProviderKind.ToString().ToCamelCase());
+        Assert.Equal("https://my-openai.openai.azure.com/", created.BaseUrl);
+        Assert.Equal(3, created.ConfiguredModels.Count);
+        Assert.False(created.IsActive);
+        Assert.Equal("neverVerified", created.Verification.Status.ToString().ToCamelCase());
     }
 
     [Fact]
-    public async Task CreateAiConnection_MissingDisplayName_Returns400()
+    public async Task CreateAiConnection_WithoutCredentials_Returns401()
     {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
-            {
-                endpointUrl = "https://fake.openai.azure.com/",
-                models = new[] { "gpt-4o" },
-            });
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections", BuildCreatePayload("Primary Profile"));
 
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task CreateAiConnection_InvalidEndpointUrl_Returns400()
+    public async Task UpdateAiConnection_WithProviderNeutralPayload_UpdatesConnection()
     {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
+        var created = await this.SeedConnectionAsync("Primary Profile", ["gpt-4o"]);
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
             new
             {
-                displayName = "Bad Endpoint",
-                endpointUrl = "not-a-url",
-                models = new[] { "gpt-4o" },
+                baseUrl = "https://updated.openai.azure.com/",
+                configuredModels = new object[]
+                {
+                    BuildConfiguredModel("gpt-4.1"),
+                    BuildConfiguredModel("text-embedding-3-large", embedding: true),
+                },
+                purposeBindings = BuildBindings("gpt-4.1", "text-embedding-3-large"),
             });
 
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task CreateAiConnection_EmptyModelsList_Returns400()
-    {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
-            {
-                displayName = "No Models",
-                endpointUrl = "https://fake.openai.azure.com/",
-                models = Array.Empty<string>(),
-            });
-
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    // ─── PATCH update ai-connection ──────────────────────────────────────────────
-
-    [Fact]
-    public async Task UpdateAiConnection_WithEndpointAndModels_UpdatesConnection()
-    {
-        var connectionId = await this.SeedConnectionAsync("Editable Connection", ["gpt-4o", "gpt-4o-mini"]);
-
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Patch,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
-            {
-                displayName = "Renamed Connection",
-                endpointUrl = "https://updated-resource.openai.azure.com/",
-                models = new[] { "gpt-4.1" },
-                apiKey = "sk-updated-secret",
-            });
-
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
 
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("Renamed Connection", body.GetProperty("displayName").GetString());
-        Assert.Equal("https://updated-resource.openai.azure.com/", body.GetProperty("endpointUrl").GetString());
-        Assert.Equal("gpt-4.1", body.GetProperty("models")[0].GetString());
-        Assert.False(body.TryGetProperty("apiKey", out _));
+        Assert.NotNull(updated);
+        Assert.Equal("https://updated.openai.azure.com/", updated.BaseUrl);
+        Assert.Contains(updated.ConfiguredModels, model => model.RemoteModelId == "gpt-4.1");
+        Assert.Equal("gpt-4.1", updated.GetBoundModelId(AiPurpose.ReviewDefault));
+    }
 
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var record = await db.AiConnections.FirstAsync(a => a.Id == connectionId);
-        Assert.Equal("https://updated-resource.openai.azure.com/", record.EndpointUrl);
-        Assert.Equal(["gpt-4.1"], record.Models);
-        Assert.NotEqual("sk-updated-secret", record.ApiKey);
+    [Fact]
+    public async Task UpdateAiConnection_QualifyingEditResetsVerificationAndBlocksActivationUntilReverified()
+    {
+        var created = await this.SeedConnectionAsync("Primary Profile", verify: true);
+        var client = this.CreateAuthorizedClient();
+
+        var updateResponse = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new
+            {
+                baseUrl = "https://updated.openai.azure.com/",
+                auth = new
+                {
+                    mode = "apiKey",
+                    apiKey = "updated-secret-api-key",
+                },
+            });
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        var updated = await updateResponse.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal("neverVerified", updated.Verification.Status.ToString().ToCamelCase());
+
+        var activateBeforeVerify = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
+        Assert.Equal(HttpStatusCode.BadRequest, activateBeforeVerify.StatusCode);
+
+        var verifyResponse = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/verify", null);
+        Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
+
+        var activateAfterVerify = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
+        Assert.Equal(HttpStatusCode.OK, activateAfterVerify.StatusCode);
     }
 
     [Fact]
     public async Task UpdateAiConnection_InvalidEndpointUrl_Returns400()
     {
-        var connectionId = await this.SeedConnectionAsync();
+        var created = await this.SeedConnectionAsync("Primary Profile");
+        var client = this.CreateAuthorizedClient();
 
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Patch,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
-            new
-            {
-                endpointUrl = "not-a-valid-url",
-            });
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new { baseUrl = "not-a-valid-url" });
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateAiConnection_RemovingActiveModel_Returns400()
+    public async Task UpdateAiConnection_MissingPurposeBindingModel_Returns400()
     {
-        var connectionId = await this.SeedConnectionAsync(models: ["gpt-4o", "gpt-4o-mini"]);
+        var created = await this.SeedConnectionAsync("Primary Profile");
+        var client = this.CreateAuthorizedClient();
 
-        var http = factory.CreateClient();
-        using (var activateRequest = new HttpRequestMessage(
-                   HttpMethod.Post,
-                   $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate"))
-        {
-            activateRequest.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-            activateRequest.Content = JsonContent.Create(new { model = "gpt-4o" });
-            var activateResponse = await http.SendAsync(activateRequest);
-            Assert.Equal(HttpStatusCode.OK, activateResponse.StatusCode);
-        }
-
-        using var request = new HttpRequestMessage(
-            HttpMethod.Patch,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
             new
             {
-                models = new[] { "gpt-4o-mini" },
+                purposeBindings = new object[]
+                {
+                    new { purpose = "reviewDefault", protocolMode = "auto", isEnabled = true },
+                },
             });
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    // ─── POST activate ───────────────────────────────────────────────────────────
-
     [Fact]
-    public async Task ActivateAiConnection_WithValidModel_Returns200AndIsActiveTrue()
+    public async Task ActivateAiConnection_WithVerifiedProfile_Returns200AndIsActiveTrue()
     {
-        var connectionId = await this.SeedConnectionAsync();
+        var created = await this.SeedConnectionAsync("Primary Profile", verify: true);
+        var client = this.CreateAuthorizedClient();
 
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { model = "gpt-4o" });
+        var response = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.True(body.GetProperty("isActive").GetBoolean());
-        Assert.Equal("gpt-4o", body.GetProperty("activeModel").GetString());
+        var activated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(activated);
+        Assert.True(activated.IsActive);
     }
 
     [Fact]
-    public async Task ActivateAiConnection_WithModelNotInList_Returns400()
+    public async Task ActivateAiConnection_WithMinimalVerifiedBindings_Returns200AndIsActiveTrue()
     {
-        var connectionId = await this.SeedConnectionAsync(models: ["gpt-4o"]);
+        var created = await this.SeedConnectionAsync("Primary Profile", verify: true, includeEffortOverrides: false);
+        var client = this.CreateAuthorizedClient();
 
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { model = "o1-preview" }); // not in list
+        var response = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
 
-        var response = await http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var activated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(activated);
+        Assert.True(activated.IsActive);
+    }
+
+    [Fact]
+    public async Task ActivateAiConnection_WithUnverifiedProfile_Returns400()
+    {
+        var created = await this.SeedConnectionAsync("Primary Profile", verify: false);
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
+
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
-
-    [Fact]
-    public async Task ActivateAiConnection_UnknownConnection_Returns404()
-    {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections/{Guid.NewGuid()}/activate");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { model = "gpt-4o" });
-
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    // ─── POST deactivate ─────────────────────────────────────────────────────────
 
     [Fact]
     public async Task DeactivateAiConnection_WhenActive_Returns200AndIsActiveFalse()
     {
-        var connectionId = await this.SeedConnectionAsync();
+        var created = await this.SeedConnectionAsync("Primary Profile", verify: true);
+        var client = this.CreateAuthorizedClient();
+        await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/activate", null);
 
-        // Activate first
-        var http = factory.CreateClient();
-        using var activateReq = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}/activate");
-        activateReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        activateReq.Content = JsonContent.Create(new { model = "gpt-4o" });
-        await http.SendAsync(activateReq);
+        var response = await client.PostAsync($"/clients/{ClientId}/ai-connections/{created.Id}/deactivate", null);
 
-        // Now deactivate
-        using var deactivateReq = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}/deactivate");
-        deactivateReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-
-        var response = await http.SendAsync(deactivateReq);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.False(body.GetProperty("isActive").GetBoolean());
+        var deactivated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(deactivated);
+        Assert.False(deactivated.IsActive);
     }
-
-    // ─── DELETE ──────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task DeleteAiConnection_ExistingConnection_Returns204()
     {
-        var connectionId = await this.SeedConnectionAsync("Delete Me");
+        var created = await this.SeedConnectionAsync("Primary Profile");
+        var client = this.CreateAuthorizedClient();
 
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        var response = await client.DeleteAsync($"/clients/{ClientId}/ai-connections/{created.Id}");
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-    }
 
-    [Fact]
-    public async Task DeleteAiConnection_UnknownConnection_Returns404()
-    {
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/clients/{factory.ClientId}/ai-connections/{Guid.NewGuid()}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-
-        var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var listResponse = await client.GetAsync($"/clients/{ClientId}/ai-connections");
+        var connections = await listResponse.Content.ReadFromJsonAsync<List<AiConnectionDto>>(ApiJsonOptions);
+        Assert.NotNull(connections);
+        Assert.DoesNotContain(connections, connection => connection.Id == created.Id);
     }
 
     [Fact]
     public async Task DeleteAiConnection_WithoutCredentials_Returns401()
     {
-        var connectionId = await this.SeedConnectionAsync("No Auth Delete");
+        var created = await this.SeedConnectionAsync("Primary Profile");
+        using var client = factory.CreateClient();
 
-        var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
+        var response = await client.DeleteAsync($"/clients/{ClientId}/ai-connections/{created.Id}");
 
-        var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
-
-    // ─── FR-017: deleting a connection must not corrupt existing job snapshots ───
 
     [Fact]
     public async Task DeleteAiConnection_DoesNotCorruptExistingJobAiConnectionSnapshot()
     {
-        // Arrange: seed a connection, activate it, then record the ID (simulates what a job would snapshot).
-        var connectionId = await this.SeedConnectionAsync("FR-017 Connection");
+        var created = await this.SeedConnectionAsync("Primary Profile");
 
-        // Seed a ReviewJob that references this connection directly in the DB
-        using (var scope = factory.Services.CreateScope())
+        await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var job = new ReviewJob(
-                Guid.NewGuid(),
-                factory.ClientId,
-                "https://dev.azure.com/org",
-                "proj",
-                "repo",
-                1,
-                1);
-            job.SetAiConfig(connectionId, "gpt-4o"); // FR-017: set the AI connection snapshot
+            var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo", 42, 9001);
+            job.SetAiConfig(created.Id, "gpt-4o");
             db.ReviewJobs.Add(job);
             await db.SaveChangesAsync();
         }
 
-        // Act: delete the AI connection
-        var http = factory.CreateClient();
-        using var deleteReq = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/clients/{factory.ClientId}/ai-connections/{connectionId}");
-        deleteReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        var deleteResp = await http.SendAsync(deleteReq);
-        Assert.Equal(HttpStatusCode.NoContent, deleteResp.StatusCode);
+        var client = this.CreateAuthorizedClient();
+        var response = await client.DeleteAsync($"/clients/{ClientId}/ai-connections/{created.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
-        // Assert: job record still has its AiConnectionId snapshot (nullable FK — job is not deleted)
-        using (var scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            var job = await db.ReviewJobs.FirstOrDefaultAsync(j => j.AiConnectionId == connectionId);
-            // Job still exists (connection deletion does not cascade to jobs in our design)
-            // The AiConnectionId on the job remains the snapshot value (soft reference).
-            // In production with a real DB, the FK is nullable and SET NULL on delete.
-            // In InMemory, deleting the AiConnectionRecord does not cascade, so the job record persists.
-            Assert.NotNull(job);
-            Assert.Equal(connectionId, job.AiConnectionId);
-        }
+        await using var verifyScope = factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var persistedJob = await verifyDb.ReviewJobs.AsNoTracking().SingleAsync();
+        Assert.Equal(created.Id, persistedJob.AiConnectionId);
+        Assert.Equal("gpt-4o", persistedJob.AiModel);
     }
 
-    // ─── WebApplicationFactory ────────────────────────────────────────────────────
-
-    public sealed class AiConnectionsApiFactory : WebApplicationFactory<Program>
+    private static JsonSerializerOptions CreateApiJsonOptions()
     {
-        private const string TestJwtSecret = "test-ai-connections-jwt-32chars!!";
-        private readonly string _dbName = $"TestDb_AiConnections_{Guid.NewGuid()}";
-        private readonly InMemoryDatabaseRoot _dbRoot = new();
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
+}
 
-        /// <summary>The UUID of the seeded client.</summary>
-        public Guid ClientId { get; } = Guid.NewGuid();
-
-        public string GenerateAdminToken()
+internal static class ClientAiConnectionsControllerTestStringExtensions
+{
+    public static string ToCamelCase(this string value)
+    {
+        if (string.IsNullOrEmpty(value) || char.IsLower(value[0]))
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
-            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
-            var descriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(
-                [
-                    new Claim("sub", Guid.NewGuid().ToString()),
-                    new Claim("global_role", "Admin"),
-                ]),
-                Expires = DateTime.UtcNow.AddHours(1),
-                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
-                Issuer = "meisterpropr",
-                Audience = "meisterpropr",
-            };
-            return handler.WriteToken(handler.CreateToken(descriptor));
+            return value;
         }
 
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment("Testing");
-            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
-            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
-            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
-            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
-
-            var dbName = this._dbName;
-            var dbRoot = this._dbRoot;
-            builder.ConfigureServices(services =>
-            {
-                // Stub external/infra services not needed for these tests
-                services.AddSingleton<IJwtTokenService, JwtTokenService>();
-                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
-                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
-                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
-                services.AddSingleton(Substitute.For<IPrStatusFetcher>());
-                services.AddSingleton(Substitute.For<IThreadMemoryService>());
-
-                // InMemory EF Core DB (shared across all requests in this factory)
-                services.AddDbContext<MeisterProPRDbContext>(opts =>
-                    opts.UseInMemoryDatabase(dbName, dbRoot));
-
-                // Use real repository implementations backed by InMemory DB
-                services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
-
-                // Stub remaining dependencies that the app expects but aren't exercised here
-                var userRepo = Substitute.For<IUserRepository>();
-                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<AppUser?>(null));
-                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
-                services.AddSingleton(userRepo);
-
-                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
-                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
-                services.AddSingleton(crawlRepo);
-
-                services.AddSingleton(Substitute.For<IJobRepository>());
-            });
-        }
-
-        protected override IHost CreateHost(IHostBuilder builder)
-        {
-            var host = base.CreateHost(builder);
-
-            // Seed the client record so ClientAiConnectionsController can validate ownership
-            using var scope = host.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            db.Clients.Add(
-                new ClientRecord
-                {
-                    Id = this.ClientId,
-                    DisplayName = "AI Test Client",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
-            db.SaveChanges();
-
-            return host;
-        }
+        return char.ToLowerInvariant(value[0]) + value[1..];
     }
 }

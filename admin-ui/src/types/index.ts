@@ -295,6 +295,139 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the activation status for every supported provider family. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Returns the activation status for all supported provider families. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderActivationStatusDto"][];
+                        "application/json": components["schemas"]["ProviderActivationStatusDto"][];
+                        "text/json": components["schemas"]["ProviderActivationStatusDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Provider activation services are unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/providers/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Updates whether one provider family is enabled for this installation. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The provider family to update. */
+                    provider: components["schemas"]["ScmProvider"];
+                };
+                cookie?: never;
+            };
+            /** @description The requested activation state. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchAdminProviderRequest"];
+                    "text/json": components["schemas"]["PatchAdminProviderRequest"];
+                    "application/*+json": components["schemas"]["PatchAdminProviderRequest"];
+                };
+            };
+            responses: {
+                /** @description Returns the updated activation state for the provider family. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderActivationStatusDto"];
+                        "application/json": components["schemas"]["ProviderActivationStatusDto"];
+                        "text/json": components["schemas"]["ProviderActivationStatusDto"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a global administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Provider activation services are unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
     "/admin/identity/users": {
         parameters: {
             query?: never;
@@ -1547,20 +1680,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lists all AI connections for the specified client. */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description List of AI connections (API keys are never returned). */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1571,7 +1702,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConnectionDto"][];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1582,7 +1713,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1596,18 +1727,15 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates a new AI connection for the specified client. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
                 };
                 cookie?: never;
             };
-            /** @description AI connection details. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["CreateAiConnectionRequest"];
@@ -1616,7 +1744,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description AI connection created. */
+                /** @description Created */
                 201: {
                     headers: {
                         [name: string]: unknown;
@@ -1627,7 +1755,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConnectionDto"];
                     };
                 };
-                /** @description Validation failure. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1638,7 +1766,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1649,7 +1777,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1678,29 +1806,26 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Deletes an AI connection. */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description AI connection identifier. */
                     connectionId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description AI connection deleted. */
+                /** @description No Content */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1711,7 +1836,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1722,7 +1847,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description AI connection not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1737,20 +1862,16 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Updates non-null fields of an AI connection. */
         patch: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description AI connection identifier. */
                     connectionId: string;
                 };
                 cookie?: never;
             };
-            /** @description Fields to update; omit a field to leave it unchanged. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["UpdateAiConnectionRequest"];
@@ -1759,7 +1880,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description AI connection updated. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1770,7 +1891,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConnectionDto"];
                     };
                 };
-                /** @description Validation failure. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1781,7 +1902,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1792,7 +1913,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1803,7 +1924,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description AI connection not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1827,29 +1948,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Activates the specified AI connection with the given model deployment. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description AI connection identifier. */
                     connectionId: string;
                 };
                 cookie?: never;
             };
-            /** @description Activation request containing the model to use. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ActivateAiConnectionRequest"];
-                    "text/json": components["schemas"]["ActivateAiConnectionRequest"];
-                    "application/*+json": components["schemas"]["ActivateAiConnectionRequest"];
-                };
-            };
+            requestBody?: never;
             responses: {
-                /** @description AI connection activated. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1860,7 +1971,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConnectionDto"];
                     };
                 };
-                /** @description Model not in the connection's model list. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1871,7 +1982,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1882,7 +1993,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1893,7 +2004,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description AI connection not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1921,22 +2032,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Deactivates the specified AI connection. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description AI connection identifier. */
                     connectionId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description AI connection deactivated. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1947,7 +2055,7 @@ export interface paths {
                         "text/json": components["schemas"]["AiConnectionDto"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1958,7 +2066,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1969,7 +2077,80 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description AI connection not found. */
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/ai-connections/{connectionId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiVerificationResultDto"];
+                        "application/json": components["schemas"]["AiVerificationResultDto"];
+                        "text/json": components["schemas"]["AiVerificationResultDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1997,22 +2178,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Probes the given endpoint URL with the supplied API key and returns the list of available
-         *     model deployment names. Returns an empty list when the endpoint is unreachable or returns
-         *     no deployments — the caller should surface this as a warning, not an error.
-         */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier (used for auth). */
                     clientId: string;
                 };
                 cookie?: never;
             };
-            /** @description Endpoint URL and API key to probe. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["DiscoverModelsRequest"];
@@ -2021,18 +2195,18 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description List of model deployment names (may be empty). */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["DiscoverModelsResponse"];
-                        "application/json": components["schemas"]["DiscoverModelsResponse"];
-                        "text/json": components["schemas"]["DiscoverModelsResponse"];
+                        "text/plain": components["schemas"]["AiModelDiscoveryResultDto"];
+                        "application/json": components["schemas"]["AiModelDiscoveryResultDto"];
+                        "text/json": components["schemas"]["AiModelDiscoveryResultDto"];
                     };
                 };
-                /** @description Validation failure. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -2043,7 +2217,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -2054,7 +2228,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not own this client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -2453,6 +2627,80 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/clients/{clientId}/provider-operations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists authoritative provider operational status for a client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Provider operational status found. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProviderOperationalStatusDto"];
+                        "application/json": components["schemas"]["ProviderOperationalStatusDto"];
+                        "text/json": components["schemas"]["ProviderOperationalStatusDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks required client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/clients/{clientId}/provider-operations/audit-trail": {
@@ -3883,7 +4131,8 @@ export interface paths {
         };
         /**
          * Returns all review jobs across all clients, newest first.
-         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.
+         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client
+         *     access.
          */
         get: {
             parameters: {
@@ -3946,7 +4195,8 @@ export interface paths {
         };
         /**
          * Returns all review jobs across all clients, newest first.
-         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client access.
+         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for scoped client
+         *     access.
          */
         get: {
             parameters: {
@@ -4392,10 +4642,10 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description ADO organization base URL. */
-                    organizationUrl?: string;
-                    /** @description ADO project identifier. */
-                    projectId?: string;
+                    /** @description Provider scope path or host-qualified namespace for the repository. */
+                    providerScopePath?: string;
+                    /** @description Provider project, owner, or namespace key for the repository. */
+                    providerProjectKey?: string;
                     /** @description ADO repository identifier. */
                     repositoryId?: string;
                     /** @description Pull request number. */
@@ -4471,10 +4721,10 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description ADO organization base URL. */
-                    organizationUrl?: string;
-                    /** @description ADO project identifier. */
-                    projectId?: string;
+                    /** @description Provider scope path or host-qualified namespace for the repository. */
+                    providerScopePath?: string;
+                    /** @description Provider project, owner, or namespace key for the repository. */
+                    providerProjectKey?: string;
                     /** @description ADO repository identifier. */
                     repositoryId?: string;
                     /** @description Pull request number. */
@@ -7235,10 +7485,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Request body for activating an AI connection with a specific model. */
-        ActivateAiConnectionRequest: {
-            model?: string | null;
-        };
         /** @description A branch option discovered for one source. */
         AdoBranchOptionDto: {
             branchName?: string | null;
@@ -7264,7 +7510,72 @@ export interface components {
             displayName?: string | null;
             defaultBranch?: string | null;
         };
-        /** @description Data transfer object for an AI connection. The API key is excluded from JSON serialization. */
+        /**
+         * @description Authentication modes supported by AI providers.
+         * @enum {string}
+         */
+        AiAuthMode: "apiKey" | "azureIdentity";
+        /** @description One configured or discovered model that belongs to an AI connection profile. */
+        AiConfiguredModelDto: {
+            /** Format: uuid */
+            id?: string;
+            remoteModelId?: string | null;
+            displayName?: string | null;
+            operationKinds?: components["schemas"]["AiOperationKind"][] | null;
+            supportedProtocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+            tokenizerName?: string | null;
+            /** Format: int32 */
+            maxInputTokens?: number | null;
+            /** Format: int32 */
+            embeddingDimensions?: number | null;
+            supportsStructuredOutput?: boolean;
+            supportsToolUse?: boolean;
+            source?: components["schemas"]["AiConfiguredModelSource"];
+            /** Format: date-time */
+            lastSeenAt?: string | null;
+            /** Format: double */
+            inputCostPer1MUsd?: number | null;
+            /** Format: double */
+            outputCostPer1MUsd?: number | null;
+            /** @description Returns true when the model supports chat workloads. */
+            readonly supportsChat?: boolean;
+            /** @description Returns true when the model supports embeddings. */
+            readonly supportsEmbedding?: boolean;
+        };
+        /** @description Configured model payload item for create, update, and discovery flows. */
+        AiConfiguredModelRequest: {
+            /** Format: uuid */
+            id?: string | null;
+            remoteModelId?: string | null;
+            displayName?: string | null;
+            operationKinds?: components["schemas"]["AiOperationKind"][] | null;
+            supportedProtocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+            tokenizerName?: string | null;
+            /** Format: int32 */
+            maxInputTokens?: number | null;
+            /** Format: int32 */
+            embeddingDimensions?: number | null;
+            supportsStructuredOutput?: boolean;
+            supportsToolUse?: boolean;
+            source?: components["schemas"]["AiConfiguredModelSource"];
+            /** Format: date-time */
+            lastSeenAt?: string | null;
+            /** Format: double */
+            inputCostPer1MUsd?: number | null;
+            /** Format: double */
+            outputCostPer1MUsd?: number | null;
+        };
+        /**
+         * @description Origin of a configured model entry.
+         * @enum {string}
+         */
+        AiConfiguredModelSource: "discovered" | "manual" | "knownCatalog";
+        /** @description Authentication settings for one AI connection profile request. */
+        AiConnectionAuthRequest: {
+            mode?: components["schemas"]["AiAuthMode"];
+            apiKey?: string | null;
+        };
+        /** @description Data transfer object for a provider-neutral AI connection profile. */
         AiConnectionDto: {
             /**
              * Format: uuid
@@ -7278,62 +7589,36 @@ export interface components {
             clientId?: string;
             /** @description Human-readable display name. */
             displayName?: string | null;
-            /** @description Azure OpenAI or AI Foundry endpoint URL. */
-            endpointUrl?: string | null;
-            /** @description Available model deployment names. */
-            models?: string[] | null;
-            /** @description Whether this is the active connection for the client. */
+            providerKind?: components["schemas"]["AiProviderKind"];
+            /** @description Exact configured provider base URL. */
+            baseUrl?: string | null;
+            authMode?: components["schemas"]["AiAuthMode"];
+            discoveryMode?: components["schemas"]["AiDiscoveryMode"];
+            /** @description Whether this is the active profile for the client. */
             isActive?: boolean;
-            /** @description Selected model when active; null otherwise. */
-            activeModel?: string | null;
+            /** @description Configured models owned by this profile. */
+            configuredModels?: components["schemas"]["AiConfiguredModelDto"][] | null;
+            /** @description Purpose bindings owned by this profile. */
+            purposeBindings?: components["schemas"]["AiPurposeBindingDto"][] | null;
+            verification?: components["schemas"]["AiVerificationResultDto"];
             /**
              * Format: date-time
              * @description When created.
              */
             createdAt?: string;
-            modelCategory?: components["schemas"]["AiConnectionModelCategory"];
-            /** @description Optional per-deployment embedding capability metadata. */
-            modelCapabilities?: components["schemas"]["AiConnectionModelCapabilityDto"][] | null;
-        };
-        /** @description Per-deployment embedding capability metadata configured for an AI connection. */
-        AiConnectionModelCapabilityDto: {
-            /** @description Deployment/model name as configured on the AI connection. */
-            modelName?: string | null;
-            /** @description Tokenizer family used to count embedding input tokens. */
-            tokenizerName?: string | null;
             /**
-             * Format: int32
-             * @description Maximum total input tokens allowed per embedding request.
+             * Format: date-time
+             * @description When last updated.
              */
-            maxInputTokens?: number;
-            /**
-             * Format: int32
-             * @description Embedding vector width returned by the deployment.
-             */
-            embeddingDimensions?: number;
-            /**
-             * Format: double
-             * @description Optional USD price per one million prompt/input tokens.
-             */
-            inputCostPer1MUsd?: number | null;
-            /**
-             * Format: double
-             * @description Optional USD price per one million completion/output tokens.
-             */
-            outputCostPer1MUsd?: number | null;
-        };
-        /** @description One per-deployment embedding capability payload item for create or update requests. */
-        AiConnectionModelCapabilityRequest: {
-            modelName?: string | null;
-            tokenizerName?: string | null;
-            /** Format: int32 */
-            maxInputTokens?: number;
-            /** Format: int32 */
-            embeddingDimensions?: number;
-            /** Format: double */
-            inputCostPer1MUsd?: number | null;
-            /** Format: double */
-            outputCostPer1MUsd?: number | null;
+            updatedAt?: string;
+            /** @description Optional default headers appended by the driver. */
+            defaultHeaders?: {
+                [key: string]: string;
+            } | null;
+            /** @description Optional default query parameters appended by the driver. */
+            defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * @description Model category tag for an `AiConnection`.
@@ -7343,6 +7628,87 @@ export interface components {
          * @enum {string}
          */
         AiConnectionModelCategory: "lowEffort" | "mediumEffort" | "highEffort" | "embedding" | "memoryReconsideration" | "default";
+        /**
+         * @description Controls whether operators rely on provider discovery or manual model entry.
+         * @enum {string}
+         */
+        AiDiscoveryMode: "providerCatalog" | "manualOnly";
+        /** @description Normalized model discovery payload returned by provider drivers. */
+        AiModelDiscoveryResultDto: {
+            discoveryStatus?: string | null;
+            manualEntryAllowed?: boolean;
+            warnings?: string[] | null;
+            models?: components["schemas"]["AiConfiguredModelDto"][] | null;
+        };
+        /**
+         * @description Supported AI operation categories.
+         * @enum {string}
+         */
+        AiOperationKind: "chat" | "embedding";
+        /**
+         * @description Provider protocol mode used for a configured model binding.
+         * @enum {string}
+         */
+        AiProtocolMode: "auto" | "responses" | "chatCompletions" | "embeddings";
+        /**
+         * @description Supported AI provider families.
+         * @enum {string}
+         */
+        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm";
+        /**
+         * @description Product-owned AI purposes that resolve to configured models.
+         * @enum {string}
+         */
+        AiPurpose: "reviewDefault" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault";
+        /** @description One configured AI purpose binding for an AI connection profile. */
+        AiPurposeBindingDto: {
+            /** Format: uuid */
+            id?: string;
+            purpose?: components["schemas"]["AiPurpose"];
+            /** Format: uuid */
+            configuredModelId?: string | null;
+            remoteModelId?: string | null;
+            protocolMode?: components["schemas"]["AiProtocolMode"];
+            isEnabled?: boolean;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        /** @description Purpose binding payload item for create and update flows. */
+        AiPurposeBindingRequest: {
+            /** Format: uuid */
+            id?: string | null;
+            purpose?: components["schemas"]["AiPurpose"];
+            /** Format: uuid */
+            configuredModelId?: string | null;
+            remoteModelId?: string | null;
+            protocolMode?: components["schemas"]["AiProtocolMode"];
+            isEnabled?: boolean;
+        };
+        /**
+         * @description Normalized failure categories for provider verification and runtime diagnostics.
+         * @enum {string}
+         */
+        AiVerificationFailureCategory: "credentials" | "endpointReachability" | "authorization" | "providerRejected" | "capabilityMismatch" | "unknown";
+        /** @description Normalized verification result for one AI connection profile. */
+        AiVerificationResultDto: {
+            status?: components["schemas"]["AiVerificationStatus"];
+            failureCategory?: components["schemas"]["AiVerificationFailureCategory"];
+            summary?: string | null;
+            actionHint?: string | null;
+            /** Format: date-time */
+            checkedAt?: string | null;
+            warnings?: string[] | null;
+            driverMetadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * @description Latest verification state for one AI connection profile.
+         * @enum {string}
+         */
+        AiVerificationStatus: "neverVerified" | "verified" | "failed";
         /**
          * @description Global role assigned directly to an application user.
          * @enum {string}
@@ -7420,6 +7786,10 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            readinessLevel?: components["schemas"]["ProviderConnectionReadinessLevel"];
+            readinessReason?: string | null;
+            hostVariant?: string | null;
+            missingReadinessCriteria?: string[] | null;
         };
         /** @description Client-scoped SCM provider scope metadata returned by admin APIs. */
         ClientScmScopeDto: {
@@ -7504,8 +7874,8 @@ export interface components {
             provider?: components["schemas"]["ScmProvider"];
             /** Format: uuid */
             organizationScopeId?: string | null;
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             /** Format: int32 */
             crawlIntervalSeconds?: number;
             isActive?: boolean;
@@ -7536,11 +7906,11 @@ export interface components {
         CreateAdminCrawlConfigRequest: {
             /** Format: uuid */
             clientId?: string;
-            projectId?: string | null;
+            providerProjectKey?: string | null;
             provider?: components["schemas"]["ScmProvider"];
             /** Format: uuid */
             organizationScopeId?: string | null;
-            organizationUrl?: string | null;
+            providerScopePath?: string | null;
             /** Format: int32 */
             crawlIntervalSeconds?: number;
             repoFilters?: components["schemas"]["CrawlRepoFilterRequest"][] | null;
@@ -7554,19 +7924,26 @@ export interface components {
             provider?: components["schemas"]["WebhookProviderType"];
             /** Format: uuid */
             organizationScopeId?: string | null;
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             enabledEvents?: components["schemas"]["WebhookEventType"][] | null;
             repoFilters?: components["schemas"]["WebhookRepoFilterRequest"][] | null;
         };
-        /** @description Request body for creating a new AI connection. */
+        /** @description Request body for creating a provider-neutral AI connection profile. */
         CreateAiConnectionRequest: {
             displayName?: string | null;
-            endpointUrl?: string | null;
-            models?: string[] | null;
-            apiKey?: string | null;
-            modelCapabilities?: components["schemas"]["AiConnectionModelCapabilityRequest"][] | null;
-            modelCategory?: components["schemas"]["AiConnectionModelCategory"];
+            providerKind?: components["schemas"]["AiProviderKind"];
+            baseUrl?: string | null;
+            auth?: components["schemas"]["AiConnectionAuthRequest"];
+            discoveryMode?: components["schemas"]["AiDiscoveryMode"];
+            defaultHeaders?: {
+                [key: string]: string;
+            } | null;
+            defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
+            configuredModels?: components["schemas"]["AiConfiguredModelRequest"][] | null;
+            purposeBindings?: components["schemas"]["AiPurposeBindingRequest"][] | null;
         };
         /** @description Request body for creating a client-scoped provider connection. */
         CreateClientProviderConnectionRequest: {
@@ -7617,14 +7994,17 @@ export interface components {
             password?: string | null;
             globalRole?: components["schemas"]["AppUserRole"];
         };
-        /** @description Request body for probing an AI endpoint to discover available model deployments. */
+        /** @description Request body for model discovery against a provider without persisting a profile. */
         DiscoverModelsRequest: {
-            endpointUrl?: string | null;
-            apiKey?: string | null;
-        };
-        /** @description Response from the discover-models probe. */
-        DiscoverModelsResponse: {
-            models?: string[] | null;
+            providerKind?: components["schemas"]["AiProviderKind"];
+            baseUrl?: string | null;
+            auth?: components["schemas"]["AiConnectionAuthRequest"];
+            defaultHeaders?: {
+                [key: string]: string;
+            } | null;
+            defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
         };
         /** @description Request to dismiss a finding and store it as an admin-dismissed memory record. */
         DismissFindingRequest: {
@@ -7672,8 +8052,8 @@ export interface components {
             id?: string;
             /** Format: uuid */
             clientId?: string | null;
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             /** Format: int32 */
             pullRequestId?: number;
@@ -7715,7 +8095,8 @@ export interface components {
             password?: string | null;
         };
         /**
-         * @description Describes the outcome of a single thread-lifecycle state machine evaluation recorded in `memory_activity_log`.
+         * @description Describes the outcome of a single thread-lifecycle state machine evaluation recorded in
+         *     `memory_activity_log`.
          * @enum {string}
          */
         MemoryActivityAction: "stored" | "removed" | "noOp";
@@ -7791,6 +8172,11 @@ export interface components {
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
             proCursorSourceIds?: string[] | null;
         };
+        /** @description Request body for updating one provider family's activation state. */
+        PatchAdminProviderRequest: {
+            /** @description Whether the provider family should be enabled installation-wide. */
+            isEnabled?: boolean;
+        };
         /** @description Request body for patching an admin-managed webhook configuration. */
         PatchAdminWebhookConfigRequest: {
             isActive?: boolean | null;
@@ -7841,8 +8227,8 @@ export interface components {
         };
         /** @description Aggregated view of all review activity for a specific pull request. */
         PrReviewViewDto: {
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             /** Format: int32 */
             pullRequestId?: number;
@@ -7866,8 +8252,8 @@ export interface components {
         ProCursorKnowledgeSourceRequest: {
             displayName?: string | null;
             sourceKind?: components["schemas"]["ProCursorSourceKind"];
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             defaultBranch?: string | null;
             rootPath?: string | null;
@@ -7884,8 +8270,8 @@ export interface components {
             sourceId?: string;
             displayName?: string | null;
             sourceKind?: components["schemas"]["ProCursorSourceKind"];
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             defaultBranch?: string | null;
             rootPath?: string | null;
@@ -8251,6 +8637,17 @@ export interface components {
          * @enum {string}
          */
         ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation";
+        /** @description Global provider-family activation status for installation-wide administration. */
+        ProviderActivationStatusDto: {
+            providerFamily?: components["schemas"]["ScmProvider"];
+            isEnabled?: boolean;
+            baselineAdapterSetRegistered?: boolean;
+            registeredCapabilities?: string[] | null;
+            supportClaimReadiness?: components["schemas"]["ProviderConnectionReadinessLevel"];
+            supportClaimReason?: string | null;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         /** @description Append-only operational audit entry for one provider connection change or verification result. */
         ProviderConnectionAuditEntryDto: {
             /** Format: uuid */
@@ -8269,6 +8666,69 @@ export interface components {
             status?: string | null;
             failureCategory?: string | null;
             detail?: string | null;
+        };
+        /** @description Operator-facing operational status for one provider connection. */
+        ProviderConnectionOperationalStatusDto: {
+            /** Format: uuid */
+            connectionId?: string;
+            providerFamily?: components["schemas"]["ScmProvider"];
+            displayName?: string | null;
+            hostBaseUrl?: string | null;
+            hostVariant?: string | null;
+            isActive?: boolean;
+            verificationStatus?: string | null;
+            readinessLevel?: components["schemas"]["ProviderConnectionReadinessLevel"];
+            readinessReason?: string | null;
+            missingReadinessCriteria?: string[] | null;
+            health?: string | null;
+            /** Format: date-time */
+            lastCheckedAt?: string | null;
+            failureCategory?: string | null;
+            statusReason?: string | null;
+        };
+        /**
+         * @description Represents the current readiness level of a provider connection or provider family.
+         * @enum {string}
+         */
+        ProviderConnectionReadinessLevel: "unknown" | "configured" | "degraded" | "onboardingReady" | "workflowComplete";
+        /** @description Operator-facing readiness summary for one provider family. */
+        ProviderFamilyOperationalStatusDto: {
+            providerFamily?: components["schemas"]["ScmProvider"];
+            baselineAdapterSetRegistered?: boolean;
+            leastReadyLevel?: components["schemas"]["ProviderConnectionReadinessLevel"];
+            summaryReason?: string | null;
+            /** Format: int32 */
+            unknownCount?: number;
+            /** Format: int32 */
+            configuredCount?: number;
+            /** Format: int32 */
+            onboardingReadyCount?: number;
+            /** Format: int32 */
+            workflowCompleteCount?: number;
+            /** Format: int32 */
+            degradedCount?: number;
+            hostVariants?: components["schemas"]["ProviderHostVariantOperationalStatusDto"][] | null;
+        };
+        /** @description Operator-facing readiness summary for one provider family host variant. */
+        ProviderHostVariantOperationalStatusDto: {
+            hostVariant?: string | null;
+            leastReadyLevel?: components["schemas"]["ProviderConnectionReadinessLevel"];
+            summaryReason?: string | null;
+            /** Format: int32 */
+            unknownCount?: number;
+            /** Format: int32 */
+            configuredCount?: number;
+            /** Format: int32 */
+            onboardingReadyCount?: number;
+            /** Format: int32 */
+            workflowCompleteCount?: number;
+            /** Format: int32 */
+            degradedCount?: number;
+        };
+        /** @description Operator-facing provider operational status response. */
+        ProviderOperationalStatusDto: {
+            connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
+            providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
         };
         /** @description Refresh token request payload. */
         RefreshRequest: {
@@ -8397,8 +8857,8 @@ export interface components {
             /** Format: uuid */
             jobId?: string;
             status?: components["schemas"]["JobStatus"];
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             /** Format: int32 */
             pullRequestId?: number;
@@ -8446,8 +8906,8 @@ export interface components {
             /** Format: uuid */
             jobId?: string;
             status?: components["schemas"]["JobStatus"];
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             repositoryId?: string | null;
             /** Format: int32 */
             pullRequestId?: number;
@@ -8577,13 +9037,21 @@ export interface components {
              */
             totalOutputTokens?: number;
         };
-        /** @description Request body for updating an AI connection. All fields are optional — omit to leave unchanged. */
+        /** @description Request body for updating an existing provider-neutral AI connection profile. */
         UpdateAiConnectionRequest: {
             displayName?: string | null;
-            endpointUrl?: string | null;
-            models?: string[] | null;
-            apiKey?: string | null;
-            modelCapabilities?: components["schemas"]["AiConnectionModelCapabilityRequest"][] | null;
+            providerKind?: components["schemas"]["AiProviderKind"];
+            baseUrl?: string | null;
+            auth?: components["schemas"]["AiConnectionAuthRequest"];
+            discoveryMode?: components["schemas"]["AiDiscoveryMode"];
+            defaultHeaders?: {
+                [key: string]: string;
+            } | null;
+            defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
+            configuredModels?: components["schemas"]["AiConfiguredModelRequest"][] | null;
+            purposeBindings?: components["schemas"]["AiPurposeBindingRequest"][] | null;
         };
         /** @description Request to replace the override text of an existing prompt override. */
         UpdatePromptOverrideRequest: {
@@ -8599,8 +9067,8 @@ export interface components {
             provider?: components["schemas"]["WebhookProviderType"];
             /** Format: uuid */
             organizationScopeId?: string | null;
-            organizationUrl?: string | null;
-            projectId?: string | null;
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
             isActive?: boolean;
             enabledEvents?: components["schemas"]["WebhookEventType"][] | null;
             repoFilters?: components["schemas"]["WebhookRepoFilterResponse"][] | null;

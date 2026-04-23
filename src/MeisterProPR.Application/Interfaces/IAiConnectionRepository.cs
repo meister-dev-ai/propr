@@ -9,55 +9,45 @@ namespace MeisterProPR.Application.Interfaces;
 /// <summary>Repository for per-client AI connection configurations.</summary>
 public interface IAiConnectionRepository
 {
-    /// <summary>Returns all AI connections for the given client.</summary>
+    /// <summary>Returns all AI connection profiles for the given client.</summary>
     Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Returns the active AI connection for the given client, or null if none is active.</summary>
+    /// <summary>Returns the active AI connection profile for the given client, or null if none is active.</summary>
     Task<AiConnectionDto?> GetActiveForClientAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>Returns the AI connection by ID, or null if not found.</summary>
+    /// <summary>Returns the AI connection profile by ID, or null if not found.</summary>
     Task<AiConnectionDto?> GetByIdAsync(Guid connectionId, CancellationToken ct = default);
 
-    /// <summary>Adds a new AI connection. Returns the created DTO.</summary>
-    Task<AiConnectionDto> AddAsync(
-        Guid clientId,
-        string displayName,
-        string endpointUrl,
-        IReadOnlyList<string> models,
-        string? apiKey,
-        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities = null,
-        AiConnectionModelCategory? modelCategory = null,
-        CancellationToken ct = default);
+    /// <summary>Adds a new AI connection profile. Returns the created DTO.</summary>
+    Task<AiConnectionDto> AddAsync(Guid clientId, AiConnectionWriteRequestDto request, CancellationToken ct = default);
 
-    /// <summary>Updates non-null fields of an existing connection. Returns false if not found.</summary>
-    Task<bool> UpdateAsync(
-        Guid connectionId,
-        string? displayName,
-        string? endpointUrl,
-        IReadOnlyList<string>? models,
-        string? apiKey,
-        IReadOnlyList<AiConnectionModelCapabilityDto>? modelCapabilities,
-        CancellationToken ct = default);
+    /// <summary>Replaces the persisted content of an existing AI connection profile.</summary>
+    Task<bool> UpdateAsync(Guid connectionId, AiConnectionWriteRequestDto request, CancellationToken ct = default);
 
-    /// <summary>Deletes the given connection. Returns false if not found.</summary>
+    /// <summary>Deletes the given AI connection profile. Returns false if not found.</summary>
     Task<bool> DeleteAsync(Guid connectionId, CancellationToken ct = default);
 
-    /// <summary>
-    ///     Activates the specified connection with the given model, deactivating all other
-    ///     connections for the same client in a single transaction.
-    ///     Returns false if the connection is not found or the model is not in the connection's model list.
-    /// </summary>
-    Task<bool> ActivateAsync(Guid connectionId, string model, CancellationToken ct = default);
+    /// <summary>Activates the specified AI connection profile and deactivates any others for the same client.</summary>
+    Task<bool> ActivateAsync(Guid connectionId, CancellationToken ct = default);
 
-    /// <summary>Deactivates the specified connection. Returns false if not found.</summary>
+    /// <summary>Deactivates the specified AI connection profile. Returns false if not found.</summary>
     Task<bool> DeactivateAsync(Guid connectionId, CancellationToken ct = default);
 
+    /// <summary>Persists the latest verification result for a profile. Returns false if not found.</summary>
+    Task<bool> SaveVerificationAsync(Guid connectionId, AiVerificationResultDto verification, CancellationToken ct = default);
+
     /// <summary>
-    ///     Returns the connection tagged with the specified <paramref name="tier" /> for the given client,
-    ///     or <see langword="null" /> if no such connection exists. The caller falls back to the active default.
+    ///     Compatibility lookup retained for legacy tests. New runtime code should use
+    ///     <see cref="GetActiveBindingForPurposeAsync" /> instead.
     /// </summary>
-    Task<AiConnectionDto?> GetForTierAsync(
+    Task<AiConnectionDto?> GetForTierAsync(Guid clientId, AiConnectionModelCategory tier, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Resolves the active profile and purpose binding for the requested AI purpose,
+    ///     or <see langword="null" /> if no valid binding exists.
+    /// </summary>
+    Task<AiResolvedPurposeBindingDto?> GetActiveBindingForPurposeAsync(
         Guid clientId,
-        AiConnectionModelCategory tier,
+        AiPurpose purpose,
         CancellationToken ct = default);
 }

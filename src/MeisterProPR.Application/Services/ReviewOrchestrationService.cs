@@ -42,7 +42,8 @@ public sealed partial class ReviewOrchestrationService(
     IAiConnectionRepository aiConnectionRepository,
     IAiChatClientFactory aiChatClientFactory,
     IPromptOverrideService? promptOverrideService = null,
-    IProviderActivationService? providerActivationService = null) : IReviewJobProcessor
+    IProviderActivationService? providerActivationService = null,
+    IAiRuntimeResolver? aiRuntimeResolver = null) : IReviewJobProcessor
 {
     private readonly AiReviewOptions _opts = options.Value;
 
@@ -311,6 +312,23 @@ public sealed partial class ReviewOrchestrationService(
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
     private async Task<IChatClient?> ResolveAiConnectionAsync(ReviewJob job, CancellationToken ct)
     {
+        if (aiRuntimeResolver is not null)
+        {
+            try
+            {
+                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
+                job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId);
+                await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct);
+                return runtime.ChatClient;
+            }
+            catch (Exception ex)
+            {
+                LogNoAiConnectionConfigured(logger, job.ClientId, job.Id);
+                await jobs.SetFailedAsync(job.Id, ex.Message, ct);
+                return null;
+            }
+        }
+
         var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(job.ClientId, ct);
         if (activeConnection is null)
         {
@@ -322,7 +340,8 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        var effectiveModelId = activeConnection.ActiveModel ?? activeConnection.Models.FirstOrDefault();
+        var effectiveModelId = activeConnection.GetBoundModelId(AiPurpose.ReviewDefault)
+                               ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
         if (string.IsNullOrWhiteSpace(effectiveModelId))
         {
             await jobs.SetFailedAsync(
@@ -332,7 +351,7 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        var client = aiChatClientFactory.CreateClient(activeConnection.EndpointUrl, activeConnection.ApiKey);
+        var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         job.SetAiConfig(activeConnection.Id, effectiveModelId);
         await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct);
         return client;

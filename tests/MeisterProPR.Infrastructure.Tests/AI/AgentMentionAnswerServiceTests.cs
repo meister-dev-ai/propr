@@ -19,16 +19,11 @@ public sealed class AgentMentionAnswerServiceTests
 
     private static AiConnectionDto BuildActiveConnection()
     {
-        return new AiConnectionDto(
-            Guid.NewGuid(),
+        return AiConnectionTestFactory.CreateChatConnection(
             ClientId,
-            "Test Connection",
-            "https://ai.example.com",
-            ["gpt-4o"],
-            true,
-            "gpt-4o",
-            DateTimeOffset.UtcNow,
-            ApiKey: "test-key");
+            modelId: "gpt-4o",
+            baseUrl: "https://ai.example.com",
+            secret: "test-key");
     }
 
     private static AgentMentionAnswerService CreateSut(IChatClient chatClient)

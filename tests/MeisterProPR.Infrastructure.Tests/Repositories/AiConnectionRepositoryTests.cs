@@ -37,9 +37,10 @@ public sealed class AiConnectionRepositoryTests
 
     private static AiConnectionRepository CreateRepository(
         MeisterProPRDbContext db,
-        IDbContextFactory<MeisterProPRDbContext>? contextFactory = null)
+        IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+        ISecretProtectionCodec? codec = null)
     {
-        return new AiConnectionRepository(db, CreateCodec(), contextFactory);
+        return new AiConnectionRepository(db, codec ?? CreateCodec(), contextFactory);
     }
 
     private static MeisterProPRDbContext CreateContext()
@@ -50,19 +51,158 @@ public sealed class AiConnectionRepositoryTests
         return new MeisterProPRDbContext(options);
     }
 
-    private static AiConnectionRecord MakeRecord(Guid clientId, bool isActive = false, string? activeModel = null)
+    private static AiConnectionProfileRecord MakeProfile(
+        Guid clientId,
+        bool isActive = false,
+        bool verified = true,
+        string displayName = "Test Connection",
+        params AiPurpose[] purposes)
     {
-        return new AiConnectionRecord
+        var createdAt = DateTimeOffset.UtcNow;
+        var profileId = Guid.NewGuid();
+        var chatModelId = Guid.NewGuid();
+        var embeddingModelId = Guid.NewGuid();
+        var resolvedPurposes = purposes.Length == 0
+            ? [
+                AiPurpose.ReviewDefault,
+                AiPurpose.ReviewLowEffort,
+                AiPurpose.ReviewMediumEffort,
+                AiPurpose.ReviewHighEffort,
+                AiPurpose.MemoryReconsideration,
+                AiPurpose.EmbeddingDefault,
+            ]
+            : purposes;
+
+        var profile = new AiConnectionProfileRecord
+        {
+            Id = profileId,
+            ClientId = clientId,
+            DisplayName = displayName,
+            ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+            BaseUrl = "https://my-openai.openai.azure.com/",
+            AuthMode = AiAuthMode.AzureIdentity.ToString(),
+            DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
+            DefaultHeaders = [],
+            DefaultQueryParams = [],
+            IsActive = isActive,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+            ConfiguredModels =
+            [
+                new AiConfiguredModelRecord
+                {
+                    Id = chatModelId,
+                    ConnectionProfileId = profileId,
+                    RemoteModelId = "gpt-4o",
+                    DisplayName = "gpt-4o",
+                    OperationKinds = [AiOperationKind.Chat.ToString()],
+                    SupportedProtocolModes =
+                    [
+                        AiProtocolMode.Auto.ToString(),
+                        AiProtocolMode.Responses.ToString(),
+                        AiProtocolMode.ChatCompletions.ToString(),
+                    ],
+                    SupportsStructuredOutput = true,
+                    SupportsToolUse = true,
+                    Source = AiConfiguredModelSource.Manual.ToString(),
+                },
+                new AiConfiguredModelRecord
+                {
+                    Id = embeddingModelId,
+                    ConnectionProfileId = profileId,
+                    RemoteModelId = "text-embedding-3-large",
+                    DisplayName = "text-embedding-3-large",
+                    OperationKinds = [AiOperationKind.Embedding.ToString()],
+                    SupportedProtocolModes =
+                    [
+                        AiProtocolMode.Auto.ToString(),
+                        AiProtocolMode.Embeddings.ToString(),
+                    ],
+                    TokenizerName = "cl100k_base",
+                    MaxInputTokens = 8192,
+                    EmbeddingDimensions = 3072,
+                    SupportsStructuredOutput = false,
+                    SupportsToolUse = false,
+                    Source = AiConfiguredModelSource.Manual.ToString(),
+                },
+            ],
+            VerificationSnapshot = new AiVerificationSnapshotRecord
+            {
+                ConnectionProfileId = profileId,
+                Status = (verified ? AiVerificationStatus.Verified : AiVerificationStatus.NeverVerified).ToString(),
+                Summary = verified ? "Verified" : "Never verified",
+                CheckedAt = createdAt,
+                Warnings = [],
+            },
+        };
+
+        profile.PurposeBindings = resolvedPurposes.Select(purpose => new AiPurposeBindingRecord
         {
             Id = Guid.NewGuid(),
-            ClientId = clientId,
-            DisplayName = "Test Connection",
-            EndpointUrl = "https://my-openai.openai.azure.com/",
-            Models = ["gpt-4o", "gpt-4o-mini"],
-            IsActive = isActive,
-            ActiveModel = activeModel,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
+            ConnectionProfileId = profileId,
+            ConfiguredModelId = purpose == AiPurpose.EmbeddingDefault ? embeddingModelId : chatModelId,
+            Purpose = purpose.ToString(),
+            ProtocolMode = (purpose == AiPurpose.EmbeddingDefault ? AiProtocolMode.Embeddings : AiProtocolMode.Auto).ToString(),
+            IsEnabled = true,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+        }).ToList();
+
+        return profile;
+    }
+
+    private static AiConnectionWriteRequestDto CreateWriteRequest(
+        string displayName = "Updated Connection",
+        string baseUrl = "https://updated.openai.azure.com/",
+        AiAuthMode authMode = AiAuthMode.AzureIdentity,
+        string? secret = null,
+        string chatModelId = "gpt-4o",
+        string embeddingModelId = "text-embedding-3-large")
+    {
+        var chatModel = new AiConfiguredModelDto(
+            Guid.Empty,
+            chatModelId,
+            chatModelId,
+            [AiOperationKind.Chat],
+            [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+            null,
+            null,
+            null,
+            true,
+            true,
+            AiConfiguredModelSource.Manual);
+
+        var embeddingModel = new AiConfiguredModelDto(
+            Guid.Empty,
+            embeddingModelId,
+            embeddingModelId,
+            [AiOperationKind.Embedding],
+            [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+            "cl100k_base",
+            8192,
+            3072,
+            false,
+            false,
+            AiConfiguredModelSource.Manual);
+
+        return new AiConnectionWriteRequestDto(
+            displayName,
+            AiProviderKind.AzureOpenAi,
+            baseUrl,
+            authMode,
+            AiDiscoveryMode.ManualOnly,
+            [chatModel, embeddingModel],
+            [
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, chatModelId, AiProtocolMode.Auto, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewLowEffort, null, chatModelId, AiProtocolMode.Auto, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewMediumEffort, null, chatModelId, AiProtocolMode.Auto, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewHighEffort, null, chatModelId, AiProtocolMode.Auto, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.MemoryReconsideration, null, chatModelId, AiProtocolMode.Auto, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, embeddingModelId, AiProtocolMode.Embeddings, true),
+            ],
+            null,
+            null,
+            secret);
     }
 
     [Fact]
@@ -70,7 +210,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        db.AiConnections.Add(MakeRecord(clientId));
+        db.AiConnectionProfiles.Add(MakeProfile(clientId));
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
@@ -84,18 +224,18 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var activeRecord = MakeRecord(clientId, true, "gpt-4o");
-        db.AiConnections.Add(activeRecord);
-        db.AiConnections.Add(MakeRecord(clientId));
+        var activeProfile = MakeProfile(clientId, isActive: true, displayName: "Active Profile");
+        db.AiConnectionProfiles.Add(activeProfile);
+        db.AiConnectionProfiles.Add(MakeProfile(clientId, displayName: "Draft Profile"));
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
         var result = await repo.GetActiveForClientAsync(clientId);
 
         Assert.NotNull(result);
-        Assert.Equal(activeRecord.Id, result.Id);
+        Assert.Equal(activeProfile.Id, result.Id);
         Assert.True(result.IsActive);
-        Assert.Equal("gpt-4o", result.ActiveModel);
+        Assert.Equal("gpt-4o", result.GetBoundModelId(AiPurpose.ReviewDefault));
     }
 
     [Fact]
@@ -108,59 +248,82 @@ public sealed class AiConnectionRepositoryTests
         await using var db = new MeisterProPRDbContext(options);
         var factory = new PooledDbContextFactory<MeisterProPRDbContext>(options);
         var clientId = Guid.NewGuid();
-        var activeRecord = MakeRecord(clientId, true, "gpt-4o");
-        db.AiConnections.Add(activeRecord);
+        var activeProfile = MakeProfile(clientId, isActive: true);
+        db.AiConnectionProfiles.Add(activeProfile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db, factory);
         var result = await repo.GetActiveForClientAsync(clientId);
 
         Assert.NotNull(result);
-        Assert.Equal(activeRecord.Id, result.Id);
-        Assert.Equal("gpt-4o", result.ActiveModel);
+        Assert.Equal(activeProfile.Id, result.Id);
+        Assert.Equal("gpt-4o", result.GetBoundModelId(AiPurpose.ReviewDefault));
     }
 
     [Fact]
-    public async Task ActivateAsync_ValidModel_ActivatesConnectionAndDeactivatesPrevious()
+    public async Task ActivateAsync_VerifiedProfileWithRequiredBindings_ActivatesAndDeactivatesPrevious()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var connA = MakeRecord(clientId, true, "gpt-4o-mini");
-        var connB = MakeRecord(clientId);
-        connB.Models = ["gpt-4o"];
-        db.AiConnections.AddRange(connA, connB);
+        var profileA = MakeProfile(clientId, isActive: true, displayName: "Primary");
+        var profileB = MakeProfile(clientId, displayName: "Secondary");
+        db.AiConnectionProfiles.AddRange(profileA, profileB);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
-        var result = await repo.ActivateAsync(connB.Id, "gpt-4o");
+        var result = await repo.ActivateAsync(profileB.Id);
 
         Assert.True(result);
 
-        var refreshedA = await db.AiConnections.FindAsync(connA.Id);
-        var refreshedB = await db.AiConnections.FindAsync(connB.Id);
+        var refreshedA = await db.AiConnectionProfiles.FindAsync(profileA.Id);
+        var refreshedB = await db.AiConnectionProfiles.FindAsync(profileB.Id);
 
         Assert.NotNull(refreshedA);
         Assert.False(refreshedA.IsActive);
-        Assert.Null(refreshedA.ActiveModel);
 
         Assert.NotNull(refreshedB);
         Assert.True(refreshedB.IsActive);
-        Assert.Equal("gpt-4o", refreshedB.ActiveModel);
     }
 
     [Fact]
-    public async Task ActivateAsync_ModelNotInList_ReturnsFalse()
+    public async Task ActivateAsync_VerifiedProfileWithMinimalRequiredBindings_Activates()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var conn = MakeRecord(clientId);
-        conn.Models = ["gpt-4o"];
-        db.AiConnections.Add(conn);
+
+        var profile = MakeProfile(
+            clientId,
+            purposes:
+            [
+                AiPurpose.ReviewDefault,
+                AiPurpose.MemoryReconsideration,
+                AiPurpose.EmbeddingDefault,
+            ]);
+        db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
-        var result = await repo.ActivateAsync(conn.Id, "gpt-5");
+        var result = await repo.ActivateAsync(profile.Id);
+
+        Assert.True(result);
+
+        var refreshed = await db.AiConnectionProfiles.FindAsync(profile.Id);
+        Assert.NotNull(refreshed);
+        Assert.True(refreshed.IsActive);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_UnverifiedProfile_ReturnsFalse()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, verified: false);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.ActivateAsync(profile.Id);
 
         Assert.False(result);
     }
@@ -171,7 +334,7 @@ public sealed class AiConnectionRepositoryTests
         await using var db = CreateContext();
         var repo = CreateRepository(db);
 
-        var result = await repo.ActivateAsync(Guid.NewGuid(), "gpt-4o");
+        var result = await repo.ActivateAsync(Guid.NewGuid());
 
         Assert.False(result);
     }
@@ -181,19 +344,18 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var conn = MakeRecord(clientId, true, "gpt-4o");
-        db.AiConnections.Add(conn);
+        var profile = MakeProfile(clientId, isActive: true);
+        db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
-        var result = await repo.DeactivateAsync(conn.Id);
+        var result = await repo.DeactivateAsync(profile.Id);
 
         Assert.True(result);
 
-        var refreshed = await db.AiConnections.FindAsync(conn.Id);
+        var refreshed = await db.AiConnectionProfiles.FindAsync(profile.Id);
         Assert.NotNull(refreshed);
         Assert.False(refreshed.IsActive);
-        Assert.Null(refreshed.ActiveModel);
     }
 
     [Fact]
@@ -201,15 +363,15 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var conn = MakeRecord(clientId);
-        db.AiConnections.Add(conn);
+        var profile = MakeProfile(clientId);
+        db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
-        var result = await repo.DeleteAsync(conn.Id);
+        var result = await repo.DeleteAsync(profile.Id);
 
         Assert.True(result);
-        Assert.Equal(0, await db.AiConnections.CountAsync());
+        Assert.Equal(0, await db.AiConnectionProfiles.CountAsync());
     }
 
     [Fact]
@@ -229,10 +391,9 @@ public sealed class AiConnectionRepositoryTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var connA = MakeRecord(clientId, true, "gpt-4o");
-        var connB = MakeRecord(clientId);
-        connB.Models = ["gpt-4o-mini"];
-        db.AiConnections.AddRange(connA, connB);
+        var profileA = MakeProfile(clientId, isActive: true, displayName: "Primary");
+        var profileB = MakeProfile(clientId, displayName: "Secondary");
+        db.AiConnectionProfiles.AddRange(profileA, profileB);
 
         var job = new ReviewJob(
             Guid.NewGuid(),
@@ -242,16 +403,16 @@ public sealed class AiConnectionRepositoryTests
             "repo",
             1,
             1);
-        job.SetAiConfig(connA.Id, "gpt-4o");
+        job.SetAiConfig(profileA.Id, "gpt-4o");
         db.ReviewJobs.Add(job);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
-        await repo.ActivateAsync(connB.Id, "gpt-4o-mini");
+        await repo.ActivateAsync(profileB.Id);
 
         var jobAfter = await db.ReviewJobs.FindAsync(job.Id);
         Assert.NotNull(jobAfter);
-        Assert.Equal(connA.Id, jobAfter.AiConnectionId);
+        Assert.Equal(profileA.Id, jobAfter.AiConnectionId);
         Assert.Equal("gpt-4o", jobAfter.AiModel);
     }
 
@@ -260,31 +421,111 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var tierRecord = MakeRecord(clientId);
-        tierRecord.ModelCategory = (short)AiConnectionModelCategory.HighEffort;
-        db.AiConnections.Add(tierRecord);
-        db.AiConnections.Add(MakeRecord(clientId));
+        var activeProfile = MakeProfile(clientId, true, true, "Test Connection", AiPurpose.ReviewHighEffort);
+        db.AiConnectionProfiles.Add(activeProfile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
         var result = await repo.GetForTierAsync(clientId, AiConnectionModelCategory.HighEffort);
 
         Assert.NotNull(result);
-        Assert.Equal(tierRecord.Id, result.Id);
+        Assert.Equal(activeProfile.Id, result.Id);
     }
 
     [Fact]
-    public async Task GetForTierAsync_NoTierConnection_ReturnsNull()
+    public async Task GetForTierAsync_NoTierOrReviewDefaultBinding_ReturnsNull()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        db.AiConnections.Add(MakeRecord(clientId));
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.MemoryReconsideration,
+            AiPurpose.EmbeddingDefault);
+        db.AiConnectionProfiles.Add(activeProfile);
         await db.SaveChangesAsync();
 
         var repo = CreateRepository(db);
         var result = await repo.GetForTierAsync(clientId, AiConnectionModelCategory.LowEffort);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetForTierAsync_MissingEffortBinding_FallsBackToReviewDefault()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.ReviewDefault,
+            AiPurpose.MemoryReconsideration,
+            AiPurpose.EmbeddingDefault);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetForTierAsync(clientId, AiConnectionModelCategory.LowEffort);
+
+        Assert.NotNull(result);
+        Assert.Equal(activeProfile.Id, result.Id);
+        Assert.Equal("gpt-4o", result.GetBoundModelId(AiPurpose.ReviewDefault));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ConnectivityChange_ResetsVerificationAndBlocksActivationUntilReverified()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, isActive: false, verified: true);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+
+        var updated = await repo.UpdateAsync(
+            profile.Id,
+            CreateWriteRequest(baseUrl: "https://updated.openai.azure.com/"));
+
+        Assert.True(updated);
+
+        var reloaded = await repo.GetByIdAsync(profile.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(AiVerificationStatus.NeverVerified, reloaded.Verification.Status);
+
+        var activated = await repo.ActivateAsync(profile.Id);
+        Assert.False(activated);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AuthModelAndBindingChanges_ResetVerification()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, isActive: false, verified: true);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+
+        var updated = await repo.UpdateAsync(
+            profile.Id,
+            CreateWriteRequest(
+                authMode: AiAuthMode.ApiKey,
+                secret: "updated-secret",
+                chatModelId: "gpt-4.1"));
+
+        Assert.True(updated);
+
+        var reloaded = await repo.GetByIdAsync(profile.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(AiVerificationStatus.NeverVerified, reloaded.Verification.Status);
+        Assert.Equal("gpt-4.1", reloaded.GetBoundModelId(AiPurpose.ReviewDefault));
     }
 
     [Fact]
@@ -296,27 +537,42 @@ public sealed class AiConnectionRepositoryTests
 
         var created = await repo.AddAsync(
             clientId,
-            "Embedding Connection",
-            "https://my-openai.openai.azure.com/",
-            ["text-embedding-3-small"],
-            "secret",
-            [
-                new AiConnectionModelCapabilityDto(
-                    "text-embedding-3-small",
-                    "cl100k_base",
-                    8192,
-                    1536,
-                    0.2m,
-                    0.4m),
-            ],
-            AiConnectionModelCategory.Embedding);
+            new AiConnectionWriteRequestDto(
+                "Embedding Connection",
+                AiProviderKind.AzureOpenAi,
+                "https://my-openai.openai.azure.com/",
+                AiAuthMode.ApiKey,
+                AiDiscoveryMode.ManualOnly,
+                [
+                    new AiConfiguredModelDto(
+                        Guid.Empty,
+                        "text-embedding-3-small",
+                        "text-embedding-3-small",
+                        [AiOperationKind.Embedding],
+                        [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                        "cl100k_base",
+                        8192,
+                        1536,
+                        false,
+                        false,
+                        AiConfiguredModelSource.Manual,
+                        null,
+                        0.2m,
+                        0.4m),
+                ],
+                [
+                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", AiProtocolMode.Embeddings, true),
+                ],
+                null,
+                null,
+                "secret"));
 
         var reloaded = await repo.GetByIdAsync(created.Id);
 
         Assert.NotNull(reloaded);
-        var capability = Assert.Single(reloaded.ModelCapabilities!);
-        Assert.Equal(0.2m, capability.InputCostPer1MUsd);
-        Assert.Equal(0.4m, capability.OutputCostPer1MUsd);
+        var configuredModel = Assert.Single(reloaded.ConfiguredModels);
+        Assert.Equal(0.2m, configuredModel.InputCostPer1MUsd);
+        Assert.Equal(0.4m, configuredModel.OutputCostPer1MUsd);
     }
 
     [Fact]
@@ -324,18 +580,42 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var repo = CreateRepository(db);
+        var codec = CreateCodec();
+        var repo = CreateRepository(db, codec: codec);
 
         var created = await repo.AddAsync(
             clientId,
-            "Protected Connection",
-            "https://my-openai.openai.azure.com/",
-            ["gpt-4o"],
-            "secret-api-key");
+            new AiConnectionWriteRequestDto(
+                "Protected Connection",
+                AiProviderKind.AzureOpenAi,
+                "https://my-openai.openai.azure.com/",
+                AiAuthMode.ApiKey,
+                AiDiscoveryMode.ManualOnly,
+                [
+                    new AiConfiguredModelDto(
+                        Guid.Empty,
+                        "gpt-4o",
+                        "gpt-4o",
+                        [AiOperationKind.Chat],
+                        [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
+                        null,
+                        null,
+                        null,
+                        true,
+                        true,
+                        AiConfiguredModelSource.Manual),
+                ],
+                [
+                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, "gpt-4o", AiProtocolMode.Auto, true),
+                ],
+                null,
+                null,
+                "secret-api-key"));
 
-        var record = await db.AiConnections.FirstAsync(a => a.Id == created.Id);
+        var record = await db.AiConnectionProfiles.FirstAsync(profile => profile.Id == created.Id);
 
-        Assert.Equal("secret-api-key", created.ApiKey);
-        Assert.NotEqual("secret-api-key", record.ApiKey);
+        Assert.Equal("secret-api-key", created.Secret);
+        Assert.NotEqual("secret-api-key", record.ProtectedSecret);
+        Assert.False(string.IsNullOrWhiteSpace(record.ProtectedSecret));
     }
 }

@@ -144,15 +144,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = new AiConnectionDto(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "Test Connection",
-            "https://api.test.com/",
-            ["gpt-4o"],
-            true,
-            "gpt-4o",
-            DateTimeOffset.UtcNow);
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), modelId: "gpt-4o");
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);
