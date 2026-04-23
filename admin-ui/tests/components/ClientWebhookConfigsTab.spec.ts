@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const listWebhookConfigurationsMock = vi.fn()
 const listWebhookDeliveriesMock = vi.fn()
@@ -24,6 +24,7 @@ vi.mock('@/composables/useNotification', () => ({
 async function mountTab() {
   const { default: ClientWebhookConfigsTab } = await import('@/components/ClientWebhookConfigsTab.vue')
   return mount(ClientWebhookConfigsTab, {
+    attachTo: document.body,
     props: {
       clientId: 'client-1',
     },
@@ -69,6 +70,7 @@ async function mountTab() {
 describe('ClientWebhookConfigsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.body.innerHTML = '<div id="provider-sidebar-target"></div>'
 
     listWebhookConfigurationsMock.mockResolvedValue([
       {
@@ -114,6 +116,10 @@ describe('ClientWebhookConfigsTab', () => {
     })
 
     deleteWebhookConfigurationMock.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
   })
 
   it('loads webhook configurations for the active client and shows the count', async () => {

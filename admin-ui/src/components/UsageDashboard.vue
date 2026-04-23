@@ -119,6 +119,11 @@
             </select>
           </label>
 
+          <button class="btn-slide btn-export" :disabled="exportingProCursor || loadingProCursor || !hasProCursorData" @click="handleExportProCursor">
+            <div class="sign"><i class="fi fi-rr-download"></i></div>
+            <span class="text">{{ exportingProCursor ? 'Exporting' : 'Export CSV' }}</span>
+          </button>
+
         </div>
       </div>
 
@@ -239,6 +244,7 @@
       import { useSession } from '@/composables/useSession'
       import { getClientTokenUsage } from '@/services/clientTokenUsageService'
       import {
+        exportProCursorTokenUsageCsv,
         getProCursorClientTokenUsage,
         getProCursorTopSources,
       } from '@/services/proCursorService'
@@ -292,6 +298,7 @@
       const reviewUsage = ref<ClientTokenUsageResponse | null>(null)
 
       const loadingProCursor = ref(false)
+      const exportingProCursor = ref(false)
       const proCursorError = ref('')
       const proCursorUsage = ref<ProCursorTokenUsageResponse | null>(null)
       const proCursorTopSources = ref<ProCursorTopSourcesResponse | null>(null)
@@ -601,6 +608,33 @@
 
       async function handleRefresh(): Promise<void> {
         await Promise.all([loadReviewUsage(), loadProCursorUsage()])
+      }
+
+      async function handleExportProCursor(): Promise<void> {
+        if (exportingProCursor.value || !hasProCursorData.value) {
+          return
+        }
+
+        exportingProCursor.value = true
+
+        try {
+          const csv = await exportProCursorTokenUsageCsv(props.clientId, {
+            from: fromDate.value,
+            to: toDate.value,
+          })
+
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `procursor-usage-${props.clientId}-${fromDate.value}-to-${toDate.value}.csv`
+          link.click()
+          URL.revokeObjectURL(url)
+        } catch (error) {
+          proCursorError.value = error instanceof Error ? error.message : 'Failed to export ProCursor usage CSV.'
+        } finally {
+          exportingProCursor.value = false
+        }
       }
 
 

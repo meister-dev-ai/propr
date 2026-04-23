@@ -3,6 +3,7 @@
 
 using MeisterProPR.Api.Tests.Fixtures;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.AspNetCore.Hosting;
@@ -26,7 +27,7 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
     }
 
     [SkippableFact]
-    public async Task Startup_PlaintextAiConnectionSecretsInDatabase_UpgradesRowsBeforeServingRequests()
+    public async Task Startup_PlaintextAiConnectionProfileSecretsInDatabase_UpgradesRowsBeforeServingRequests()
     {
         fixture.SkipIfUnavailable();
 
@@ -55,16 +56,22 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
                         CreatedAt = DateTimeOffset.UtcNow,
                     });
 
-                db.AiConnections.Add(
-                    new AiConnectionRecord
+                db.AiConnectionProfiles.Add(
+                    new AiConnectionProfileRecord
                     {
                         Id = connectionId,
                         ClientId = clientId,
                         DisplayName = $"Legacy Startup Connection {connectionId:N}",
-                        EndpointUrl = "https://fake.openai.azure.com/",
-                        Models = ["gpt-4o"],
-                        ApiKey = "legacy-ai-key",
+                        ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                        BaseUrl = "https://fake.openai.azure.com/",
+                        AuthMode = AiAuthMode.ApiKey.ToString(),
+                        DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
+                        ProtectedSecret = "legacy-ai-key",
+                        DefaultHeaders = [],
+                        DefaultQueryParams = [],
+                        IsActive = false,
                         CreatedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow,
                     });
 
                 await db.SaveChangesAsync();
@@ -90,11 +97,11 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
             var runtimeDb = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             var aiConnectionRepository = scope.ServiceProvider.GetRequiredService<IAiConnectionRepository>();
 
-            var connection = await runtimeDb.AiConnections.AsNoTracking().FirstAsync(c => c.Id == connectionId);
+            var connection = await runtimeDb.AiConnectionProfiles.AsNoTracking().FirstAsync(c => c.Id == connectionId);
             var aiConnection = await aiConnectionRepository.GetByIdAsync(connectionId, CancellationToken.None);
 
             Assert.NotNull(aiConnection);
-            Assert.NotEqual("legacy-ai-key", connection.ApiKey);
+            Assert.NotEqual("legacy-ai-key", connection.ProtectedSecret);
             Assert.Equal("legacy-ai-key", aiConnection.Secret);
         }
         finally

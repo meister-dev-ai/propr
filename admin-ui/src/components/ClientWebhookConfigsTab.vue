@@ -372,14 +372,20 @@ function onConfigSaved(saved: WebhookConfigurationResponse) {
   const index = allConfigs.value.findIndex((c) => c.id === saved.id)
   if (index >= 0) {
     allConfigs.value.splice(index, 1, saved)
+    selectedConfigId.value = saved.id
+    deliveries.value = []
     notify('Webhook configuration updated.')
   } else {
     allConfigs.value.unshift(saved)
     creationReceipt.value = saved.generatedSecret ? saved : null
+    if (!saved.generatedSecret) {
+      selectedConfigId.value = saved.id
+      deliveries.value = []
+    } else {
+      closeDetail()
+    }
     notify('Webhook configuration created.')
   }
-  selectedConfigId.value = saved.id
-  deliveries.value = []
   closeForm()
 }
 

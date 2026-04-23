@@ -51,6 +51,14 @@ vi.mock('@/components/ClientProviderConnectionsTab.vue', () => ({
   },
 }))
 
+vi.mock('@/components/ClientOverview.vue', () => ({
+  default: {
+    name: 'ClientOverview',
+    props: ['clientId'],
+    template: '<div class="client-overview-stub" :data-client-id="clientId">overview cards</div>',
+  },
+}))
+
 vi.mock('@/components/ProviderConnectionStatusList.vue', () => ({
   default: {
     name: 'ProviderConnectionStatusList',
@@ -102,7 +110,7 @@ describe('ClientDetailView', () => {
   })
 
   async function openAiConnectionsTab(wrapper: ReturnType<typeof mount>) {
-    const aiTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('AI Connections'))
+    const aiTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('AI Providers'))
     expect(aiTab).toBeDefined()
     await aiTab!.trigger('click')
     await flushPromises()
@@ -158,17 +166,15 @@ describe('ClientDetailView', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'clients' })
   })
 
-  it('shows the provider-management handoff in the system tab', async () => {
+  it('shows the client overview cards in the system tab', async () => {
     mockGet.mockResolvedValue({ data: sampleClient })
     const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Provider Access')
-    expect(wrapper.text()).toContain('Provider connections, organization scopes, and reviewer identities are managed in the Providers tab.')
-    expect(wrapper.text()).toContain('managed in the Providers tab')
-    expect(wrapper.text()).not.toContain('ADO Credentials')
-    expect(wrapper.text()).not.toContain('AI Reviewer Identity')
+    expect(wrapper.find('.client-overview-stub').attributes('data-client-id')).toBe('client-1')
+    expect(wrapper.text()).toContain('overview cards')
+    expect(wrapper.text()).toContain('Danger Zone')
   })
 
   it('passes the current client ID into the crawl configuration tab', async () => {
@@ -195,7 +201,7 @@ describe('ClientDetailView', () => {
     const wrapper = mount(ClientDetailView)
     await flushPromises()
 
-    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
+    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('SCM Providers'))
     expect(providersTab).toBeDefined()
     await providersTab!.trigger('click')
     await flushPromises()
@@ -203,35 +209,19 @@ describe('ClientDetailView', () => {
     expect(wrapper.find('.client-provider-connections-tab-stub').attributes('data-client-id')).toBe('client-1')
   })
 
-  it('passes the current client ID into the provider operations widgets', async () => {
+  it('keeps the providers tab available from the detail page', async () => {
     mockGet.mockResolvedValue({ data: sampleClient })
     const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
     await flushPromises()
 
-    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
-    expect(providersTab).toBeDefined()
-    await providersTab!.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.provider-connection-status-list-stub').attributes('data-client-id')).toBe('client-1')
-    expect(wrapper.find('.provider-connection-audit-trail-stub').attributes('data-client-id')).toBe('client-1')
-  })
-
-  it('keeps the providers onboarding tab available from the detail page', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
-    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
-    const wrapper = mount(ClientDetailView)
-    await flushPromises()
-
-    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('Providers'))
+    const providersTab = wrapper.findAll('button.sidebar-nav-link').find((button) => button.text().includes('SCM Providers'))
     expect(providersTab).toBeDefined()
 
     await providersTab!.trigger('click')
     await flushPromises()
 
     expect(wrapper.find('.client-provider-connections-tab-stub').exists()).toBe(true)
-    expect(wrapper.text()).toContain('provider audit')
   })
 
   it('passes the current client ID into the usage dashboard tab', async () => {
@@ -271,8 +261,9 @@ describe('ClientDetailView', () => {
     await flushPromises()
     const elapsedMs = Date.now() - startedAt
 
-    expect(wrapper.text()).toContain('Provider Access')
+    expect(wrapper.find('.client-overview-stub').exists()).toBe(true)
     expect(wrapper.find('.client-crawl-configs-tab-stub').exists()).toBe(true)
+    expect(wrapper.text()).toContain('SCM Providers')
     expect(elapsedMs).toBeLessThan(2000)
   })
 
