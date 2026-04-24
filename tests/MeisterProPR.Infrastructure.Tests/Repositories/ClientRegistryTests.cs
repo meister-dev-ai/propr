@@ -17,7 +17,7 @@ using FactAttribute = Xunit.SkippableFactAttribute;
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
 
 /// <summary>
-///     Tests for <see cref="DbClientRegistry.GetReviewerIdAsync" />.
+///     Tests for <see cref="DbClientRegistry" /> reviewer identity lookups.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
@@ -67,32 +67,6 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
 
         var provider = services.BuildServiceProvider();
         return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
-    }
-
-    [Fact]
-    public async Task GetReviewerIdAsync_ClientWithNullReviewerId_ReturnsNull()
-    {
-        var record = await this.SeedClientAsync();
-        var result = await this._registry.GetReviewerIdAsync(record.Id);
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public async Task GetReviewerIdAsync_ClientWithReviewerId_ReturnsGuid()
-    {
-        var reviewerId = Guid.NewGuid();
-        var record = await this.SeedClientAsync(reviewerId);
-        var result = await this._registry.GetReviewerIdAsync(record.Id);
-        Assert.Equal(reviewerId, result);
-    }
-
-    // T001 — GetReviewerIdAsync returns null for unknown client ID
-
-    [Fact]
-    public async Task GetReviewerIdAsync_UnknownClientId_ReturnsNull()
-    {
-        var result = await this._registry.GetReviewerIdAsync(Guid.NewGuid());
-        Assert.Null(result);
     }
 
     [Fact]
@@ -168,7 +142,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Null(result);
     }
 
-    private async Task<ClientRecord> SeedClientAsync(Guid? reviewerId = null)
+    private async Task<ClientRecord> SeedClientAsync()
     {
         var record = new ClientRecord
         {
@@ -176,7 +150,6 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             DisplayName = "Test Client",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
-            ReviewerId = reviewerId,
         };
         this._dbContext.Clients.Add(record);
         await this._dbContext.SaveChangesAsync();

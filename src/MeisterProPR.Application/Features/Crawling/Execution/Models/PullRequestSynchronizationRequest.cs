@@ -33,9 +33,6 @@ public sealed record PullRequestSynchronizationRequest
     /// <summary>The observed pull-request status for this synchronization pass.</summary>
     public required PrStatus PullRequestStatus { get; init; }
 
-    /// <summary>The configured reviewer identity, when already known to the caller.</summary>
-    public Guid? ReviewerId { get; init; }
-
     /// <summary>Normalized SCM provider family for the synchronized review context.</summary>
     public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
 

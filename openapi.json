@@ -5741,131 +5741,6 @@
         }
       }
     },
-    "/clients/{clientId}/reviewer-identity": {
-      "put": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Sets or replaces the ADO reviewer identity GUID for a client.\nRequires global admin or `ClientAdministrator` role for the specified client.\nUntil this is set, review jobs for the client will be rejected.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "The ADO identity GUID of the AI service account.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetReviewerIdentityRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetReviewerIdentityRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetReviewerIdentityRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Reviewer identity stored."
-          },
-          "400": {
-            "description": "request contains an empty GUID.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks required role for this client.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/clients/{clientId}/token-usage": {
       "get": {
         "tags": [
@@ -11849,11 +11724,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "reviewerId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
           "commentResolutionBehavior": {
             "$ref": "#/components/schemas/CommentResolutionBehavior"
           },
@@ -14896,17 +14766,6 @@
         },
         "additionalProperties": false,
         "description": "Request body for setting a client-scoped provider reviewer identity."
-      },
-      "SetReviewerIdentityRequest": {
-        "type": "object",
-        "properties": {
-          "reviewerId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "additionalProperties": false,
-        "description": "Request body for setting the ADO reviewer identity on a client."
       },
       "SubmitReviewRequest": {
         "type": "object",

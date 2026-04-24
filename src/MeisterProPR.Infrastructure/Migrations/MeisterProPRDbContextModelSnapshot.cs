@@ -2028,10 +2028,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
-                    b.Property<Guid?>("ReviewerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewer_id");
-
                     b.HasKey("Id");
 
                     b.ToTable("clients", (string)null);

@@ -29,10 +29,6 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("created_at")
             .IsRequired();
 
-        builder.Property(c => c.ReviewerId)
-            .HasColumnName("reviewer_id")
-            .IsRequired(false);
-
         builder.Property(c => c.CommentResolutionBehavior)
             .HasColumnName("comment_resolution_behavior")
             .HasConversion<int>()

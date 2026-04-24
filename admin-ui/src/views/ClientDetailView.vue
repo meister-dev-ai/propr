@@ -6,7 +6,7 @@
         <!-- Sidebar Navigation -->
         <aside class="page-sidebar">
             <div id="provider-sidebar-target"></div>
-            
+
             <div v-show="!isProviderDetailOpen && !isWebhookDetailOpen" class="default-sidebar-content">
                 <RouterLink class="back-link" to="/clients" style="margin-bottom: 0;">
                 <i class="fi fi-rr-arrow-left"></i> Back to clients
@@ -142,8 +142,8 @@
             </div>
 
             <div v-show="activeTab === 'providers'" class="provider-operations-tab">
-                <ClientProviderConnectionsTab 
-                    :clientId="client.id" 
+                <ClientProviderConnectionsTab
+                    :clientId="client.id"
                     @update:isDetailOpen="isProviderDetailOpen = $event"
                 />
             </div>
@@ -304,10 +304,10 @@
         </template>
         </main>
 
-        <TextViewerModal 
-            :isOpen="isTextViewerOpen" 
+        <TextViewerModal
+            :isOpen="isTextViewerOpen"
             @update:isOpen="isTextViewerOpen = $event"
-            :title="textViewerTitle" 
+            :title="textViewerTitle"
             :text="textViewerContent"
             plain-text
         />
@@ -339,7 +339,6 @@ interface Client {
     id: string
     displayName: string
     isActive: boolean
-    reviewerId?: string | null
     createdAt: string
 }
 

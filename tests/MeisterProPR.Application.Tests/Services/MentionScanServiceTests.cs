@@ -26,7 +26,6 @@ public sealed class MentionScanServiceTests
         ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
-        ReviewerId,
         60,
         true,
         DateTimeOffset.UtcNow,
@@ -62,6 +61,17 @@ public sealed class MentionScanServiceTests
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        this._clientRegistry.GetReviewerIdentityAsync(
+                DefaultConfig.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewerIdentity(
+                    new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath),
+                    ReviewerId.ToString("D"),
+                    ReviewerId.ToString("D"),
+                    ReviewerId.ToString("D"),
+                    false));
     }
 
     [Fact]

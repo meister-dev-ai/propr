@@ -110,20 +110,6 @@ public sealed class ClientAdminService(
     }
 
     /// <inheritdoc />
-    public async Task<bool> SetReviewerIdentityAsync(Guid clientId, Guid reviewerId, CancellationToken ct = default)
-    {
-        var client = await dbContext.Clients.FindAsync([clientId], ct);
-        if (client is null)
-        {
-            return false;
-        }
-
-        client.ReviewerId = reviewerId;
-        await dbContext.SaveChangesAsync(ct);
-        return true;
-    }
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<ClientDto>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
     {
         var idList = ids.ToList();
@@ -208,7 +194,6 @@ public sealed class ClientAdminService(
             client.DisplayName,
             client.IsActive,
             client.CreatedAt,
-            client.ReviewerId,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage);
     }

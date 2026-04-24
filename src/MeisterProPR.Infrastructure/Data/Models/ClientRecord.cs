@@ -12,7 +12,6 @@ public sealed class ClientRecord
     public DateTimeOffset CreatedAt { get; set; }
     public Guid Id { get; set; }
     public string DisplayName { get; set; } = string.Empty;
-    public Guid? ReviewerId { get; set; }
 
     /// <summary>
     ///     Determines how the reviewer behaves when automatically resolving its own comment threads.

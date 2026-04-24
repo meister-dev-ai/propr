@@ -1680,6 +1680,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Lists all AI connection profiles for the specified client. */
         get: {
             parameters: {
                 query?: never;
@@ -1727,6 +1728,7 @@ export interface paths {
             };
         };
         put?: never;
+        /** Creates a new AI connection profile for the specified client. */
         post: {
             parameters: {
                 query?: never;
@@ -1806,6 +1808,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** Deletes an AI connection profile. */
         delete: {
             parameters: {
                 query?: never;
@@ -1862,6 +1865,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
+        /** Updates an existing AI connection profile for the specified client. */
         patch: {
             parameters: {
                 query?: never;
@@ -1948,6 +1952,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Activates a verified AI connection profile after validating the minimum runtime bindings. */
         post: {
             parameters: {
                 query?: never;
@@ -2032,6 +2037,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Deactivates an AI connection profile. */
         post: {
             parameters: {
                 query?: never;
@@ -2105,6 +2111,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Verifies the saved provider profile and updates its verification snapshot. */
         post: {
             parameters: {
                 query?: never;
@@ -2178,6 +2185,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Discovers provider models using the supplied unsaved profile settings. */
         post: {
             parameters: {
                 query?: never;
@@ -3853,98 +3861,6 @@ export interface paths {
                 };
             };
         };
-        trace?: never;
-    };
-    "/clients/{clientId}/reviewer-identity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Sets or replaces the ADO reviewer identity GUID for a client.
-         *     Requires global admin or `ClientAdministrator` role for the specified client.
-         *     Until this is set, review jobs for the client will be rejected.
-         */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            /** @description The ADO identity GUID of the AI service account. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["SetReviewerIdentityRequest"];
-                    "text/json": components["schemas"]["SetReviewerIdentityRequest"];
-                    "application/*+json": components["schemas"]["SetReviewerIdentityRequest"];
-                };
-            };
-            responses: {
-                /** @description Reviewer identity stored. */
-                204: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description request contains an empty GUID. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks required role for this client. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Client not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/admin/clients/{clientId}/token-usage": {
@@ -7738,8 +7654,6 @@ export interface components {
             isActive?: boolean;
             /** Format: date-time */
             createdAt?: string;
-            /** Format: uuid */
-            reviewerId?: string | null;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
         };
@@ -8942,11 +8856,6 @@ export interface components {
             login?: string | null;
             displayName?: string | null;
             isBot?: boolean;
-        };
-        /** @description Request body for setting the ADO reviewer identity on a client. */
-        SetReviewerIdentityRequest: {
-            /** Format: uuid */
-            reviewerId?: string;
         };
         /** @description Request payload for provider-neutral review intake. */
         SubmitReviewRequest: {

@@ -116,7 +116,13 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             CreateGitHubRequest(PullRequestActivationSource.Webhook, "pull request updated") with
             {
                 CandidateIterationId = 11,
-                ReviewerId = ReviewerId,
+                RequestedReviewerIdentity =
+                    new ReviewerIdentity(
+                        new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                        ReviewerId.ToString("D"),
+                        "meister-dev-bot",
+                        "Meister Dev Bot",
+                        true),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
@@ -180,7 +186,13 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             CreateGitHubRequest(PullRequestActivationSource.Webhook, "pull request updated") with
             {
                 CandidateIterationId = 11,
-                ReviewerId = ReviewerId,
+                RequestedReviewerIdentity =
+                    new ReviewerIdentity(
+                        new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                        ReviewerId.ToString("D"),
+                        "meister-dev-bot",
+                        "Meister Dev Bot",
+                        true),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.NoReviewChanges, outcome.ReviewDecision);

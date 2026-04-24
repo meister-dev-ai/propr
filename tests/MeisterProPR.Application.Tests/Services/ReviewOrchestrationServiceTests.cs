@@ -372,11 +372,18 @@ public class ReviewOrchestrationServiceTests
         return fetcher;
     }
 
-    /// <summary>Set up the clientRegistry to return a non-null reviewerId for the given job's ClientId.</summary>
+    /// <summary>Set up the clientRegistry to return a configured provider reviewer identity for the given job.</summary>
     private static void SetupReviewerIdReturns(IClientRegistry clientRegistry, ReviewJob job, Guid reviewerId)
     {
-        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<Guid?>(reviewerId));
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<ReviewerIdentity?>(
+                    new ReviewerIdentity(
+                        job.ProviderHost,
+                        reviewerId.ToString("D"),
+                        reviewerId.ToString("D"),
+                        reviewerId.ToString("D"),
+                        false)));
     }
 
     private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
@@ -981,7 +988,7 @@ public class ReviewOrchestrationServiceTests
         await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
     }
 
-    // T032 — null ReviewerId → SetFailed "not configured", no reviewer call, no PostAsync
+    // T032 — missing configured reviewer identity → SetFailed "not configured", no reviewer call, no PostAsync
 
     [Fact]
     public async Task ProcessAsync_NullReviewerId_CallsSetFailedWithNotConfiguredMessage()
@@ -993,8 +1000,8 @@ public class ReviewOrchestrationServiceTests
         var clientId = Guid.NewGuid();
         var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
 
-        clientRegistry.GetReviewerIdAsync(clientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<Guid?>(null));
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(null));
 
         var service = CreateService(
             jobs,
@@ -2113,7 +2120,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>());
     }
 
-    // T026 — GetReviewerIdAsync returns non-null → AddOptionalReviewerAsync called with that GUID
+    // T026 — configured reviewer identity resolves to a GUID → AddOptionalReviewerAsync called with that GUID
 
     [Fact]
     public async Task ProcessAsync_WithConfiguredReviewerId_CallsAddOptionalReviewerWithThatGuid()
@@ -3260,8 +3267,8 @@ public class ReviewOrchestrationServiceTests
         var job = CreateJob();
 
         // Reviewer identity NOT configured
-        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<Guid?>(null));
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(null));
 
         var sut = CreateService(
             jobs,

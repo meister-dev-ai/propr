@@ -26,8 +26,7 @@ public sealed class PullRequestSynchronizationService(
     IPullRequestIterationResolver? iterationResolver = null,
     IReviewerThreadStatusFetcher? threadStatusFetcher = null,
     IThreadMemoryService? threadMemoryService = null,
-    IReviewPrScanRepository? prScanRepository = null,
-    IClientRegistry? clientRegistry = null) : IPullRequestSynchronizationService
+    IReviewPrScanRepository? prScanRepository = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -79,7 +78,7 @@ public sealed class PullRequestSynchronizationService(
                 return CompleteOutcome(activity, startedAt, request, outcome);
             }
 
-            var reviewerId = await this.ResolveReviewerIdAsync(request, ct);
+            var reviewerId = ResolveReviewerId(request.RequestedReviewerIdentity);
             await this.RunThreadMemoryStateMachineAsync(request, reviewerId, ct);
 
             var iterationId = request.CandidateIterationId;
@@ -470,26 +469,19 @@ public sealed class PullRequestSynchronizationService(
         return null;
     }
 
-    private async Task<Guid?> ResolveReviewerIdAsync(PullRequestSynchronizationRequest request, CancellationToken ct)
+    private static Guid? ResolveReviewerId(ReviewerIdentity? requestedReviewerIdentity)
     {
-        if (request.ReviewerId.HasValue)
+        if (requestedReviewerIdentity is not null)
         {
-            return request.ReviewerId.Value;
-        }
-
-        if (request.RequestedReviewerIdentity is not null)
-        {
-            if (Guid.TryParse(request.RequestedReviewerIdentity.ExternalUserId, out var parsedReviewerId))
+            if (Guid.TryParse(requestedReviewerIdentity.ExternalUserId, out var parsedReviewerId))
             {
                 return parsedReviewerId;
             }
 
-            return StableGuidGenerator.Create(request.RequestedReviewerIdentity.ExternalUserId);
+            return StableGuidGenerator.Create(requestedReviewerIdentity.ExternalUserId);
         }
 
-        return clientRegistry is null
-            ? null
-            : await clientRegistry.GetReviewerIdAsync(request.ClientId, ct);
+        return null;
     }
 
     private static int? TryCreateSyntheticIterationId(ReviewRevision? revision)

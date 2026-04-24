@@ -17,7 +17,8 @@ namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 public sealed partial class AdoAssignedPrFetcher(
     VssConnectionFactory connectionFactory,
     IClientScmConnectionRepository connectionRepository,
-    ILogger<AdoAssignedPrFetcher> logger) : IAssignedReviewDiscoveryService
+    ILogger<AdoAssignedPrFetcher> logger,
+    IClientRegistry? clientRegistry = null) : IAssignedReviewDiscoveryService
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
@@ -32,7 +33,8 @@ public sealed partial class AdoAssignedPrFetcher(
         CrawlConfigurationDto config,
         CancellationToken cancellationToken = default)
     {
-        if (config.ReviewerId is null)
+        var reviewerId = await this.ResolveReviewerIdAsync(config, cancellationToken);
+        if (!reviewerId.HasValue)
         {
             LogSkippedNoReviewerIdentity(logger, config.Id, config.ClientId);
             return [];
@@ -47,7 +49,7 @@ public sealed partial class AdoAssignedPrFetcher(
 
         var criteria = new GitPullRequestSearchCriteria
         {
-            ReviewerId = config.ReviewerId,
+            ReviewerId = reviewerId,
             Status = PullRequestStatus.Active,
         };
 
@@ -135,6 +137,25 @@ public sealed partial class AdoAssignedPrFetcher(
         }
 
         return results;
+    }
+
+    private async Task<Guid?> ResolveReviewerIdAsync(CrawlConfigurationDto config, CancellationToken cancellationToken)
+    {
+        if (clientRegistry is null)
+        {
+            return null;
+        }
+
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, config.ProviderScopePath);
+        var reviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, cancellationToken);
+        if (reviewer is null)
+        {
+            return null;
+        }
+
+        return Guid.TryParse(reviewer.ExternalUserId, out var reviewerId)
+            ? reviewerId
+            : null;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to get iterations for PR #{PrId}")]

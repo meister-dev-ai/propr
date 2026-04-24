@@ -12,7 +12,6 @@ namespace MeisterProPR.Api.Tests.Validators;
 public sealed class ClientsValidatorTests
 {
     private static readonly CreateClientRequestValidator CreateClientValidator = new();
-    private static readonly SetReviewerIdentityRequestValidator SetReviewerIdentityValidator = new();
     private static readonly PatchClientRequestValidator PatchClientValidator = new();
     private static readonly CreateClientProviderConnectionRequestValidator CreateProviderConnectionValidator = new();
     private static readonly PatchClientProviderConnectionRequestValidator PatchProviderConnectionValidator = new();
@@ -108,23 +107,6 @@ public sealed class ClientsValidatorTests
         Assert.Contains(
             result.Errors,
             error => error.PropertyName == nameof(PatchClientProviderConnectionRequest.OAuthTenantId));
-    }
-
-    [Fact]
-    public void SetReviewerIdentity_ValidGuid_Passes()
-    {
-        var result = SetReviewerIdentityValidator.Validate(new SetReviewerIdentityRequest(Guid.NewGuid()));
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public void SetReviewerIdentity_EmptyGuid_FailsOnReviewerId()
-    {
-        var result = SetReviewerIdentityValidator.Validate(new SetReviewerIdentityRequest(Guid.Empty));
-        Assert.False(result.IsValid);
-        Assert.Contains(
-            result.Errors,
-            e => e.PropertyName == nameof(SetReviewerIdentityRequest.ReviewerId));
     }
 
     // T035 — PatchClientRequest.CustomSystemMessage validation

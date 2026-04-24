@@ -1147,7 +1147,7 @@ export const handlers = [
   http.post(`${base}/auth/login`, async () => {
     await delay(500)
     // The dummy token contains a base64 payload with both role and username claims.
-    return HttpResponse.json({ 
+    return HttpResponse.json({
       accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIiwidW5pcXVlX25hbWUiOiJtb2NrLmFkbWluIn0=.dummySignature',
       refreshToken: 'mock-refresh'
     })
@@ -1173,15 +1173,14 @@ export const handlers = [
   http.get(`${base}/clients/:id`, async ({ params }) => {
     await delay(300)
     return HttpResponse.json({
-        id: params.id, 
-        displayName: 'Mocked Client ' + params.id, 
-        isActive: true, 
-        createdAt: new Date().toISOString(), 
-        recentUsageTokens: 14520,
-        reviewerId: '0000-1111-2222-3333'
+        id: params.id,
+        displayName: 'Mocked Client ' + params.id,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        recentUsageTokens: 14520
     })
   }),
-  
+
   http.patch(`${base}/clients/:id`, async ({ request }) => {
     await delay(300)
     const body = await request.json() as any
@@ -1878,9 +1877,9 @@ export const handlers = [
   http.get(`${base}/jobs`, async () => {
     await delay(400)
     jobTick++
-    
+
     const isCompleted = false
-    
+
     return HttpResponse.json({
       items: [
         {
@@ -1917,8 +1916,8 @@ export const handlers = [
           completedAt: isCompleted ? new Date().toISOString() : null,
           totalInputTokens: 5000 + (jobTick * 200),
           totalOutputTokens: jobTick * 100,
-          resultSummary: isCompleted 
-            ? 'Automated review finished. LGTM!' 
+          resultSummary: isCompleted
+            ? 'Automated review finished. LGTM!'
             : `Evaluating subjob ${jobTick}: src/components/Component${Math.ceil(jobTick/2)}.vue`,
           prTitle: 'refactor: Migrate to Composition API',
           prRepositoryName: 'frontend-app',
@@ -1952,9 +1951,9 @@ export const handlers = [
 
   http.get(`${base}/Reviews/:jobId`, async ({ params }) => {
     await delay(300)
-    
+
     const jobId = params.jobId as string
-    
+
     // Simulating "No Synthesis" for a failed job
     if (jobId === 'job-125') {
         return HttpResponse.json({
@@ -1976,7 +1975,7 @@ export const handlers = [
             } : null
         })
     }
-    
+
     // Provide a mocked synthesis review result for others (completed)
     return HttpResponse.json({
         jobId,
@@ -2065,11 +2064,11 @@ export const handlers = [
 
   http.get(`${base}/jobs/:id/protocol`, async ({ params }) => {
     await delay(600)
-    
+
     if (params.id === 'job-124') {
         const events = []
         const currentTick = Math.min(jobTick, 8)
-        
+
         for (let i = 1; i <= currentTick; i++) {
             // Odd ticks generate a fresh ToolCall
             events.push({
@@ -2094,7 +2093,7 @@ export const handlers = [
                 })
             }
         }
-        
+
         const isCompleted = false
         return HttpResponse.json([
           {
@@ -2190,14 +2189,14 @@ export const handlers = [
     if (staleFilter) {
       return HttpResponse.json({ error: 'The selected crawl filter is no longer available in Azure DevOps.' }, { status: 409 })
     }
-    
-    crawlConfigs[idx] = { 
-      ...existingConfig, 
-      ...body, 
+
+    crawlConfigs[idx] = {
+      ...existingConfig,
+      ...body,
       repoFilters: body.repoFilters ?? existingConfig.repoFilters,
       proCursorSourceScopeMode: body.proCursorSourceScopeMode ?? existingConfig.proCursorSourceScopeMode,
       proCursorSourceIds: body.proCursorSourceIds ?? existingConfig.proCursorSourceIds,
-      updatedAt: new Date().toISOString() 
+      updatedAt: new Date().toISOString()
     }
     return HttpResponse.json(crawlConfigs[idx])
   }),
@@ -2207,7 +2206,7 @@ export const handlers = [
     const { configId } = params
     const idx = crawlConfigs.findIndex(c => c.id === configId)
     if (idx === -1) return new HttpResponse(null, { status: 404 })
-    
+
     crawlConfigs.splice(idx, 1)
     return new HttpResponse(null, { status: 204 })
   }),
@@ -2413,9 +2412,9 @@ export const handlers = [
 
     let items = threadMemoryRecords.filter(r => r.clientId === clientId)
     if (search) {
-      items = items.filter(r => 
-        r.repositoryId.toLowerCase().includes(search) || 
-        r.filePath?.toLowerCase().includes(search) || 
+      items = items.filter(r =>
+        r.repositoryId.toLowerCase().includes(search) ||
+        r.filePath?.toLowerCase().includes(search) ||
         r.resolutionSummary.toLowerCase().includes(search)
       )
     }

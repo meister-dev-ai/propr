@@ -64,7 +64,8 @@ public sealed class AdoWebhookIngressServiceTests
         var parser = Substitute.For<IAdoWebhookPayloadParser>();
         var clientRegistry = Substitute.For<IClientRegistry>();
 
-        clientRegistry.GetReviewerIdAsync(clientId, Arg.Any<CancellationToken>()).Returns(reviewerId);
+        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(host, reviewerId.ToString("D"), "review-bot", "Review Bot", true));
         parser.Parse(Arg.Any<string>(), Arg.Any<JsonElement>())
             .Returns(
                 new IncomingAdoWebhookDelivery(

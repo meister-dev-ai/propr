@@ -26,7 +26,6 @@ public sealed class MentionsModuleTests
         ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
-        ReviewerId,
         60,
         true,
         DateTimeOffset.UtcNow,
@@ -89,6 +88,8 @@ public sealed class MentionsModuleTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns([pr]);
+        clientRegistry.GetReviewerIdentityAsync(ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath), ReviewerId.ToString("D"), "review-bot", "Review Bot", false));
         pullRequestFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),

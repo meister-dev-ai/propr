@@ -55,17 +55,6 @@ public sealed partial class MentionScanService(
 
     private async Task ScanConfigAsync(CrawlConfigurationDto config, CancellationToken ct)
     {
-        if (config.ReviewerId is null)
-        {
-            var fallbackHost = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-            var fallbackReviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, fallbackHost, ct);
-            if (fallbackReviewer is null)
-            {
-                LogSkippedNoReviewerId(logger, config.Id, config.ClientId);
-                return;
-            }
-        }
-
         try
         {
             var reviewer = await this.ResolveReviewerIdentityAsync(config, ct);
@@ -285,19 +274,7 @@ public sealed partial class MentionScanService(
         CancellationToken ct)
     {
         var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-        var reviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
-        if (reviewer is not null)
-        {
-            return reviewer;
-        }
-
-        if (config.Provider != ScmProvider.AzureDevOps || !config.ReviewerId.HasValue)
-        {
-            return null;
-        }
-
-        var reviewerId = config.ReviewerId.Value.ToString("D");
-        return new ReviewerIdentity(host, reviewerId, reviewerId, reviewerId, false);
+        return await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
     }
 
     private static string ResolveRepositoryProjectPath(

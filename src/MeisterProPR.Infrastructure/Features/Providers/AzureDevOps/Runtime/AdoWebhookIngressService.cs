@@ -51,7 +51,7 @@ internal sealed class AdoWebhookIngressService(
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
         var delivery = payloadParser.Parse("providers/ado", root);
-        var configuredReviewerId = await clientRegistry.GetReviewerIdAsync(clientId, ct);
+        var configuredReviewerId = await this.ResolveConfiguredReviewerIdAsync(clientId, host, ct);
         var repository = ReadRepository(host, root, delivery);
 
         return new WebhookDeliveryEnvelope(
@@ -69,6 +69,19 @@ internal sealed class AdoWebhookIngressService(
             delivery.SourceBranch,
             delivery.TargetBranch,
             null);
+    }
+
+    private async Task<Guid?> ResolveConfiguredReviewerIdAsync(Guid clientId, ProviderHostRef host, CancellationToken ct)
+    {
+        var reviewer = await clientRegistry.GetReviewerIdentityAsync(clientId, host, ct);
+        if (reviewer is null)
+        {
+            return null;
+        }
+
+        return Guid.TryParse(reviewer.ExternalUserId, out var reviewerId)
+            ? reviewerId
+            : null;
     }
 
     private static string ClassifyDeliveryKind(IncomingAdoWebhookDelivery delivery, Guid? configuredReviewerId)

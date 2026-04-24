@@ -17,13 +17,14 @@ namespace MeisterProPR.Application.Tests.Services;
 /// <summary>Unit tests for <see cref="PrCrawlService" /> using NSubstitute.</summary>
 public sealed class PrCrawlServiceTests
 {
+    private static readonly Guid DefaultReviewerId = Guid.NewGuid();
+
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         Guid.NewGuid(),
         Guid.NewGuid(),
         ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
-        Guid.NewGuid(),
         60,
         true,
         DateTimeOffset.UtcNow,
@@ -33,6 +34,7 @@ public sealed class PrCrawlServiceTests
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
 
     private readonly IAssignedReviewDiscoveryService _prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
+    private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
 
     private readonly IProviderActivationService _providerActivationService =
         Substitute.For<IProviderActivationService>();
@@ -51,10 +53,13 @@ public sealed class PrCrawlServiceTests
             this._jobs,
             this._statusFetcher,
             NullLogger<PrCrawlService>.Instance,
-            providerActivationService: this._providerActivationService);
+            providerActivationService: this._providerActivationService,
+            clientRegistry: this._clientRegistry);
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        this._clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath), DefaultReviewerId.ToString("D"), "review-bot", "Review Bot", true));
     }
 
     private static AssignedCodeReviewRef MakePr(
@@ -106,6 +111,18 @@ public sealed class PrCrawlServiceTests
         return scan;
     }
 
+    private static ReviewerIdentity MakeConfiguredReviewer(CrawlConfigurationDto config, Guid? reviewerId = null)
+    {
+        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+
+        return new ReviewerIdentity(
+            host,
+            (reviewerId ?? Guid.NewGuid()).ToString(),
+            "review-bot",
+            "Review Bot",
+            true);
+    }
+
     private PrCrawlService CreateSutWithScanDependencies()
     {
         return new PrCrawlService(
@@ -117,7 +134,8 @@ public sealed class PrCrawlServiceTests
             this._threadStatusFetcher,
             this._threadMemoryService,
             this._prScanRepository,
-            providerActivationService: this._providerActivationService);
+            providerActivationService: this._providerActivationService,
+            clientRegistry: this._clientRegistry);
     }
 
     private PrCrawlService CreateSutWithSharedSynchronizationService(IPullRequestSynchronizationService synchronizationService)
@@ -129,7 +147,8 @@ public sealed class PrCrawlServiceTests
             this._statusFetcher,
             NullLogger<PrCrawlService>.Instance,
             pullRequestSynchronizationService: synchronizationService,
-            providerActivationService: this._providerActivationService);
+                providerActivationService: this._providerActivationService,
+                clientRegistry: this._clientRegistry);
     }
 
     [Fact]
@@ -315,7 +334,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultConfig.ReviewerId!.Value,
+            DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -329,6 +348,68 @@ public sealed class PrCrawlServiceTests
 
         // Assert
         await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_SameIterationWithoutLegacyReviewerId_UsesConfiguredProviderReviewerIdentity()
+    {
+        var sut = this.CreateSutWithScanDependencies();
+        var providerReviewerId = Guid.NewGuid();
+        var config = DefaultConfig;
+        var reviewer = MakeConfiguredReviewer(config, providerReviewerId);
+        var pr = MakePr(142, 3, config);
+
+        this._clientRegistry.GetReviewerIdentityAsync(
+                config.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(reviewer);
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._prScanRepository.GetAsync(
+                config.ClientId,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<ReviewPrScan?>(
+                    MakeScan(
+                        pr.CodeReview.Number,
+                        pr.RevisionId,
+                        new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+        this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                config.ProviderScopePath,
+                pr.Repository.ProjectPath,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                providerReviewerId,
+                config.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
+                [
+                    new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+                ]));
+
+        await sut.CrawlAsync();
+
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
+        await this._threadStatusFetcher.Received(2)
+            .GetReviewerThreadStatusesAsync(
+                config.ProviderScopePath,
+                pr.Repository.ProjectPath,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                providerReviewerId,
+                config.ClientId,
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -361,7 +442,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultConfig.ReviewerId!.Value,
+            DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -417,7 +498,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultConfig.ReviewerId!.Value,
+            DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([]));
@@ -484,7 +565,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultConfig.ReviewerId!.Value,
+            DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -661,7 +742,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultConfig.ReviewerId!.Value,
+            DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -1028,7 +1109,6 @@ public sealed class PrCrawlServiceTests
         var sourceId = Guid.NewGuid();
         var config = DefaultConfig with
         {
-            ReviewerId = Guid.NewGuid(),
             ProCursorSourceScopeMode = ProCursorSourceScopeMode.SelectedSources,
             ProCursorSourceIds = [sourceId],
             InvalidProCursorSourceIds = [],
@@ -1074,7 +1154,8 @@ public sealed class PrCrawlServiceTests
                     request.PullRequestId == pr.CodeReview.Number &&
                     request.PullRequestStatus == PrStatus.Active &&
                     request.CandidateIterationId == pr.RevisionId &&
-                    request.ReviewerId == config.ReviewerId &&
+                    request.RequestedReviewerIdentity != null &&
+                    request.RequestedReviewerIdentity.ExternalUserId == DefaultReviewerId.ToString("D") &&
                     request.PrTitle == pr.ReviewTitle &&
                     request.RepositoryName == pr.RepositoryDisplayName &&
                     request.SourceBranch == pr.SourceBranch &&
@@ -1083,6 +1164,57 @@ public sealed class PrCrawlServiceTests
                     request.ProCursorSourceIds.SequenceEqual(new[] { sourceId })),
                 Arg.Any<CancellationToken>());
         await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CrawlAsync_WithSharedSynchronizationService_ForwardsConfiguredProviderReviewer_WhenLegacyReviewerIdIsMissing()
+    {
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+        var sut = this.CreateSutWithSharedSynchronizationService(synchronizationService);
+        var providerReviewerId = Guid.NewGuid();
+        var config = DefaultConfig;
+        var reviewer = MakeConfiguredReviewer(config, providerReviewerId);
+        var pr = MakePr(
+            43,
+            8,
+            config,
+            "repo-1",
+            "Use provider reviewer identity",
+            "repo-display",
+            "feature/provider-reviewer",
+            "main");
+
+        this._clientRegistry.GetReviewerIdentityAsync(
+                config.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(reviewer);
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
+        this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
+            .Returns([pr]);
+        this._jobs.GetActiveJobsForConfigAsync(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        synchronizationService.SynchronizeAsync(
+                Arg.Any<PullRequestSynchronizationRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.Submitted,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    ["Submitted review intake job for PR #43 at iteration 8 via crawl discovery."]));
+
+        await sut.CrawlAsync();
+
+        await synchronizationService.Received(1)
+            .SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request =>
+                    request.PullRequestId == pr.CodeReview.Number &&
+                    request.RequestedReviewerIdentity == reviewer &&
+                    request.RequestedReviewerIdentity.ExternalUserId == providerReviewerId.ToString("D")),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]

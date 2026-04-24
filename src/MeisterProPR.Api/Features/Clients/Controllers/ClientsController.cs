@@ -12,12 +12,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
-/// <summary>Manages clients, client-scoped reviewer identity, and related admin configuration.</summary>
+/// <summary>Manages clients and related admin configuration.</summary>
 [ApiController]
 public sealed partial class ClientsController(
     IClientAdminService clientAdminService,
-    IUserRepository userRepository,
-    ILogger<ClientsController> logger) : ControllerBase
+    IUserRepository userRepository) : ControllerBase
 {
     private static ClientResponse ToClientResponse(ClientDto client)
     {
@@ -26,7 +25,6 @@ public sealed partial class ClientsController(
             client.DisplayName,
             client.IsActive,
             client.CreatedAt,
-            client.ReviewerId,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage);
     }
@@ -255,64 +253,6 @@ public sealed partial class ClientsController(
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 
-    /// <summary>
-    ///     Sets or replaces the ADO reviewer identity GUID for a client.
-    ///     Requires global admin or <c>ClientAdministrator</c> role for the specified client.
-    ///     Until this is set, review jobs for the client will be rejected.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">The ADO identity GUID of the AI service account.</param>
-    /// <param name="validator">Validator for the request body.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Reviewer identity stored.</response>
-    /// <response code="400"><paramref name="request" /> contains an empty GUID.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller lacks required role for this client.</response>
-    /// <response code="404">Client not found.</response>
-    [HttpPut("clients/{clientId:guid}/reviewer-identity")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> PutReviewerIdentity(
-        Guid clientId,
-        [FromBody] SetReviewerIdentityRequest request,
-        [FromServices] IValidator<SetReviewerIdentityRequest> validator,
-        CancellationToken ct = default)
-    {
-        string actorType;
-
-        if (AuthHelpers.IsAdmin(this.HttpContext))
-        {
-            actorType = "Admin";
-        }
-        else
-        {
-            var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
-            if (roleCheck is not null)
-            {
-                return roleCheck;
-            }
-
-            actorType = "User";
-        }
-
-        var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        var found = await clientAdminService.SetReviewerIdentityAsync(clientId, request.ReviewerId, ct);
-        if (!found)
-        {
-            return this.NotFound();
-        }
-
-        LogReviewerIdentityUpdated(logger, clientId, actorType);
-        return this.NoContent();
-    }
 }
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
@@ -321,7 +261,6 @@ public sealed record ClientResponse(
     string DisplayName,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    Guid? ReviewerId,
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage);
 
@@ -362,5 +301,3 @@ public sealed record PatchClientRequest(
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null);
 
-/// <summary>Request body for setting the ADO reviewer identity on a client.</summary>
-public sealed record SetReviewerIdentityRequest(Guid ReviewerId);

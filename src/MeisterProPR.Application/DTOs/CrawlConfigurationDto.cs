@@ -12,10 +12,6 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="Provider">Source control management provider.</param>
 /// <param name="ProviderScopePath">Provider-specific scope path or URL used to enumerate crawl targets.</param>
 /// <param name="ProviderProjectKey">Provider-specific project, workspace, or namespace key within the selected scope.</param>
-/// <param name="ReviewerId">
-///     Reviewer identity GUID of the configured service account when available; null if not configured on the owning
-///     client.
-/// </param>
 /// <param name="CrawlIntervalSeconds">Polling interval in seconds.</param>
 /// <param name="IsActive">Whether the configuration is active.</param>
 /// <param name="CreatedAt">When the configuration was created.</param>
@@ -32,7 +28,6 @@ public sealed record CrawlConfigurationDto(
     ScmProvider Provider,
     string ProviderScopePath,
     string ProviderProjectKey,
-    Guid? ReviewerId,
     int CrawlIntervalSeconds,
     bool IsActive,
     DateTimeOffset CreatedAt,

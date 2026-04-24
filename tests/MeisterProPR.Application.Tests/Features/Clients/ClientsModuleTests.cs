@@ -43,32 +43,6 @@ public sealed class ClientsModuleTests
     }
 
     [Fact]
-    public async Task SetReviewerIdentityAsync_WhenClientExists_PersistsReviewerId()
-    {
-        await using var db = CreateContext();
-        var clientId = Guid.NewGuid();
-        var reviewerId = Guid.NewGuid();
-        db.Clients.Add(
-            new ClientRecord
-            {
-                Id = clientId,
-                DisplayName = "Reviewer Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-        await db.SaveChangesAsync();
-
-        var sut = new ClientAdminService(db);
-
-        var updated = await sut.SetReviewerIdentityAsync(clientId, reviewerId);
-
-        Assert.True(updated);
-        Assert.Equal(
-            reviewerId,
-            await db.Clients.Where(record => record.Id == clientId).Select(record => record.ReviewerId).SingleAsync());
-    }
-
-    [Fact]
     public void AddClientsModule_WithDatabaseConnectionString_RegistersProviderReadinessServices()
     {
         var services = new ServiceCollection();

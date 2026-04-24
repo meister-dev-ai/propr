@@ -57,15 +57,6 @@ public interface IClientAdminService
     /// <param name="ct">Cancellation token.</param>
     Task<bool> ExistsAsync(Guid clientId, CancellationToken ct = default);
 
-    /// <summary>
-    ///     Sets the ADO reviewer identity GUID for a client.
-    ///     Returns <c>false</c> if the client was not found.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="reviewerId">ADO identity GUID of the AI service account.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<bool> SetReviewerIdentityAsync(Guid clientId, Guid reviewerId, CancellationToken ct = default);
-
     /// <summary>Returns clients with the given IDs. Silently omits IDs that do not exist.</summary>
     /// <param name="ids">Collection of client identifiers to look up.</param>
     /// <param name="ct">Cancellation token.</param>

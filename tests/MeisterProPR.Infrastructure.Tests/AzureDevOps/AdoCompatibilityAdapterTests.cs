@@ -463,7 +463,8 @@ public sealed class AdoCompatibilityAdapterTests
             new AdoWebhookPayloadParser(),
             clientRegistry);
 
-        clientRegistry.GetReviewerIdAsync(clientId, Arg.Any<CancellationToken>()).Returns(reviewerId);
+        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(host, reviewerId.ToString("D"), "review-bot", "Review Bot", true));
 
         var payload = $$"""
                         {

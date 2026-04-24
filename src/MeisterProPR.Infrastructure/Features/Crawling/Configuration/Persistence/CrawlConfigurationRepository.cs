@@ -57,19 +57,12 @@ public sealed class CrawlConfigurationRepository(
         dbContext.CrawlConfigurations.Add(record);
         await dbContext.SaveChangesAsync(ct);
 
-        // Populate ReviewerId from the owning client record.
-        var clientReviewerId = await dbContext.Clients
-            .Where(c => c.Id == clientId)
-            .Select(c => c.ReviewerId)
-            .FirstOrDefaultAsync(ct);
-
         return new CrawlConfigurationDto(
             record.Id,
             record.ClientId,
             record.Provider,
             record.OrganizationUrl,
             record.ProjectId,
-            clientReviewerId,
             record.CrawlIntervalSeconds,
             record.IsActive,
             record.CreatedAt,
@@ -90,7 +83,7 @@ public sealed class CrawlConfigurationRepository(
             records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
         }
 
-        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
+        return records.Select(ToDto).ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -142,7 +135,7 @@ public sealed class CrawlConfigurationRepository(
             records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
         }
 
-        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
+        return records.Select(ToDto).ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -167,7 +160,7 @@ public sealed class CrawlConfigurationRepository(
             records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
         }
 
-        return records.Select(c => ToDto(c, c.Client.ReviewerId)).ToList().AsReadOnly();
+        return records.Select(ToDto).ToList().AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -186,7 +179,7 @@ public sealed class CrawlConfigurationRepository(
             }
         }
 
-        return record is null ? null : ToDto(record, record.Client.ReviewerId);
+        return record is null ? null : ToDto(record);
     }
 
     /// <inheritdoc />
@@ -295,7 +288,7 @@ public sealed class CrawlConfigurationRepository(
         return true;
     }
 
-    private static CrawlConfigurationDto ToDto(CrawlConfigurationRecord c, Guid? reviewerId)
+    private static CrawlConfigurationDto ToDto(CrawlConfigurationRecord c)
     {
         var proCursorSourceIds = c.ProCursorSources
             .Select(link => link.ProCursorSourceId)
@@ -317,7 +310,6 @@ public sealed class CrawlConfigurationRepository(
             c.Provider,
             c.OrganizationUrl,
             c.ProjectId,
-            reviewerId,
             c.CrawlIntervalSeconds,
             c.IsActive,
             c.CreatedAt,

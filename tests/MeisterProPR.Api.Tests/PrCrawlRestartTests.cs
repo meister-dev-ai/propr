@@ -91,7 +91,6 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "proj",
-            Guid.NewGuid(),
             60,
             true,
             DateTimeOffset.UtcNow,

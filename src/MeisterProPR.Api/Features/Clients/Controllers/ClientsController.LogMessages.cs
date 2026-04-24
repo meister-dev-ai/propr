@@ -9,11 +9,6 @@ public sealed partial class ClientsController
 {
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Reviewer identity updated for client {ClientId} by {ActorType}")]
-    private static partial void LogReviewerIdentityUpdated(ILogger logger, Guid clientId, string actorType);
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
         Message =
             "ADO organization scope {ScopeId} created for client {ClientId}; verification status {VerificationStatus}; enabled={IsEnabled}")]
     private static partial void LogAdoOrganizationScopeCreated(

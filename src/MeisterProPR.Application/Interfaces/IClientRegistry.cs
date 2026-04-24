@@ -13,12 +13,6 @@ namespace MeisterProPR.Application.Interfaces;
 public interface IClientRegistry
 {
     /// <summary>
-    ///     Returns the configured ADO reviewer identity GUID for the given client,
-    ///     or null if not configured or client not found.
-    /// </summary>
-    Task<Guid?> GetReviewerIdAsync(Guid clientId, CancellationToken ct = default);
-
-    /// <summary>
     ///     Returns the configured provider reviewer identity for the given client and provider host,
     ///     or <see langword="null" /> when no active connection or reviewer identity is configured.
     /// </summary>

@@ -183,8 +183,9 @@ public class ReviewOrchestrationServicePromptOverrideTests
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
-        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<Guid?>(Guid.NewGuid()));
+        var reviewerId = Guid.NewGuid();
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
         clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

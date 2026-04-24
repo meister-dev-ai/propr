@@ -181,7 +181,6 @@ try
     });
 
     builder.Services.AddSingleton<IValidator<CreateClientRequest>, CreateClientRequestValidator>();
-    builder.Services.AddSingleton<IValidator<SetReviewerIdentityRequest>, SetReviewerIdentityRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchClientRequest>, PatchClientRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<CreateClientProviderConnectionRequest>,

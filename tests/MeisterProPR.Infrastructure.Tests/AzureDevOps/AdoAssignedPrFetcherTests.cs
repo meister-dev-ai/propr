@@ -20,19 +20,33 @@ namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 /// </summary>
 public sealed class AdoAssignedPrFetcherTests
 {
+    private static readonly Guid DefaultReviewerId = Guid.NewGuid();
+
     private static readonly CrawlConfigurationDto DefaultConfig = new(
         Guid.NewGuid(),
         Guid.NewGuid(),
         ScmProvider.AzureDevOps,
         "https://dev.azure.com/testorg",
         "TestProject",
-        Guid.NewGuid(),
         60,
         true,
         DateTimeOffset.UtcNow,
         []);
 
-    private static AdoAssignedPrFetcher BuildSut(GitHttpClient gitClient)
+    private static ReviewerIdentity CreateConfiguredReviewer(
+        CrawlConfigurationDto config,
+        Guid? reviewerId = null)
+    {
+        var resolvedReviewerId = reviewerId ?? DefaultReviewerId;
+        return new ReviewerIdentity(
+            new ProviderHostRef(ScmProvider.AzureDevOps, config.ProviderScopePath),
+            resolvedReviewerId.ToString("D"),
+            "meister-bot",
+            "Meister Bot",
+            true);
+    }
+
+    private static AdoAssignedPrFetcher BuildSut(GitHttpClient gitClient, IClientRegistry? clientRegistry = null)
     {
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
         var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
@@ -41,10 +55,17 @@ public sealed class AdoAssignedPrFetcherTests
                 Arg.Any<ProviderHostRef>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+        var reviewerRegistry = clientRegistry ?? Substitute.For<IClientRegistry>();
+        if (clientRegistry is null)
+        {
+            reviewerRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+                .Returns(CreateConfiguredReviewer(DefaultConfig));
+        }
         var fetcher = new AdoAssignedPrFetcher(
             factory,
             connectionRepository,
-            NullLogger<AdoAssignedPrFetcher>.Instance);
+            NullLogger<AdoAssignedPrFetcher>.Instance,
+            reviewerRegistry);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
         return fetcher;
     }
@@ -135,36 +156,92 @@ public sealed class AdoAssignedPrFetcherTests
         Assert.Equal(22, result[0].CodeReview.Number);
     }
 
-    // T035 — config with null ReviewerId is skipped and returns empty list
+    // T035 — missing configured reviewer identity is skipped and returns empty list
 
     [Fact]
-    public async Task GetAssignedOpenPullRequestsAsync_NullReviewerId_ReturnsEmptyListWithoutCallingAdo()
+    public async Task GetAssignedOpenPullRequestsAsync_MissingConfiguredReviewerIdentity_ReturnsEmptyListWithoutCallingAdo()
     {
-        var configWithNullReviewer = new CrawlConfigurationDto(
+        var configWithoutConfiguredReviewer = new CrawlConfigurationDto(
             Guid.NewGuid(),
             Guid.NewGuid(),
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/testorg",
             "TestProject",
-            null, // ReviewerId = null → should skip
             60,
             true,
             DateTimeOffset.UtcNow,
             []);
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(
+                configWithoutConfiguredReviewer.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns((ReviewerIdentity?)null);
 
         var gitClient = Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
             new VssCredentials());
 
-        var sut = BuildSut(gitClient);
-        var result = await sut.ListAssignedOpenReviewsAsync(configWithNullReviewer);
+        var sut = BuildSut(gitClient, clientRegistry);
+        var result = await sut.ListAssignedOpenReviewsAsync(configWithoutConfiguredReviewer);
 
         Assert.Empty(result);
-        // ADO was never called since we short-circuit on null ReviewerId
+        // ADO was never called since we short-circuit on a missing provider reviewer identity.
         await gitClient.DidNotReceiveWithAnyArgs()
             .GetPullRequestsByProjectAsync(
                 null!,
                 null!);
+    }
+
+    [Fact]
+    public async Task GetAssignedOpenPullRequestsAsync_UsesConfiguredProviderReviewerIdentity()
+    {
+        var repoId = Guid.NewGuid();
+        var providerReviewerId = Guid.NewGuid();
+        var providerReviewer = CreateConfiguredReviewer(DefaultConfig, providerReviewerId);
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(
+                DefaultConfig.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(providerReviewer);
+        GitPullRequestSearchCriteria? capturedCriteria = null;
+
+        var gitClient = Substitute.For<GitHttpClient>(
+            new Uri("https://dev.azure.com/testorg"),
+            new VssCredentials());
+        gitClient.GetPullRequestsByProjectAsync(
+                Arg.Any<string>(),
+                Arg.Any<GitPullRequestSearchCriteria>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedCriteria = callInfo.ArgAt<GitPullRequestSearchCriteria>(1);
+                return Task.FromResult(new List<GitPullRequest> { MakePr(42, repoId) });
+            });
+        gitClient.GetPullRequestIterationsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<GitPullRequestIteration> { new() { Id = 3 } }));
+
+        var sut = BuildSut(gitClient, clientRegistry);
+
+        var result = await sut.ListAssignedOpenReviewsAsync(DefaultConfig);
+
+        Assert.Single(result);
+        Assert.Equal(42, result[0].CodeReview.Number);
+        Assert.NotNull(capturedCriteria);
+        Assert.Equal(providerReviewerId, capturedCriteria!.ReviewerId);
+        Assert.Equal(PullRequestStatus.Active, capturedCriteria.Status);
     }
 
     [Fact]
@@ -287,7 +364,7 @@ public sealed class AdoAssignedPrFetcherTests
             .GetPullRequestsByProjectAsync(
                 Arg.Is(DefaultConfig.ProviderProjectKey),
                 Arg.Is<GitPullRequestSearchCriteria>(c =>
-                    c.ReviewerId == DefaultConfig.ReviewerId &&
+                    c.ReviewerId == DefaultReviewerId &&
                     c.Status == PullRequestStatus.Active),
                 Arg.Any<int?>(),
                 Arg.Any<int?>(),
@@ -321,15 +398,19 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns(CreateConfiguredReviewer(DefaultConfig));
         var fetcher = new AdoAssignedPrFetcher(
             factory,
             connectionRepository,
-            NullLogger<AdoAssignedPrFetcher>.Instance);
+            NullLogger<AdoAssignedPrFetcher>.Instance,
+            clientRegistry);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
 
         await fetcher.ListAssignedOpenReviewsAsync(DefaultConfig);
 
-        // The provider-neutral connection lookup must still be queried even when nothing is configured.
+        // Connection lookup still happens once a reviewer identity is configured and crawl proceeds.
         await connectionRepository.Received(1)
             .GetOperationalConnectionAsync(
                 DefaultConfig.ClientId,
@@ -379,10 +460,14 @@ public sealed class AdoAssignedPrFetcherTests
             .Returns(Task.FromResult(new List<GitPullRequest>()));
 
         var factory = new VssConnectionFactory(Substitute.For<TokenCredential>());
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns(CreateConfiguredReviewer(DefaultConfig));
         var fetcher = new AdoAssignedPrFetcher(
             factory,
             connectionRepository,
-            NullLogger<AdoAssignedPrFetcher>.Instance);
+            NullLogger<AdoAssignedPrFetcher>.Instance,
+            clientRegistry);
         fetcher.GitClientResolver = (_, _) => Task.FromResult(gitClient);
 
         await fetcher.ListAssignedOpenReviewsAsync(DefaultConfig);

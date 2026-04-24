@@ -267,8 +267,6 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
                             "refs/heads/main",
                             "active",
                             []));
-                this._clientRegistry.GetReviewerIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult<Guid?>(null));
                 this._clientRegistry.GetReviewerIdentityAsync(
                         Arg.Any<Guid>(),
                         Arg.Any<ProviderHostRef>(),

@@ -277,7 +277,7 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    // T069/T073: Resolve the normalized reviewer identity plus the legacy GUID needed by the current scan model.
+    // Resolve the normalized reviewer identity plus the current internal GUID needed by the scan model.
     private async Task<(ReviewerIdentity reviewer, Guid reviewerId)?> ResolveReviewerAsync(
         ReviewJob job,
         CancellationToken ct)
@@ -291,22 +291,9 @@ public sealed partial class ReviewOrchestrationService(
             return (normalizedReviewer, normalizedReviewerId);
         }
 
-        var reviewerId = await clientRegistry.GetReviewerIdAsync(job.ClientId, ct);
-        if (reviewerId is null)
-        {
-            LogReviewerIdentityMissing(logger, job.ClientId, job.Id);
-            await jobs.SetFailedAsync(job.Id, $"Reviewer identity not configured for client {job.ClientId}", ct);
-            return null;
-        }
-
-        return (
-            normalizedReviewer ?? new ReviewerIdentity(
-                job.ProviderHost,
-                reviewerId.Value.ToString("D"),
-                reviewerId.Value.ToString("D"),
-                reviewerId.Value.ToString("D"),
-                false),
-            reviewerId.Value);
+        LogReviewerIdentityMissing(logger, job.ClientId, job.Id);
+        await jobs.SetFailedAsync(job.Id, $"Reviewer identity not configured for client {job.ClientId}", ct);
+        return null;
     }
 
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).

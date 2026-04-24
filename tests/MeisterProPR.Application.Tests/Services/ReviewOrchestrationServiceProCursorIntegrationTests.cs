@@ -177,8 +177,9 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(Guid.NewGuid());
+        var reviewerId = Guid.NewGuid();
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
         clientRegistry.GetCommentResolutionBehaviorAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(CommentResolutionBehavior.Silent);
         clientRegistry.GetCustomSystemMessageAsync(job.ClientId, Arg.Any<CancellationToken>())

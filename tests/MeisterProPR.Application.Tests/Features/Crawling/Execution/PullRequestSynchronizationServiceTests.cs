@@ -9,6 +9,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Events;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -70,14 +71,13 @@ public sealed class PullRequestSynchronizationServiceTests
             iterationResolver,
             threadStatusFetcher,
             threadMemoryService,
-            scanRepository,
-            clientRegistry);
+            scanRepository);
 
         var outcome = await sut.SynchronizeAsync(
             CreateRequest(activationSource, summaryLabel) with
             {
                 CandidateIterationId = 7,
-                ReviewerId = ReviewerId,
+                RequestedReviewerIdentity = CreateRequestedReviewerIdentity(),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
@@ -201,14 +201,13 @@ public sealed class PullRequestSynchronizationServiceTests
             iterationResolver,
             threadStatusFetcher,
             threadMemoryService,
-            scanRepository,
-            clientRegistry);
+            scanRepository);
 
         var outcome = await sut.SynchronizeAsync(
             CreateRequest(activationSource, summaryLabel) with
             {
                 CandidateIterationId = 7,
-                ReviewerId = ReviewerId,
+                RequestedReviewerIdentity = CreateRequestedReviewerIdentity(),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.NoReviewChanges, outcome.ReviewDecision);
@@ -271,5 +270,11 @@ public sealed class PullRequestSynchronizationServiceTests
             PullRequestId = 42,
             PullRequestStatus = PrStatus.Active,
         };
+    }
+
+    private static ReviewerIdentity CreateRequestedReviewerIdentity()
+    {
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org");
+        return new ReviewerIdentity(host, ReviewerId.ToString("D"), "review-bot", "Review Bot", true);
     }
 }

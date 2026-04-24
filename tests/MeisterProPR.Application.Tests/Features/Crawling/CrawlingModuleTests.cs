@@ -20,7 +20,6 @@ public sealed class CrawlingModuleTests
         ScmProvider.AzureDevOps,
         "https://dev.azure.com/org",
         "proj",
-        Guid.NewGuid(),
         60,
         true,
         DateTimeOffset.UtcNow,

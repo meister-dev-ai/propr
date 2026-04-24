@@ -7,46 +7,9 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Tests.DTOs;
 
-/// <summary>T003 — Confirm <see cref="CrawlConfigurationDto.ReviewerId" /> is nullable.</summary>
+/// <summary>Unit tests for <see cref="CrawlConfigurationDto" /> defaults and optional fields.</summary>
 public sealed class CrawlConfigurationDtoTests
 {
-    [Fact]
-    public void ReviewerId_CanBeNonNull()
-    {
-        var reviewerId = Guid.NewGuid();
-        var dto = new CrawlConfigurationDto(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            ScmProvider.AzureDevOps,
-            "https://dev.azure.com/org",
-            "project",
-            reviewerId,
-            60,
-            true,
-            DateTimeOffset.UtcNow,
-            []);
-
-        Assert.Equal(reviewerId, dto.ReviewerId);
-    }
-
-    [Fact]
-    public void ReviewerId_CanBeNull()
-    {
-        var dto = new CrawlConfigurationDto(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            ScmProvider.AzureDevOps,
-            "https://dev.azure.com/org",
-            "project",
-            null, // ReviewerId is Guid? — must accept null
-            60,
-            true,
-            DateTimeOffset.UtcNow,
-            []);
-
-        Assert.Null(dto.ReviewerId);
-    }
-
     [Fact]
     public void ProCursorSourceScopeMode_DefaultsToAllClientSources()
     {
@@ -56,7 +19,6 @@ public sealed class CrawlConfigurationDtoTests
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
-            null,
             60,
             true,
             DateTimeOffset.UtcNow,
@@ -79,7 +41,6 @@ public sealed class CrawlConfigurationDtoTests
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
-            null,
             60,
             true,
             DateTimeOffset.UtcNow,
@@ -111,7 +72,6 @@ public sealed class CrawlConfigurationDtoTests
             ScmProvider.AzureDevOps,
             "https://dev.azure.com/org",
             "project",
-            null,
             60,
             true,
             DateTimeOffset.UtcNow,
