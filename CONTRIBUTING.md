@@ -5,6 +5,17 @@ Great you are here! We welcome contributions from the community to help us build
 - **Report issues**: If you find a bug or have a feature request, please open an issue on GitHub. We use issues to track bugs, plan features, and organize our work.
 - **Submit pull requests**: If you want to contribute code, please fork the repository and submit a pull request. We welcome contributions of all sizes, from small bug fixes to large features. Please make sure to follow our coding standards and include tests for your changes.
 
+### Developer Certificate of Origin (DCO)
+
+To keep the IP (Intellectual Property) clean for both our community and commercial users, we use a DCO process. By adding a `Signed-off-by` line to your commit messages, you certify that:
+
+1. You created the contribution or have the right to submit it under the project's license (ELv2).
+2. You grant **Andreas Rain** a non-exclusive, perpetual, worldwide, sublicensable license to use, modify, and distribute your contribution, including the right to sell it under a commercial license.
+
+**How to sign your work:**
+Use the `-s` flag when committing:
+`git commit -s -m "My informative commit message"`
+
 # Submitting a pull request
 
 1. Fork the repository and create a new branch for your changes.

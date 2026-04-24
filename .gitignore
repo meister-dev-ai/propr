@@ -53,10 +53,12 @@ specs/
 
 # Claude / Copilot / Gemini
 .claude
-.github
+.github/agents
+.github/instructions
+.github/prompts
+.github/skills
 .gemini
 .agents
-!.github/workflows
 skills-lock.json
 AGENTS.md
 
