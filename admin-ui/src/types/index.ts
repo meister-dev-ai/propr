@@ -295,6 +295,152 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/licensing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the current installation edition and premium capability state. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LicensingSummaryDto"];
+                        "application/json": components["schemas"]["LicensingSummaryDto"];
+                        "text/json": components["schemas"]["LicensingSummaryDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Updates the installation edition and optional per-capability overrides. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchAdminLicensingRequest"];
+                    "text/json": components["schemas"]["PatchAdminLicensingRequest"];
+                    "application/*+json": components["schemas"]["PatchAdminLicensingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LicensingSummaryDto"];
+                        "application/json": components["schemas"]["LicensingSummaryDto"];
+                        "text/json": components["schemas"]["LicensingSummaryDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
     "/admin/providers": {
         parameters: {
             query?: never;
@@ -1661,7 +1807,60 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["AuthenticatedSessionDto"];
+                        "application/json": components["schemas"]["AuthenticatedSessionDto"];
+                        "text/json": components["schemas"]["AuthenticatedSessionDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns public sign-in options and edition-aware capability messaging. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AuthOptionsDto"];
+                        "application/json": components["schemas"]["AuthOptionsDto"];
+                        "text/json": components["schemas"]["AuthOptionsDto"];
+                    };
                 };
             };
         };
@@ -7636,6 +7835,21 @@ export interface components {
             clientId?: string;
             role?: components["schemas"]["ClientRole"];
         };
+        /** @description Public authentication bootstrap information for the current installation edition. */
+        AuthOptionsDto: {
+            edition?: components["schemas"]["InstallationEdition"];
+            availableSignInMethods?: string[] | null;
+            capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
+        /** @description Authenticated session snapshot shared with the admin UI after sign-in. */
+        AuthenticatedSessionDto: {
+            globalRole?: string | null;
+            clientRoles?: {
+                [key: string]: number;
+            } | null;
+            edition?: components["schemas"]["InstallationEdition"];
+            capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
         /** @description Transport shape for a provider-aware canonical source reference. */
         CanonicalSourceReferenceDto: {
             provider?: string | null;
@@ -7939,6 +8153,11 @@ export interface components {
             /** @description Human-readable display name. */
             displayName?: string | null;
         };
+        /**
+         * @description Customer-facing product edition for one ProPR installation.
+         * @enum {string}
+         */
+        InstallationEdition: "community" | "commercial";
         /** @description Detailed response for a single job, including the per-tier token breakdown. */
         JobDetailResponse: {
             /** Format: uuid */
@@ -8003,6 +8222,13 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled";
+        /** @description Installation-wide licensing summary for administration and session hydration. */
+        LicensingSummaryDto: {
+            edition?: components["schemas"]["InstallationEdition"];
+            /** Format: date-time */
+            activatedAt?: string | null;
+            capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
         /** @description Login request payload. */
         LoginRequest: {
             username?: string | null;
@@ -8086,6 +8312,11 @@ export interface components {
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
             proCursorSourceIds?: string[] | null;
         };
+        /** @description Patch payload for installation licensing updates. */
+        PatchAdminLicensingRequest: {
+            edition?: components["schemas"]["InstallationEdition"];
+            capabilityOverrides?: components["schemas"]["PatchPremiumCapabilityOverrideRequest"][] | null;
+        };
         /** @description Request body for updating one provider family's activation state. */
         PatchAdminProviderRequest: {
             /** @description Whether the provider family should be enabled installation-wide. */
@@ -8121,6 +8352,11 @@ export interface components {
             displayName?: string | null;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
+        };
+        /** @description Patch payload for one premium capability override. */
+        PatchPremiumCapabilityOverrideRequest: {
+            key?: string | null;
+            overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
         };
         /** @description Summary of a single review job within the PR view. */
         PrJobSummaryDto: {
@@ -8162,6 +8398,21 @@ export interface components {
             contributedMemoryCount?: number;
             contributedMemories?: components["schemas"]["ContributingMemorySummaryDto"][] | null;
         };
+        /** @description API-facing representation of one premium capability's effective state. */
+        PremiumCapabilityDto: {
+            key?: string | null;
+            displayName?: string | null;
+            requiresCommercial?: boolean;
+            defaultWhenCommercial?: boolean;
+            overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
+            isAvailable?: boolean;
+            message?: string | null;
+        };
+        /**
+         * @description Optional installation override for one premium capability.
+         * @enum {string}
+         */
+        PremiumCapabilityOverrideState: "default" | "enabled" | "disabled";
         /** @description API request body for creating a ProCursor knowledge source. */
         ProCursorKnowledgeSourceRequest: {
             displayName?: string | null;

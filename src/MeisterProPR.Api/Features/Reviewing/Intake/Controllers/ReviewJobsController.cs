@@ -2,7 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.Features.Reviewing.Contracts;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -87,7 +89,16 @@ public sealed partial class ReviewJobsController(
             return this.BadRequest(new { error = validationError });
         }
 
-        var result = await submitReviewJobHandler.HandleAsync(new SubmitReviewJobCommand(clientId, intakeRequest), ct);
+        SubmitReviewJobResult result;
+        try
+        {
+            result = await submitReviewJobHandler.HandleAsync(new SubmitReviewJobCommand(clientId, intakeRequest), ct);
+        }
+        catch (PremiumFeatureUnavailableException ex)
+        {
+            return new PremiumFeatureUnavailableResult(ex.Capability);
+        }
+
         var response = MapAcceptedResponse(result, intakeRequest);
 
         if (result.IsDuplicate)

@@ -104,6 +104,14 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
     }
 
     /// <inheritdoc />
+    public Task<int> CountActiveJobsAsync(CancellationToken cancellationToken = default)
+    {
+        return dbContext.ReviewJobs.CountAsync(
+            job => job.Status == JobStatus.Pending || job.Status == JobStatus.Processing,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task UpdatePrContextAsync(
         Guid jobId,
         string? title,

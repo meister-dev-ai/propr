@@ -12,6 +12,7 @@ export type AdoBranchOptionDto = components['schemas']['AdoBranchOptionDto']
 export type AdoCrawlFilterOptionDto = components['schemas']['AdoCrawlFilterOptionDto']
 
 export type AdoSourceKind = 'repository' | 'adoWiki'
+export type AdoDiscoveryPurpose = 'crawl' | 'procursor' | 'webhook'
 
 export interface ClientAdoOrganizationScopeDto {
   id: string
@@ -76,11 +77,12 @@ function mapVerificationStatus(status: string): ClientAdoOrganizationScopeDto['v
 export async function listAdoProjects(
   clientId: string,
   organizationScopeId: string,
+  purpose?: AdoDiscoveryPurpose,
 ): Promise<AdoProjectOptionDto[]> {
   const { data, error, response } = await createAdminClient().GET('/admin/clients/{clientId}/ado/discovery/projects', {
     params: {
       path: { clientId },
-      query: { organizationScopeId },
+      query: { organizationScopeId, purpose },
     },
   })
 
@@ -142,11 +144,12 @@ export async function listAdoCrawlFilters(
   clientId: string,
   organizationScopeId: string,
   projectId: string,
+  purpose?: AdoDiscoveryPurpose,
 ): Promise<AdoCrawlFilterOptionDto[]> {
   const { data, error, response } = await createAdminClient().GET('/admin/clients/{clientId}/ado/discovery/crawl-filters', {
     params: {
       path: { clientId },
-      query: { organizationScopeId, projectId },
+      query: { organizationScopeId, projectId, purpose },
     },
   })
 

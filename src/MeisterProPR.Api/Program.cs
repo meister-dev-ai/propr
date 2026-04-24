@@ -9,6 +9,7 @@ using FluentValidation;
 using MeisterProPR.Api.Controllers;
 using MeisterProPR.Api.Features.Clients.Controllers;
 using MeisterProPR.Api.Features.Crawling.Webhooks.Validators;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
@@ -23,6 +24,7 @@ using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Clients;
 using MeisterProPR.Infrastructure.Features.Crawling;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterProPR.Infrastructure.Features.Licensing;
 using MeisterProPR.Infrastructure.Features.Mentions;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
@@ -34,6 +36,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.FeatureManagement;
 using Microsoft.OpenApi;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -152,7 +155,14 @@ try
     builder.Services.AddMentionsModule(builder.Configuration, builder.Environment);
     builder.Services.AddPromptCustomizationModule(builder.Configuration, builder.Environment);
     builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddLicensingModule(builder.Configuration, builder.Environment);
     builder.Services.AddProCursorModule(builder.Configuration, builder.Environment);
+
+    if (hasDatabaseConnectionString)
+    {
+        builder.Services.AddFeatureManagement()
+            .UseDisabledFeaturesHandler(new PremiumFeatureDisabledHandler());
+    }
 
     // Data protection: used to encrypt sensitive configuration values (e.g., AdoClientSecret).
     var dataProtectionBuilder = builder.Services.AddDataProtection()

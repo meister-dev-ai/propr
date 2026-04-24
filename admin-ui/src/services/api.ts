@@ -16,10 +16,15 @@ export class UnauthorizedError extends Error {
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object') {
     const apiError = error as {
+      message?: string
       error?: string
       detail?: string
       title?: string
       errors?: Record<string, string[]>
+    }
+
+    if (typeof apiError.message === 'string' && apiError.message) {
+      return apiError.message
     }
 
     if (typeof apiError.error === 'string' && apiError.error) {

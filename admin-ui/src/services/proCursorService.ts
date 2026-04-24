@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { createAdminClient } from '@/services/api'
+import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 import type {
   ProCursorClientUsageQuery,
@@ -27,36 +27,43 @@ export type ProCursorTrackedBranchDto = components['schemas']['ProCursorTrackedB
 export type ProCursorTrackedBranchPatchRequest = components['schemas']['ProCursorTrackedBranchPatchRequest']
 export type ProCursorTrackedBranchRequest = components['schemas']['ProCursorTrackedBranchRequest']
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const apiError = error as {
-      error?: string
-      detail?: string
-      title?: string
-      errors?: Record<string, string[]>
-    }
+export class PremiumFeatureUnavailableError extends Error {
+  feature: string | null
 
-    if (typeof apiError.error === 'string' && apiError.error) {
-      return apiError.error
-    }
+  constructor(message: string, feature?: string | null) {
+    super(message)
+    this.name = 'PremiumFeatureUnavailableError'
+    this.feature = feature ?? null
+  }
+}
 
-    if (typeof apiError.detail === 'string' && apiError.detail) {
-      return apiError.detail
-    }
-
-    if (typeof apiError.title === 'string' && apiError.title) {
-      return apiError.title
-    }
-
-    if (apiError.errors && typeof apiError.errors === 'object') {
-      const firstError = Object.values(apiError.errors).flat()[0]
-      if (firstError) {
-        return firstError
-      }
-    }
+function toPremiumFeatureUnavailableError(error: unknown): PremiumFeatureUnavailableError | null {
+  if (!error || typeof error !== 'object') {
+    return null
   }
 
-  return fallback
+  const apiError = error as {
+    error?: string
+    feature?: string | null
+    message?: string
+  }
+
+  if (apiError.error !== 'premium_feature_unavailable') {
+    return null
+  }
+
+  return new PremiumFeatureUnavailableError(
+    getErrorMessage(error, 'This premium feature is unavailable for the current installation.'),
+    apiError.feature,
+  )
+}
+
+function createRequestError(error: unknown, fallback: string): Error {
+  return toPremiumFeatureUnavailableError(error) ?? new Error(getErrorMessage(error, fallback))
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return getApiErrorMessage(error, fallback)
 }
 
 export async function listProCursorSources(clientId: string): Promise<ProCursorKnowledgeSourceDto[]> {
@@ -65,7 +72,7 @@ export async function listProCursorSources(clientId: string): Promise<ProCursorK
   })
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load ProCursor sources.'))
+    throw createRequestError(error, 'Failed to load ProCursor sources.')
   }
 
   return (data as ProCursorKnowledgeSourceDto[]) ?? []
@@ -81,7 +88,7 @@ export async function createProCursorSource(
   })
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to create ProCursor source.'))
+    throw createRequestError(error, 'Failed to create ProCursor source.')
   }
 
   return data as ProCursorKnowledgeSourceDto
@@ -99,7 +106,7 @@ export async function listProCursorTrackedBranches(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load tracked branches.'))
+    throw createRequestError(error, 'Failed to load tracked branches.')
   }
 
   return (data as ProCursorTrackedBranchDto[]) ?? []
@@ -119,7 +126,7 @@ export async function createProCursorTrackedBranch(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to add tracked branch.'))
+    throw createRequestError(error, 'Failed to add tracked branch.')
   }
 
   return data as ProCursorTrackedBranchDto
@@ -140,7 +147,7 @@ export async function updateProCursorTrackedBranch(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to update tracked branch.'))
+    throw createRequestError(error, 'Failed to update tracked branch.')
   }
 
   return data as ProCursorTrackedBranchDto
@@ -159,7 +166,7 @@ export async function deleteProCursorTrackedBranch(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to remove tracked branch.'))
+    throw createRequestError(error, 'Failed to remove tracked branch.')
   }
 }
 
@@ -177,7 +184,7 @@ export async function queueProCursorRefresh(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to queue ProCursor refresh.'))
+    throw createRequestError(error, 'Failed to queue ProCursor refresh.')
   }
 
   return data as ProCursorRefreshResponse
@@ -200,7 +207,7 @@ export async function getProCursorClientTokenUsage(
   })
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load ProCursor usage.'))
+    throw createRequestError(error, 'Failed to load ProCursor usage.')
   }
 
   return data as ProCursorTokenUsageResponse
@@ -225,7 +232,7 @@ export async function getProCursorTopSources(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load top ProCursor sources.'))
+    throw createRequestError(error, 'Failed to load top ProCursor sources.')
   }
 
   return data as ProCursorTopSourcesResponse
@@ -252,7 +259,7 @@ export async function getProCursorSourceTokenUsage(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load source-level ProCursor usage.'))
+    throw createRequestError(error, 'Failed to load source-level ProCursor usage.')
   }
 
   return data as ProCursorSourceTokenUsageResponse
@@ -274,7 +281,7 @@ export async function getProCursorRecentEvents(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load recent ProCursor usage events.'))
+    throw createRequestError(error, 'Failed to load recent ProCursor usage events.')
   }
 
   return data as ProCursorTokenUsageEventsResponse
@@ -293,7 +300,7 @@ export async function getProCursorTokenUsageFreshness(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to load ProCursor usage freshness.'))
+    throw createRequestError(error, 'Failed to load ProCursor usage freshness.')
   }
 
   return data as ProCursorTokenUsageFreshnessResponse
@@ -314,7 +321,7 @@ export async function rebuildProCursorTokenUsage(
   )
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to rebuild ProCursor usage rollups.'))
+    throw createRequestError(error, 'Failed to rebuild ProCursor usage rollups.')
   }
 
   return data as ProCursorTokenUsageRebuildResponse
@@ -336,7 +343,7 @@ export async function exportProCursorTokenUsageCsv(
   })
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(error, 'Failed to export ProCursor usage CSV.'))
+    throw createRequestError(error, 'Failed to export ProCursor usage CSV.')
   }
 
   return data as string

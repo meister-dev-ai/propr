@@ -24,6 +24,14 @@ vi.mock('@/services/api', () => ({
     PUT: putMock,
     DELETE: deleteMock,
   }),
+  getApiErrorMessage: (error: unknown, fallback: string) => {
+    if (error && typeof error === 'object') {
+      const apiError = error as { message?: string; error?: string; detail?: string; title?: string }
+      return apiError.message || apiError.error || apiError.detail || apiError.title || fallback
+    }
+
+    return fallback
+  },
 }))
 
 describe('proCursorService', () => {

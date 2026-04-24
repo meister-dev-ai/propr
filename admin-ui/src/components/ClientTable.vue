@@ -12,8 +12,8 @@
       </tr>
     </thead>
     <tbody>
-      <tr v-for="client in filteredClients" :key="client.id" class="row-clickable" @click="$router.push('/' + client.id)">
-        <td><RouterLink :to="'/' + client.id">{{ client.displayName }}</RouterLink></td>
+      <tr v-for="client in filteredClients" :key="client.id" class="row-clickable" @click="openClient(client.id)">
+        <td><RouterLink :to="clientDetailRoute(client.id)" @click.stop>{{ client.displayName }}</RouterLink></td>
         <td>
           <span :class="client.isActive ? 'chip chip-success' : 'chip chip-muted'">
             <i :class="client.isActive ? 'fi fi-rr-check-circle' : 'fi fi-rr-ban'"></i>
@@ -53,7 +53,7 @@ const props = defineProps<{
   filter: string
 }>()
 
-const $router = useRouter()
+const router = useRouter()
 
 const filteredClients = computed(() =>
   props.clients.filter((c) =>
@@ -71,6 +71,17 @@ function formatTokens(tokens?: number): string {
     return (tokens / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
   }
   return tokens.toString()
+}
+
+function clientDetailRoute(clientId: string) {
+  return {
+    name: 'client-detail',
+    params: { id: clientId },
+  }
+}
+
+function openClient(clientId: string) {
+  void router.push(clientDetailRoute(clientId))
 }
 </script>
 

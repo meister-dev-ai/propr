@@ -16,6 +16,7 @@ const listOrganizationScopesMock = vi.fn()
 const listProjectsMock = vi.fn()
 const listCrawlFiltersMock = vi.fn()
 const listProCursorSourcesMock = vi.fn()
+let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
 
 vi.mock('@/services/api', () => ({
   createAdminClient: vi.fn(() => ({ POST: mockPost, PATCH: mockPatch })),
@@ -44,6 +45,24 @@ vi.mock('@/services/promptOverridesService', () => ({
   createOverride: vi.fn(),
   deleteOverride: vi.fn(),
 }))
+
+vi.mock('@/composables/useSession', () => ({
+  useSession: () => ({
+    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
+  }),
+}))
+
+function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
+  capabilityState = capabilities.map((capability) => ({
+    key: capability.key,
+    displayName: capability.key,
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: capability.isAvailable,
+    message: capability.message ?? null,
+  }))
+}
 
 async function mountForm() {
   const { default: CrawlConfigForm } = await import('@/components/CrawlConfigForm.vue')
@@ -85,6 +104,8 @@ function findButtonByText(wrapper: Awaited<ReturnType<typeof mountForm>>, text: 
 describe('CrawlConfigForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    capabilityState = []
+    setCapabilities([{ key: 'procursor', isAvailable: true }])
 
     listOrganizationScopesMock.mockResolvedValue([
       {
@@ -225,8 +246,8 @@ describe('CrawlConfigForm', () => {
 
     expect(listOrganizationScopesMock).toHaveBeenCalledWith(CLIENT_ID)
     expect(listProCursorSourcesMock).toHaveBeenCalledWith(CLIENT_ID)
-    expect(listProjectsMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID)
-    expect(listCrawlFiltersMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID, 'project-1')
+    expect(listProjectsMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID, 'crawl')
+    expect(listCrawlFiltersMock).toHaveBeenCalledWith(CLIENT_ID, SCOPE_ID, 'project-1', 'crawl')
     expect(mockPost).toHaveBeenCalledWith(
       '/admin/crawl-configurations',
       expect.objectContaining({
@@ -300,7 +321,7 @@ describe('CrawlConfigForm', () => {
     await wrapper.get('#crawlProjectId').setValue('project-2')
     await flushPromises()
 
-    expect(listCrawlFiltersMock).toHaveBeenLastCalledWith(CLIENT_ID, SCOPE_ID, 'project-2')
+    expect(listCrawlFiltersMock).toHaveBeenLastCalledWith(CLIENT_ID, SCOPE_ID, 'project-2', 'crawl')
     expect(wrapper.findAll('[data-testid^="crawl-filter-select-"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('No filters selected — all repositories are crawled.')
   })
@@ -330,6 +351,8 @@ describe('CrawlConfigForm', () => {
   })
 
   it('shows repair messaging and removes stale source associations before saving edits', async () => {
+    setCapabilities([{ key: 'procursor', isAvailable: true }])
+
     const wrapper = await mountEditForm({
       id: 'config-1',
       clientId: CLIENT_ID,
@@ -361,5 +384,16 @@ describe('CrawlConfigForm', () => {
         }),
       }),
     )
+  })
+
+  it('hides selected-source controls and skips loading ProCursor sources when unavailable', async () => {
+    setCapabilities([{ key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' }])
+
+    const wrapper = await mountForm()
+    await flushPromises()
+
+    expect(listProCursorSourcesMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('ProCursor requires commercial.')
+    expect(wrapper.find('#crawlSourceScopeSelected').exists()).toBe(false)
   })
 })

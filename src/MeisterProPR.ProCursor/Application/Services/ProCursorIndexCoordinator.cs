@@ -2,6 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
@@ -24,7 +27,8 @@ public sealed partial class ProCursorIndexCoordinator(
     IProCursorEmbeddingService embeddingService,
     IProCursorSymbolExtractor symbolExtractor,
     ILogger<ProCursorIndexCoordinator> logger,
-    IOptions<ProCursorOptions> options)
+    IOptions<ProCursorOptions> options,
+    ILicensingCapabilityService? licensingCapabilityService = null)
 {
     private const int MaxRetryAttempts = 3;
     private readonly ProCursorOptions _options = options.Value;
@@ -74,6 +78,18 @@ public sealed partial class ProCursorIndexCoordinator(
         if (job is null)
         {
             return false;
+        }
+
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+
+        if (capability is not null)
+        {
+            job.MarkFailed(capability.Message ?? $"Capability '{capability.Key}' is unavailable.");
+            await indexJobRepository.UpdateAsync(job, ct);
+            return true;
         }
 
         var snapshot = default(ProCursorIndexSnapshot);
@@ -222,6 +238,16 @@ public sealed partial class ProCursorIndexCoordinator(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+
+        if (capability is not null)
+        {
+            throw new InvalidOperationException(capability.Message ?? $"Capability '{capability.Key}' is unavailable.");
+        }
 
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)

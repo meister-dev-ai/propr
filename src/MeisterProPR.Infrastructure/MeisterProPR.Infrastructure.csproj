@@ -5,15 +5,16 @@
         <ProjectReference Include="..\MeisterProPR.Application\MeisterProPR.Application.csproj"/>
     </ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
-        <PackageReference Include="Azure.Identity" Version="1.19.0"/>
-        <PackageReference Include="Azure.ResourceManager.CognitiveServices" Version="1.5.2"/>
-        <PackageReference Include="BCrypt.Net-Next" Version="4.1.0"/>
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7"/>
+     <ItemGroup>
+         <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
+         <PackageReference Include="Azure.Identity" Version="1.19.0"/>
+         <PackageReference Include="Azure.ResourceManager.CognitiveServices" Version="1.5.2"/>
+         <PackageReference Include="BCrypt.Net-Next" Version="4.1.0"/>
+         <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.7"/>
+         <PackageReference Include="Microsoft.FeatureManagement" Version="4.3.0"/>
+         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1"/>
+         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7"/>
+         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7"/>
         <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.7"/>
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7"/>
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>

@@ -165,6 +165,12 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
+    public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)
+    {
+        return dbContext.ReviewJobs.CountAsync(j => j.Status == JobStatus.Processing, ct);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(ReviewJob job, CancellationToken ct = default)
     {
         dbContext.ReviewJobs.Add(job);

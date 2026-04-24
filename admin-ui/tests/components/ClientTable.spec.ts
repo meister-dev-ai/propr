@@ -1,8 +1,18 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+
+const mockRouterPush = vi.fn()
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+  RouterLink: {
+    props: ['to'],
+    template: '<a class="router-link-stub" :data-to="JSON.stringify(to)"><slot /></a>',
+  },
+}))
 
 // Stub ClientTable for now — tests will fail until implementation exists
 async function importClientTable() {
@@ -17,6 +27,10 @@ const sampleClients = [
 ]
 
 describe('ClientTable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('renders a row per client with displayName and status badge', async () => {
     const ClientTable = await importClientTable()
     const wrapper = mount(ClientTable, {
@@ -53,5 +67,19 @@ describe('ClientTable', () => {
       props: { clients: [], filter: '' },
     })
     expect(wrapper.text()).toContain('No clients match your search.')
+  })
+
+  it('navigates to the named client-detail route when a row is clicked', async () => {
+    const ClientTable = await importClientTable()
+    const wrapper = mount(ClientTable, {
+      props: { clients: sampleClients, filter: '' },
+    })
+
+    await wrapper.find('tbody tr').trigger('click')
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      name: 'client-detail',
+      params: { id: '1' },
+    })
   })
 })

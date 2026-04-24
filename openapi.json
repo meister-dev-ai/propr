@@ -437,6 +437,209 @@
         }
       }
     },
+    "/admin/licensing": {
+      "get": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Returns the current installation edition and premium capability state.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AdminLicensing"
+        ],
+        "summary": "Updates the installation edition and optional per-capability overrides.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAdminLicensingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicensingSummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/admin/providers": {
       "get": {
         "tags": [
@@ -1522,6 +1725,14 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Optional discovery purpose. Use `crawl` or `procursor` to enforce premium capability checks.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1630,6 +1841,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The requested premium capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
                 }
               }
             }
@@ -1786,6 +2017,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The requested premium capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
                 }
               }
             }
@@ -1961,6 +2212,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The requested premium capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
           }
         }
       }
@@ -1995,6 +2266,14 @@
             "name": "projectId",
             "in": "query",
             "description": "Azure DevOps project identifier.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "description": "Optional discovery purpose. Use `crawl` to enforce crawl-configuration premium checks.",
             "schema": {
               "type": "string"
             }
@@ -2109,6 +2388,26 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The requested premium capability is unavailable.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremiumFeatureUnavailablePayload"
+                }
+              }
+            }
           }
         }
       }
@@ -2185,7 +2484,74 @@
         "summary": "Returns the current user's global role and per-client roles. Requires authentication.",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticatedSessionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticatedSessionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticatedSessionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/options": {
+      "get": {
+        "tags": [
+          "AuthOptions"
+        ],
+        "summary": "Returns public sign-in options and edition-aware capability messaging.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOptionsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOptionsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOptionsDto"
+                }
+              }
+            }
           }
         }
       }
@@ -11676,6 +12042,59 @@
         "additionalProperties": false,
         "description": "Assign-client-role request."
       },
+      "AuthOptionsDto": {
+        "type": "object",
+        "properties": {
+          "edition": {
+            "$ref": "#/components/schemas/InstallationEdition"
+          },
+          "availableSignInMethods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PremiumCapabilityDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Public authentication bootstrap information for the current installation edition."
+      },
+      "AuthenticatedSessionDto": {
+        "type": "object",
+        "properties": {
+          "globalRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientRoles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "edition": {
+            "$ref": "#/components/schemas/InstallationEdition"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PremiumCapabilityDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Authenticated session snapshot shared with the admin UI after sign-in."
+      },
       "CanonicalSourceReferenceDto": {
         "type": "object",
         "properties": {
@@ -12515,6 +12934,14 @@
         "additionalProperties": false,
         "description": "Resolved ADO identity."
       },
+      "InstallationEdition": {
+        "enum": [
+          "community",
+          "commercial"
+        ],
+        "type": "string",
+        "description": "Customer-facing product edition for one ProPR installation."
+      },
       "JobDetailResponse": {
         "type": "object",
         "properties": {
@@ -12692,6 +13119,28 @@
         "type": "string",
         "description": "Status of a review job."
       },
+      "LicensingSummaryDto": {
+        "type": "object",
+        "properties": {
+          "edition": {
+            "$ref": "#/components/schemas/InstallationEdition"
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PremiumCapabilityDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Installation-wide licensing summary for administration and session hydration."
+      },
       "LoginRequest": {
         "type": "object",
         "properties": {
@@ -12839,6 +13288,23 @@
         "additionalProperties": false,
         "description": "Request body for patching an admin-managed crawl configuration.\nOmit a field to leave it unchanged."
       },
+      "PatchAdminLicensingRequest": {
+        "type": "object",
+        "properties": {
+          "edition": {
+            "$ref": "#/components/schemas/InstallationEdition"
+          },
+          "capabilityOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatchPremiumCapabilityOverrideRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Patch payload for installation licensing updates."
+      },
       "PatchAdminProviderRequest": {
         "type": "object",
         "properties": {
@@ -12945,6 +13411,20 @@
         },
         "additionalProperties": false,
         "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value."
+      },
+      "PatchPremiumCapabilityOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "overrideState": {
+            "$ref": "#/components/schemas/PremiumCapabilityOverrideState"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Patch payload for one premium capability override."
       },
       "PrJobSummaryDto": {
         "type": "object",
@@ -13064,6 +13544,64 @@
         },
         "additionalProperties": false,
         "description": "Aggregated view of all review activity for a specific pull request."
+      },
+      "PremiumCapabilityDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "requiresCommercial": {
+            "type": "boolean"
+          },
+          "defaultWhenCommercial": {
+            "type": "boolean"
+          },
+          "overrideState": {
+            "$ref": "#/components/schemas/PremiumCapabilityOverrideState"
+          },
+          "isAvailable": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "API-facing representation of one premium capability's effective state."
+      },
+      "PremiumCapabilityOverrideState": {
+        "enum": [
+          "default",
+          "enabled",
+          "disabled"
+        ],
+        "type": "string",
+        "description": "Optional installation override for one premium capability."
+      },
+      "PremiumFeatureUnavailablePayload": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "feature": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "ProCursorKnowledgeSourceRequest": {
         "type": "object",
@@ -15227,6 +15765,9 @@
       "name": "AdminCrawlConfigs"
     },
     {
+      "name": "AdminLicensing"
+    },
+    {
       "name": "AdminProviders"
     },
     {
@@ -15240,6 +15781,9 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "AuthOptions"
     },
     {
       "name": "ClientAiConnections"

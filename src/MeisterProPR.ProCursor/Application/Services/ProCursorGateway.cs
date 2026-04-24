@@ -3,6 +3,9 @@
 
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -20,7 +23,8 @@ public sealed partial class ProCursorGateway(
     IProCursorIndexSnapshotRepository snapshotRepository,
     ProCursorQueryService queryService,
     ProCursorIndexCoordinator indexCoordinator,
-    ILogger<ProCursorGateway> logger) : IProCursorGateway
+    ILogger<ProCursorGateway> logger,
+    ILicensingCapabilityService? licensingCapabilityService = null) : IProCursorGateway
 {
     private const string AzureDevOpsProvider = "azureDevOps";
 
@@ -29,6 +33,8 @@ public sealed partial class ProCursorGateway(
         Guid clientId,
         CancellationToken ct = default)
     {
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
+
         if (!await clientAdminService.ExistsAsync(clientId, ct))
         {
             throw new KeyNotFoundException($"Client {clientId} was not found.");
@@ -58,6 +64,8 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
 
         if (!await clientAdminService.ExistsAsync(clientId, ct))
         {
@@ -122,7 +130,7 @@ public sealed partial class ProCursorGateway(
         ProCursorRefreshRequest request,
         CancellationToken ct = default)
     {
-        return indexCoordinator.QueueRefreshAsync(clientId, sourceId, request, ct);
+        return this.QueueRefreshInternalAsync(clientId, sourceId, request, ct);
     }
 
     /// <inheritdoc />
@@ -131,6 +139,8 @@ public sealed partial class ProCursorGateway(
         Guid sourceId,
         CancellationToken ct = default)
     {
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
+
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -157,6 +167,8 @@ public sealed partial class ProCursorGateway(
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
+
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -182,6 +194,8 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
 
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
@@ -212,6 +226,8 @@ public sealed partial class ProCursorGateway(
         Guid trackedBranchId,
         CancellationToken ct = default)
     {
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
+
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -232,7 +248,7 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return this.LogKnowledgeQueryAsync(request, ct);
+        return this.AskKnowledgeInternalAsync(request, ct);
     }
 
     /// <inheritdoc />
@@ -241,7 +257,65 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return this.LogSymbolQueryAsync(request, ct);
+        return this.GetSymbolInsightInternalAsync(request, ct);
+    }
+
+    private async Task EnsureCapabilityEnabledAsync(Guid clientId, CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+
+        if (capability is not null)
+        {
+            LogCapabilityUnavailable(logger, clientId, capability.Key);
+            throw new InvalidOperationException(capability.Message ?? $"Capability '{capability.Key}' is unavailable.");
+        }
+    }
+
+    private async Task<ProCursorIndexJobDto> QueueRefreshInternalAsync(
+        Guid clientId,
+        Guid sourceId,
+        ProCursorRefreshRequest request,
+        CancellationToken ct)
+    {
+        await this.EnsureCapabilityEnabledAsync(clientId, ct);
+        return await indexCoordinator.QueueRefreshAsync(clientId, sourceId, request, ct);
+    }
+
+    private async Task<ProCursorKnowledgeAnswerDto> AskKnowledgeInternalAsync(
+        ProCursorKnowledgeQueryRequest request,
+        CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+        if (capability is not null)
+        {
+            LogCapabilityUnavailable(logger, request.ClientId, capability.Key);
+            return new ProCursorKnowledgeAnswerDto("unavailable", [], capability.Message);
+        }
+
+        return await this.LogKnowledgeQueryAsync(request, ct);
+    }
+
+    private async Task<ProCursorSymbolInsightDto> GetSymbolInsightInternalAsync(
+        ProCursorSymbolQueryRequest request,
+        CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+        if (capability is not null)
+        {
+            LogCapabilityUnavailable(logger, request.ClientId, capability.Key);
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
+        }
+
+        return await this.LogSymbolQueryAsync(request, ct);
     }
 
     private static ProCursorKnowledgeSourceDto MapSource(
@@ -492,4 +566,7 @@ public sealed partial class ProCursorGateway(
         Guid? OrganizationScopeId,
         CanonicalSourceReferenceDto? CanonicalSourceRef,
         string? SourceDisplayName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Skipped ProCursor operation for client {ClientId} because capability {CapabilityKey} is unavailable")]
+    private static partial void LogCapabilityUnavailable(ILogger logger, Guid clientId, string capabilityKey);
 }

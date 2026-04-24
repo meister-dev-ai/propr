@@ -3,6 +3,9 @@
 
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.ProCursor.Api.Extensions;
@@ -18,8 +21,24 @@ namespace MeisterProPR.Api.Controllers;
 [ApiController]
 public sealed partial class ProCursorKnowledgeSourcesController(
     IProCursorGateway proCursorGateway,
-    ILogger<ProCursorKnowledgeSourcesController> logger) : ControllerBase
+    ILogger<ProCursorKnowledgeSourcesController> logger,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
+    private async Task<IActionResult?> RequireProCursorCapabilityAsync(CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+
+        return capability is null
+            ? null
+            : this.Conflict(new PremiumFeatureUnavailablePayload(
+                "premium_feature_unavailable",
+                capability.Key,
+                capability.Message ?? $"Capability '{capability.Key}' is unavailable."));
+    }
+
     /// <summary>
     ///     Returns the ProCursor knowledge sources configured for the given client.
     /// </summary>
@@ -40,6 +59,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         try
@@ -87,6 +112,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (validation is not null)
         {
             return validation;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         try
@@ -156,6 +187,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         try
         {
             var job = await proCursorGateway.QueueRefreshAsync(
@@ -196,6 +233,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         try
@@ -251,6 +294,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return this.ValidationProblem();
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         try
         {
             var branch = await proCursorGateway.AddTrackedBranchAsync(
@@ -304,6 +353,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         try
         {
             var branch = await proCursorGateway.UpdateTrackedBranchAsync(
@@ -352,6 +407,12 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         try
@@ -514,6 +575,8 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     [LoggerMessage(Level = LogLevel.Information, Message = "ProCursor source {SourceId} created for client {ClientId}")]
     private static partial void LogSourceCreated(ILogger logger, Guid clientId, Guid sourceId);
 }
+
+file sealed record PremiumFeatureUnavailablePayload(string Error, string Feature, string Message);
 
 /// <summary>Response payload for a ProCursor knowledge source.</summary>
 public sealed record ProCursorKnowledgeSourceResponse(

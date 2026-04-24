@@ -5,7 +5,7 @@
   <div class="access-denied-view">
     <h2>403 — Access Denied</h2>
     <p>You do not have permission to access this page.</p>
-    <RouterLink to="/" class="btn-secondary">Back to Home</RouterLink>
+    <RouterLink :to="{ name: 'home' }" class="btn-secondary">Back to Home</RouterLink>
   </div>
 </template>
 

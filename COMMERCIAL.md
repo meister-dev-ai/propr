@@ -19,6 +19,10 @@ Perfect for individuals, home labs, internal teams, and community contributors.
 
 Designed for businesses that need managed-service rights, alternative commercial terms, or professional support.
 
+Commercial licensing also maps to the runtime `Commercial` installation edition inside ProPR. A fresh
+deployment starts in `Community` mode and an administrator can switch the installation to `Commercial`
+from the admin UI or the `/api/admin/licensing` endpoint without rebuilding the deployment.
+
 | Feature                   | Community (ELv2)                          | Commercial                    |
 |---------------------------|-------------------------------------------|-------------------------------|
 | License Cost              | $0                                        | Contact Us                    |
@@ -26,6 +30,20 @@ Designed for businesses that need managed-service rights, alternative commercial
 | SaaS / Managed Hosting    | ❌ Not permitted under ELv2                | ✅ Full Commercial SaaS Rights |
 | Professional Support      | Best Effort                               | ✅ Priority (Email/Slack/SLA)  |
 | Consulting & Setup        | Self-Service                              | ✅ Available as Add-on         |
+
+### Runtime edition capabilities
+
+| Runtime capability | Community | Commercial |
+|--------------------|-----------|------------|
+| Password sign-in | Available | Available |
+| Single sign-on | Upgrade required | Available |
+| One active review at a time | Enforced | Not enforced |
+| One active SCM provider connection | Enforced | Not enforced |
+| Premium capability toggles per installation | Not available | Available |
+
+The admin UI surfaces the current edition in the header, the login screen, and `Settings -> Licensing`.
+When a Community deployment hits a premium-only path, the API returns a structured
+`premium_feature_unavailable` response so the UI can explain why the action is blocked.
 
 ### Why choose a Commercial License?
 

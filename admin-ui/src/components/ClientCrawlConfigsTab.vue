@@ -10,13 +10,19 @@
         <p class="crawl-subtitle">Schedules, provider context, and repository scope rules for automated review discovery on this client.</p>
       </div>
       <div class="section-card-header-actions">
-        <button class="btn-primary" @click="openCreateForm">
+        <button v-if="isCrawlConfigsAvailable" class="btn-primary" @click="openCreateForm">
           <i class="fi fi-rr-plus"></i> New Config
         </button>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="!isCrawlConfigsAvailable" class="empty-state premium-unavailable-state">
+      <i class="fi fi-rr-lock empty-icon"></i>
+      <h3>Crawl Configs are unavailable</h3>
+      <p>{{ unavailableMessage }}</p>
+    </div>
+
+    <div v-else-if="loading" class="loading-state">
       <ProgressOrb class="state-orb" />
       <span>Loading configurations...</span>
     </div>
@@ -34,7 +40,7 @@
       <i class="fi fi-rr-inbox empty-icon"></i>
       <h3>No crawl configurations yet</h3>
       <p>Create the first scan schedule for this client.</p>
-      <button class="btn-primary" @click="openCreateForm">
+      <button v-if="isCrawlConfigsAvailable" class="btn-primary" @click="openCreateForm">
         <i class="fi fi-rr-plus"></i> Create Config
       </button>
     </div>
@@ -113,8 +119,9 @@ import CrawlConfigForm from '@/components/CrawlConfigForm.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
+import { useSession } from '@/composables/useSession'
 import { useNotification } from '@/composables/useNotification'
-import { createAdminClient } from '@/services/api'
+import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
 type ScmProvider = components['schemas']['ScmProvider']
@@ -133,18 +140,32 @@ const editingConfig = ref<CrawlConfigResponse | undefined>(undefined)
 const deletingConfig = ref<CrawlConfigResponse | null>(null)
 
 const { notify } = useNotification()
+const { getCapability } = useSession()
+const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
+const isCrawlConfigsAvailable = computed(() => crawlConfigsCapability.value?.isAvailable === true)
+const unavailableMessage = computed(() =>
+  crawlConfigsCapability.value?.message
+    ?? 'Commercial edition is required to manage guided crawl configurations and discovery.',
+)
 
 const configs = computed(() => allConfigs.value.filter((config) => config.clientId === props.clientId))
 
 onMounted(() => loadConfigs())
 
 async function loadConfigs() {
+  if (!isCrawlConfigsAvailable.value) {
+    allConfigs.value = []
+    error.value = ''
+    loading.value = false
+    return
+  }
+
   loading.value = true
   error.value = ''
   try {
-    const { data, response } = await createAdminClient().GET('/admin/crawl-configurations', {})
+    const { data, error: apiError, response } = await createAdminClient().GET('/admin/crawl-configurations', {})
     if (!response.ok) {
-      error.value = 'Failed to load configurations.'
+      error.value = getApiErrorMessage(apiError, 'Failed to load configurations.')
       return
     }
 
@@ -240,7 +261,7 @@ async function confirmDelete() {
   if (!config?.id) return
 
   try {
-    const { response } = await createAdminClient().DELETE('/admin/crawl-configurations/{configId}', {
+    const { error: apiError, response } = await createAdminClient().DELETE('/admin/crawl-configurations/{configId}', {
       params: { path: { configId: config.id } },
     })
 
@@ -256,7 +277,7 @@ async function confirmDelete() {
     }
 
     if (!response.ok) {
-      notify('Failed to delete configuration.', 'error')
+      notify(getApiErrorMessage(apiError, 'Failed to delete configuration.'), 'error')
       return
     }
 
@@ -367,6 +388,10 @@ async function confirmDelete() {
   padding: 4rem 2rem;
   text-align: center;
   gap: 0.75rem;
+}
+
+.premium-unavailable-state {
+  padding-block: 3rem;
 }
 
 .state-orb {

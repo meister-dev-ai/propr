@@ -13,13 +13,19 @@
           <p class="crawl-subtitle">Automated scanning schedules for Azure DevOps projects</p>
         </div>
         <div class="section-card-header-actions">
-          <button class="btn-primary" @click="openCreateForm">
+          <button v-if="isCrawlConfigsAvailable" class="btn-primary" @click="openCreateForm">
             <i class="fi fi-rr-plus"></i> New Config
           </button>
         </div>
       </div>
 
-      <div v-if="loading" class="loading-state">
+      <div v-if="!isCrawlConfigsAvailable" class="empty-state premium-unavailable-state">
+        <i class="fi fi-rr-lock empty-icon"></i>
+        <h3>Crawl Configurations are unavailable</h3>
+        <p>{{ unavailableMessage }}</p>
+      </div>
+
+      <div v-else-if="loading" class="loading-state">
         <ProgressOrb class="state-orb" />
         <span>Loading configurations...</span>
       </div>
@@ -37,7 +43,7 @@
         <i class="fi fi-rr-inbox empty-icon"></i>
         <h3>No configurations found</h3>
         <p>Get started by creating your first crawl schedule.</p>
-        <button class="btn-primary" @click="openCreateForm">
+        <button v-if="isCrawlConfigsAvailable" class="btn-primary" @click="openCreateForm">
           <i class="fi fi-rr-plus"></i> Create Config
         </button>
       </div>
@@ -108,12 +114,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import CrawlConfigForm from '@/components/CrawlConfigForm.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
-import { createAdminClient } from '@/services/api'
+import { useSession } from '@/composables/useSession'
+import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import { useNotification } from '@/composables/useNotification'
 import type { components } from '@/services/generated/openapi'
 
@@ -128,16 +135,30 @@ const editingConfig = ref<CrawlConfigResponse | undefined>(undefined)
 const deletingConfig = ref<CrawlConfigResponse | null>(null)
 
 const { notify } = useNotification()
+const { getCapability } = useSession()
+const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
+const isCrawlConfigsAvailable = computed(() => crawlConfigsCapability.value?.isAvailable === true)
+const unavailableMessage = computed(() =>
+  crawlConfigsCapability.value?.message
+    ?? 'Commercial edition is required to manage guided crawl configurations and discovery.',
+)
 
 onMounted(() => loadConfigs())
 
 async function loadConfigs() {
+  if (!isCrawlConfigsAvailable.value) {
+    configs.value = []
+    error.value = ''
+    loading.value = false
+    return
+  }
+
   loading.value = true
   error.value = ''
   try {
-    const { data, response } = await createAdminClient().GET('/admin/crawl-configurations', {})
+    const { data, error: apiError, response } = await createAdminClient().GET('/admin/crawl-configurations', {})
     if (!response.ok) {
-      error.value = 'Failed to load configurations.'
+      error.value = getApiErrorMessage(apiError, 'Failed to load configurations.')
       return
     }
     configs.value = (data as CrawlConfigResponse[]) ?? []
@@ -218,7 +239,7 @@ async function confirmDelete() {
   if (!config?.id) return
 
   try {
-    const { response } = await createAdminClient().DELETE('/admin/crawl-configurations/{configId}', {
+    const { error: apiError, response } = await createAdminClient().DELETE('/admin/crawl-configurations/{configId}', {
       params: { path: { configId: config.id } },
     })
     if (response.status === 404) {
@@ -231,7 +252,7 @@ async function confirmDelete() {
       return
     }
     if (!response.ok) {
-      notify('Failed to delete configuration.', 'error')
+      notify(getApiErrorMessage(apiError, 'Failed to delete configuration.'), 'error')
       return
     }
     configs.value = configs.value.filter((c) => c.id !== config.id)
@@ -349,6 +370,10 @@ async function confirmDelete() {
   padding: 5rem 2rem;
   text-align: center;
   gap: 0.75rem;
+}
+
+.premium-unavailable-state {
+  padding-block: 3rem;
 }
 
 .state-orb {

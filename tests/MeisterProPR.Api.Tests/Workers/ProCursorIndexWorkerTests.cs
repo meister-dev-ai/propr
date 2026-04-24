@@ -3,6 +3,8 @@
 
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -14,6 +16,7 @@ using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Workers;
 
@@ -170,7 +173,41 @@ public sealed class ProCursorIndexWorkerTests
         }
     }
 
-    private static ServiceProvider BuildServiceProvider(IProCursorMaterializer materializer, ProCursorOptions options)
+    [Fact]
+    public async Task Worker_WhenCapabilityUnavailable_CompletesCycleWithoutStartingJobs()
+    {
+        using var provider = BuildServiceProvider(
+            new FlakyRepositoryMaterializer(new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)),
+            new ProCursorOptions
+            {
+                MaxIndexConcurrency = 1,
+                RefreshPollSeconds = 1,
+                ChunkTargetLines = 50,
+            },
+            CreateLicensingService(isAvailable: false));
+        var worker = provider.GetRequiredService<ProCursorIndexWorker>();
+
+        await worker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            await WaitUntilAsync(
+                () => worker.LastCycleCompletedAt is not null,
+                TimeSpan.FromSeconds(1),
+                "Worker did not complete a cycle when ProCursor was unavailable.");
+
+            Assert.Equal(0, worker.ActiveJobCount);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static ServiceProvider BuildServiceProvider(
+        IProCursorMaterializer materializer,
+        ProCursorOptions options,
+        ILicensingCapabilityService? licensingCapabilityService = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -189,6 +226,7 @@ public sealed class ProCursorIndexWorkerTests
         services.AddSingleton<IProCursorEmbeddingService, EmptyEmbeddingService>();
         services.AddSingleton<IProCursorSymbolExtractor, EmptySymbolExtractor>();
         services.AddSingleton<IProCursorTrackedBranchChangeDetector, NoOpTrackedBranchChangeDetector>();
+        services.AddSingleton(licensingCapabilityService ?? CreateLicensingService(isAvailable: true));
 
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
@@ -196,6 +234,21 @@ public sealed class ProCursorIndexWorkerTests
         services.AddSingleton<ProCursorIndexWorker>();
 
         return services.BuildServiceProvider(true);
+    }
+
+    private static ILicensingCapabilityService CreateLicensingService(bool isAvailable)
+    {
+        var licensingService = Substitute.For<ILicensingCapabilityService>();
+        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new CapabilitySnapshot(
+                PremiumCapabilityKey.ProCursor,
+                PremiumCapabilityKey.ProCursor,
+                true,
+                true,
+                PremiumCapabilityOverrideState.Default,
+                isAvailable,
+                isAvailable ? null : "ProCursor requires a premium license.")));
+        return licensingService;
     }
 
     private static ServiceProvider BuildIncompleteGraphServiceProvider()

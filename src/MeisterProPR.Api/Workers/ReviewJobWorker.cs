@@ -4,10 +4,13 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using MeisterProPR.Api.Telemetry;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Api.Workers;
@@ -87,9 +90,21 @@ public sealed partial class ReviewJobWorker(
 
         using var tickScope = scopeFactory.CreateScope();
         var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
+        var licensingCapabilityService = tickScope.ServiceProvider.GetService<ILicensingCapabilityService>();
+        var parallelReviewExecutionEnabled = licensingCapabilityService is null
+            || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
 
         foreach (var job in jobRepository.GetPendingJobs())
         {
+            if (!parallelReviewExecutionEnabled)
+            {
+                var processingJobCount = await jobRepository.CountProcessingJobsAsync(stoppingToken);
+                if (processingJobCount > 0)
+                {
+                    break;
+                }
+            }
+
             if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
             {
                 continue;

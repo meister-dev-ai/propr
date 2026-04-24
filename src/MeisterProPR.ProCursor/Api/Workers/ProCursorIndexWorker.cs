@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -88,6 +91,19 @@ public sealed partial class ProCursorIndexWorker(
         try
         {
             this.LastCycleStartedAt = DateTimeOffset.UtcNow;
+
+            using (var licensingScope = scopeFactory.CreateScope())
+            {
+                var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                    licensingScope.ServiceProvider.GetService<ILicensingCapabilityService>(),
+                    PremiumCapabilityKey.ProCursor,
+                    ct);
+                if (capability is not null)
+                {
+                    this.LastCycleCompletedAt = DateTimeOffset.UtcNow;
+                    return;
+                }
+            }
 
             using (var scheduleScope = scopeFactory.CreateScope())
             {

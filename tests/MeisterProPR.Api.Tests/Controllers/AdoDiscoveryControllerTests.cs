@@ -9,6 +9,8 @@ using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -31,6 +33,15 @@ namespace MeisterProPR.Api.Tests.Controllers;
 public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoDiscoveryApiFactory factory)
     : IClassFixture<AdoDiscoveryControllerTests.AdoDiscoveryApiFactory>
 {
+    private readonly bool _capabilityDefaultsInitialized = InitializeCapabilityDefaults(factory);
+
+    private static bool InitializeCapabilityDefaults(AdoDiscoveryApiFactory factory)
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, true);
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
+        return true;
+    }
+
     [Fact]
     public async Task GetProjects_ClientUserForAssignedClient_Returns200WithProjectOptions()
     {
@@ -65,6 +76,46 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         var response = await httpClient.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetProjects_WithWebhookPurpose_AllowsDiscoveryWhenPremiumCapabilitiesAreUnavailable()
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, false, "ProCursor requires a premium license.");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/ado/discovery/projects?organizationScopeId={factory.OrganizationScopeId}&purpose=webhook");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetProjects_WithCrawlPurpose_AndCapabilityUnavailable_Returns409PremiumUnavailable()
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/ado/discovery/projects?organizationScopeId={factory.OrganizationScopeId}&purpose=crawl");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+        Assert.Equal(PremiumCapabilityKey.CrawlConfigs, body.GetProperty("feature").GetString());
     }
 
     [Fact]
@@ -196,6 +247,66 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         Assert.Equal("The discovery request could not be completed.", body.GetProperty("error").GetString());
     }
 
+    [Fact]
+    public async Task GetCrawlFilters_WithWebhookPurpose_AllowsDiscoveryWhenCrawlConfigsCapabilityIsUnavailable()
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/ado/discovery/crawl-filters?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&purpose=webhook");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetCrawlFilters_WithCrawlPurpose_AndCapabilityUnavailable_Returns409PremiumUnavailable()
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/ado/discovery/crawl-filters?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&purpose=crawl");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+        Assert.Equal(PremiumCapabilityKey.CrawlConfigs, body.GetProperty("feature").GetString());
+    }
+
+    [Fact]
+    public async Task GetSources_WhenProCursorCapabilityUnavailable_Returns409PremiumUnavailable()
+    {
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, false, "ProCursor requires a premium license.");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/ado/discovery/sources?organizationScopeId={factory.OrganizationScopeId}&projectId=project-1&sourceKind=repository");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+        Assert.Equal(PremiumCapabilityKey.ProCursor, body.GetProperty("feature").GetString());
+    }
+
     public sealed class AdoDiscoveryApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-ado-discovery-jwt-secret-32ch";
@@ -212,6 +323,22 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
             Substitute.For<IProviderAdminDiscoveryService>();
 
         public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+
+        public ILicensingCapabilityService LicensingCapabilityService { get; } =
+            Substitute.For<ILicensingCapabilityService>();
+
+        public void SetCapabilityAvailability(string capabilityKey, bool isAvailable, string? message = null)
+        {
+            this.LicensingCapabilityService.GetCapabilityAsync(capabilityKey, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult(new CapabilitySnapshot(
+                    capabilityKey,
+                    capabilityKey,
+                    true,
+                    true,
+                    PremiumCapabilityOverrideState.Default,
+                    isAvailable,
+                    message)));
+        }
 
         public string GenerateClientUserToken()
         {
@@ -305,6 +432,9 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                     .Returns(discoveryService);
                 services.AddSingleton(discoveryService);
                 services.AddSingleton(this.ProviderRegistry);
+                this.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, true);
+                this.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
+                services.AddSingleton(this.LicensingCapabilityService);
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

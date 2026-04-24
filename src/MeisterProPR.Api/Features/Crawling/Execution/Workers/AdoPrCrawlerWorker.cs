@@ -3,6 +3,9 @@
 
 using System.Diagnostics;
 using MeisterProPR.Api.Telemetry;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 
@@ -52,6 +55,16 @@ public sealed partial class AdoPrCrawlerWorker(
         try
         {
             using var scope = scopeFactory.CreateScope();
+            var crawlCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                scope.ServiceProvider.GetService<ILicensingCapabilityService>(),
+                PremiumCapabilityKey.CrawlConfigs,
+                ct);
+
+            if (crawlCapability is not null)
+            {
+                return;
+            }
+
             var crawlService = scope.ServiceProvider.GetService<IPrCrawlService>();
             if (crawlService is null)
             {

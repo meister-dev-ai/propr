@@ -4,9 +4,12 @@
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.Validators;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Clients.Models;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -24,7 +27,8 @@ public sealed partial class ClientProviderConnectionsController(
     IProviderReadinessEvaluator readinessEvaluator,
     IProviderOperationalStatusService providerOperationalStatusService,
     ILogger<ClientProviderConnectionsController> logger,
-    IProviderActivationService? providerActivationService = null) : ControllerBase
+    IProviderActivationService? providerActivationService = null,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const string DuplicateProviderConnectionMessage =
         "A provider connection with the same provider family and host already exists for this client.";
@@ -128,6 +132,16 @@ public sealed partial class ClientProviderConnectionsController(
     private async Task<bool> IsProviderEnabledAsync(ScmProvider providerFamily, CancellationToken ct)
     {
         return providerActivationService is null || await providerActivationService.IsEnabledAsync(providerFamily, ct);
+    }
+
+    private async Task<CapabilitySnapshot?> GetMultipleProviderCapabilityAsync(CancellationToken ct)
+    {
+        if (licensingCapabilityService is null)
+        {
+            return null;
+        }
+
+        return await licensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.MultipleScmProviders, ct);
     }
 
     private async Task<ClientScmConnectionDto> EnrichConnectionAsync(
@@ -337,6 +351,16 @@ public sealed partial class ClientProviderConnectionsController(
             return this.Conflict(new { error = DisabledProviderMessage });
         }
 
+        var multipleProviderCapability = await this.GetMultipleProviderCapabilityAsync(ct);
+        if (multipleProviderCapability is { IsAvailable: false })
+        {
+            var existingConnections = await connectionRepository.GetByClientIdAsync(clientId, ct);
+            if (existingConnections.Count > 0)
+            {
+                return new PremiumFeatureUnavailableResult(multipleProviderCapability);
+            }
+        }
+
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
             request.ProviderFamily,
             request.AuthenticationKind,
@@ -425,6 +449,19 @@ public sealed partial class ClientProviderConnectionsController(
         if (existing is null)
         {
             return this.NotFound();
+        }
+
+        if (request.IsActive == true && !existing.IsActive)
+        {
+            var multipleProviderCapability = await this.GetMultipleProviderCapabilityAsync(ct);
+            if (multipleProviderCapability is { IsAvailable: false })
+            {
+                var existingConnections = await connectionRepository.GetByClientIdAsync(clientId, ct);
+                if (existingConnections.Any(connection => connection.Id != connectionId && connection.IsActive))
+                {
+                    return new PremiumFeatureUnavailableResult(multipleProviderCapability);
+                }
+            }
         }
 
         var effectiveAuthenticationKind = request.AuthenticationKind ?? existing.AuthenticationKind;

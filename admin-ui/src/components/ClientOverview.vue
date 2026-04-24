@@ -47,7 +47,7 @@
       </button>
 
       <!-- 30d Token Usage -->
-      <button class="overview-card overview-card--link" @click="emit('navigate', 'usage')">
+      <button v-if="isUsageCardAvailable" class="overview-card overview-card--link" @click="emit('navigate', 'usage')">
         <div class="overview-card-icon overview-card-icon--tokens">
           <i class="fi fi-rr-chart-histogram"></i>
         </div>
@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { listProviderConnections } from '@/services/providerConnectionsService'
 import { listAiConnections } from '@/services/aiConnectionsService'
@@ -75,7 +75,7 @@ type JobListItem = components['schemas']['JobListItem']
 
 const props = defineProps<{ clientId: string }>()
 const emit = defineEmits<{ (e: 'navigate', tab: string): void }>()
-const { getAccessToken } = useSession()
+const { getAccessToken, getCapability } = useSession()
 
 const loading = ref(true)
 const scmCount = ref<number>(0)
@@ -83,6 +83,13 @@ const aiCount = ref<number>(0)
 const reviewCount = ref<number | null>(null)
 const latestReviewDate = ref<string | null>(null)
 const tokenSummary = ref<string>('—')
+const isUsageCardAvailable = computed(() => {
+  if (import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING === 'false') {
+    return false
+  }
+
+  return getCapability('procursor')?.isAvailable === true
+})
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function daysAgoStr(n: number) {
@@ -123,7 +130,7 @@ onMounted(async () => {
     }
 
     const token = getAccessToken()
-    if (token) {
+    if (token && isUsageCardAvailable.value) {
       const usage = await getClientTokenUsage(props.clientId, daysAgoStr(29), todayStr(), token)
       const total = (usage.totalInputTokens ?? 0) + (usage.totalOutputTokens ?? 0)
       tokenSummary.value = total > 0 ? formatTokens(total) : '0'

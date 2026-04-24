@@ -31,6 +31,11 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         return inner.GetStuckProcessingJobsAsync(threshold, ct);
     }
 
+    public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)
+    {
+        return inner.CountProcessingJobsAsync(ct);
+    }
+
     public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
         return inner.TryTransitionAsync(id, from, to, ct);

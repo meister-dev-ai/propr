@@ -8,6 +8,7 @@ instead of as a single long page.
 
 | Document | Focus |
 |----------|-------|
+| [docs/architecture/licensing-and-feature-flags.md](architecture/licensing-and-feature-flags.md) | Installation edition persistence, premium capability resolution, feature-management integration, and onboarding steps for new licensed features |
 | [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, worker execution, dedup, job lifecycle, and token optimization |
 | [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) | Provider connection onboarding, mixed-provider webhook activation, Azure DevOps crawl compatibility, and operational audit |
 | [docs/architecture/security-and-access.md](architecture/security-and-access.md) | Login, PATs, request auth evaluation, and Azure credential resolution |
@@ -84,6 +85,7 @@ feature ownership stays visible at the composition root.
 | `AddMentionsModule()` | Mention scan, reply, and AI answer composition |
 | `AddPromptCustomizationModule()` | Prompt override persistence and application services |
 | `AddUsageReportingModule()` | Client and ProCursor usage reporting services |
+| `AddLicensingModule()` | Installation edition persistence, premium capability resolution, admin/auth licensing contracts, and feature-management integration |
 | `AddProCursorModule()` | ProCursor indexing, graph extraction, and query composition |
 
 This composition model is the enforcement point for the vertical-slice migration: feature-owned
@@ -97,6 +99,7 @@ If you are new to the codebase, read these documents in this order:
 
 1. This page for the runtime shape and composition root.
 2. [docs/architecture/security-and-access.md](architecture/security-and-access.md) for caller identity and Azure credential resolution.
-3. [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) for the main review execution path.
-4. [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) for admin onboarding and scheduled review generation.
-5. [docs/architecture/procursor.md](architecture/procursor.md) and [docs/architecture/data-model.md](architecture/data-model.md) for the deeper persistence and knowledge-indexing model.
+3. [docs/architecture/licensing-and-feature-flags.md](architecture/licensing-and-feature-flags.md) for installation licensing, premium capability resolution, and feature gating.
+4. [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) for the main review execution path.
+5. [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) for admin onboarding and scheduled review generation.
+6. [docs/architecture/procursor.md](architecture/procursor.md) and [docs/architecture/data-model.md](architecture/data-model.md) for the deeper persistence and knowledge-indexing model.

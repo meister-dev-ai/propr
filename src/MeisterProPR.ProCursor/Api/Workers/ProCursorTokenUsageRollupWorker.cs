@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,6 +93,18 @@ public sealed partial class ProCursorTokenUsageRollupWorker(
         try
         {
             using var scope = scopeFactory.CreateScope();
+
+            var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                scope.ServiceProvider.GetService<ILicensingCapabilityService>(),
+                PremiumCapabilityKey.ProCursor,
+                ct);
+
+            if (capability is not null)
+            {
+                this.LastCycleCompletedAt = DateTimeOffset.UtcNow;
+                return;
+            }
+
             var aggregationService = scope.ServiceProvider.GetService<IProCursorTokenUsageAggregationService>();
             if (aggregationService is null)
             {

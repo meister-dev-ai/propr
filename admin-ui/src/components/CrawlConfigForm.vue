@@ -279,18 +279,21 @@
             <label>Review Knowledge Scope</label>
             <p class="field-hint">Choose whether crawl-triggered reviews can use every enabled ProCursor source on this client or only a selected subset.</p>
           </div>
-          <span v-if="usesSelectedProCursorSources && selectedProCursorSourceCount" class="scope-count-pill">
+          <span v-if="isProCursorAvailable && usesSelectedProCursorSources && selectedProCursorSourceCount" class="scope-count-pill">
             {{ selectedProCursorSourceCount }} selected
           </span>
         </div>
 
         <span v-if="proCursorSourceScopeError" class="field-error">{{ proCursorSourceScopeError }}</span>
         <span v-else-if="proCursorSourcesError" class="field-error">{{ proCursorSourcesError }}</span>
+        <span v-else-if="!isProCursorAvailable" class="field-help">
+          {{ proCursorUnavailableMessage }} Crawl reviews will proceed without ProCursor knowledge sources while this capability is disabled.
+        </span>
         <span v-else-if="repairRequiredProCursorSourceIds.length" class="field-help legacy-note">
           {{ formatProCursorScopeRepairMessage(repairRequiredProCursorSourceIds.length) }}
         </span>
 
-        <div class="source-scope-mode-grid">
+        <div v-if="isProCursorAvailable" class="source-scope-mode-grid">
           <label class="source-scope-mode-card" :class="{ active: proCursorSourceScopeMode === 'allClientSources' }" for="crawlSourceScopeAll">
             <input id="crawlSourceScopeAll" v-model="proCursorSourceScopeMode" type="radio" name="crawlSourceScope" value="allClientSources" />
             <div class="source-scope-mode-copy">
@@ -308,7 +311,7 @@
           </label>
         </div>
 
-        <div v-if="usesSelectedProCursorSources" class="source-scope-selection-panel">
+        <div v-if="isProCursorAvailable && usesSelectedProCursorSources" class="source-scope-selection-panel">
           <p v-if="proCursorSourcesLoading" class="filters-empty-hint">Loading ProCursor sources...</p>
           <p v-else-if="!selectableProCursorSources.length" class="filters-empty-hint">
             {{ proCursorSources.length ? 'No enabled ProCursor sources are currently eligible for crawl reviews.' : 'Create at least one ProCursor source for this client before using selected-source scope.' }}
@@ -339,7 +342,7 @@
           <p class="field-help">The selected source scope is snapshotted onto each queued review job so later admin edits do not change in-flight work.</p>
         </div>
 
-        <p v-else class="filters-empty-hint">All enabled ProCursor sources on this client are available to queued crawl reviews.</p>
+        <p v-else-if="isProCursorAvailable" class="filters-empty-hint">All enabled ProCursor sources on this client are available to queued crawl reviews.</p>
       </div>
 
       <div v-if="editMode && config?.id" class="form-group full-width prompt-overrides-section">
@@ -450,6 +453,7 @@ import type {
 } from '@/services/adoDiscoveryService'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import TextViewerModal from '@/components/TextViewerModal.vue'
+import { useSession } from '@/composables/useSession'
 import { createOverride, deleteOverride, listOverrides } from '@/services/promptOverridesService'
 import { listProCursorSources } from '@/services/proCursorService'
 import type { ProCursorKnowledgeSourceDto } from '@/services/proCursorService'
@@ -534,6 +538,7 @@ const repoFiltersError = ref('')
 const proCursorSourceScopeError = ref('')
 const formError = ref('')
 const loading = ref(false)
+const { getCapability } = useSession()
 
 const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
 const canLoadOrganizationScopes = computed(() => isValidUuid(effectiveClientId.value))
@@ -550,6 +555,12 @@ const currentProjectOption = computed(() =>
   projects.value.find((project) => normalizeText(project.projectId) === projectId.value),
 )
 const projectMissing = computed(() => !!projectId.value && !currentProjectOption.value && !legacyModeWithoutScope.value)
+const proCursorCapability = computed(() => getCapability('procursor'))
+const isProCursorAvailable = computed(() => proCursorCapability.value?.isAvailable === true)
+const proCursorUnavailableMessage = computed(() =>
+  proCursorCapability.value?.message
+    ?? 'Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting.',
+)
 const usesSelectedProCursorSources = computed(() => proCursorSourceScopeMode.value === 'selectedSources')
 const selectableProCursorSources = computed(() =>
   proCursorSources.value.filter((source) => normalizeText(source.sourceId).length > 0 && source.isEnabled !== false),
@@ -699,6 +710,7 @@ function resetProCursorSourceState(): void {
   repairRequiredProCursorSourceIds.value = []
   proCursorSources.value = []
   proCursorSourcesError.value = ''
+  proCursorSourcesLoading.value = false
 }
 
 function resetFilterSelection(): void {
@@ -806,7 +818,7 @@ async function loadProjects(preserveProject: boolean): Promise<void> {
   projectsError.value = ''
 
   try {
-    projects.value = sortProjects(await listAdoProjects(effectiveClientId.value, organizationScopeId.value))
+    projects.value = sortProjects(await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'crawl'))
 
     if (!preserveProject && !projects.value.some((project) => normalizeText(project.projectId) === projectId.value)) {
       projectId.value = ''
@@ -834,7 +846,7 @@ async function loadCrawlFilterOptions(preserveRows: boolean): Promise<void> {
 
   try {
     crawlFilterOptions.value = sortCrawlFilterOptions(
-      await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value),
+      await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'crawl'),
     )
 
     if (!preserveRows) {
@@ -852,6 +864,13 @@ async function loadCrawlFilterOptions(preserveRows: boolean): Promise<void> {
 }
 
 async function loadProCursorSources(): Promise<void> {
+  if (!isProCursorAvailable.value) {
+    proCursorSources.value = []
+    proCursorSourcesError.value = ''
+    proCursorSourcesLoading.value = false
+    return
+  }
+
   if (!canLoadOrganizationScopes.value) {
     return
   }
@@ -1126,7 +1145,7 @@ function validate(): boolean {
     }
   }
 
-  if (usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0) {
+  if (isProCursorAvailable.value && usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0) {
     proCursorSourceScopeError.value = 'Select at least one enabled ProCursor source or switch to all client sources.'
     valid = false
   }

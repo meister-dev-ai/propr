@@ -3,6 +3,9 @@
 
 using System.Diagnostics;
 using MeisterProPR.Api.Telemetry;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 
@@ -58,6 +61,18 @@ public sealed partial class MentionScanWorker(
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
+
+            var crawlCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                scope.ServiceProvider.GetService<ILicensingCapabilityService>(),
+                PremiumCapabilityKey.CrawlConfigs,
+                stoppingToken);
+
+            if (crawlCapability is not null)
+            {
+                outcome = "skipped_premium_disabled";
+                activity?.SetStatus(ActivityStatusCode.Ok, "crawl_configs_disabled");
+                return;
+            }
 
             var crawlConfigRepository = scope.ServiceProvider.GetService<ICrawlConfigurationRepository>();
             if (crawlConfigRepository is not null)

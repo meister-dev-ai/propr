@@ -3,6 +3,8 @@
 
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,17 +87,55 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
 
     private static IServiceScopeFactory CreateScopeFactory(
         IProCursorTokenUsageAggregationService aggregationService,
-        IProCursorTokenUsageRetentionService retentionService)
+        IProCursorTokenUsageRetentionService retentionService,
+        ILicensingCapabilityService? licensingCapabilityService = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
+        var resolvedLicensingService = licensingCapabilityService ?? CreateLicensingService(isAvailable: true);
 
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
         serviceProvider.GetService(typeof(IProCursorTokenUsageAggregationService)).Returns(aggregationService);
         serviceProvider.GetService(typeof(IProCursorTokenUsageRetentionService)).Returns(retentionService);
+        serviceProvider.GetService(typeof(ILicensingCapabilityService)).Returns(resolvedLicensingService);
 
         return scopeFactory;
+    }
+
+    private static ILicensingCapabilityService CreateLicensingService(bool isAvailable)
+    {
+        var licensingService = Substitute.For<ILicensingCapabilityService>();
+        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new CapabilitySnapshot(
+                PremiumCapabilityKey.ProCursor,
+                PremiumCapabilityKey.ProCursor,
+                true,
+                true,
+                PremiumCapabilityOverrideState.Default,
+                isAvailable,
+                isAvailable ? null : "ProCursor requires a premium license.")));
+        return licensingService;
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenCapabilityUnavailable_SkipsRefreshAndRetention()
+    {
+        var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
+        var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
+        var scopeFactory = CreateScopeFactory(
+            aggregationService,
+            retentionService,
+            CreateLicensingService(isAvailable: false));
+        var worker = BuildWorker(scopeFactory);
+
+        await worker.StartAsync(CancellationToken.None);
+        await Task.Delay(30, CancellationToken.None);
+        await worker.StopAsync(CancellationToken.None);
+
+        await aggregationService.DidNotReceive().RefreshRecentAsync(Arg.Any<CancellationToken>());
+        await retentionService.DidNotReceive().PurgeExpiredAsync(Arg.Any<CancellationToken>());
+        Assert.NotNull(worker.LastCycleCompletedAt);
     }
 }

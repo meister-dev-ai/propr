@@ -144,7 +144,7 @@ async function handleSubmit() {
     successMessage.value = 'Password changed. Refresh tokens were revoked and PATs remain valid.'
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      router.push('/login')
+      router.push({ name: 'login' })
       return
     }
 

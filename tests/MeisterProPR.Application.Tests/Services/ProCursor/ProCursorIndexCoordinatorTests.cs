@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -149,5 +151,47 @@ public sealed class ProCursorIndexCoordinatorTests
                     context.InputContexts.Count == 1 &&
                     context.InputContexts[0].SourcePath == "/src/Program.cs"),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteJobAsync_WhenCapabilityUnavailable_FailsJobWithoutProcessing()
+    {
+        var sourceRepository = Substitute.For<IProCursorKnowledgeSourceRepository>();
+        var jobRepository = Substitute.For<IProCursorIndexJobRepository>();
+        var snapshotRepository = Substitute.For<IProCursorIndexSnapshotRepository>();
+        var licensingService = Substitute.For<ILicensingCapabilityService>();
+        var job = new ProCursorIndexJob(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "refresh", "dedup-key");
+
+        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new CapabilitySnapshot(
+                PremiumCapabilityKey.ProCursor,
+                PremiumCapabilityKey.ProCursor,
+                true,
+                true,
+                PremiumCapabilityOverrideState.Default,
+                false,
+                "ProCursor requires a premium license.")));
+
+        jobRepository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var coordinator = new ProCursorIndexCoordinator(
+            sourceRepository,
+            jobRepository,
+            snapshotRepository,
+            Substitute.For<IProCursorSymbolGraphRepository>(),
+            Enumerable.Empty<IProCursorMaterializer>(),
+            Substitute.For<IProCursorChunkExtractor>(),
+            Substitute.For<IProCursorEmbeddingService>(),
+            Substitute.For<IProCursorSymbolExtractor>(),
+            NullLogger<ProCursorIndexCoordinator>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new ProCursorOptions()),
+            licensingService);
+
+        var handled = await coordinator.ExecuteJobAsync(job.Id, CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(ProCursorIndexJobStatus.Failed, job.Status);
+        await sourceRepository.DidNotReceive().GetBySourceIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await snapshotRepository.DidNotReceive().AddAsync(Arg.Any<ProCursorIndexSnapshot>(), Arg.Any<CancellationToken>());
     }
 }

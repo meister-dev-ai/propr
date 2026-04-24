@@ -4,8 +4,12 @@
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +25,8 @@ public sealed partial class AdminCrawlConfigsController(
     IScmProviderRegistry providerRegistry,
     IProCursorKnowledgeSourceRepository proCursorKnowledgeSourceRepository,
     ILogger<AdminCrawlConfigsController> logger,
-    IProviderActivationService? providerActivationService = null) : ControllerBase
+    IProviderActivationService? providerActivationService = null,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const string DisabledProviderMessage =
         "The selected provider family is currently disabled by system administration.";
@@ -82,6 +87,16 @@ public sealed partial class AdminCrawlConfigsController(
     private async Task<bool> IsProviderEnabledAsync(ScmProvider provider, CancellationToken ct)
     {
         return providerActivationService is null || await providerActivationService.IsEnabledAsync(provider, ct);
+    }
+
+    private async Task<IActionResult?> RequireCrawlConfigsCapabilityAsync(CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.CrawlConfigs,
+            ct);
+
+        return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
     }
 
     private static IReadOnlyList<string> NormalizeBranchPatterns(IReadOnlyList<string>? targetBranchPatterns)
@@ -267,6 +282,12 @@ public sealed partial class AdminCrawlConfigsController(
             return auth;
         }
 
+        var capability = await this.RequireCrawlConfigsCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         IReadOnlyList<CrawlConfigurationDto> configs;
         if (isAdmin)
         {
@@ -319,6 +340,12 @@ public sealed partial class AdminCrawlConfigsController(
         if (validation is not null)
         {
             return validation;
+        }
+
+        var capability = await this.RequireCrawlConfigsCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (!isAdmin)
@@ -465,6 +492,12 @@ public sealed partial class AdminCrawlConfigsController(
             return validation;
         }
 
+        var capability = await this.RequireCrawlConfigsCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         var existing = await crawlConfigRepo.GetByIdAsync(configId, ct);
         if (existing is null)
         {
@@ -567,6 +600,12 @@ public sealed partial class AdminCrawlConfigsController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireCrawlConfigsCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         var existing = await crawlConfigRepo.GetByIdAsync(configId, ct);

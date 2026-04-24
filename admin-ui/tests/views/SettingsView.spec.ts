@@ -27,6 +27,10 @@ vi.mock('@/services/api', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     username: ref('dev-admin'),
+    isAdmin: ref(false),
+    edition: ref('community'),
+    capabilities: ref([]),
+    setLicensingState: vi.fn(),
   }),
 }))
 

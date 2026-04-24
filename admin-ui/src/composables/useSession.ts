@@ -3,10 +3,22 @@
 
 import { computed, ref } from 'vue'
 import { API_BASE_URL } from '@/services/apiBase'
+import type { components } from '@/services/generated/openapi'
 
 const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
 const REFRESH_TOKEN_KEY = 'meisterpropr_refresh_token'
 const CLIENT_ROLES_KEY = 'meisterpropr_client_roles'
+const EDITION_KEY = 'meisterpropr_installation_edition'
+const CAPABILITIES_KEY = 'meisterpropr_capabilities'
+
+type InstallationEdition = components['schemas']['InstallationEdition']
+type PremiumCapabilityDto = components['schemas']['PremiumCapabilityDto']
+type SessionSnapshot = {
+  globalRole?: string
+  clientRoles?: Record<string, number>
+  edition?: InstallationEdition
+  capabilities?: PremiumCapabilityDto[] | null
+}
 
 // Initialize shared reactive state FROM storage
 const accessToken = ref<string | null>(sessionStorage.getItem(ACCESS_TOKEN_KEY))
@@ -17,9 +29,15 @@ const clientRoles = ref<Record<string, number>>(
   JSON.parse(sessionStorage.getItem(CLIENT_ROLES_KEY) ?? '{}') as Record<string, number>,
 )
 
+const edition = ref<InstallationEdition>((sessionStorage.getItem(EDITION_KEY) as InstallationEdition | null) ?? 'community')
+const capabilities = ref<PremiumCapabilityDto[]>(
+  JSON.parse(sessionStorage.getItem(CAPABILITIES_KEY) ?? '[]') as PremiumCapabilityDto[],
+)
+
 export function useSession() {
   function setTokens(at: string, rt: string): void {
     setClientRoles({})
+    setLicensingState('community', [])
     sessionStorage.setItem(ACCESS_TOKEN_KEY, at)
     localStorage.setItem(REFRESH_TOKEN_KEY, rt)
     accessToken.value = at
@@ -38,9 +56,13 @@ export function useSession() {
     sessionStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
     sessionStorage.removeItem(CLIENT_ROLES_KEY)
+    sessionStorage.removeItem(EDITION_KEY)
+    sessionStorage.removeItem(CAPABILITIES_KEY)
     accessToken.value = null
     refreshToken.value = null
     clientRoles.value = {}
+    edition.value = 'community'
+    capabilities.value = []
   }
 
   function setAccessToken(token: string): void {
@@ -108,6 +130,24 @@ export function useSession() {
     clientRoles.value = roles
   }
 
+  function setLicensingState(nextEdition: InstallationEdition, nextCapabilities: PremiumCapabilityDto[]): void {
+    sessionStorage.setItem(EDITION_KEY, nextEdition)
+    sessionStorage.setItem(CAPABILITIES_KEY, JSON.stringify(nextCapabilities))
+    edition.value = nextEdition
+    capabilities.value = nextCapabilities
+  }
+
+  function getCapability(key: string): PremiumCapabilityDto | null {
+    const normalizedKey = key.trim().toLowerCase()
+    return capabilities.value.find((capability) => capability.key?.toLowerCase() === normalizedKey) ?? null
+  }
+
+  function isCapabilityAvailable(key: string): boolean {
+    return getCapability(key)?.isAvailable === true
+  }
+
+  const isCommercialEdition = computed(() => edition.value === 'commercial')
+
   /**
    * Returns true if the current user has at least `minRole` for `clientId`,
    * or if they are a global admin.
@@ -126,6 +166,7 @@ export function useSession() {
     const token = getAccessToken()
     if (!token) {
       setClientRoles({})
+      setLicensingState('community', [])
       return
     }
 
@@ -134,13 +175,16 @@ export function useSession() {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
-        const data = (await res.json()) as { globalRole: string; clientRoles: Record<string, number> }
+        const data = (await res.json()) as SessionSnapshot
         setClientRoles(data.clientRoles ?? {})
+        setLicensingState(data.edition ?? 'community', data.capabilities ?? [])
       } else {
         setClientRoles({})
+        setLicensingState('community', [])
       }
     } catch {
       setClientRoles({})
+      setLicensingState('community', [])
     }
   }
 
@@ -168,7 +212,13 @@ export function useSession() {
     getUsername,
     username,
     clientRoles,
+    edition,
+    capabilities,
+    isCommercialEdition,
     setClientRoles,
+    setLicensingState,
+    getCapability,
+    isCapabilityAvailable,
     hasClientRole,
     loadClientRoles,
     // Legacy aliases

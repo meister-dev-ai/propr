@@ -27,6 +27,9 @@ public interface IReviewJobIntakeStore
     /// <summary>Returns a single review job by identifier, or <see langword="null" /> if it does not exist.</summary>
     Task<ReviewJob?> GetByIdAsync(Guid jobId, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns the number of review jobs that are currently pending or processing.</summary>
+    Task<int> CountActiveJobsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Updates the PR context snapshot captured from ADO after the job was created.</summary>
     Task UpdatePrContextAsync(
         Guid jobId,

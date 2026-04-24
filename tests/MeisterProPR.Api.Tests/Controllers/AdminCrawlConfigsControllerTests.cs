@@ -11,6 +11,8 @@ using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -30,6 +32,13 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
     : IClassFixture<AdminCrawlConfigsControllerTests.AdminCrawlConfigsApiFactory>
 {
     private const string ValidAdminKey = "admin-key-min-16-chars-ok";
+    private readonly bool _capabilityDefaultsInitialized = InitializeCapabilityDefaults(factory);
+
+    private static bool InitializeCapabilityDefaults(AdminCrawlConfigsApiFactory factory)
+    {
+        factory.SetCrawlConfigsCapabilityAvailability(true);
+        return true;
+    }
 
     // --- GET /admin/crawl-configurations ---
 
@@ -79,6 +88,25 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         var body = await response.Content.ReadAsStringAsync();
         var items = JsonDocument.Parse(body).RootElement;
         Assert.Equal(JsonValueKind.Array, items.ValueKind);
+    }
+
+    [Fact]
+    public async Task GetCrawlConfigs_WhenCapabilityUnavailable_Returns409PremiumUnavailable()
+    {
+        factory.SetCrawlConfigsCapabilityAvailability(false, "Crawl configs requires a premium license.");
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/crawl-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+        Assert.Equal(PremiumCapabilityKey.CrawlConfigs, body.GetProperty("feature").GetString());
     }
 
     // --- POST /admin/crawl-configurations ---
@@ -519,6 +547,22 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         public IProCursorKnowledgeSourceRepository ProCursorKnowledgeSourceRepository { get; } =
             Substitute.For<IProCursorKnowledgeSourceRepository>();
 
+        public ILicensingCapabilityService LicensingCapabilityService { get; } =
+            Substitute.For<ILicensingCapabilityService>();
+
+        public void SetCrawlConfigsCapabilityAvailability(bool isAvailable, string? message = null)
+        {
+            this.LicensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult(new CapabilitySnapshot(
+                    PremiumCapabilityKey.CrawlConfigs,
+                    PremiumCapabilityKey.CrawlConfigs,
+                    true,
+                    true,
+                    PremiumCapabilityOverrideState.Default,
+                    isAvailable,
+                    message)));
+        }
+
         /// <summary>Generates a JWT token for the given user ID and role.</summary>
         public string GenerateUserToken(Guid userId, string globalRole = "User")
         {
@@ -679,6 +723,8 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                         Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<ProCursorKnowledgeSource>>([]));
                 services.AddSingleton(this.ProCursorKnowledgeSourceRepository);
+                this.SetCrawlConfigsCapabilityAvailability(true);
+                services.AddSingleton(this.LicensingCapabilityService);
 
                 // Stub IClientRegistry
                 services.AddSingleton(Substitute.For<IClientRegistry>());

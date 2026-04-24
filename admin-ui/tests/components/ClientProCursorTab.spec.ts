@@ -15,6 +15,7 @@ const listSourceOptionsMock = vi.fn()
 const listBranchOptionsMock = vi.fn()
 
 let assignedRole: 0 | 1 = 1
+let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
 
 vi.mock('@/services/proCursorService', () => ({
   listProCursorSources: listSourcesMock,
@@ -44,6 +45,13 @@ vi.mock('@/composables/useNotification', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     hasClientRole: (_clientId: string, minRole: 0 | 1) => assignedRole >= minRole,
+    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
+    setLicensingState: (_edition: string, capabilities: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }>) => {
+      capabilityState = capabilities
+    },
+    clearTokens: () => {
+      capabilityState = []
+    },
   }),
 }))
 
@@ -69,6 +77,18 @@ async function mountTab() {
   })
 }
 
+function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
+  capabilityState = capabilities.map((capability) => ({
+    key: capability.key,
+    displayName: capability.key,
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: capability.isAvailable,
+    message: capability.message ?? null,
+  }))
+}
+
 function findButtonByText(wrapper: Awaited<ReturnType<typeof mountTab>>, text: string) {
   const matches = wrapper.findAll('button').filter((candidate) => candidate.text().includes(text))
   const button = matches[matches.length - 1]
@@ -85,6 +105,8 @@ describe('ClientProCursorTab', () => {
     vi.resetModules()
     vi.stubEnv('VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING', 'true')
     assignedRole = 1
+    capabilityState = []
+    setCapabilities([{ key: 'procursor', isAvailable: true }])
     listSourcesMock.mockResolvedValue([])
     listBranchesMock.mockResolvedValue([])
     createSourceMock.mockResolvedValue({ sourceId: 'source-1' })
@@ -283,7 +305,7 @@ describe('ClientProCursorTab', () => {
     await flushPromises()
 
     expect(listOrganizationScopesMock).toHaveBeenCalledWith('client-1')
-    expect(listProjectsMock).toHaveBeenCalledWith('client-1', 'scope-1')
+    expect(listProjectsMock).toHaveBeenCalledWith('client-1', 'scope-1', 'procursor')
     expect(listSourceOptionsMock).toHaveBeenCalledWith('client-1', 'scope-1', 'project-1', 'repository')
     expect(listBranchOptionsMock).toHaveBeenCalledWith('client-1', 'scope-1', 'project-1', 'repository', {
       provider: 'azureDevOps',
@@ -421,5 +443,19 @@ describe('ClientProCursorTab', () => {
     expect(getProCursorSourceTokenUsageMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Usage reporting rollout is disabled')
     expect(wrapper.text()).not.toContain('Source Usage')
+  })
+
+  it('shows a non-actionable unavailable state when ProCursor is disabled', async () => {
+    setCapabilities([{ key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' }])
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    expect(listSourcesMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('ProCursor is unavailable')
+    expect(wrapper.text()).toContain('ProCursor requires commercial.')
+    expect(wrapper.text()).not.toContain('Add Source')
+    expect(wrapper.text()).not.toContain('Create Source')
+    expect(wrapper.text()).not.toContain('Try Again')
   })
 })

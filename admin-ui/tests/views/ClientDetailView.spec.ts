@@ -12,10 +12,29 @@ vi.mock('@/services/api', () => ({
 }))
 
 const mockRouterPush = vi.fn()
+const mockRouterReplace = vi.fn()
+const mockRoute = {
+  params: { id: 'client-1' },
+  query: {} as Record<string, string>,
+}
+let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  useRoute: () => ({ params: { id: 'client-1' } }),
+  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
+  useRoute: () => mockRoute,
   RouterLink: { template: '<a><slot /></a>' },
+}))
+
+vi.mock('@/composables/useSession', () => ({
+  useSession: () => ({
+    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
+    setLicensingState: (_edition: string, capabilities: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }>) => {
+      capabilityState = capabilities
+    },
+    clearTokens: () => {
+      capabilityState = []
+    },
+  }),
 }))
 
 vi.mock('@/components/ConfirmDialog.vue', () => ({
@@ -59,6 +78,14 @@ vi.mock('@/components/ClientOverview.vue', () => ({
   },
 }))
 
+vi.mock('@/components/ClientProCursorTab.vue', () => ({
+  default: {
+    name: 'ClientProCursorTab',
+    props: ['clientId'],
+    template: '<div class="client-procursor-tab-stub" :data-client-id="clientId">procursor tab</div>',
+  },
+}))
+
 vi.mock('@/components/ProviderConnectionStatusList.vue', () => ({
   default: {
     name: 'ProviderConnectionStatusList',
@@ -98,11 +125,31 @@ const sampleClient = {
   createdAt: '2024-01-01T00:00:00Z',
 }
 
+function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
+  capabilityState = capabilities.map((capability) => ({
+    key: capability.key,
+    displayName: capability.key,
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: capability.isAvailable,
+    message: capability.message ?? null,
+  }))
+}
+
 describe('ClientDetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
     vi.stubEnv('VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING', 'true')
+    mockRoute.query = {}
+    mockRouterReplace.mockReset()
+    capabilityState = []
+    setCapabilities([
+      { key: 'crawl-configs', isAvailable: true },
+      { key: 'procursor', isAvailable: true },
+      { key: 'multiple-scm-providers', isAvailable: true },
+    ])
   })
 
   afterEach(() => {
@@ -237,6 +284,59 @@ describe('ClientDetailView', () => {
 
     expect(wrapper.find('.usage-dashboard-stub').attributes('data-client-id')).toBe('client-1')
     expect(wrapper.text()).toContain('procursor usage dashboard')
+  })
+
+  it('hides Crawl Configs and ProCursor navigation when those capabilities are unavailable', async () => {
+    setCapabilities([
+      { key: 'crawl-configs', isAvailable: false, message: 'Crawl configs require commercial.' },
+      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
+      { key: 'multiple-scm-providers', isAvailable: true },
+    ])
+    mockGet.mockResolvedValue({ data: sampleClient })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const navTexts = wrapper.findAll('button.sidebar-nav-link').map((button) => button.text())
+    expect(navTexts.some((text) => text.includes('Crawl Configs'))).toBe(false)
+    expect(navTexts.some((text) => text.includes('ProCursor'))).toBe(false)
+    expect(navTexts.some((text) => text.includes('Tokens & Usage'))).toBe(false)
+  })
+
+  it('shows a non-actionable unavailable state for direct ProCursor usage navigation', async () => {
+    setCapabilities([
+      { key: 'crawl-configs', isAvailable: true },
+      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
+      { key: 'multiple-scm-providers', isAvailable: true },
+    ])
+    mockRoute.query = { tab: 'usage' }
+    mockGet.mockResolvedValue({ data: sampleClient })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Tokens & Usage')
+    expect(wrapper.text()).toContain('ProCursor requires commercial.')
+    expect(wrapper.find('.usage-dashboard-stub').exists()).toBe(false)
+  })
+
+  it('shows a non-actionable unavailable state for direct ProCursor tab navigation', async () => {
+    setCapabilities([
+      { key: 'crawl-configs', isAvailable: true },
+      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
+      { key: 'multiple-scm-providers', isAvailable: true },
+    ])
+    mockRoute.query = { tab: 'procursor' }
+    mockGet.mockResolvedValue({ data: sampleClient })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    expect(wrapper.find('.client-procursor-tab-stub').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Add Source')
   })
 
   it('hides the usage analytics tab when the rollout flag is disabled', async () => {

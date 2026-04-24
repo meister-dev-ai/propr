@@ -130,6 +130,33 @@ token refresh automatically.
 
 ---
 
+## Editions and Premium Capabilities
+
+Every installation starts in `Community` edition by default. Community mode is intended to be safe for
+fresh deployments and small self-hosted setups:
+
+- Username/password sign-in remains available.
+- Only one active PR review job may be pending or processing at a time.
+- Only one active SCM provider connection may be configured at a time.
+
+Commercial edition keeps all Community behavior and unlocks the current premium capability set:
+
+- Single sign-on (`sso-authentication`)
+- Parallel review execution (`parallel-review-execution`)
+- Multiple SCM providers (`multiple-scm-providers`)
+
+Admins can inspect and change the current edition from `Settings -> Licensing` in the admin UI, or
+via `GET /api/admin/licensing` and `PATCH /api/admin/licensing` for automation.
+
+Before sign-in, the login screen calls `GET /api/auth/options` for generic auth bootstrap data.
+Today that means edition plus password sign-in availability; future sign-in methods such as SSO can
+extend the same contract without replacing the route.
+
+For the internal processing flow and the implementation checklist for new licensed features, see
+[docs/architecture/licensing-and-feature-flags.md](docs/architecture/licensing-and-feature-flags.md).
+
+---
+
 ## Key Environment Variables
 
 | Variable                           | Required      | Description                                                                     |
@@ -153,6 +180,7 @@ See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup v
 | [docs/provider-connections.md](docs/provider-connections.md) | Provider connection guide: auth modes, required fields, provider scopes, and where to get each value |
 | [docs/api.md](docs/api.md) | Technical API reference and curl examples |
 | [docs/architecture.md](docs/architecture.md) | Architecture overview and links to focused subsystem docs |
+| [docs/architecture/licensing-and-feature-flags.md](docs/architecture/licensing-and-feature-flags.md) | Licensing resolution flow, feature flag integration, and the checklist for new licensed features |
 
 ---
 

@@ -10,7 +10,7 @@
           <p class="section-subtitle">Manage connection hosts, verification status, selected scopes, and reviewer identities for enabled provider families on this client.</p>
         </div>
         <div class="section-card-header-actions">
-          <button class="btn-primary btn-sm provider-create-toggle" :disabled="!hasEnabledProviderOptions" @click="showCreateForm = !showCreateForm">
+          <button class="btn-primary btn-sm provider-create-toggle" :disabled="!canCreateConnection" @click="showCreateForm = !showCreateForm">
             <i class="fi fi-rr-plus"></i> {{ showCreateForm ? 'Hide Form' : 'Add Connection' }}
           </button>
         </div>
@@ -18,6 +18,7 @@
 
       <div class="section-card-body">
         <p v-if="providerOptionsError" class="error provider-options-note">{{ providerOptionsError }}</p>
+        <p v-else-if="multipleProviderUpgradeMessage" class="muted provider-options-note">{{ multipleProviderUpgradeMessage }}</p>
         <p v-else-if="!hasEnabledProviderOptions" class="muted provider-options-note">No provider families are currently enabled for new client connections.</p>
         <ProviderConnectionForm
           v-if="showCreateForm"
@@ -126,9 +127,9 @@
                 :show-cancel="false"
                 @submit="handleSaveConnectionEdit(selectedConnectionId)"
               />
-              
+
               <hr class="provider-divider" />
-              
+
               <div class="provider-actions-row">
                 <button class="btn-secondary btn-sm" :disabled="busyConnectionId === selectedConnectionId" @click="handleVerifyConnection(selectedConnectionId)">
                   Verify Connection
@@ -204,6 +205,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useNotification } from '@/composables/useNotification'
+import { useSession } from '@/composables/useSession'
 import ProviderConnectionForm from '@/components/ProviderConnectionForm.vue'
 import ProviderScopePicker from '@/components/ProviderScopePicker.vue'
 import ReviewerIdentityPicker from '@/components/ReviewerIdentityPicker.vue'
@@ -245,6 +247,7 @@ const emit = defineEmits<{
 }>()
 
 const { notify } = useNotification()
+const { capabilities } = useSession()
 
 const connections = ref<ClientScmConnectionDto[]>([])
 const scopes = ref<ClientScmScopeDto[]>([])
@@ -324,6 +327,18 @@ const selectedConnection = computed(() =>
 )
 const providerOptions = computed(() => getEnabledProviderOptions(providerStatuses.value))
 const hasEnabledProviderOptions = computed(() => providerOptions.value.length > 0)
+const multipleProvidersCapability = computed(() =>
+  capabilities.value.find((capability) => capability.key === 'multiple-scm-providers') ?? null,
+)
+const providerLimitReached = computed(
+  () => multipleProvidersCapability.value?.isAvailable === false && connections.value.length > 0,
+)
+const multipleProviderUpgradeMessage = computed(() =>
+  providerLimitReached.value
+    ? multipleProvidersCapability.value?.message ?? 'Commercial edition is required to configure more than one SCM provider connection.'
+    : '',
+)
+const canCreateConnection = computed(() => hasEnabledProviderOptions.value && !providerLimitReached.value)
 
 const selectedReviewerCandidate = computed(() =>
   reviewerCandidates.value.find((candidate) => candidate.externalUserId === selectedReviewerExternalUserId.value) ?? null,

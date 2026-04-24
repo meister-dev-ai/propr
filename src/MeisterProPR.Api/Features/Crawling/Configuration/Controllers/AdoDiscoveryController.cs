@@ -2,7 +2,11 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -13,8 +17,11 @@ namespace MeisterProPR.Api.Controllers;
 [ApiController]
 public sealed partial class AdoDiscoveryController(
     IScmProviderRegistry providerRegistry,
-    ILogger<AdoDiscoveryController> logger) : ControllerBase
+    ILogger<AdoDiscoveryController> logger,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
+    private const string DiscoveryPurposeCrawl = "crawl";
+    private const string DiscoveryPurposeProCursor = "procursor";
     private const string DiscoveryNotFoundMessage = "The requested discovery resource was not found.";
     private const string DiscoveryRequestRejectedMessage = "The discovery request could not be completed.";
 
@@ -30,33 +37,66 @@ public sealed partial class AdoDiscoveryController(
         return this.BadRequest(new { error = DiscoveryRequestRejectedMessage });
     }
 
+    private async Task<IActionResult?> RequireDiscoveryCapabilityAsync(
+        string capabilityKey,
+        CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            capabilityKey,
+            ct);
+
+        return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
+    }
+
     /// <summary>
     ///     Lists projects available within one configured Azure DevOps organization scope.
     ///     Requires global admin or <c>ClientUser</c> access for the specified client.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="organizationScopeId">Organization-scope identifier.</param>
+    /// <param name="purpose">Optional discovery purpose. Use <c>crawl</c> or <c>procursor</c> to enforce premium capability checks.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Projects found.</response>
     /// <response code="400">The query is invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
+    /// <response code="409">The requested premium capability is unavailable.</response>
     [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/projects")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoProjectOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetProjects(
         Guid clientId,
         [FromQuery] Guid organizationScopeId,
+        [FromQuery] string? purpose = null,
         CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (string.Equals(purpose, DiscoveryPurposeCrawl, StringComparison.OrdinalIgnoreCase))
+        {
+            var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, ct);
+            if (capability is not null)
+            {
+                return capability;
+            }
+        }
+        else if (string.Equals(purpose, DiscoveryPurposeProCursor, StringComparison.OrdinalIgnoreCase))
+        {
+            var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
+            if (capability is not null)
+            {
+                return capability;
+            }
         }
 
         if (organizationScopeId == Guid.Empty)
@@ -95,12 +135,14 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
+    /// <response code="409">The requested premium capability is unavailable.</response>
     [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/sources")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoSourceOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetSources(
         Guid clientId,
         [FromQuery] Guid organizationScopeId,
@@ -112,6 +154,12 @@ public sealed partial class AdoDiscoveryController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (this.ValidateDiscoveryQuery(organizationScopeId, projectId) is IActionResult validation)
@@ -161,12 +209,14 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
+    /// <response code="409">The requested premium capability is unavailable.</response>
     [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/branches")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoBranchOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetBranches(
         Guid clientId,
         [FromQuery] Guid organizationScopeId,
@@ -180,6 +230,12 @@ public sealed partial class AdoDiscoveryController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (this.ValidateDiscoveryQuery(organizationScopeId, projectId) is IActionResult validation)
@@ -241,28 +297,41 @@ public sealed partial class AdoDiscoveryController(
     /// <param name="clientId">Client identifier.</param>
     /// <param name="organizationScopeId">Organization-scope identifier.</param>
     /// <param name="projectId">Azure DevOps project identifier.</param>
+    /// <param name="purpose">Optional discovery purpose. Use <c>crawl</c> to enforce crawl-configuration premium checks.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Crawl-filter options found.</response>
     /// <response code="400">The query is invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
+    /// <response code="409">The requested premium capability is unavailable.</response>
     [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/crawl-filters")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoCrawlFilterOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> GetCrawlFilters(
         Guid clientId,
         [FromQuery] Guid organizationScopeId,
         [FromQuery] string projectId,
+        [FromQuery] string? purpose = null,
         CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (string.Equals(purpose, DiscoveryPurposeCrawl, StringComparison.OrdinalIgnoreCase))
+        {
+            var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, ct);
+            if (capability is not null)
+            {
+                return capability;
+            }
         }
 
         if (this.ValidateDiscoveryQuery(organizationScopeId, projectId) is IActionResult validation)

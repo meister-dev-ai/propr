@@ -72,6 +72,22 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/licensing',
+      name: 'licensing',
+      component: () => import('@/views/LicensingView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/clients/:id/providers',
+      name: 'client-detail-providers',
+      redirect: (to) => ({
+        name: 'client-detail',
+        params: { id: to.params.id },
+        query: { ...to.query, tab: 'providers' },
+      }),
+      meta: { requiresAuth: true, requiresClientAdmin: true },
+    },
+    {
       path: '/pr-review',
       name: 'pr-review',
       component: () => import('@/views/PrReviewView.vue'),

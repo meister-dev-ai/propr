@@ -4,6 +4,8 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
@@ -194,6 +196,42 @@ public sealed class ProCursorGatewayTests
             .AddAsync(Arg.Any<ProCursorKnowledgeSource>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ListSourcesAsync_WhenCapabilityUnavailable_ThrowsInvalidOperationException()
+    {
+        var clientId = Guid.NewGuid();
+        var licensingService = CreateLicensingService(isAvailable: false, "ProCursor requires a premium license.");
+        var gateway = CreateGateway(
+            Substitute.For<IClientAdminService>(),
+            CreateProviderRegistry(Substitute.For<IProviderAdminDiscoveryService>()),
+            Substitute.For<IProCursorKnowledgeSourceRepository>(),
+            licensingCapabilityService: licensingService);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.ListSourcesAsync(clientId, CancellationToken.None));
+
+        Assert.Contains("premium", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AskKnowledgeAsync_WhenCapabilityUnavailable_ReturnsUnavailableResponse()
+    {
+        var clientId = Guid.NewGuid();
+        var licensingService = CreateLicensingService(isAvailable: false, "ProCursor requires a premium license.");
+        var gateway = CreateGateway(
+            Substitute.For<IClientAdminService>(),
+            CreateProviderRegistry(Substitute.For<IProviderAdminDiscoveryService>()),
+            Substitute.For<IProCursorKnowledgeSourceRepository>(),
+            licensingCapabilityService: licensingService);
+
+        var response = await gateway.AskKnowledgeAsync(
+            new ProCursorKnowledgeQueryRequest(clientId, "What changed?"),
+            CancellationToken.None);
+
+        Assert.Equal("unavailable", response.Status);
+        Assert.Equal("ProCursor requires a premium license.", response.NoResultReason);
+    }
+
     private static ProCursorKnowledgeSource CreateSource(Guid clientId, string displayName, string repositoryId)
     {
         return new ProCursorKnowledgeSource(
@@ -256,7 +294,8 @@ public sealed class ProCursorGatewayTests
     private static ProCursorGateway CreateGateway(
         IClientAdminService clientAdminService,
         IScmProviderRegistry providerRegistry,
-        IProCursorKnowledgeSourceRepository knowledgeSourceRepository)
+        IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
+        ILicensingCapabilityService? licensingCapabilityService = null)
     {
         return new ProCursorGateway(
             clientAdminService,
@@ -265,7 +304,23 @@ public sealed class ProCursorGatewayTests
             Substitute.For<IProCursorIndexSnapshotRepository>(),
             null!,
             null!,
-            NullLogger<ProCursorGateway>.Instance);
+            NullLogger<ProCursorGateway>.Instance,
+            licensingCapabilityService);
+    }
+
+    private static ILicensingCapabilityService CreateLicensingService(bool isAvailable, string? message = null)
+    {
+        var licensingService = Substitute.For<ILicensingCapabilityService>();
+        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new CapabilitySnapshot(
+                PremiumCapabilityKey.ProCursor,
+                PremiumCapabilityKey.ProCursor,
+                true,
+                true,
+                PremiumCapabilityOverrideState.Default,
+                isAvailable,
+                message)));
+        return licensingService;
     }
 
     private static ProCursorIndexSnapshot CreateReadySnapshot(Guid sourceId, Guid trackedBranchId, string commitSha)

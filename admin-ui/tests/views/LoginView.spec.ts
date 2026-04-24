@@ -11,8 +11,17 @@ vi.mock('vue-router', () => ({
 
 const mockSetTokens = vi.fn()
 const mockLoadClientRoles = vi.fn().mockResolvedValue(undefined)
+const mockGetAuthOptions = vi.fn().mockResolvedValue({
+  edition: 'community',
+  availableSignInMethods: ['password'],
+  capabilities: [],
+})
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({ setTokens: mockSetTokens, loadClientRoles: mockLoadClientRoles }),
+}))
+
+vi.mock('@/services/authOptionsService', () => ({
+  getAuthOptions: mockGetAuthOptions,
 }))
 
 async function importLoginView() {
@@ -23,6 +32,11 @@ async function importLoginView() {
 describe('LoginView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetAuthOptions.mockResolvedValue({
+      edition: 'community',
+      availableSignInMethods: ['password'],
+      capabilities: [],
+    })
   })
 
   it('renders username and password inputs and submit button', async () => {

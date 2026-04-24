@@ -3,6 +3,8 @@
 
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Workers;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +41,21 @@ public sealed class AdoPrCrawlerWorkerTests
             metrics,
             config,
             NullLogger<AdoPrCrawlerWorker>.Instance);
+    }
+
+    private static ILicensingCapabilityService CreateLicensingService(bool isAvailable)
+    {
+        var licensingService = Substitute.For<ILicensingCapabilityService>();
+        licensingService.GetCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new CapabilitySnapshot(
+                PremiumCapabilityKey.CrawlConfigs,
+                PremiumCapabilityKey.CrawlConfigs,
+                true,
+                true,
+                PremiumCapabilityOverrideState.Default,
+                isAvailable,
+                isAvailable ? null : "Crawl configs requires a premium license.")));
+        return licensingService;
     }
 
     [Fact]
@@ -159,5 +176,29 @@ public sealed class AdoPrCrawlerWorkerTests
         });
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenCapabilityUnavailable_SkipsCrawlService()
+    {
+        var fakePrCrawlService = Substitute.For<IPrCrawlService>();
+        var scope = Substitute.For<IServiceScope>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var licensingService = CreateLicensingService(isAvailable: false);
+        scope.ServiceProvider.Returns(serviceProvider);
+        serviceProvider.GetService(typeof(ILicensingCapabilityService)).Returns(licensingService);
+        serviceProvider.GetService(typeof(IPrCrawlService)).Returns(fakePrCrawlService);
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        var worker = BuildWorker(scopeFactory);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        await worker.StartAsync(CancellationToken.None);
+        await Task.Delay(30, CancellationToken.None);
+        await worker.StopAsync(CancellationToken.None);
+
+        await fakePrCrawlService.DidNotReceive().CrawlAsync(Arg.Any<CancellationToken>());
     }
 }

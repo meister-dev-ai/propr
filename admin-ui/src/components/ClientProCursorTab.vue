@@ -14,14 +14,20 @@
         </p>
       </div>
       <div class="section-card-header-actions">
-        <span v-if="!canManage" class="chip chip-muted">Read-only</span>
+        <span v-if="!isProCursorAvailable || !canManage" class="chip chip-muted">{{ !isProCursorAvailable ? 'Unavailable' : 'Read-only' }}</span>
         <button v-else class="btn-primary" @click="openCreateSourceModal">
           <i class="fi fi-rr-plus"></i> Add Source
         </button>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="!isProCursorAvailable" class="empty-state premium-unavailable-state">
+      <i class="fi fi-rr-lock empty-icon"></i>
+      <h3>ProCursor is unavailable</h3>
+      <p>{{ unavailableMessage }}</p>
+    </div>
+
+    <div v-else-if="loading" class="loading-state">
       <ProgressOrb class="state-orb" />
       <span>Loading ProCursor sources...</span>
     </div>
@@ -632,6 +638,7 @@ import {
   type ClientAdoOrganizationScopeDto,
 } from '@/services/adoDiscoveryService'
 import {
+  PremiumFeatureUnavailableError,
   createProCursorSource,
   createProCursorTrackedBranch,
   deleteProCursorTrackedBranch,
@@ -680,7 +687,7 @@ interface SourceUsageState {
 }
 
 const { notify } = useNotification()
-const { hasClientRole } = useSession()
+const { hasClientRole, getCapability } = useSession()
 
 const sources = ref<ProCursorKnowledgeSourceDto[]>([])
 const loading = ref(false)
@@ -695,6 +702,12 @@ const sourceDrilldownConcurrency = 3
 const isTokenUsageReportingEnabled = import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false'
 
 const canManage = computed(() => hasClientRole(props.clientId, 1))
+const proCursorCapability = computed(() => getCapability('procursor'))
+const isProCursorAvailable = computed(() => proCursorCapability.value?.isAvailable === true)
+const unavailableMessage = computed(() =>
+  proCursorCapability.value?.message
+    ?? 'Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting.',
+)
 
 const createSourceModal = reactive({
   open: false,
@@ -955,6 +968,13 @@ function setRefreshing(key: string, active: boolean) {
 }
 
 async function loadSources() {
+  if (!isProCursorAvailable.value) {
+    sources.value = []
+    error.value = ''
+    loading.value = false
+    return
+  }
+
   loading.value = true
   error.value = ''
 
@@ -979,6 +999,11 @@ async function loadSources() {
       void warmSourceDrilldowns(sourceIdsToWarm)
     }
   } catch (cause) {
+    if (cause instanceof PremiumFeatureUnavailableError) {
+      error.value = ''
+      return
+    }
+
     error.value = toErrorMessage(cause, 'Failed to load ProCursor sources.')
   } finally {
     loading.value = false
@@ -1166,7 +1191,7 @@ async function loadCreateSourceProjects(scopeId: string) {
   createSourceModal.projectError = ''
 
   try {
-    const projects = sortProjects(await listAdoProjects(props.clientId, scopeId))
+    const projects = sortProjects(await listAdoProjects(props.clientId, scopeId, 'procursor'))
     if (requestId !== createSourceProjectsRequestId || createSourceModal.organizationScopeId !== scopeId) {
       return
     }
@@ -1331,6 +1356,10 @@ function resetCreateSourceModal() {
 }
 
 function openCreateSourceModal() {
+  if (!isProCursorAvailable.value) {
+    return
+  }
+
   resetCreateSourceModal()
   createSourceModal.open = true
   void loadCreateSourceOrganizationScopes()
@@ -2070,6 +2099,10 @@ function formatDate(value?: string | null): string {
   padding: 4rem 2rem;
   text-align: center;
   gap: 0.75rem;
+}
+
+.premium-unavailable-state {
+  padding-block: 3rem;
 }
 
 .inline-state,

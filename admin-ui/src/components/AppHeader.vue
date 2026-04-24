@@ -8,25 +8,29 @@
       <div>
         <span class="app-title">ProPR</span>
         <span class="app-subtitle">Admin Console</span>
+        <span :class="['app-edition-badge', edition === 'commercial' ? 'app-edition-badge-commercial' : 'app-edition-badge-community']">
+          {{ edition === 'commercial' ? 'Commercial' : 'Community' }}
+        </span>
       </div>
     </a>
     <nav class="app-nav">
-      <RouterLink v-if="isClientAdmin" to="/clients" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
-      <RouterLink to="/reviews" class="nav-link" :class="{ 'router-link-active': $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
+      <RouterLink v-if="isClientAdmin" :to="{ name: 'clients' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
+      <RouterLink :to="{ name: 'reviews' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
       <div v-if="isAdmin" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
-          <RouterLink to="/provider-settings" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
-          <RouterLink to="/users" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
-          <RouterLink to="/thread-memory" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
+          <RouterLink :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
+          <RouterLink :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
+          <RouterLink :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
+          <RouterLink :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
         </div>
       </div>
     </nav>
     <div class="header-actions">
-      <RouterLink to="/settings" class="nav-link nav-link-button" :class="{ 'router-link-active': $route.name === 'settings' }">
+      <RouterLink :to="{ name: 'settings' }" class="nav-link nav-link-button" :class="{ 'router-link-active': $route.name === 'settings' }">
         <i class="fi fi-rr-settings"></i>
         <span>Settings</span>
       </RouterLink>
@@ -45,7 +49,7 @@ import { useSession } from '@/composables/useSession'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { clearTokens, isAdmin, clientRoles } = useSession()
+const { clearTokens, isAdmin, clientRoles, edition } = useSession()
 
 /** True for global admins or users with at least one ClientAdministrator role. */
 const isClientAdmin = computed(
@@ -56,7 +60,7 @@ const adminDropdownOpen = ref(false)
 
 function logout() {
   clearTokens()
-  router.push('/login')
+  router.push({ name: 'login' })
 }
 </script>
 
@@ -162,6 +166,27 @@ function logout() {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 700;
+}
+
+.app-edition-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.app-edition-badge-community {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--color-text-muted);
+}
+
+.app-edition-badge-commercial {
+  background: rgba(34, 197, 94, 0.16);
+  color: var(--color-success);
 }
 
 /* Dropdown */

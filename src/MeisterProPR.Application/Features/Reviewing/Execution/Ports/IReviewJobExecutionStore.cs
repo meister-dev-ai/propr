@@ -33,6 +33,9 @@ public interface IReviewJobExecutionStore
     /// <returns>A read-only list of stuck processing review jobs.</returns>
     Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default);
 
+    /// <summary>Returns the number of review jobs currently in the Processing state.</summary>
+    Task<int> CountProcessingJobsAsync(CancellationToken ct = default);
+
     /// <summary>
     ///     Attempts to transition a review job from one status to another.
     /// </summary>

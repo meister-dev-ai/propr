@@ -4,7 +4,7 @@
 <template>
     <div class="page-view">
         <div class="header-stack">
-            <RouterLink class="back-link" to="/reviews">← Back to reviews</RouterLink>
+            <RouterLink class="back-link" :to="{ name: 'reviews' }">← Back to reviews</RouterLink>
             <h2>PR Review View</h2>
         </div>
 

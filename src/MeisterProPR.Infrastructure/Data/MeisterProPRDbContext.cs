@@ -103,6 +103,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Installation-wide provider-family activation policy.</summary>
     public DbSet<ProviderActivationRecord> ProviderActivations => this.Set<ProviderActivationRecord>();
 
+    /// <summary>Singleton installation edition row for Community or Commercial operation.</summary>
+    public DbSet<InstallationEditionRecord> InstallationEditions => this.Set<InstallationEditionRecord>();
+
+    /// <summary>Installation-wide override rows for premium capability state.</summary>
+    public DbSet<PremiumCapabilityOverrideRecord> PremiumCapabilityOverrides => this.Set<PremiumCapabilityOverrideRecord>();
+
     /// <summary>Explicit ProCursor source associations for crawl configurations.</summary>
     public DbSet<CrawlConfigurationProCursorSourceRecord> CrawlConfigurationProCursorSources =>
         this.Set<CrawlConfigurationProCursorSourceRecord>();

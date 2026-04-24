@@ -4,6 +4,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Application.Features.Licensing.Dtos;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +19,8 @@ public sealed class AuthController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
     IPasswordHashService passwordHashService,
-    IJwtTokenService jwtTokenService) : ControllerBase
+    IJwtTokenService jwtTokenService,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
     [HttpPost("/auth/login")]
@@ -94,26 +98,42 @@ public sealed class AuthController(
 
     /// <summary>Returns the current user's global role and per-client roles. Requires authentication.</summary>
     [HttpGet("/auth/me")]
-    public IActionResult GetMe()
+    [ProducesResponseType(typeof(AuthenticatedSessionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthenticatedSessionDto>> GetMe(CancellationToken ct = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
-        if (auth is not null)
+        if (auth is ObjectResult objectResult)
         {
-            return auth;
+            return this.StatusCode(
+                objectResult.StatusCode ?? StatusCodes.Status401Unauthorized,
+                objectResult.Value);
+        }
+
+        if (auth is StatusCodeResult statusCodeResult)
+        {
+            return this.StatusCode(statusCodeResult.StatusCode);
         }
 
         var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
         var clientRoles = AuthHelpers.GetClientRoles(this.HttpContext);
         var globalRole = isAdmin ? "Admin" : "User";
+        var licensingSummary = licensingCapabilityService is null
+            ? CreateCommunityFallbackSummary()
+            : await licensingCapabilityService.GetSummaryAsync(ct);
 
-        return this.Ok(
-            new
-            {
-                globalRole,
-                clientRoles = clientRoles.ToDictionary(
-                    kvp => kvp.Key.ToString(),
-                    kvp => (int)kvp.Value),
-            });
+        return new AuthenticatedSessionDto(
+            globalRole,
+            clientRoles.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => (int)kvp.Value),
+            licensingSummary.Edition,
+            licensingSummary.Capabilities);
+    }
+
+    private static LicensingSummaryDto CreateCommunityFallbackSummary()
+    {
+        return new LicensingSummaryDto(InstallationEdition.Community, null, []);
     }
 
     private static string ComputeSha256(string input)

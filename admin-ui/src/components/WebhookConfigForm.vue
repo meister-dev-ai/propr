@@ -539,7 +539,7 @@ async function loadProjects(reset = true) {
 
   projectsLoading.value = true
   try {
-    projects.value = await listAdoProjects(effectiveClientId.value, organizationScopeId.value)
+    projects.value = await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'webhook')
     if (reset) {
       projectId.value = ''
       repoFilters.value = []
@@ -559,7 +559,7 @@ async function loadFilterOptions(reset = true) {
   crawlFilterOptionsLoading.value = true
   crawlFilterOptionsError.value = ''
   try {
-    crawlFilterOptions.value = await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value)
+    crawlFilterOptions.value = await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'webhook')
     if (reset) {
       repoFilters.value = []
     } else {

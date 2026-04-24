@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -12,7 +15,8 @@ public sealed partial class SubmitReviewJobHandler(
     IReviewJobIntakeStore intakeStore,
     IReviewExecutionQueue executionQueue,
     ILogger<SubmitReviewJobHandler> logger,
-    IPullRequestFetcher? pullRequestFetcher = null)
+    IPullRequestFetcher? pullRequestFetcher = null,
+    ILicensingCapabilityService? licensingCapabilityService = null)
 {
     /// <summary>Creates a new review job unless an active job already exists for the requested PR iteration.</summary>
     public async Task<SubmitReviewJobResult> HandleAsync(
@@ -29,6 +33,22 @@ public sealed partial class SubmitReviewJobHandler(
         if (existing is not null)
         {
             return new SubmitReviewJobResult(existing.Id, existing.Status, true);
+        }
+
+        if (licensingCapabilityService is not null)
+        {
+            var parallelExecutionCapability = await licensingCapabilityService.GetCapabilityAsync(
+                PremiumCapabilityKey.ParallelReviewExecution,
+                cancellationToken);
+
+            if (!parallelExecutionCapability.IsAvailable)
+            {
+                var activeJobCount = await intakeStore.CountActiveJobsAsync(cancellationToken);
+                if (activeJobCount > 0)
+                {
+                    throw new PremiumFeatureUnavailableException(parallelExecutionCapability);
+                }
+            }
         }
 
         var job = await intakeStore.CreatePendingJobAsync(command.ClientId, request, cancellationToken);

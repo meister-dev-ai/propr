@@ -8,7 +8,7 @@
             <div id="provider-sidebar-target"></div>
 
             <div v-show="!isProviderDetailOpen && !isWebhookDetailOpen" class="default-sidebar-content">
-                <RouterLink class="back-link" to="/clients" style="margin-bottom: 0;">
+                <RouterLink class="back-link" :to="{ name: 'clients' }" style="margin-bottom: 0;">
                 <i class="fi fi-rr-arrow-left"></i> Back to clients
             </RouterLink>
 
@@ -23,7 +23,12 @@
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'config' }" @click="activeTab = 'config'">
                         <i class="fi fi-rr-settings"></i> System
                     </button>
-                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'crawl-configs' }" @click="activeTab = 'crawl-configs'">
+                    <button
+                        v-if="isCrawlConfigsAvailable"
+                        class="sidebar-nav-link"
+                        :class="{ 'active': activeTab === 'crawl-configs' }"
+                        @click="activeTab = 'crawl-configs'"
+                    >
                         <i class="fi fi-rr-spider"></i> Crawl Configs
                     </button>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'webhooks' }" @click="activeTab = 'webhooks'">
@@ -32,7 +37,12 @@
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'providers' }" @click="activeTab = 'providers'">
                         <i class="fi fi-rr-plug-connection"></i> SCM Providers
                     </button>
-                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'procursor' }" @click="activeTab = 'procursor'">
+                    <button
+                        v-if="isProCursorAvailable"
+                        class="sidebar-nav-link"
+                        :class="{ 'active': activeTab === 'procursor' }"
+                        @click="activeTab = 'procursor'"
+                    >
                         <i class="fi fi-rr-books"></i> ProCursor
                     </button>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'ai' }" @click="activeTab = 'ai'">
@@ -53,7 +63,7 @@
                     </button>
                 </div>
 
-                <div v-if="isProCursorTokenUsageReportingEnabled" class="sidebar-nav-group">
+                <div v-if="isUsageTabAvailable" class="sidebar-nav-group">
                     <h4>Analytics</h4>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'usage' }" @click="activeTab = 'usage'">
                         <i class="fi fi-rr-chart-histogram"></i> Tokens & Usage
@@ -108,7 +118,7 @@
                         <h3>Overview</h3>
                     </div>
                     <div class="section-card-body section-card-body--compact">
-                        <ClientOverview :client-id="clientId" @navigate="tab => activeTab = tab as typeof activeTab.value" />
+                        <ClientOverview :client-id="clientId" @navigate="handleOverviewNavigate" />
                     </div>
                 </div>
 
@@ -142,6 +152,11 @@
             </div>
 
             <div v-show="activeTab === 'providers'" class="provider-operations-tab">
+                <div v-if="providerUpgradeMessage" class="section-card provider-upgrade-note">
+                    <div class="section-card-body">
+                        <p class="muted">{{ providerUpgradeMessage }}</p>
+                    </div>
+                </div>
                 <ClientProviderConnectionsTab
                     :clientId="client.id"
                     @update:isDetailOpen="isProviderDetailOpen = $event"
@@ -153,8 +168,17 @@
             </div>
 
             <!-- Tab: Usage -->
-            <div v-if="isProCursorTokenUsageReportingEnabled" v-show="activeTab === 'usage'">
+            <div v-if="isUsageTabAvailable" v-show="activeTab === 'usage'">
                 <UsageDashboard :clientId="client.id" />
+            </div>
+
+            <div v-else-if="activeTab === 'usage'" class="section-card premium-unavailable-card">
+                <div class="section-card-header">
+                    <h3>Tokens & Usage</h3>
+                </div>
+                <div class="section-card-body">
+                    <p class="premium-unavailable-copy">{{ usageUnavailableMessage }}</p>
+                </div>
             </div>
 
             <!-- Tab: Review History -->
@@ -315,7 +339,7 @@
 </template>
 
 <script lang="ts" setup>
-import {onMounted, ref, reactive, computed} from 'vue'
+import {onMounted, ref, reactive, computed, watch} from 'vue'
 import {RouterLink, useRoute, useRouter} from 'vue-router'
 import ClientCrawlConfigsTab from '@/components/ClientCrawlConfigsTab.vue'
 import ClientWebhookConfigsTab from '@/components/ClientWebhookConfigsTab.vue'
@@ -333,7 +357,11 @@ import {
 } from '@/services/findingDismissalsService'
 import { listOverrides, createOverride, deleteOverride } from '@/services/promptOverridesService'
 import type { components } from '@/types'
+import { useSession } from '@/composables/useSession'
 type PromptOverrideDto = components['schemas']['PromptOverrideDto']
+
+const detailTabs = ['config', 'crawl-configs', 'webhooks', 'providers', 'procursor', 'ai', 'history', 'dismissals', 'prompt-overrides', 'usage'] as const
+type DetailTab = typeof detailTabs[number]
 
 interface Client {
     id: string
@@ -344,6 +372,7 @@ interface Client {
 
 const router = useRouter()
 const route = useRoute()
+const { getCapability } = useSession()
 const clientId = route.params.id as string
 const isProviderDetailOpen = ref(false)
 const isWebhookDetailOpen = ref(false)
@@ -355,8 +384,22 @@ const saving = ref(false)
 const saveError = ref('')
 const showDeleteDialog = ref(false)
 const editedDisplayName = ref('')
-const activeTab = ref<'config' | 'crawl-configs' | 'webhooks' | 'providers' | 'procursor' | 'ai' | 'history' | 'dismissals' | 'prompt-overrides' | 'usage'>('config')
+const activeTab = ref<DetailTab>('config')
 const isProCursorTokenUsageReportingEnabled = import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false'
+const providerUpgradeMessage = computed(() => getCapability('multiple-scm-providers')?.message ?? '')
+const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
+const proCursorCapability = computed(() => getCapability('procursor'))
+const isCrawlConfigsAvailable = computed(() => crawlConfigsCapability.value?.isAvailable === true)
+const isProCursorAvailable = computed(() => proCursorCapability.value?.isAvailable === true)
+const isUsageTabAvailable = computed(() => isProCursorTokenUsageReportingEnabled && isProCursorAvailable.value)
+const usageUnavailableMessage = computed(() => {
+    if (!isProCursorTokenUsageReportingEnabled) {
+        return 'ProCursor usage reporting is disabled in this environment.'
+    }
+
+    return proCursorCapability.value?.message
+        ?? 'Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting.'
+})
 
 // Text Viewer Modal
 const isTextViewerOpen = ref(false)
@@ -390,6 +433,7 @@ const clientScopedOverrides = computed(() =>
 )
 
 onMounted(async () => {
+    syncActiveTabFromRoute()
     loading.value = true
     try {
         const {data, response} = await createAdminClient().GET('/clients/{clientId}', {
@@ -409,6 +453,56 @@ onMounted(async () => {
         loading.value = false
     }
 })
+
+watch(() => route.query?.tab, () => {
+    syncActiveTabFromRoute()
+})
+
+watch(activeTab, (tab) => {
+    const nextTab = tab === 'config' ? undefined : tab
+    const currentTab = typeof route.query?.tab === 'string' ? route.query.tab : undefined
+
+    if (currentTab === nextTab) {
+        return
+    }
+
+    const nextQuery = { ...(route.query ?? {}) }
+    if (nextTab) {
+        nextQuery.tab = nextTab
+    } else {
+        delete nextQuery.tab
+    }
+
+    if (typeof router.replace === 'function') {
+        router.replace({ query: nextQuery })
+        return
+    }
+
+    router.push({ query: nextQuery })
+})
+
+function syncActiveTabFromRoute() {
+    const requestedTab = typeof route.query?.tab === 'string' ? route.query.tab : null
+    if (requestedTab && isDetailTab(requestedTab)) {
+        activeTab.value = requestedTab
+    }
+}
+
+function handleOverviewNavigate(tab: string) {
+    if (!isDetailTab(tab)) {
+        return
+    }
+
+    if (tab === 'usage' && !isUsageTabAvailable.value) {
+        return
+    }
+
+    activeTab.value = tab
+}
+
+function isDetailTab(value: string): value is DetailTab {
+    return (detailTabs as readonly string[]).includes(value)
+}
 
 async function saveDisplayName() {
     if (!client.value) return
@@ -952,6 +1046,15 @@ async function handleDeleteOverride(id: string) {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+}
+
+.premium-unavailable-card .section-card-body {
+    padding-top: 0.5rem;
+}
+
+.premium-unavailable-copy {
+    margin: 0;
+    color: var(--color-text-muted);
 }
 
 .provider-operations-stack {

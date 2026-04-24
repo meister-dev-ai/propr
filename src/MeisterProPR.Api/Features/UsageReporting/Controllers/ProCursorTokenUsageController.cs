@@ -4,7 +4,11 @@
 using System.Globalization;
 using System.Text;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -17,9 +21,20 @@ namespace MeisterProPR.Api.Controllers;
 [ApiController]
 public sealed class ProCursorTokenUsageController(
     IProCursorTokenUsageReadRepository readRepository,
-    IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
+    IProCursorTokenUsageRebuildService rebuildService,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const int MaxTopSourcesLimit = 1000;
+
+    private async Task<IActionResult?> RequireProCursorCapabilityAsync(CancellationToken ct)
+    {
+        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+            licensingCapabilityService,
+            PremiumCapabilityKey.ProCursor,
+            ct);
+
+        return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
+    }
 
     /// <summary>
     ///     Returns aggregated ProCursor token usage for a client-wide reporting interval.
@@ -51,6 +66,12 @@ public sealed class ProCursorTokenUsageController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (!TryParseRange(from, to, out var startDate, out var endDate, out var rangeError))
@@ -111,6 +132,12 @@ public sealed class ProCursorTokenUsageController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         if (!TryParsePeriod(period, out var from, out var to))
         {
             this.ModelState.AddModelError(nameof(period), "period must use the format '<days>d', for example '30d'.");
@@ -169,6 +196,12 @@ public sealed class ProCursorTokenUsageController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         if (!TryResolveRange(period, from, to, out var startDate, out var endDate, out var rangeError))
         {
             this.ModelState.AddModelError(nameof(period), rangeError);
@@ -221,6 +254,12 @@ public sealed class ProCursorTokenUsageController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         if (limit <= 0)
         {
             this.ModelState.AddModelError(nameof(limit), "limit must be greater than zero.");
@@ -262,6 +301,12 @@ public sealed class ProCursorTokenUsageController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         if (!TryParseRange(from, to, out var startDate, out var endDate, out var rangeError))
         {
             this.ModelState.AddModelError("from", rangeError);
@@ -296,6 +341,12 @@ public sealed class ProCursorTokenUsageController(
             return auth;
         }
 
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
+        }
+
         return this.Ok(await readRepository.GetFreshnessAsync(clientId, ct));
     }
 
@@ -323,6 +374,12 @@ public sealed class ProCursorTokenUsageController(
         if (auth is not null)
         {
             return auth;
+        }
+
+        var capability = await this.RequireProCursorCapabilityAsync(ct);
+        if (capability is not null)
+        {
+            return capability;
         }
 
         if (request.To < request.From)
