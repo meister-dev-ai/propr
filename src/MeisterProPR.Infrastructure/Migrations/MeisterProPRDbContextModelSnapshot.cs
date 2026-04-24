@@ -535,8 +535,7 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.Property<string>("SourcePath")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("source_path");
 
                     b.Property<string>("Title")
@@ -673,14 +672,12 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.Property<string>("FilePath")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("file_path");
 
                     b.Property<string>("FromSymbolKey")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("from_symbol_key");
 
                     b.Property<int?>("LineEnd")
@@ -697,8 +694,7 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.Property<string>("ToSymbolKey")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("to_symbol_key");
 
                     b.HasKey("Id");
@@ -719,8 +715,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ContainingSymbolKey")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("containing_symbol_key");
 
                     b.Property<string>("DisplayName")
@@ -731,8 +726,7 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.Property<string>("FilePath")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("file_path");
 
                     b.Property<string>("Language")
@@ -765,8 +759,7 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.Property<string>("SymbolKey")
                         .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("text")
                         .HasColumnName("symbol_key");
 
                     b.Property<string>("SymbolKind")

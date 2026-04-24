@@ -22,7 +22,7 @@ internal sealed class ProCursorKnowledgeChunkEntityTypeConfiguration : IEntityTy
 
         builder.Property(chunk => chunk.SourcePath)
             .HasColumnName("source_path")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(chunk => chunk.ChunkKind)

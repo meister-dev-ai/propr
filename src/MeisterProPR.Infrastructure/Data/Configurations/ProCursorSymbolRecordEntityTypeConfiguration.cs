@@ -27,7 +27,7 @@ internal sealed class ProCursorSymbolRecordEntityTypeConfiguration : IEntityType
 
         builder.Property(symbol => symbol.SymbolKey)
             .HasColumnName("symbol_key")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(symbol => symbol.DisplayName)
@@ -42,12 +42,12 @@ internal sealed class ProCursorSymbolRecordEntityTypeConfiguration : IEntityType
 
         builder.Property(symbol => symbol.ContainingSymbolKey)
             .HasColumnName("containing_symbol_key")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired(false);
 
         builder.Property(symbol => symbol.FilePath)
             .HasColumnName("file_path")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(symbol => symbol.LineStart)

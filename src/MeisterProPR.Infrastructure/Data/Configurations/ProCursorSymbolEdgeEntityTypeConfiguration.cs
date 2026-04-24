@@ -22,12 +22,12 @@ internal sealed class ProCursorSymbolEdgeEntityTypeConfiguration : IEntityTypeCo
 
         builder.Property(edge => edge.FromSymbolKey)
             .HasColumnName("from_symbol_key")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(edge => edge.ToSymbolKey)
             .HasColumnName("to_symbol_key")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(edge => edge.EdgeKind)
@@ -37,7 +37,7 @@ internal sealed class ProCursorSymbolEdgeEntityTypeConfiguration : IEntityTypeCo
 
         builder.Property(edge => edge.FilePath)
             .HasColumnName("file_path")
-            .HasMaxLength(1024)
+            .HasColumnType("text")
             .IsRequired();
 
         builder.Property(edge => edge.LineStart)
