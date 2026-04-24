@@ -163,7 +163,6 @@ public sealed class ModuleRegistrationTests
             services,
             descriptor => string.Equals(descriptor.ServiceType.Name, "IAdoTokenValidator", StringComparison.Ordinal));
         Assert.NotNull(FindService<IAiChatClientFactory>(services));
-        Assert.NotNull(FindService<IAiEmbeddingGeneratorFactory>(services));
         Assert.Null(FindService<IJobRepository>(services));
         Assert.Null(FindService<ICrawlConfigurationRepository>(services));
         Assert.Null(FindService<IWebhookConfigurationRepository>(services));

@@ -13,6 +13,7 @@ using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -21,6 +22,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -599,7 +601,6 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
 
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<IAiRuntimeResolver>();
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
                 services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
@@ -668,6 +669,69 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddSingleton(Substitute.For<IJobRepository>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
+                var embeddingModelId = Guid.NewGuid();
+                var embeddingModel = new AiConfiguredModelDto(
+                    embeddingModelId,
+                    "text-embedding-3-small",
+                    "text-embedding-3-small",
+                    [AiOperationKind.Embedding],
+                    [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                    "cl100k_base",
+                    8192,
+                    1536,
+                    false,
+                    false,
+                    AiConfiguredModelSource.Manual);
+                var embeddingBinding = new AiPurposeBindingDto(
+                    Guid.NewGuid(),
+                    AiPurpose.EmbeddingDefault,
+                    embeddingModelId,
+                    embeddingModel.RemoteModelId,
+                    AiProtocolMode.Embeddings,
+                    true);
+                var embeddingConnection = new AiConnectionDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    "Embedding Connection",
+                    AiProviderKind.AzureOpenAi,
+                    "https://embeddings.openai.azure.com/",
+                    AiAuthMode.AzureIdentity,
+                    AiDiscoveryMode.ManualOnly,
+                    false,
+                    [embeddingModel],
+                    [embeddingBinding],
+                    AiVerificationResultDto.NeverVerified,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow);
+                var embeddingGenerator = Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>();
+                embeddingGenerator.GenerateAsync(
+                        Arg.Any<IEnumerable<string>>(),
+                        Arg.Any<EmbeddingGenerationOptions?>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(callInfo =>
+                    {
+                        var inputs = ((IEnumerable<string>)callInfo[0]).ToList();
+                        return new GeneratedEmbeddings<Embedding<float>>(
+                            inputs.Select(_ => new Embedding<float>(new float[embeddingModel.EmbeddingDimensions!.Value])).ToList());
+                    });
+
+                var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+                aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
+                        Arg.Any<Guid>(),
+                        AiPurpose.EmbeddingDefault,
+                        Arg.Any<int?>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(_ =>
+                        new ResolvedAiEmbeddingRuntime(
+                            embeddingConnection,
+                            embeddingModel,
+                            embeddingBinding,
+                            embeddingGenerator,
+                            embeddingModel.TokenizerName!,
+                            embeddingModel.EmbeddingDimensions!.Value));
+                services.RemoveAll<IAiRuntimeResolver>();
+                services.AddSingleton(aiRuntimeResolver);
+
                 var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
                 aiConnectionRepository.GetByClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<AiConnectionDto>>([]));
@@ -675,43 +739,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                         clientId,
                         AiConnectionModelCategory.Embedding,
                         Arg.Any<CancellationToken>())
-                    .Returns(
-                        Task.FromResult<AiConnectionDto?>(
-                            new AiConnectionDto(
-                                Guid.NewGuid(),
-                                clientId,
-                                "Embedding Connection",
-                                AiProviderKind.AzureOpenAi,
-                                "https://embeddings.openai.azure.com/",
-                                AiAuthMode.AzureIdentity,
-                                AiDiscoveryMode.ManualOnly,
-                                false,
-                                [
-                                    new AiConfiguredModelDto(
-                                        Guid.NewGuid(),
-                                        "text-embedding-3-small",
-                                        "text-embedding-3-small",
-                                        [AiOperationKind.Embedding],
-                                        [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
-                                        "cl100k_base",
-                                        8192,
-                                        1536,
-                                        false,
-                                        false,
-                                        AiConfiguredModelSource.Manual),
-                                ],
-                                [
-                                    new AiPurposeBindingDto(
-                                        Guid.NewGuid(),
-                                        AiPurpose.EmbeddingDefault,
-                                        null,
-                                        "text-embedding-3-small",
-                                        AiProtocolMode.Embeddings,
-                                        true),
-                                ],
-                                AiVerificationResultDto.NeverVerified,
-                                DateTimeOffset.UtcNow,
-                                DateTimeOffset.UtcNow)));
+                    .Returns(Task.FromResult<AiConnectionDto?>(embeddingConnection));
                 aiConnectionRepository.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AiConnectionDto?>(null));
                 services.AddSingleton(aiConnectionRepository);

@@ -13,20 +13,14 @@ namespace MeisterProPR.Infrastructure.AI;
 
 /// <summary>
 ///     Infrastructure implementation of <see cref="IThreadMemoryEmbedder" />.
-///     Resolves the embedding connection per-client via <see cref="IAiConnectionRepository" />
-///     and creates a transient <see cref="IEmbeddingGenerator{TInput,TEmbedding}" /> via
-///     <see cref="IAiEmbeddingGeneratorFactory" /> for each operation.
-///     Uses <see cref="IChatClient" /> for resolution summary generation.
+///     Resolves provider-neutral chat and embedding runtimes via <see cref="IAiRuntimeResolver" />.
+///     Supports an optional <see cref="IChatClient" /> override for summary-generation tests.
 /// </summary>
 public sealed partial class ThreadMemoryEmbedder(
-    IAiConnectionRepository aiConnectionRepository,
-    IAiEmbeddingGeneratorFactory embeddingGeneratorFactory,
-    EmbeddingDeploymentResolver embeddingDeploymentResolver,
     IOptions<AiReviewOptions> options,
+    IAiRuntimeResolver aiRuntimeResolver,
     IChatClient? chatClient = null,
-    IAiChatClientFactory? aiChatClientFactory = null,
-    ILogger<ThreadMemoryEmbedder>? logger = null,
-    IAiRuntimeResolver? aiRuntimeResolver = null) : IThreadMemoryEmbedder
+    ILogger<ThreadMemoryEmbedder>? logger = null) : IThreadMemoryEmbedder
 {
     private const string FallbackSummary =
         "Thread was resolved. No AI-generated summary could be produced at this time.";
@@ -37,28 +31,23 @@ public sealed partial class ThreadMemoryEmbedder(
         Guid clientId,
         CancellationToken ct = default)
     {
-        var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
+        var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
             clientId,
+            AiPurpose.EmbeddingDefault,
             options.Value.MemoryEmbeddingDimensions,
-            false,
             ct);
 
+        var maxInputTokens = runtime.Model.MaxInputTokens ?? 8192;
         var tokenCount = EmbeddingTokenizerRegistry.CountTokens(
-            deployment.Capability.TokenizerName,
+            runtime.TokenizerName,
             compositeText);
-        if (tokenCount > deployment.Capability.MaxInputTokens)
+        if (tokenCount > maxInputTokens)
         {
             throw new InvalidOperationException(
-                $"Embedding input exceeds the configured limit of {deployment.Capability.MaxInputTokens} tokens for deployment '{deployment.DeploymentName}'.");
+                $"Embedding input exceeds the configured limit of {maxInputTokens} tokens for deployment '{runtime.Model.RemoteModelId}'.");
         }
 
-        var generator = embeddingGeneratorFactory.CreateGenerator(
-            deployment.Connection.BaseUrl,
-            deployment.DeploymentName,
-            deployment.Connection.Secret,
-            deployment.Capability.EmbeddingDimensions);
-
-        var result = await generator.GenerateAsync([compositeText], cancellationToken: ct);
+        var result = await runtime.Generator.GenerateAsync([compositeText], cancellationToken: ct);
         return result[0].Vector.ToArray();
     }
 
@@ -75,35 +64,12 @@ public sealed partial class ThreadMemoryEmbedder(
 
         if (effectiveChatClient is null)
         {
-            if (aiRuntimeResolver is not null)
-            {
-                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
-                    clientId,
-                    AiPurpose.MemoryReconsideration,
-                    ct);
-                modelId = runtime.Model.RemoteModelId;
-                effectiveChatClient = runtime.ChatClient;
-            }
-            else if (aiChatClientFactory is null)
-            {
-                return FallbackSummary;
-            }
-
-            if (effectiveChatClient is null)
-            {
-                var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
-                if (activeConnection is null)
-                {
-                    return FallbackSummary;
-                }
-
-                modelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration)
-                          ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
-                          ?? modelId;
-                effectiveChatClient = aiChatClientFactory!.CreateClient(
-                    activeConnection.BaseUrl,
-                    activeConnection.Secret);
-            }
+            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+                clientId,
+                AiPurpose.MemoryReconsideration,
+                ct);
+            modelId = runtime.Model.RemoteModelId;
+            effectiveChatClient = runtime.ChatClient;
         }
 
         try

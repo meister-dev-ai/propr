@@ -25,28 +25,21 @@ public sealed class ThreadMemoryEmbedderTests
     }
 
     private static ThreadMemoryEmbedder BuildEmbedder(
-        IAiConnectionRepository? aiConnRepo = null,
-        IAiEmbeddingGeneratorFactory? factory = null,
-        IChatClient? chatClient = null)
+        IChatClient? chatClient = null,
+        IAiRuntimeResolver? aiRuntimeResolver = null)
     {
-        var repository = aiConnRepo ?? Substitute.For<IAiConnectionRepository>();
         var opts = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions());
         return new ThreadMemoryEmbedder(
-            repository,
-            factory ?? Substitute.For<IAiEmbeddingGeneratorFactory>(),
-            new EmbeddingDeploymentResolver(repository),
             opts,
-            chatClient ?? Substitute.For<IChatClient>());
+            aiRuntimeResolver ?? Substitute.For<IAiRuntimeResolver>(),
+            chatClient ?? Substitute.For<IChatClient>(),
+            null);
     }
 
     [Fact]
     public async Task GenerateEmbeddingAsync_NormalCase_ReturnsFloatArrayFromGenerator()
     {
         var expectedFloats = new[] { 0.1f, 0.2f, 0.3f };
-
-        var aiConnRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnRepo.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(ValidEmbeddingConnection());
 
         var generator = Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>();
         var embedding = new Embedding<float>(expectedFloats);
@@ -56,11 +49,26 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .Returns(new GeneratedEmbeddings<Embedding<float>>([embedding]));
 
-        var factory = Substitute.For<IAiEmbeddingGeneratorFactory>();
-        factory.CreateGenerator(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<int>())
-            .Returns(generator);
+        var runtimeResolver = Substitute.For<IAiRuntimeResolver>();
+        var runtime = Substitute.For<IResolvedAiEmbeddingRuntime>();
+        var connection = ValidEmbeddingConnection();
+        var binding = connection.PurposeBindings.Single(candidate => candidate.Purpose == AiPurpose.EmbeddingDefault);
+        var model = connection.ConfiguredModels.Single(candidate => candidate.Id == binding.ConfiguredModelId);
 
-        var embedder = BuildEmbedder(aiConnRepo, factory);
+        runtime.Connection.Returns(connection);
+        runtime.Binding.Returns(binding);
+        runtime.Model.Returns(model);
+        runtime.Generator.Returns(generator);
+        runtime.TokenizerName.Returns(model.TokenizerName!);
+        runtime.Dimensions.Returns(model.EmbeddingDimensions!.Value);
+        runtimeResolver.ResolveEmbeddingRuntimeAsync(
+                ClientId,
+                AiPurpose.EmbeddingDefault,
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(runtime);
+
+        var embedder = BuildEmbedder(aiRuntimeResolver: runtimeResolver);
 
         var result = await embedder.GenerateEmbeddingAsync("some text", ClientId);
 
@@ -70,11 +78,15 @@ public sealed class ThreadMemoryEmbedderTests
     [Fact]
     public async Task GenerateEmbeddingAsync_NoEmbeddingConnection_ThrowsInvalidOperation()
     {
-        var aiConnRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnRepo.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns((AiConnectionDto?)null);
+        var runtimeResolver = Substitute.For<IAiRuntimeResolver>();
+        runtimeResolver.ResolveEmbeddingRuntimeAsync(
+                ClientId,
+                AiPurpose.EmbeddingDefault,
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("No active AI binding is configured for purpose 'EmbeddingDefault'."));
 
-        var embedder = BuildEmbedder(aiConnRepo);
+        var embedder = BuildEmbedder(aiRuntimeResolver: runtimeResolver);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             embedder.GenerateEmbeddingAsync("some text", ClientId));
@@ -83,19 +95,56 @@ public sealed class ThreadMemoryEmbedderTests
     [Fact]
     public async Task GenerateEmbeddingAsync_MissingEmbeddingBinding_ThrowsWithoutConfiguredModelFallback()
     {
-        var aiConnRepo = Substitute.For<IAiConnectionRepository>();
-        aiConnRepo.GetForTierAsync(ClientId, AiConnectionModelCategory.Embedding, Arg.Any<CancellationToken>())
-            .Returns(ValidEmbeddingConnection(includeBinding: false));
+        var runtimeResolver = Substitute.For<IAiRuntimeResolver>();
+        runtimeResolver.ResolveEmbeddingRuntimeAsync(
+                ClientId,
+                AiPurpose.EmbeddingDefault,
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("No active AI binding is configured for purpose 'EmbeddingDefault'."));
 
-        var factory = Substitute.For<IAiEmbeddingGeneratorFactory>();
-
-        var embedder = BuildEmbedder(aiConnRepo, factory);
+        var embedder = BuildEmbedder(aiRuntimeResolver: runtimeResolver);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             embedder.GenerateEmbeddingAsync("some text", ClientId));
+    }
 
-        factory.DidNotReceiveWithAnyArgs()
-            .CreateGenerator(default!, default!, default, default);
+    [Fact]
+    public async Task GenerateEmbeddingAsync_WithResolvedEmbeddingRuntime_UsesRuntimeGenerator()
+    {
+        var expectedFloats = new[] { 0.4f, 0.5f, 0.6f };
+        var generator = Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>();
+        generator.GenerateAsync(
+                Arg.Any<IEnumerable<string>>(),
+                Arg.Any<EmbeddingGenerationOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new GeneratedEmbeddings<Embedding<float>>([new Embedding<float>(expectedFloats)]));
+
+        var runtimeResolver = Substitute.For<IAiRuntimeResolver>();
+        var runtime = Substitute.For<IResolvedAiEmbeddingRuntime>();
+        var connection = ValidEmbeddingConnection();
+        var binding = connection.PurposeBindings.Single(binding => binding.Purpose == AiPurpose.EmbeddingDefault);
+        var model = connection.ConfiguredModels.Single(candidate => candidate.Id == binding.ConfiguredModelId);
+
+        runtime.Connection.Returns(connection);
+        runtime.Binding.Returns(binding);
+        runtime.Model.Returns(model);
+        runtime.Generator.Returns(generator);
+        runtime.TokenizerName.Returns(model.TokenizerName!);
+        runtime.Dimensions.Returns(model.EmbeddingDimensions!.Value);
+
+        runtimeResolver.ResolveEmbeddingRuntimeAsync(
+                ClientId,
+                AiPurpose.EmbeddingDefault,
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(runtime);
+
+        var embedder = BuildEmbedder(aiRuntimeResolver: runtimeResolver);
+
+        var result = await embedder.GenerateEmbeddingAsync("some text", ClientId);
+
+        Assert.Equal(expectedFloats, result);
     }
 
     [Fact]

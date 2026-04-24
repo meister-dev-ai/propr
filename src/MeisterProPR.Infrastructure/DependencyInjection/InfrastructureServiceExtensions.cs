@@ -70,7 +70,6 @@ public static class InfrastructureServiceExtensions
         }
 
         services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
-        services.AddScoped<EmbeddingDeploymentResolver>();
         services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
 
         // ADO operational services are composed behind provider-local registration.
@@ -209,8 +208,6 @@ public static class InfrastructureServiceExtensions
                 (_, _) =>
                     CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"]));
         }
-
-        services.AddSingleton<IAiEmbeddingGeneratorFactory, AiEmbeddingGeneratorFactory>();
 
         // Per-client AI connection factory (singleton — stateless, creates new clients on demand)
         services.AddHttpClient("AiProbe")

@@ -7,6 +7,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -16,9 +17,8 @@ namespace MeisterProPR.Infrastructure.AI.ProCursor;
 ///     Generates client-scoped ProCursor embeddings using the configured embedding-capable AI connection.
 /// </summary>
 public sealed class ProCursorEmbeddingService(
-    IAiEmbeddingGeneratorFactory embeddingGeneratorFactory,
-    EmbeddingDeploymentResolver embeddingDeploymentResolver,
     IOptions<ProCursorOptions> options,
+    IAiRuntimeResolver aiRuntimeResolver,
     IProCursorTokenUsageRecorder? tokenUsageRecorder = null) : IProCursorEmbeddingService
 {
     private readonly ProCursorOptions _options = options.Value;
@@ -26,10 +26,10 @@ public sealed class ProCursorEmbeddingService(
     /// <inheritdoc />
     public async Task EnsureConfigurationAsync(Guid clientId, CancellationToken ct = default)
     {
-        _ = await embeddingDeploymentResolver.ResolveForClientAsync(
+        _ = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
             clientId,
+            AiPurpose.EmbeddingDefault,
             this._options.EmbeddingDimensions,
-            true,
             ct);
     }
 
@@ -45,11 +45,12 @@ public sealed class ProCursorEmbeddingService(
             return [];
         }
 
-        var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
+        var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
             clientId,
+            AiPurpose.EmbeddingDefault,
             this._options.EmbeddingDimensions,
-            true,
             ct);
+        var deployment = new ValidatedEmbeddingDeployment(runtime.Connection, runtime.Model);
 
         var normalizedChunks = new List<ProCursorExtractedChunk>(chunks.Count);
         var nextChunkOrdinalsBySourcePath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -83,17 +84,13 @@ public sealed class ProCursorEmbeddingService(
             return [];
         }
 
-        var deployment = await embeddingDeploymentResolver.ResolveForClientAsync(
+        var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
             clientId,
+            AiPurpose.EmbeddingDefault,
             this._options.EmbeddingDimensions,
-            true,
             ct);
-
-        var generator = embeddingGeneratorFactory.CreateGenerator(
-            deployment.Connection.BaseUrl,
-            deployment.DeploymentName,
-            deployment.Connection.Secret,
-            deployment.Model.EmbeddingDimensions ?? deployment.Capability.EmbeddingDimensions);
+        var deployment = new ValidatedEmbeddingDeployment(runtime.Connection, runtime.Model);
+        var generator = runtime.Generator;
 
         var embeddings = new List<float[]>(inputs.Count);
         var currentBatch = new List<string>();
