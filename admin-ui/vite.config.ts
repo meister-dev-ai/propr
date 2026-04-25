@@ -4,6 +4,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { configDefaults } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
@@ -38,6 +39,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['tests/setup.ts'],
+    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
     env: {
       VITE_API_BASE_URL: 'http://localhost/api',
     },
