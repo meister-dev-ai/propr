@@ -413,6 +413,59 @@ public class FileByFileReviewOrchestratorTests
         Assert.Contains("b.cs", result.Summary);
     }
 
+    [Fact]
+    public async Task ReviewAsync_SynthesisFails_RecordsProtocolFailureEvent()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var pr = ci.Arg<PullRequest>();
+                var file = pr.ChangedFiles[0];
+                return Task.FromResult(new ReviewResult($"Summary for {file.Path}", new List<ReviewComment>().AsReadOnly()));
+            });
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("a.cs"));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("synthesis service unavailable"));
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, chatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await protocolRecorder.Received()
+            .RecordAiCallAsync(
+                Arg.Any<Guid>(),
+                1,
+                0,
+                0,
+                Arg.Any<string?>(),
+                Arg.Is<string?>(output => output == null),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>(),
+                Arg.Is<string?>(error => error != null && error.Contains("synthesis service unavailable")));
+    }
+
     private static ReviewJob BuildJobWithResults(ReviewJob original, IEnumerable<ReviewFileResult> results)
     {
         var job = new ReviewJob(

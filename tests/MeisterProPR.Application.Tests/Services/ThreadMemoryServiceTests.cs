@@ -673,6 +673,48 @@ public sealed class ThreadMemoryServiceTests
     }
 
     [Fact]
+    public async Task FindDuplicateSuppressionMatchAsync_EmbeddingFailsOnce_SkipsRepeatedEmbeddingCallsForSameClient()
+    {
+        var (embedder, repo, _, _, service) = CreateService();
+
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
+        repo.FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                "/src/Foo.cs",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+
+        await service.FindDuplicateSuppressionMatchAsync(
+            ClientId,
+            "repo-1",
+            42,
+            "/src/Foo.cs",
+            "First finding text.");
+
+        await service.FindDuplicateSuppressionMatchAsync(
+            ClientId,
+            "repo-1",
+            42,
+            "/src/Foo.cs",
+            "Second finding text.");
+
+        await embedder.Received(1)
+            .GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>());
+        await repo.Received(2)
+            .FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                "/src/Foo.cs",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task FindDuplicateSuppressionMatchAsync_RepositoryFails_ReturnsNoMatchWithDegradedReason()
     {
         var (embedder, repo, _, _, service) = CreateService();

@@ -50,6 +50,7 @@ public interface IProtocolRecorder
     ///     Override the auto-generated event name <c>ai_call_iter_{iteration}</c>. Use for out-of-loop AI calls
     ///     such as <c>ai_call_memory_reconsideration</c>.
     /// </param>
+    /// <param name="error">Error message when the AI call failed before returning usable output, or <see langword="null" />.</param>
     Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,
@@ -58,7 +59,8 @@ public interface IProtocolRecorder
         string? inputTextSample,
         string? outputTextSample,
         CancellationToken ct = default,
-        string? name = null);
+        string? name = null,
+        string? error = null);
 
     /// <summary>
     ///     Records a single tool call event. Never throws.

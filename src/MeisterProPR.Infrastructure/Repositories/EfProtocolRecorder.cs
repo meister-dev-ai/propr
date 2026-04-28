@@ -58,7 +58,8 @@ public sealed class EfProtocolRecorder(
         string? inputTextSample,
         string? outputTextSample,
         CancellationToken ct = default,
-        string? name = null)
+        string? name = null,
+        string? error = null)
     {
         try
         {
@@ -74,6 +75,7 @@ public sealed class EfProtocolRecorder(
                 OutputTokens = outputTokens,
                 InputTextSample = Sanitize(inputTextSample),
                 OutputSummary = Sanitize(outputTextSample),
+                Error = Sanitize(error),
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);

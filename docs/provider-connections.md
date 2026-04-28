@@ -311,3 +311,13 @@ Use them only when the provider endpoint or gateway requires request-shaping ove
 3. A self-hosted compatibility layer that expects additional static request metadata
 
 Treat both fields as advanced settings, not mandatory setup steps.
+
+### Azure-Hosted Endpoint Rule
+
+Use `providerKind: "azureOpenAi"` for all Azure-hosted AI endpoints, including:
+
+1. `*.openai.azure.com`
+2. `*.services.ai.azure.com`
+3. Azure AI Foundry endpoints that the portal labels as an "OpenAI endpoint"
+
+Use `providerKind: "openAi"` only for true OpenAI-hosted or OpenAI-compatible endpoints, not Azure-hosted ones.

@@ -32,7 +32,8 @@ public sealed class LegacyReviewProtocolRecorderAdapter(IProtocolRecorder inner)
         string? inputTextSample,
         string? outputTextSample,
         CancellationToken ct = default,
-        string? name = null)
+        string? name = null,
+        string? error = null)
     {
         return inner.RecordAiCallAsync(
             protocolId,
@@ -42,7 +43,8 @@ public sealed class LegacyReviewProtocolRecorderAdapter(IProtocolRecorder inner)
             inputTextSample,
             outputTextSample,
             ct,
-            name);
+            name,
+            error);
     }
 
     public Task RecordToolCallAsync(

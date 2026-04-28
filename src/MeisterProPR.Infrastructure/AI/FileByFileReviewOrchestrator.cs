@@ -454,6 +454,17 @@ public sealed partial class FileByFileReviewOrchestrator(
             if (protocolId.HasValue)
             {
                 var m = fileContext?.LoopMetrics;
+                await protocolRecorder.RecordAiCallAsync(
+                    protocolId.Value,
+                    m?.Iterations ?? 1,
+                    0,
+                    0,
+                    null,
+                    null,
+                    ct,
+                    name: "ai_call_failure",
+                    error: ex.Message);
+
                 await protocolRecorder.SetCompletedAsync(
                     protocolId.Value,
                     "Failed",
@@ -553,6 +564,7 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         string finalSummary;
         IReadOnlyList<ReviewComment> crossCuttingComments = [];
+        string? synthesisInputSample = null;
         try
         {
             var expectsJson = allComments.Count > 0;
@@ -562,6 +574,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 pr.Title,
                 pr.Description,
                 allComments);
+            synthesisInputSample = userMessage;
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, systemPrompt),
@@ -657,6 +670,17 @@ public sealed partial class FileByFileReviewOrchestrator(
 
             if (protocolId.HasValue)
             {
+                await protocolRecorder.RecordAiCallAsync(
+                    protocolId.Value,
+                    1,
+                    0,
+                    0,
+                    synthesisInputSample,
+                    null,
+                    ct,
+                    name: "ai_call_synthesis_failed",
+                    error: ex.Message);
+
                 await protocolRecorder.SetCompletedAsync(protocolId.Value, "Failed", 0, 0, 0, 0, null, ct);
             }
         }

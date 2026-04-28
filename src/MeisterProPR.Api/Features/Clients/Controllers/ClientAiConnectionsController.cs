@@ -469,6 +469,14 @@ public sealed partial class ClientAiConnectionsController(
             return null;
         }
 
+        if (providerKind == AiProviderKind.OpenAi && IsAzureHostedOpenAiEndpoint(baseUrl))
+        {
+            this.ModelState.AddModelError(
+                nameof(baseUrl),
+                "Azure-hosted OpenAI endpoints, including Azure AI Foundry OpenAI endpoints, must use providerKind 'azureOpenAi' instead of 'openAi'.");
+            return null;
+        }
+
         if (auth is null)
         {
             this.ModelState.AddModelError(nameof(auth), "auth is required.");
@@ -487,6 +495,17 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         return new AiConnectionProbeOptionsDto(providerKind, baseUrl.Trim(), auth.Mode, auth.ApiKey.Trim(), NormalizeMap(defaultHeaders), NormalizeMap(defaultQueryParams));
+    }
+
+    private static bool IsAzureHostedOpenAiEndpoint(string baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.EndsWith(".openai.azure.com", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.EndsWith(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private IReadOnlyList<AiConfiguredModelDto> NormalizeConfiguredModels(IReadOnlyList<AiConfiguredModelRequest>? requestModels)

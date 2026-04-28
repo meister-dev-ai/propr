@@ -134,6 +134,9 @@
             <label class="form-field ai-form-grid-full">
               <span>Base URL</span>
               <input v-model="editor.baseUrl" data-testid="ai-base-url" type="text" placeholder="https://api.openai.com/v1" />
+              <small class="field-hint-inline">
+                Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under <code>Azure OpenAI / AI Foundry</code>.
+              </small>
             </label>
 
             <label class="form-field">
@@ -439,7 +442,7 @@ type EditableBinding = {
 
 const providerOptions: Array<{ value: AiProviderKind; label: string }> = [
   { value: 'azureOpenAi', label: 'Azure OpenAI / AI Foundry' },
-  { value: 'openAi', label: 'OpenAI' },
+  { value: 'openAi', label: 'OpenAI (non-Azure)' },
   { value: 'liteLlm', label: 'LiteLLM' },
 ]
 

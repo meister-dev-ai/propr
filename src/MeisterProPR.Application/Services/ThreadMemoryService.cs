@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
@@ -39,6 +40,7 @@ public sealed partial class ThreadMemoryService(
     private const string FilePathFallbackCheck = "pull_request_file_path_memory";
 
     private readonly AiReviewOptions _opts = options.Value;
+    private readonly ConcurrentDictionary<Guid, byte> _embeddingLookupFailuresByClient = new();
 
     /// <inheritdoc />
     public async Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
@@ -237,15 +239,23 @@ public sealed partial class ThreadMemoryService(
         var normalizedFilePath = NormalizeFilePathForLookup(filePath);
 
         float[]? queryVector = null;
-        try
+        if (!this._embeddingLookupFailuresByClient.ContainsKey(clientId))
         {
-            var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
-            queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
+            try
+            {
+                var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
+                queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
+            }
+            catch (Exception ex)
+            {
+                this._embeddingLookupFailuresByClient.TryAdd(clientId, 0);
+                degradedComponents.Add(EmbeddingDegradedComponent);
+                LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
+            }
         }
-        catch (Exception ex)
+        else
         {
             degradedComponents.Add(EmbeddingDegradedComponent);
-            LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
         }
 
         if (queryVector is not null)

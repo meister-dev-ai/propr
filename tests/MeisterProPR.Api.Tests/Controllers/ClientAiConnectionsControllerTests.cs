@@ -156,6 +156,36 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
     }
 
     [Fact]
+    public async Task CreateAiConnection_OpenAiProviderWithAzureHostedEndpoint_Returns400()
+    {
+        var client = this.CreateAuthorizedClient();
+        var payload = new
+        {
+            displayName = "Wrong Provider",
+            providerKind = "openAi",
+            baseUrl = "https://my-openai.openai.azure.com/",
+            auth = new
+            {
+                mode = "apiKey",
+                apiKey = "secret-api-key",
+            },
+            discoveryMode = "manualOnly",
+            configuredModels = new[]
+            {
+                BuildConfiguredModel("gpt-4o"),
+                BuildConfiguredModel("text-embedding-3-large", embedding: true),
+            },
+            purposeBindings = BuildBindings("gpt-4o", "text-embedding-3-large"),
+        };
+
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("must use providerKind 'azureOpenAi'", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UpdateAiConnection_WithProviderNeutralPayload_UpdatesConnection()
     {
         var created = await this.SeedConnectionAsync("Primary Profile", ["gpt-4o"]);
@@ -227,6 +257,25 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             new { baseUrl = "not-a-valid-url" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateAiConnection_OpenAiProviderWithAzureHostedEndpoint_Returns400()
+    {
+        var created = await this.SeedConnectionAsync("Primary Profile");
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new
+            {
+                providerKind = "openAi",
+                baseUrl = "https://project.services.ai.azure.com/api/projects/demo",
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("must use providerKind 'azureOpenAi'", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

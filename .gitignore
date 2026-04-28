@@ -53,6 +53,7 @@ specs/
 
 # Claude / Copilot / Gemini
 .claude
+.opencode
 .github/agents
 .github/instructions
 .github/prompts

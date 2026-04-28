@@ -221,6 +221,7 @@
                             <div class="pass-nav-info">
                                 <div class="pass-nav-path">
                                     <span class="pass-nav-filename">{{ item.name }}</span>
+                                    <span v-if="item.protocol.attemptNumber" class="attempt-pill">try {{ item.protocol.attemptNumber }}</span>
                                 </div>
                                 <div class="pass-nav-stats-grid" style="margin-left: auto; padding-right: 0.5rem;">
                                     <div class="stat-item" title="Tokens">
@@ -237,6 +238,7 @@
                 <div class="protocol-content">
                     <div class="pass-main" v-if="activePass">
                         <dl class="summary-grid pass-summary">
+                            <div><dt>Attempt</dt><dd>{{ activePass.attemptNumber ?? '—' }}</dd></div>
                             <div><dt>Started</dt><dd>{{ formatDate(activePass.startedAt) }}</dd></div>
                             <div><dt>Completed</dt><dd>{{ formatDate(activePass.completedAt) }}</dd></div>
                             <div><dt>Duration</dt><dd>{{ computePassDuration(activePass) }}</dd></div>
@@ -248,7 +250,7 @@
 
                         <section class="events-section">
                             <h4>Events ({{ activePass.events?.length ? Math.ceil(activePass.events.length / 2) : 0 }})</h4>
-                            <p v-if="!activePass.events?.length" class="empty-state">No events recorded.</p>
+                            <p v-if="!activePass.events?.length" class="empty-state">{{ emptyPassMessage(activePass) }}</p>
                             <table v-else class="events-table">
                                 <thead>
                                     <tr>
@@ -548,10 +550,24 @@ interface MergedEvent {
     resultDetails: ProtocolEventDto | null
 }
 
+type ReviewProtocolPass = ReviewJobProtocolDto & {
+    id?: string
+    attemptNumber?: number
+    label?: string | null
+    outcome?: string | null
+    events?: ProtocolEventDto[]
+    startedAt?: string
+    completedAt?: string | null
+    totalInputTokens?: number | null
+    totalOutputTokens?: number | null
+    iterationCount?: number | null
+    toolCallCount?: number | null
+}
+
 const loading = ref(false)
 const error = ref('')
 const activeTab = ref<'summary' | 'traces' | 'tokens'>('summary')
-const protocols = ref<ReviewJobProtocolDto[]>([])
+const protocols = ref<ReviewProtocolPass[]>([])
 const activePassId = ref<string | null>(null)
 const selectedMergedEvent = ref<MergedEvent | null>(null)
 const reviewStatus = ref<ReviewJobResultDto | null>(null)
@@ -910,7 +926,7 @@ const groupedReviewComments = computed(() => {
     })
 })
 
-const activePass = computed(() => {
+const activePass = computed<ReviewProtocolPass | null>(() => {
     if (!protocols.value.length || activeTab.value === 'summary') return null
     return protocols.value.find(p => p.id === activePassId.value) ?? protocols.value[0]
 })
@@ -1011,7 +1027,8 @@ async function loadProtocol(showLoading = false) {
         if (fetchError) {
             if (showLoading) error.value = 'Protocol not found for this job.'
         } else if (Array.isArray(data)) {
-            protocols.value = data
+            const normalizedProtocols = [...data].sort(compareProtocols)
+            protocols.value = normalizedProtocols
             if (resultRes.data) {
                 reviewStatus.value = resultRes.data
             }
@@ -1022,10 +1039,10 @@ async function loadProtocol(showLoading = false) {
                     breakdownConsistent: d.breakdownConsistent ?? null,
                 }
             }
-            if (!activePassId.value && data.length > 0 && data[0].id) {
-                activePassId.value = data[0].id
+            if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
+                activePassId.value = normalizedProtocols[0].id
             }
-            const isProcessing = data.some((p: any) => !p.completedAt) || (resultRes.data?.status === 'processing')
+            const isProcessing = normalizedProtocols.some((p: any) => !p.completedAt) || (resultRes.data?.status === 'processing')
             if (isProcessing && !pollInterval) {
                 pollInterval = setInterval(() => loadProtocol(false), 3000)
             } else if (!isProcessing && pollInterval) {
@@ -1057,6 +1074,26 @@ function processEvents(events: ProtocolEventDto[] | undefined | null): MergedEve
         callDetails: ev,
         resultDetails: ev
     }))
+}
+
+function compareProtocols(left: ReviewProtocolPass, right: ReviewProtocolPass): number {
+    const attemptDelta = (right.attemptNumber ?? 0) - (left.attemptNumber ?? 0)
+    if (attemptDelta !== 0) return attemptDelta
+
+    const rightStarted = right.startedAt ? new Date(right.startedAt).getTime() : 0
+    const leftStarted = left.startedAt ? new Date(left.startedAt).getTime() : 0
+    if (rightStarted !== leftStarted) return rightStarted - leftStarted
+
+    return (left.label ?? '').localeCompare(right.label ?? '')
+}
+
+function emptyPassMessage(pass: ReviewProtocolPass): string {
+    if ((pass.events?.length ?? 0) > 0) return 'No events recorded.'
+    if ((pass.outcome ?? '').toLowerCase() === 'failed') {
+        return 'This pass failed before any protocol events were captured.'
+    }
+
+    return 'No events recorded.'
 }
 
 function statusIconClass(status: string | undefined | null): string {
@@ -1210,6 +1247,18 @@ function formatConfidence(val: number | string | null | undefined): string {
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: capitalize;
+}
+
+.attempt-pill {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
 }
 
 .status-processing {
