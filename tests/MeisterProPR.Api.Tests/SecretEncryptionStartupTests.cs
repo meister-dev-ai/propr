@@ -31,6 +31,7 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
     {
         fixture.SkipIfUnavailable();
 
+        var tenantId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
         var connectionId = Guid.NewGuid();
         var keysDirectory = Path.Combine(
@@ -47,10 +48,23 @@ public sealed class SecretEncryptionStartupTests(PostgresContainerFixture fixtur
 
             await using (var db = new MeisterProPRDbContext(options))
             {
+                db.Tenants.Add(
+                    new TenantRecord
+                    {
+                        Id = tenantId,
+                        Slug = $"legacy-startup-tenant-{tenantId:N}",
+                        DisplayName = $"Legacy Startup Tenant {tenantId:N}",
+                        IsActive = true,
+                        LocalLoginEnabled = true,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                    });
+
                 db.Clients.Add(
                     new ClientRecord
                     {
                         Id = clientId,
+                        TenantId = tenantId,
                         DisplayName = $"Legacy Startup Client {clientId:N}",
                         IsActive = true,
                         CreatedAt = DateTimeOffset.UtcNow,
