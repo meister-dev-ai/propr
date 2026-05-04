@@ -1,37 +1,36 @@
 # Configuration And Crawling
 
-This page covers the admin configuration workflow that defines what the system may review, and the
+This page describes the admin configuration workflow that defines reviewable scope and the
 background crawler workflow that turns saved configuration into queued review jobs. Azure DevOps,
-GitHub, GitLab, and Forgejo-family hosts now share the same provider-neutral connection, scope,
+GitHub, GitLab, and Forgejo-family hosts use shared provider-neutral connection, scope,
 repository, review, revision, and webhook concepts for manual review, webhook activation, and
-operational visibility. Guided Azure DevOps discovery remains available, but the old client System
-credential and allowed-organization surface has been retired.
+operational visibility. Guided Azure DevOps discovery is available through the same provider model.
 
 ## Provider-Neutral Runtime Guardrails
 
-- Provider onboarding, manual review intake, webhook ingress, and provider-scoped observability now
-    run through one shared provider-neutral model instead of branching the application workflow per
+- Provider onboarding, manual review intake, webhook ingress, and provider-scoped observability run
+    through one shared provider-neutral model instead of branching the application workflow per
     provider family.
-- Azure DevOps still offers guided discovery for project, source, and branch selection, but its
-    credentials, organization scopes, and reviewer setup now resolve from the same provider
-    connections and provider scopes used by the other supported SCM families.
+- Azure DevOps provides guided discovery for project, source, and branch selection. Credentials,
+    organization scopes, and reviewer setup are resolved from the same provider connections and
+    provider scopes used by the other supported SCM families.
 - Provider connections own secrets and host configuration; provider scopes define the usable
     administrative boundary inside each connection.
 - Repository, review, revision, thread, comment, and webhook concepts are normalized so downstream
     deduplication, thread memory, observability, and audit paths stay shared across provider families.
 - Provider readiness is evaluated as a separate read model. Verification answers whether onboarding
-    checks passed; readiness answers whether the connection is merely configured, onboarding-ready,
-    degraded, or workflow-complete for the current provider family and host variant.
+    checks passed; readiness answers whether the connection is configured, onboarding-ready,
+    degraded, or workflow-complete for the selected provider family and host variant.
 
 ## Guided Azure DevOps Configuration Through Provider Connections
 
-Azure DevOps is now administered through the shared provider-management flow. Administrators create
-or recreate an Azure DevOps provider connection in the Providers tab, add one or more organization
+Azure DevOps is administered through the shared provider-management flow. Administrators create or
+update an Azure DevOps provider connection in the Providers tab, add one or more organization
 scopes to that connection, and then use the same provider-scoped reviewer identity and discovery
 surfaces as the other supported SCM families.
 
-During cutover, the removed client System Azure DevOps settings are not auto-migrated behind a
-hidden compatibility layer. Recreate Azure DevOps in this order:
+The provider-connection model does not use client-level System Azure DevOps settings. Configure
+Azure DevOps in this order:
 
 1. Add the Azure DevOps provider connection.
 2. Add the organization scope on that connection.
@@ -70,9 +69,8 @@ sequenceDiagram
 ```
 
 All downstream project, repository, wiki, branch, and crawl-filter choices are resolved through
-discovery endpoints and then revalidated again at save time. Azure DevOps keeps the guided
-discovery experience, but the durable admin boundary is now the provider connection and its scopes,
-not a client-level System ADO record.
+discovery endpoints and revalidated at save time. The durable admin boundary is the provider
+connection and its scopes, not a client-level System Azure DevOps record.
 
 ## Webhook Configuration And Delivery History
 
@@ -113,13 +111,13 @@ raw secrets.
 
 ## Public Webhook Intake
 
-The public provider receiver sits beside the crawler rather than replacing it. GitHub, GitLab, and
-Forgejo-family deliveries arrive through `/webhooks/v1/providers/{provider}/{pathKey}`, and Azure
-DevOps now uses the same provider-scoped ingress route instead of a separate compatibility path.
-Deliveries are matched by opaque path key, verified with the provider-specific ingress service,
-checked against the saved repository and branch scope, and then handed to the shared
-pull-request synchronization service so lifecycle handling, review-intake deduplication, scan
-updates, and reviewer-thread memory transitions are decided from one downstream path.
+The public provider receiver sits beside the crawler rather than replacing it. GitHub, GitLab,
+Forgejo-family, and Azure DevOps deliveries arrive through
+`/webhooks/v1/providers/{provider}/{pathKey}`. Deliveries are matched by opaque path key,
+verified with the provider-specific ingress service, checked against the saved repository and
+branch scope, and handed to the shared pull-request synchronization service so lifecycle handling,
+review-intake deduplication, scan updates, and reviewer-thread memory transitions are decided from
+one downstream path.
 
 ```mermaid
 sequenceDiagram
@@ -148,11 +146,11 @@ sequenceDiagram
     RX-->>PRV: Fast acknowledgement
 ```
 
-The crawler and webhook listener can both target the same client or repository. Webhooks reduce the
-time to first action, while the crawler remains an independent discovery path and fallback mechanism
-for provider-backed configurations. Both sources converge before any durable downstream action is
-taken, which prevents provider-specific shortcuts from diverging from shared lifecycle,
-thread-memory, audit, or retention behavior.
+The crawler and webhook listener can target the same client or repository. Webhooks reduce the time
+to first action, while the crawler provides periodic discovery and fallback coverage for
+provider-backed configurations. Both sources feed the same downstream synchronization path before
+durable action is taken, which prevents provider-specific shortcuts from diverging from shared
+lifecycle, thread-memory, audit, or retention behavior.
 
 ## PR Crawler Flow
 
@@ -187,6 +185,10 @@ The crawler operates against crawl configurations that may reference all client 
 or a selected subset. That selection is durable and does not depend on reading the latest admin
 configuration during review execution.
 
+Each crawl or webhook activation path can also snapshot an optional review temperature. Review
+execution uses the job-scoped value, so later admin edits do not retroactively change in-flight
+work.
+
 ## Shared Pull-Request Synchronization
 
 `IPullRequestSynchronizationService` is the convergence point between webhook-triggered and
@@ -219,7 +221,7 @@ sequenceDiagram
     SYNC-->>SRC: Outcome with review/lifecycle decisions and action summaries
 ```
 
-This shared seam is also where synchronization-level telemetry is emitted. Observability now tracks
+This shared seam is also where synchronization-level telemetry is emitted. Observability tracks
 activation source, PR status, review decision, and lifecycle decision for each pass, which makes it
 possible to compare webhook- and crawler-driven behavior using the same tracing and metric series.
 

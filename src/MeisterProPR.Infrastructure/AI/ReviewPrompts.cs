@@ -3,6 +3,7 @@
 
 using System.Text;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -43,6 +44,8 @@ internal static class ReviewPrompts
                                          HTML SAFETY RULE: Your message strings MUST NOT contain any HTML tags or raw angle brackets.
                                          Never output <style>, <script>, <div>, <!DOCTYPE>, or any < or > characters outside of markdown code blocks.
                                          If you need to reference code with angle brackets, wrap the code in triple backticks (```code here```).
+
+                                         MARKDOWN: Utilize markdown formatting to enhance clarity using bullet points, numbered lists, fenced code blocks, bold font etc.
 
                                          Schema:
                                          {
@@ -310,7 +313,7 @@ internal static class ReviewPrompts
                    Do not call any tools.
                    Respond with a single raw JSON object ONLY — no markdown fences, no prose before or after.
                    The very first character must be '{' and the very last character must be '}'.
-                   Schema: { "summary": "<overall narrative>", "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>" }] }
+                   Schema: { "summary": "<overall narrative>", "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }] }
                    """;
         }
 
@@ -356,10 +359,12 @@ internal static class ReviewPrompts
             else
             {
                 sb.AppendLine($"=== {file.Path} [{file.ChangeType}] ===");
-                sb.AppendLine("--- FULL CONTENT ---");
+                sb.AppendLine("======================================= FULL CONTENT =======================================");
                 sb.AppendLine(file.FullContent);
-                sb.AppendLine("--- DIFF ---");
+                sb.AppendLine("======================================= END FULL CONTENT =======================================");
+                sb.AppendLine("======================================= DIFF =======================================");
                 sb.AppendLine(file.UnifiedDiff);
+                sb.AppendLine("======================================= END DIFF =======================================");
             }
         }
 
@@ -403,7 +408,7 @@ internal static class ReviewPrompts
         sb.AppendLine();
 
         // File under review — diff only
-        sb.AppendLine("--- FILE UNDER REVIEW ---");
+        sb.AppendLine("======================================= FILE UNDER REVIEW =======================================");
         if (file.IsBinary)
         {
             sb.AppendLine($"=== {file.Path} [{file.ChangeType}] === [binary file — content omitted]");
@@ -411,8 +416,9 @@ internal static class ReviewPrompts
         else
         {
             sb.AppendLine($"=== {file.Path} [{file.ChangeType}] ===");
-            sb.AppendLine("--- DIFF ---");
+            sb.AppendLine("======================================= DIFF =======================================");
             sb.AppendLine(file.UnifiedDiff);
+            sb.AppendLine("======================================= END DIFF =======================================");
             sb.AppendLine("(Full file content is not included. Call `get_file_content` on this file if the diff is insufficient for a complete analysis.)");
         }
 
@@ -447,7 +453,8 @@ internal static class ReviewPrompts
         IReadOnlyList<(string FilePath, string Summary)> perFileSummaries,
         string prTitle,
         string? prDescription,
-        IReadOnlyList<ReviewComment>? allComments = null)
+        IReadOnlyList<ReviewComment>? allComments = null,
+        IReadOnlyList<CandidateReviewFinding>? candidateFindings = null)
     {
         var sb = new StringBuilder();
 
@@ -466,25 +473,44 @@ internal static class ReviewPrompts
             sb.AppendLine();
         }
 
-        if (allComments is { Count: > 0 })
+        if (candidateFindings is { Count: > 0 } || allComments is { Count: > 0 })
         {
             sb.AppendLine("## All Per-File Findings");
             sb.AppendLine();
-            sb.AppendLine("| File | Severity | Message |");
-            sb.AppendLine("|------|----------|---------|");
-            foreach (var c in allComments)
+
+            if (candidateFindings is { Count: > 0 })
             {
-                var file = c.FilePath ?? "(PR-level)";
-                var severity = c.Severity.ToString().ToLowerInvariant();
-                var msg = c.Message.Replace("|", "\\|");
-                sb.AppendLine($"| {file} | {severity} | {msg} |");
+                sb.AppendLine("| Finding ID | File | Severity | Message |");
+                sb.AppendLine("|------------|------|----------|---------|");
+                foreach (var finding in candidateFindings)
+                {
+                    var file = finding.FilePath ?? "(PR-level)";
+                    var severity = finding.Severity.ToString().ToLowerInvariant();
+                    var msg = finding.Message.Replace("|", "\\|");
+                    sb.AppendLine($"| {finding.FindingId} | {file} | {severity} | {msg} |");
+                }
+            }
+            else if (allComments is { Count: > 0 })
+            {
+                sb.AppendLine("| File | Severity | Message |");
+                sb.AppendLine("|------|----------|---------|");
+                foreach (var c in allComments)
+                {
+                    var file = c.FilePath ?? "(PR-level)";
+                    var severity = c.Severity.ToString().ToLowerInvariant();
+                    var msg = c.Message.Replace("|", "\\|");
+                    sb.AppendLine($"| {file} | {severity} | {msg} |");
+                }
             }
 
             sb.AppendLine();
             sb.AppendLine(
                 "Based on the above findings, identify any cross-cutting concerns — issues that span multiple files or form a coherent architectural or behavioral pattern. " +
                 "Return a JSON object with a `cross_cutting_concerns` array field. Each entry should be: " +
-                "{ \"message\": \"<concern description>\", \"severity\": \"<info|warning|error|suggestion>\" }. " +
+                "{ \"message\": \"<concern description>\", \"severity\": \"<info|warning|error|suggestion>\", \"category\": \"<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>\", \"candidateSummaryText\": \"<summary-only wording>\", \"supportingFindingIds\": [\"<finding-id>\"], \"supportingFiles\": [\"<path>\"], \"evidenceResolutionState\": \"<resolved|missing|partial>\", \"evidenceSource\": \"<synthesis_payload>\" }. " +
+                (candidateFindings is { Count: > 0 }
+                    ? "Use the exact `Finding ID` values from the table for `supportingFindingIds`. "
+                    : string.Empty) +
                 "If there are no cross-cutting concerns, return { \"cross_cutting_concerns\": [] }. " +
                 "Also write a single cohesive narrative summary for the PR. Wrap the summary in a `summary` field in the same JSON object.");
         }
@@ -588,6 +614,105 @@ internal static class ReviewPrompts
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    ///     System prompt for bounded PR-level verification of synthesized cross-file findings.
+    ///     The verifier must only promote findings when the provided evidence independently supports them.
+    /// </summary>
+    internal static string BuildPrVerificationSystemPrompt(ReviewSystemContext? context)
+    {
+        if (context?.PromptOverrides.TryGetValue("PrVerificationSystemPrompt", out var overrideText) == true)
+        {
+            return overrideText!;
+        }
+
+        return """
+               You are verifying a synthesized PR-level review finding against independently retrieved repository evidence.
+               Your task is not to discover new issues. Your task is only to decide whether the existing claim is supported.
+
+               Rules:
+               1. Return SUPPORTED only when the provided evidence directly confirms the claim.
+               2. Return UNRESOLVED when the evidence is partial, indirect, ambiguous, or missing.
+               3. Do not invent facts beyond the supplied claim and evidence bundle.
+               4. Recommend Publish only for SUPPORTED findings. Recommend SummaryOnly for UNRESOLVED findings.
+
+               Respond ONLY with a single raw JSON object in this format:
+               {
+                 "verdict": "supported"|"unresolved",
+                 "recommended_disposition": "Publish"|"SummaryOnly",
+                 "reason_codes": ["<machine_readable_reason>"],
+                 "summary": "<brief evidence-based rationale>"
+               }
+               """;
+    }
+
+    /// <summary>
+    ///     User message for bounded PR-level verification.
+    /// </summary>
+    internal static string BuildPrVerificationUserMessage(ClaimDescriptor claim, EvidenceBundle evidence)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(evidence);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Claim ID: {claim.ClaimId}");
+        sb.AppendLine($"Finding ID: {claim.FindingId}");
+        sb.AppendLine($"Claim kind: {claim.ClaimKind}");
+        sb.AppendLine($"Claim family: {claim.ClaimFamily}");
+        sb.AppendLine($"Assertion: {claim.AssertionText}");
+        sb.AppendLine($"Coverage state: {evidence.CoverageState}");
+        if (evidence.HasProCursorAttempt)
+        {
+            sb.AppendLine($"ProCursor result status: {evidence.ProCursorResultStatus}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(evidence.RetrievalNotes))
+        {
+            sb.AppendLine($"Retrieval notes: {evidence.RetrievalNotes}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Evidence items:");
+
+        if (evidence.EvidenceItems.Count == 0)
+        {
+            sb.AppendLine("- (none)");
+        }
+        else
+        {
+            foreach (var item in evidence.EvidenceItems)
+            {
+                sb.AppendLine($"- Kind: {item.Kind}");
+                if (!string.IsNullOrWhiteSpace(item.SourceId))
+                {
+                    sb.AppendLine($"  Source: {item.SourceId}");
+                }
+
+                sb.AppendLine($"  Summary: {item.Summary}");
+                if (!string.IsNullOrWhiteSpace(item.PayloadReference))
+                {
+                    sb.AppendLine($"  Payload: {item.PayloadReference}");
+                }
+            }
+        }
+
+        if (evidence.EvidenceAttempts.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Evidence attempts:");
+            foreach (var attempt in evidence.EvidenceAttempts)
+            {
+                sb.AppendLine($"- Source: {attempt.SourceFamily}; Status: {attempt.Status}; Impact: {attempt.CoverageImpact}");
+                sb.AppendLine($"  Scope: {attempt.ScopeSummary}");
+                if (!string.IsNullOrWhiteSpace(attempt.FailureReason))
+                {
+                    sb.AppendLine($"  Failure: {attempt.FailureReason}");
+                }
+            }
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     /// <summary>

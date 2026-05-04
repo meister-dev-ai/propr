@@ -5,10 +5,10 @@ sources are refreshed, and how ProCursor token usage is captured and rolled up.
 
 ## Boundary And Runtime Position
 
-ProCursor runs inside the same deployment today, but it is treated as a bounded slice with its own
-facade and options surface. Review orchestration reaches it only through `IProCursorGateway` and
-`PROCURSOR_*` settings; it does not talk directly to ProCursor repositories, Azure DevOps
-materializers, or snapshot tables.
+ProCursor runs inside the same deployment as a bounded slice with its own facade and options
+surface. Review orchestration reaches it only through `IProCursorGateway` and `PROCURSOR_*`
+settings; it does not talk directly to ProCursor repositories, Azure DevOps materializers, or
+snapshot tables.
 
 For guided admin flows, the same gateway boundary owns save-time validation of
 `organizationScopeId`, canonical source references, and default or tracked branch selections. That
@@ -33,6 +33,59 @@ flowchart LR
     INDEX --> ADO
     INDEX --> AOAI
 ```
+
+## Review-Time Retrieval Path
+
+Per-file review loops and the verification layer both reach ProCursor through the review-tools
+boundary. The final finding gate does not call ProCursor directly; targeted evidence retrieval
+executes upstream through the `IReviewContextTools` seam.
+
+```mermaid
+sequenceDiagram
+    participant ORCH as ReviewOrchestrationService
+    participant FACT as ProviderReviewContextToolsFactory
+    participant LOOP as ToolAwareAiReviewCore
+    participant VER as ReviewContextEvidenceCollector
+    participant TOOLS as ProviderReviewContextToolsBase
+    participant GW as IProCursorGateway
+    participant QUERY as ProCursorQueryService
+
+    ORCH->>FACT: Create(ReviewContextToolsRequest)
+    FACT-->>ORCH: IReviewContextTools
+    ORCH->>LOOP: ReviewAsync(..., ReviewSystemContext)
+    LOOP->>TOOLS: ask_procursor_knowledge / get_procursor_symbol_info
+    TOOLS->>GW: AskKnowledgeAsync(...) / GetSymbolInsightAsync(...)
+    GW->>QUERY: Query repository-scoped chunks and symbols
+    QUERY-->>GW: Answer or symbol insight
+    GW-->>TOOLS: DTO
+    TOOLS-->>LOOP: Tool result
+    ORCH->>VER: CollectEvidenceAsync(work item, tools, modelId)
+    VER->>TOOLS: get_changed_files / get_file_content / ask_procursor_knowledge / get_procursor_symbol_info
+    TOOLS->>GW: Forward bounded repository-aware lookups
+    GW->>QUERY: Query repository-scoped chunks and symbols
+    QUERY-->>GW: Evidence DTOs
+    GW-->>TOOLS: DTOs
+    TOOLS-->>VER: Evidence items
+```
+
+1. `ReviewOrchestrationService.BuildReviewContextAsync(...)` snapshots PR identity, source branch,
+   iteration, client id, and optional scoped ProCursor source ids into `ReviewContextToolsRequest`.
+2. `ProviderReviewContextToolsFactory` selects the provider-specific implementation. Azure DevOps
+   uses `AdoReviewContextToolsFactory`, and the same `IReviewContextTools` contract is preserved for
+   the other providers.
+3. `ToolAwareAiReviewCore` exposes `ask_procursor_knowledge` and `get_procursor_symbol_info`
+   alongside file and tree lookup tools during each per-file review loop.
+4. `ReviewContextEvidenceCollector` reuses the same `IReviewContextTools` boundary during PR-level
+   verification to gather bounded evidence for synthesized or unresolved claims. Each ProCursor
+   knowledge or symbol lookup records an explicit attempt status (`Succeeded`, `Empty`, or
+   `Unavailable`) in the verification evidence bundle.
+5. `ProviderReviewContextToolsBase` forwards review-time ProCursor calls through
+   `IProCursorGateway` with repository or review-target context instead of querying ProCursor tables
+   directly.
+6. This keeps ProCursor as a bounded evidence dependency: verification can use repository-aware
+   knowledge and symbol lookups without adding direct reviewing-to-ProCursor persistence coupling.
+7. `DeterministicReviewFindingGate` remains retrieval-free. It consumes `VerificationOutcome`
+   produced upstream rather than issuing its own ProCursor queries.
 
 ## Refresh Flow
 
@@ -97,4 +150,4 @@ sequenceDiagram
 ```
 
 A dedicated rollup worker refreshes daily and monthly aggregates so the admin UI can read stable
-totals while still gap-filling the newest uncaptured window from raw events.
+totals and gap-fill the newest uncaptured window from raw events.

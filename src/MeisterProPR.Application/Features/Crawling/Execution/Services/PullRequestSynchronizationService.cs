@@ -135,6 +135,11 @@ public sealed class PullRequestSynchronizationService(
                 request.PullRequestId,
                 iterationId.Value);
 
+            if (request.ReviewTemperature.HasValue)
+            {
+                job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);
+            }
+
             if (request.CodeReview is not null)
             {
                 job.SetProviderReviewContext(request.CodeReview);

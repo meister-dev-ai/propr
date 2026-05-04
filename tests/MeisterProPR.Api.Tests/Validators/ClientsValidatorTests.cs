@@ -19,7 +19,7 @@ public sealed class ClientsValidatorTests
     [Fact]
     public void CreateClient_ValidRequest_Passes()
     {
-        var result = CreateClientValidator.Validate(new CreateClientRequest("My Client"));
+        var result = CreateClientValidator.Validate(new CreateClientRequest("My Client", Guid.NewGuid()));
         Assert.True(result.IsValid);
     }
 
@@ -28,9 +28,18 @@ public sealed class ClientsValidatorTests
     [InlineData("   ")]
     public void CreateClient_EmptyDisplayName_FailsOnDisplayName(string displayName)
     {
-        var result = CreateClientValidator.Validate(new CreateClientRequest(displayName));
+        var result = CreateClientValidator.Validate(new CreateClientRequest(displayName, Guid.NewGuid()));
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.DisplayName));
+    }
+
+    [Fact]
+    public void CreateClient_EmptyTenantId_FailsOnTenantId()
+    {
+        var result = CreateClientValidator.Validate(new CreateClientRequest("My Client", Guid.Empty));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.TenantId));
     }
 
     [Fact]

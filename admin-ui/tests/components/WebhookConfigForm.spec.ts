@@ -109,6 +109,7 @@ describe('WebhookConfigForm', () => {
       providerScopePath: 'https://dev.azure.com/example',
       providerProjectKey: 'project-1',
       isActive: true,
+      reviewTemperature: 0.35,
       enabledEvents: ['pullRequestCreated', 'pullRequestUpdated', 'pullRequestCommented'],
       repoFilters: [
         {
@@ -132,6 +133,7 @@ describe('WebhookConfigForm', () => {
       providerScopePath: 'https://dev.azure.com/example',
       providerProjectKey: 'project-1',
       isActive: false,
+      reviewTemperature: 0.55,
       enabledEvents: ['pullRequestUpdated'],
       repoFilters: [],
       listenerUrl: 'https://propr.example.com/webhooks/v1/providers/ado/mock-path-key-1',
@@ -151,6 +153,7 @@ describe('WebhookConfigForm', () => {
     await wrapper.get('#webhookAddFilter').trigger('click')
     await wrapper.get('[data-testid="webhook-filter-select-0"]').setValue('azureDevOps::repo-1')
     await flushPromises()
+    await wrapper.get('#webhookReviewTemperature').setValue('0.3')
     await wrapper.get('[data-testid="webhook-event-pullRequestCreated"]').setValue(true)
     await wrapper.get('[data-testid="webhook-event-pullRequestUpdated"]').setValue(true)
     await wrapper.get('[data-testid="webhook-event-pullRequestCommented"]').setValue(true)
@@ -163,6 +166,7 @@ describe('WebhookConfigForm', () => {
       provider: 'azureDevOps',
       organizationScopeId: SCOPE_ID,
       providerProjectKey: 'project-1',
+      reviewTemperature: 0.3,
       enabledEvents: ['pullRequestCreated', 'pullRequestUpdated', 'pullRequestCommented'],
       repoFilters: [
         {
@@ -246,6 +250,7 @@ describe('WebhookConfigForm', () => {
     await flushPromises()
     await wrapper.get('#webhookHostUrl').setValue(host)
     await wrapper.get('#webhookProjectScope').setValue(projectId)
+    await wrapper.get('#webhookReviewTemperature').setValue('0.6')
     await wrapper.get('#webhookAddFilter').trigger('click')
     await wrapper.get('[data-testid="webhook-filter-repository-0"]').setValue('propr')
     await wrapper.get('[data-testid="webhook-event-pullRequestUpdated"]').setValue(true)
@@ -258,6 +263,7 @@ describe('WebhookConfigForm', () => {
       provider,
       providerScopePath: host,
       providerProjectKey: projectId,
+      reviewTemperature: 0.6,
       enabledEvents: ['pullRequestUpdated'],
       repoFilters: [
         {
@@ -283,6 +289,7 @@ describe('WebhookConfigForm', () => {
       providerScopePath: 'https://dev.azure.com/example',
       providerProjectKey: 'project-1',
       isActive: true,
+      reviewTemperature: 0.25,
       enabledEvents: ['pullRequestCreated', 'pullRequestUpdated'],
       repoFilters: [],
       listenerUrl: 'https://propr.example.com/webhooks/v1/providers/ado/mock-path-key-1',
@@ -291,6 +298,7 @@ describe('WebhookConfigForm', () => {
     await flushPromises()
 
     await wrapper.get('#webhookIsActive').setValue(false)
+    await wrapper.get('#webhookReviewTemperature').setValue('0.4')
     await wrapper.get('[data-testid="webhook-event-pullRequestCreated"]').setValue(false)
     await wrapper.get('[data-testid="webhook-event-pullRequestUpdated"]').setValue(true)
 
@@ -301,6 +309,7 @@ describe('WebhookConfigForm', () => {
       isActive: false,
       enabledEvents: ['pullRequestUpdated'],
       repoFilters: [],
+      reviewTemperature: 0.4,
     })
     expect(wrapper.emitted('config-saved')).toBeTruthy()
   })
@@ -314,6 +323,7 @@ describe('WebhookConfigForm', () => {
       providerScopePath: 'https://dev.azure.com/example',
       providerProjectKey: 'project-1',
       isActive: true,
+      reviewTemperature: 0.2,
       enabledEvents: ['pullRequestUpdated'],
       repoFilters: [
         {
@@ -349,6 +359,51 @@ describe('WebhookConfigForm', () => {
           targetBranchPatterns: ['main'],
         },
       ],
+      reviewTemperature: 0.2,
     })
+  })
+
+  it('disables adding repository filters in edit mode', async () => {
+    const wrapper = await mountEditForm({
+      id: 'webhook-config-1',
+      clientId: CLIENT_ID,
+      provider: 'azureDevOps',
+      organizationScopeId: SCOPE_ID,
+      providerScopePath: 'https://dev.azure.com/example',
+      providerProjectKey: 'project-1',
+      isActive: true,
+      reviewTemperature: 0.25,
+      enabledEvents: ['pullRequestUpdated'],
+      repoFilters: [],
+      listenerUrl: 'https://propr.example.com/webhooks/v1/providers/ado/mock-path-key-1',
+      createdAt: '2026-04-07T09:00:00Z',
+    })
+    await flushPromises()
+
+    const addFilterButton = wrapper.get('#webhookAddFilter')
+    expect((addFilterButton.element as HTMLButtonElement).disabled).toBe(true)
+
+    await addFilterButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.filter-row')).toHaveLength(0)
+  })
+
+  it('rejects webhook review temperature outside the supported range', async () => {
+    const wrapper = await mountCreateForm()
+    await flushPromises()
+
+    await wrapper.get('#webhookOrganizationScope').setValue(SCOPE_ID)
+    await flushPromises()
+    await wrapper.get('#webhookProjectId').setValue('project-1')
+    await flushPromises()
+    await wrapper.get('[data-testid="webhook-event-pullRequestUpdated"]').setValue(true)
+    await wrapper.get('#webhookReviewTemperature').setValue('-0.1')
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Review temperature must be between 0.0 and 2.0.')
+    expect(createWebhookConfigurationMock).not.toHaveBeenCalled()
   })
 })

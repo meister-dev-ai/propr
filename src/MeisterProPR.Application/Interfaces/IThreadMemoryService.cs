@@ -57,7 +57,8 @@ public interface IThreadMemoryService
         string? changeExcerpt,
         ReviewResult draftResult,
         Guid? protocolId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        float? temperature = null);
 
     /// <summary>
     ///     Stores a finding dismissal as an <c>AdminDismissed</c> memory record, generating an embedding

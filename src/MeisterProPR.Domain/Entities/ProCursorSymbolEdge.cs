@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorSymbolEdge
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorSymbolEdge"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorSymbolEdge" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for the edge.</param>
     /// <param name="snapshotId">The identifier of the snapshot this edge belongs to.</param>

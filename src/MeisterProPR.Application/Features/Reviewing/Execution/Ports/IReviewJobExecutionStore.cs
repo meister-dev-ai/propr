@@ -123,5 +123,5 @@ public interface IReviewJobExecutionStore
     /// <param name="model">The AI model identifier, or <c>null</c> to clear it.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default);
+    Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null);
 }

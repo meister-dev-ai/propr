@@ -9,7 +9,8 @@ namespace MeisterProPR.Domain.Enums;
 public enum WebhookProviderType
 {
     /// <summary>Azure DevOps service hooks.</summary>
-    [JsonStringEnumMemberName("azureDevOps")] AzureDevOps = 0,
+    [JsonStringEnumMemberName("azureDevOps")]
+    AzureDevOps = 0,
 
     /// <summary>GitHub webhooks.</summary>
     [JsonStringEnumMemberName("github")] GitHub = 1,

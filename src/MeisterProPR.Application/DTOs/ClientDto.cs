@@ -15,4 +15,7 @@ public sealed record ClientDto(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
-    string? CustomSystemMessage);
+    string? CustomSystemMessage,
+    Guid? TenantId = null,
+    string? TenantSlug = null,
+    string? TenantDisplayName = null);

@@ -32,8 +32,7 @@ public sealed class ThreadMemoryEmbedderTests
         return new ThreadMemoryEmbedder(
             opts,
             aiRuntimeResolver ?? Substitute.For<IAiRuntimeResolver>(),
-            chatClient ?? Substitute.For<IChatClient>(),
-            null);
+            chatClient ?? Substitute.For<IChatClient>());
     }
 
     [Fact]
@@ -157,7 +156,7 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("AI endpoint unreachable"));
 
-        var embedder = BuildEmbedder(chatClient: chatClient);
+        var embedder = BuildEmbedder(chatClient);
 
         var ex = await Record.ExceptionAsync(() =>
             embedder.GenerateResolutionSummaryAsync("src/Foo.cs", "diff content", "comment history", ClientId));
@@ -175,7 +174,7 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("AI endpoint unreachable"));
 
-        var embedder = BuildEmbedder(chatClient: chatClient);
+        var embedder = BuildEmbedder(chatClient);
         var result = await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", null, "comment history", ClientId);
 
         Assert.False(string.IsNullOrEmpty(result));
@@ -193,7 +192,7 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse([message]));
 
-        var embedder = BuildEmbedder(chatClient: chatClient);
+        var embedder = BuildEmbedder(chatClient);
         var result = await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", "diff", "comment history", ClientId);
 
         Assert.Equal("This was resolved by adding nil check.", result);
@@ -218,7 +217,7 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse([message]));
 
-        var embedder = BuildEmbedder(chatClient: chatClient);
+        var embedder = BuildEmbedder(chatClient);
         await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", null, "Alice: looks fine", ClientId);
 
         Assert.NotNull(capturedMessages);

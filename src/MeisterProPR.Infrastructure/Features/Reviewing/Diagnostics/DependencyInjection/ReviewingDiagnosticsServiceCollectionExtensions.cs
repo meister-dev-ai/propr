@@ -4,7 +4,9 @@
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
@@ -19,9 +21,13 @@ public static class ReviewingDiagnosticsServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddReviewingDiagnostics(this IServiceCollection services)
     {
-        services.AddSingleton<IReviewProtocolRecorder>(sp =>
-            new LegacyReviewProtocolRecorderAdapter(sp.GetRequiredService<IProtocolRecorder>()));
-        services.AddScoped<IReviewDiagnosticsReader, EfReviewDiagnosticsReader>();
+        services.AddScoped<IReviewDiagnosticsReader>(sp =>
+        {
+            var jobRepository = sp.GetRequiredService<IJobRepository>();
+            return jobRepository is InMemoryReviewJobRepository inMemoryRepository
+                ? new InMemoryReviewDiagnosticsReader(inMemoryRepository)
+                : new EfReviewDiagnosticsReader(jobRepository);
+        });
         services.AddScoped<GetReviewJobProtocolHandler>();
 
         return services;

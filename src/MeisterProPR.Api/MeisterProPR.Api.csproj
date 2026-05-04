@@ -6,14 +6,14 @@
         <ProjectReference Include="..\MeisterProPR.ProCursor\MeisterProPR.ProCursor.csproj"/>
     </ItemGroup>
 
-     <ItemGroup>
-         <PackageReference Include="FluentValidation" Version="12.1.1"/>
-         <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" Version="4.3.0"/>
-         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7"/>
-         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
-             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-             <PrivateAssets>all</PrivateAssets>
-         </PackageReference>
+    <ItemGroup>
+        <PackageReference Include="FluentValidation" Version="12.1.1"/>
+        <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" Version="4.3.0"/>
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.7"/>
         <PackageReference Include="Microsoft.OpenApi" Version="2.4.1"/>
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3"/>

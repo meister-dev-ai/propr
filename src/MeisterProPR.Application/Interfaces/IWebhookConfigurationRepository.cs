@@ -19,7 +19,8 @@ public interface IWebhookConfigurationRepository
         string secretCiphertext,
         IReadOnlyList<WebhookEventType> enabledEvents,
         Guid? organizationScopeId = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        float? reviewTemperature = null);
 
     /// <summary>Deletes a webhook configuration. Returns false if it does not exist or is not owned by the client.</summary>
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
@@ -56,7 +57,9 @@ public interface IWebhookConfigurationRepository
         bool? isActive,
         IReadOnlyList<WebhookEventType>? enabledEvents,
         Guid? ownerClientId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        float? reviewTemperature = null,
+        bool shouldUpdateReviewTemperature = false);
 
     /// <summary>Replaces all repository filters for the given webhook configuration.</summary>
     Task<bool> UpdateRepoFiltersAsync(

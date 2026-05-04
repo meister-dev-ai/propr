@@ -6,6 +6,7 @@
     <thead>
       <tr>
         <th>Display Name</th>
+        <th>Tenant</th>
         <th>Status</th>
         <th>Usage (30d)</th>
         <th>Created</th>
@@ -14,6 +15,12 @@
     <tbody>
       <tr v-for="client in filteredClients" :key="client.id" class="row-clickable" @click="openClient(client.id)">
         <td><RouterLink :to="clientDetailRoute(client.id)" @click.stop>{{ client.displayName }}</RouterLink></td>
+        <td>
+          <div class="tenant-cell">
+            <span>{{ client.tenantDisplayName ?? 'Unassigned' }}</span>
+            <span v-if="client.tenantSlug" class="tenant-slug">/{{ client.tenantSlug }}</span>
+          </div>
+        </td>
         <td>
           <span :class="client.isActive ? 'chip chip-success' : 'chip chip-muted'">
             <i :class="client.isActive ? 'fi fi-rr-check-circle' : 'fi fi-rr-ban'"></i>
@@ -46,20 +53,39 @@ interface Client {
   isActive: boolean
   createdAt: string
   recentUsageTokens?: number
+  tenantId?: string | null
+  tenantSlug?: string | null
+  tenantDisplayName?: string | null
 }
 
 const props = defineProps<{
   clients: Client[]
   filter: string
+  tenantFilterId?: string
 }>()
 
 const router = useRouter()
 
 const filteredClients = computed(() =>
   props.clients.filter((c) =>
-    c.displayName.toLowerCase().includes(props.filter.toLowerCase())
+    matchesSearch(c, props.filter) && matchesTenantFilter(c, props.tenantFilterId)
   )
 )
+
+function matchesSearch(client: Client, filter: string): boolean {
+  const normalizedFilter = filter.trim().toLowerCase()
+  if (!normalizedFilter) {
+    return true
+  }
+
+  return [client.displayName, client.tenantDisplayName, client.tenantSlug]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => value.toLowerCase().includes(normalizedFilter))
+}
+
+function matchesTenantFilter(client: Client, tenantFilterId?: string): boolean {
+  return !tenantFilterId || client.tenantId === tenantFilterId
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
@@ -108,5 +134,16 @@ function openClient(clientId: string) {
 }
 .usage-badge i {
   margin-right: 4px;
+}
+
+.tenant-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tenant-slug {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
 }
 </style>

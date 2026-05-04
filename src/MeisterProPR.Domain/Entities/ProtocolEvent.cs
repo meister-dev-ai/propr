@@ -35,6 +35,9 @@ public sealed class ProtocolEvent
     /// <summary>Truncated sample of the input text sent (max 4,000 characters). <see langword="null" /> when not applicable.</summary>
     public string? InputTextSample { get; init; }
 
+    /// <summary>Truncated system prompt used for this AI call (max 4,000 characters). <see langword="null" /> when not applicable.</summary>
+    public string? SystemPrompt { get; init; }
+
     /// <summary>
     ///     Truncated summary of the output or tool result (max 1,000 characters). <see langword="null" /> when not
     ///     applicable.

@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Dtos;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -495,14 +496,32 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         public void SetProCursorCapabilityAvailability(bool isAvailable, string? message = null)
         {
             this.LicensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult(new CapabilitySnapshot(
-                    PremiumCapabilityKey.ProCursor,
-                    PremiumCapabilityKey.ProCursor,
-                    true,
-                    true,
-                    PremiumCapabilityOverrideState.Default,
-                    isAvailable,
-                    message)));
+                .Returns(
+                    Task.FromResult(
+                        new CapabilitySnapshot(
+                            PremiumCapabilityKey.ProCursor,
+                            PremiumCapabilityKey.ProCursor,
+                            true,
+                            true,
+                            PremiumCapabilityOverrideState.Default,
+                            isAvailable,
+                            message)));
+            this.LicensingCapabilityService.GetSummaryAsync(Arg.Any<CancellationToken>())
+                .Returns(
+                    Task.FromResult(
+                        new LicensingSummaryDto(
+                            InstallationEdition.Commercial,
+                            DateTimeOffset.UtcNow,
+                            [
+                                new PremiumCapabilityDto(
+                                    PremiumCapabilityKey.ProCursor,
+                                    PremiumCapabilityKey.ProCursor,
+                                    true,
+                                    true,
+                                    PremiumCapabilityOverrideState.Default,
+                                    isAvailable,
+                                    message),
+                            ])));
         }
 
         public string GenerateClientAdministratorToken()
@@ -659,25 +678,53 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
 
                 var userRepo = Substitute.For<IUserRepository>();
-                userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
+                userRepo.GetByIdWithAssignmentsAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
                     .Returns(
-                        Task.FromResult(
-                            new Dictionary<Guid, ClientRole>
+                        Task.FromResult<AppUser?>(
+                            new AppUser
                             {
-                                { clientId, ClientRole.ClientAdministrator },
+                                Id = clientAdministratorUserId,
+                                Username = "client.admin",
+                                GlobalRole = AppUserRole.User,
+                                IsActive = true,
+                                CreatedAt = DateTimeOffset.UtcNow,
+                                ClientAssignments =
+                                {
+                                    new UserClientRole
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        UserId = clientAdministratorUserId,
+                                        ClientId = clientId,
+                                        Role = ClientRole.ClientAdministrator,
+                                        AssignedAt = DateTimeOffset.UtcNow,
+                                    },
+                                },
                             }));
-                userRepo.GetUserClientRolesAsync(clientUserId, Arg.Any<CancellationToken>())
+                userRepo.GetByIdWithAssignmentsAsync(clientUserId, Arg.Any<CancellationToken>())
                     .Returns(
-                        Task.FromResult(
-                            new Dictionary<Guid, ClientRole>
+                        Task.FromResult<AppUser?>(
+                            new AppUser
                             {
-                                { clientId, ClientRole.ClientUser },
+                                Id = clientUserId,
+                                Username = "client.user",
+                                GlobalRole = AppUserRole.User,
+                                IsActive = true,
+                                CreatedAt = DateTimeOffset.UtcNow,
+                                ClientAssignments =
+                                {
+                                    new UserClientRole
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        UserId = clientUserId,
+                                        ClientId = clientId,
+                                        Role = ClientRole.ClientUser,
+                                        AssignedAt = DateTimeOffset.UtcNow,
+                                    },
+                                },
                             }));
-                userRepo.GetUserClientRolesAsync(
+                userRepo.GetByIdWithAssignmentsAsync(
                         Arg.Is<Guid>(id => id != clientAdministratorUserId && id != clientUserId),
                         Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
-                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 services.AddSingleton(userRepo);
 
@@ -718,17 +765,13 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
                     "cl100k_base",
                     8192,
-                    1536,
-                    false,
-                    false,
-                    AiConfiguredModelSource.Manual);
+                    1536);
                 var embeddingBinding = new AiPurposeBindingDto(
                     Guid.NewGuid(),
                     AiPurpose.EmbeddingDefault,
                     embeddingModelId,
                     embeddingModel.RemoteModelId,
-                    AiProtocolMode.Embeddings,
-                    true);
+                    AiProtocolMode.Embeddings);
                 var embeddingConnection = new AiConnectionDto(
                     Guid.NewGuid(),
                     clientId,

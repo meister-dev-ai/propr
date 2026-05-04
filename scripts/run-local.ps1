@@ -29,6 +29,30 @@ function Write-RunLocalMessage {
     Write-Host $formatted -ForegroundColor $Color
 }
 
+function Test-ChildStructuredLogLine {
+    param([string]$Line)
+
+    return $Line -match '^\[\d{2}:\d{2}:\d{2} [A-Z]{3}\]'
+}
+
+function Format-ChildOutputLine {
+    param(
+        [pscustomobject]$Child,
+        [string]$Line
+    )
+
+    if (Test-ChildStructuredLogLine -Line $Line) {
+        $Child.InDbCommandBlock = $Line.Contains('DbCommand (')
+        return "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$($Child.Label)] $Line"
+    }
+
+    if ($Child.InDbCommandBlock) {
+        return "                    [$($Child.Label)] │ $Line"
+    }
+
+    return "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$($Child.Label)] $Line"
+}
+
 if (-not $DbConnectionString) {
     Write-RunLocalMessage -Message "DB connection string not provided; checking dotnet user-secrets..." -Color Cyan
     try {
@@ -102,7 +126,9 @@ function Flush-ChildOutput {
         }
 
         if ($line -ne '') {
-            Write-RunLocalMessage -Message "[$($Child.Label)] $line"
+            $formatted = Format-ChildOutputLine -Child $Child -Line $line
+            Add-Content -Path $script:LogFile -Value $formatted -Encoding utf8
+            Write-Host $formatted -ForegroundColor Gray
         }
 
         $Child.OutputTask = $Child.Process.StandardOutput.ReadLineAsync()
@@ -116,7 +142,9 @@ function Flush-ChildOutput {
         }
 
         if ($line -ne '') {
-            Write-RunLocalMessage -Message "[$($Child.Label)] $line" -Color Red
+            $formatted = Format-ChildOutputLine -Child $Child -Line $line
+            Add-Content -Path $script:LogFile -Value $formatted -Encoding utf8
+            Write-Host $formatted -ForegroundColor Red
         }
 
         $Child.ErrorTask = $Child.Process.StandardError.ReadLineAsync()
@@ -212,6 +240,7 @@ function Start-ChildProcess {
         Label = $Label
         OutputTask = $proc.StandardOutput.ReadLineAsync()
         ErrorTask = $proc.StandardError.ReadLineAsync()
+        InDbCommandBlock = $false
     }
 
     # If the child process exits immediately, surface any available output now.

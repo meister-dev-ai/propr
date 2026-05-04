@@ -16,6 +16,11 @@ public sealed class PatchAdminWebhookConfigRequestValidator : AbstractValidator<
             .Must(events => events is null || events.Count > 0)
             .WithMessage("EnabledEvents must contain at least one event when provided.");
 
+        this.RuleFor(request => request.ReviewTemperature)
+            .InclusiveBetween(0.0f, 2.0f)
+            .WithMessage("ReviewTemperature must be between 0.0 and 2.0 when provided.")
+            .When(request => request.ReviewTemperature.HasValue);
+
         this.RuleForEach(request => request.RepoFilters)
             .ChildRules(filter =>
             {

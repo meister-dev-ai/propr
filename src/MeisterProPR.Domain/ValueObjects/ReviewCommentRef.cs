@@ -6,7 +6,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Stable identity for a provider comment inside a review thread.</summary>
 public sealed record ReviewCommentRef
 {
-    /// <summary>Initializes a new instance of the <see cref="ReviewCommentRef"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ReviewCommentRef" /> class.</summary>
     /// <param name="thread">The review thread containing this comment.</param>
     /// <param name="externalCommentId">The external identifier for the comment.</param>
     /// <param name="author">The identity of the comment author.</param>

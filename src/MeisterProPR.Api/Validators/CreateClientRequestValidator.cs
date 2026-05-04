@@ -15,5 +15,9 @@ public sealed class CreateClientRequestValidator : AbstractValidator<CreateClien
         this.RuleFor(r => r.DisplayName)
             .NotEmpty()
             .WithMessage("DisplayName is required.");
+
+        this.RuleFor(r => r.TenantId)
+            .NotEmpty()
+            .WithMessage("TenantId is required.");
     }
 }

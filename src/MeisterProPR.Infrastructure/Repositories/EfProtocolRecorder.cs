@@ -56,6 +56,7 @@ public sealed class EfProtocolRecorder(
         long? inputTokens,
         long? outputTokens,
         string? inputTextSample,
+        string? systemPrompt,
         string? outputTextSample,
         CancellationToken ct = default,
         string? name = null,
@@ -74,6 +75,7 @@ public sealed class EfProtocolRecorder(
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
                 InputTextSample = Sanitize(inputTextSample),
+                SystemPrompt = Sanitize(systemPrompt),
                 OutputSummary = Sanitize(outputTextSample),
                 Error = Sanitize(error),
             };
@@ -99,10 +101,6 @@ public sealed class EfProtocolRecorder(
         {
             await using var db = await contextFactory.CreateDbContextAsync(ct);
             var sample = $"args={arguments}";
-            var effectiveResult = iteration > 3 && !string.IsNullOrEmpty(result) &&
-                                  result.Length > ProtocolLimits.ToolResultExcerptMaxLength
-                ? string.Concat(result.AsSpan(0, ProtocolLimits.ToolResultExcerptMaxLength), " [TRUNCATED]")
-                : result;
             var ev = new ProtocolEvent
             {
                 Id = Guid.NewGuid(),
@@ -111,7 +109,7 @@ public sealed class EfProtocolRecorder(
                 Name = toolName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(sample),
-                OutputSummary = Sanitize(effectiveResult),
+                OutputSummary = Sanitize(result),
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);
@@ -148,8 +146,8 @@ public sealed class EfProtocolRecorder(
 
             protocol.CompletedAt = DateTimeOffset.UtcNow;
             protocol.Outcome = outcome;
-            protocol.TotalInputTokens = totalInputTokens;
-            protocol.TotalOutputTokens = totalOutputTokens;
+            protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + totalInputTokens;
+            protocol.TotalOutputTokens = (protocol.TotalOutputTokens ?? 0) + totalOutputTokens;
             protocol.IterationCount = iterationCount;
             protocol.ToolCallCount = toolCallCount;
             protocol.FinalConfidence = finalConfidence;
@@ -232,7 +230,7 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, error, ct, "memory");
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, null, error, ct, "memory");
     }
 
     /// <inheritdoc />
@@ -243,13 +241,50 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, error, ct, "duplicate-suppression");
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, null, error, ct, "duplicate-suppression");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordCommentRelevanceEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "comment-relevance");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordReviewFindingGateEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "review-finding-gate");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordVerificationEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "verification");
     }
 
     private async Task RecordOperationalEventAsync(
         Guid protocolId,
         string eventName,
         string? details,
+        string? output,
         string? error,
         CancellationToken ct,
         string eventCategory)
@@ -261,10 +296,11 @@ public sealed class EfProtocolRecorder(
             {
                 Id = Guid.NewGuid(),
                 ProtocolId = protocolId,
-                Kind = ProtocolEventKind.MemoryOperation,
+                Kind = ProtocolEventKind.Operational,
                 Name = eventName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(details),
+                OutputSummary = Sanitize(output),
                 Error = Sanitize(error),
             };
             db.ProtocolEvents.Add(ev);
@@ -282,8 +318,7 @@ public sealed class EfProtocolRecorder(
     }
 
     /// <summary>
-    ///     Removes null bytes (rejected by PostgreSQL UTF-8) and truncates to
-    ///     <see cref="ProtocolLimits.TextSampleMaxLength" />.
+    ///     Removes null bytes rejected by PostgreSQL UTF-8.
     /// </summary>
     private static string? Sanitize(string? text)
     {
@@ -297,6 +332,6 @@ public sealed class EfProtocolRecorder(
             text = text.Replace("\0", string.Empty);
         }
 
-        return text.Length > ProtocolLimits.TextSampleMaxLength ? text[..ProtocolLimits.TextSampleMaxLength] : text;
+        return text;
     }
 }

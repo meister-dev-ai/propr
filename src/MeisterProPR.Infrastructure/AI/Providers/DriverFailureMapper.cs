@@ -21,8 +21,7 @@ public static class DriverFailureMapper
             summary,
             null,
             DateTimeOffset.UtcNow,
-            warnings ?? [],
-            null);
+            warnings ?? []);
     }
 
     public static AiVerificationResultDto Failed(HttpStatusCode statusCode, string? detail = null)

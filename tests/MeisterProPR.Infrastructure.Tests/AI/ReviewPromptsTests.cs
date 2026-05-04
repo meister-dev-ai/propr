@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -169,7 +170,7 @@ public class ReviewPromptsTests
 
         var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main");
 
-        Assert.Contains("--- DIFF ---", msg);
+        Assert.Contains("======================================= DIFF =======================================", msg);
         Assert.Contains("+UNIQUE_DIFF_MARKER", msg);
     }
 
@@ -411,6 +412,59 @@ public class ReviewPromptsTests
 
         Assert.Contains("senior code review editor", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DISCARD", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildPrVerificationSystemPrompt_WithoutOverride_ReturnsVerificationRules()
+    {
+        var prompt = ReviewPrompts.BuildPrVerificationSystemPrompt(null);
+
+        Assert.Contains("independently retrieved repository evidence", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SUPPORTED", prompt, StringComparison.Ordinal);
+        Assert.Contains("UNRESOLVED", prompt, StringComparison.Ordinal);
+        Assert.Contains("recommended_disposition", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPrVerificationSystemPrompt_WithOverride_ReturnsOverrideText()
+    {
+        var overrides = new Dictionary<string, string> { ["PrVerificationSystemPrompt"] = "Custom PR verification" };
+        var context = new ReviewSystemContext(null, [], null) { PromptOverrides = overrides };
+
+        var prompt = ReviewPrompts.BuildPrVerificationSystemPrompt(context);
+
+        Assert.Equal("Custom PR verification", prompt);
+    }
+
+    [Fact]
+    public void BuildPrVerificationUserMessage_IncludesClaimAndEvidenceDetails()
+    {
+        var claim = new ClaimDescriptor(
+            "claim-1",
+            "finding-1",
+            ClaimDescriptor.PrLevelStage,
+            CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
+            "Cross-file DI registration is missing.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.NeedsEvidenceMode,
+            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily,
+            "ServiceRegistration",
+            requiresCrossFileEvidence: true,
+            requiresSymbolEvidence: true);
+        var evidence = new EvidenceBundle(
+            claim.ClaimId,
+            [new EvidenceItem("FileContentRange", "Fetched file", "src/Foo.cs", "services.AddFoo();")],
+            EvidenceBundle.PartialCoverage,
+            "One supporting file was retrieved.");
+
+        var message = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
+
+        Assert.Contains("Claim ID: claim-1", message);
+        Assert.Contains("Finding ID: finding-1", message);
+        Assert.Contains($"Claim family: {ClaimDescriptor.CrossFileConsistencyFamily}", message);
+        Assert.Contains("Coverage state: Partial", message);
+        Assert.Contains("Source: src/Foo.cs", message);
+        Assert.Contains("Payload: services.AddFoo();", message);
     }
 
     // PromptOverrides — BuildSystemPrompt applies SystemPrompt override from context

@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -144,7 +143,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), modelId: "gpt-4o");
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), "gpt-4o");
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);
@@ -157,7 +156,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             clientRegistry,
             prScanRepository,
             resolutionCore,
-            Substitute.For<IReviewProtocolRecorder>(),
+            Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,

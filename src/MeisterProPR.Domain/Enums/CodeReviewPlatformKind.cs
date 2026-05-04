@@ -8,6 +8,7 @@ public enum CodeReviewPlatformKind
 {
     /// <summary>A pull request.</summary>
     PullRequest = 0,
+
     /// <summary>A merge request.</summary>
     MergeRequest = 1,
 }

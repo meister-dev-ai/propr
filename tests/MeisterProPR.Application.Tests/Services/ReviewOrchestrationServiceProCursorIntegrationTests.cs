@@ -4,7 +4,6 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -218,7 +217,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, modelId: "gpt-4o", baseUrl: "https://ai.test.local"));
+            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, "gpt-4o", baseUrl: "https://ai.test.local"));
 
         var chatClientFactory = Substitute.For<IAiChatClientFactory>();
         chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
@@ -288,7 +287,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             clientRegistry,
             prScanRepository,
             Substitute.For<IAiCommentResolutionCore>(),
-            Substitute.For<IReviewProtocolRecorder>(),
+            Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,

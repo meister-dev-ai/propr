@@ -24,11 +24,15 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
         builder.Property(e => e.OutputTokens).HasColumnName("output_tokens").IsRequired(false);
         builder.Property(e => e.InputTextSample)
             .HasColumnName("input_text_sample")
-            .HasMaxLength(ProtocolLimits.TextSampleMaxLength)
+            .HasColumnType("text")
+            .IsRequired(false);
+        builder.Property(e => e.SystemPrompt)
+            .HasColumnName("system_prompt")
+            .HasColumnType("text")
             .IsRequired(false);
         builder.Property(e => e.OutputSummary)
             .HasColumnName("output_summary")
-            .HasMaxLength(ProtocolLimits.TextSampleMaxLength)
+            .HasColumnType("text")
             .IsRequired(false);
         builder.Property(e => e.Error).HasColumnName("error").IsRequired(false);
 

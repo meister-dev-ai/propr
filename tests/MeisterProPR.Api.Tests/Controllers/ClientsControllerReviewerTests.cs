@@ -63,6 +63,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         private readonly string _dbName = $"TestDb_Reviewer_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
+        public Guid TenantId { get; } = Guid.NewGuid();
         public Guid ClientId { get; } = Guid.NewGuid();
         public Guid OtherClientId { get; } = Guid.NewGuid();
         public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
@@ -134,10 +135,22 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
 
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = this.TenantId,
+                    Slug = "reviewer-test-tenant",
+                    DisplayName = "Reviewer Test Tenant",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
             db.Clients.AddRange(
                 new ClientRecord
                 {
                     Id = this.ClientId,
+                    TenantId = this.TenantId,
                     DisplayName = "Reviewer Test Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -145,6 +158,7 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 new ClientRecord
                 {
                     Id = this.OtherClientId,
+                    TenantId = this.TenantId,
                     DisplayName = "Other Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,

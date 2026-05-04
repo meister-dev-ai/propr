@@ -88,6 +88,7 @@ public sealed partial class PrCrawlService(
                             ProCursorSourceScopeMode = config.ProCursorSourceScopeMode,
                             ProCursorSourceIds = config.ProCursorSourceIds ?? [],
                             InvalidProCursorSourceIds = config.InvalidProCursorSourceIds ?? [],
+                            ReviewTemperature = config.ReviewTemperature,
                         },
                         cancellationToken);
                     continue;
@@ -106,6 +107,11 @@ public sealed partial class PrCrawlService(
                     pr.Repository.ExternalRepositoryId,
                     pr.CodeReview.Number,
                     pr.RevisionId);
+
+                if (config.ReviewTemperature.HasValue)
+                {
+                    job.SetAiConfig(job.AiConnectionId, job.AiModel, config.ReviewTemperature);
+                }
 
                 if (pr.ReviewRevision is not null)
                 {

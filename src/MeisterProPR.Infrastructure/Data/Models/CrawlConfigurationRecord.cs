@@ -17,6 +17,7 @@ public sealed class CrawlConfigurationRecord
     public ScmProvider Provider { get; set; } = ScmProvider.AzureDevOps;
     public string OrganizationUrl { get; set; } = string.Empty;
     public string ProjectId { get; set; } = string.Empty;
+    public float? ReviewTemperature { get; set; }
     public Guid? OrganizationScopeId { get; set; }
     public ProCursorSourceScopeMode ProCursorSourceScopeMode { get; set; } = ProCursorSourceScopeMode.AllClientSources;
 

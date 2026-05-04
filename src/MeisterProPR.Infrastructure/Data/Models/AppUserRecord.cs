@@ -10,12 +10,16 @@ public sealed class AppUserRecord
 {
     public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
-    public string PasswordHash { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? NormalizedEmail { get; set; }
+    public string? PasswordHash { get; set; }
     public AppUserRole GlobalRole { get; set; } = AppUserRole.User;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
 
     public ICollection<UserClientRoleRecord> ClientAssignments { get; set; } = [];
+    public ICollection<TenantMembershipRecord> TenantMemberships { get; set; } = [];
+    public ICollection<ExternalIdentityRecord> ExternalIdentities { get; set; } = [];
     public ICollection<UserPatRecord> Pats { get; set; } = [];
     public ICollection<RefreshTokenRecord> RefreshTokens { get; set; } = [];
 }

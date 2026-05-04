@@ -19,14 +19,29 @@ public sealed class ClientsModuleTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Tenants.Add(
+            new TenantRecord
+            {
+                Id = tenantId,
+                Slug = "test-tenant",
+                DisplayName = "Test Tenant",
+                IsActive = true,
+                LocalLoginEnabled = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
         db.Clients.Add(
             new ClientRecord
             {
                 Id = clientId,
+                TenantId = tenantId,
                 DisplayName = "Feature Client",
                 IsActive = true,
                 CustomSystemMessage = "keep me",
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = now,
             });
         await db.SaveChangesAsync();
 

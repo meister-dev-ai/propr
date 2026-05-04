@@ -6,7 +6,7 @@ This document is the durable ownership map for the backend modular-monolith migr
 
 ## Module Catalog
 
-| Module | Scope | Current Entry Point | Primary Contracts |
+| Module | Scope | Module Entry Point | Primary Contracts |
 |--------|-------|---------------------|-------------------|
 | Reviewing | Review intake, execution orchestration, diagnostics, and thread memory | `AddReviewingModule()` | `IJobRepository`, `IProtocolRecorder`, `IFileByFileReviewOrchestrator`, `IThreadMemoryService` |
 | Crawling | Crawl configuration, ADO discovery, and periodic PR scan execution | `AddCrawlingModule()` | `ICrawlConfigurationRepository`, `IReviewPrScanRepository`, `IPrCrawlService`, `IAdoDiscoveryService` |
@@ -35,9 +35,9 @@ These concerns remain shared support because they provide technical capabilities
 - Module roots may depend on shared support services and public contracts from other modules.
 - Shared support must not absorb feature-owned repositories, stores, or orchestration services.
 - Cross-module calls should use public interfaces or DTOs rather than implementation types.
-- DB-backed module registrations now key directly off `DB_CONNECTION_STRING`, including in `Testing`; test hosts that need an isolated graph should avoid inheriting a PostgreSQL connection string or override the affected services explicitly.
-- Future feature work should continue to land under matching `Features/` paths without changing the module catalog unless the docs and guardrail tests are updated together.
+- DB-backed module registrations key directly off `DB_CONNECTION_STRING`, including in `Testing`; test hosts that need an isolated graph should avoid inheriting a PostgreSQL connection string or override the affected services explicitly.
+- Feature work follows matching `Features/` paths without changing the module catalog unless the docs and guardrail tests are updated together.
 
 ## Review Checklist Alignment
 
-The active wave-review checklist in `specs/034-vertical-slice-migration/checklists/wave-review.md` should be used to confirm that any new slice follows this ownership map before the legacy seam is removed.
+Use the wave-review checklist in `specs/034-vertical-slice-migration/checklists/wave-review.md` to confirm that each new slice follows this ownership map before a legacy seam is removed.

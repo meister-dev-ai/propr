@@ -66,6 +66,8 @@ export interface JobDetailResponse {
   totalInputTokens: number | null
   totalOutputTokens: number | null
   errorMessage: string | null
+  aiModel: string | null
+  reviewTemperature: number | null
   tokenBreakdown: TokenBreakdownEntry[]
   breakdownConsistent: boolean | null
 }

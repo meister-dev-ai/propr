@@ -28,12 +28,15 @@ public sealed class WaveRegistrationSafetyTests
         Assert.NotNull(FindService<IReviewDiagnosticsReader>(services));
         Assert.NotNull(FindService<IReviewThreadMemoryStore>(services));
         Assert.NotNull(FindService<IReviewThreadMemoryService>(services));
+        Assert.NotNull(FindService<IReviewWorkflowRunner>(services));
+        Assert.NotNull(FindService<IEvaluationArtifactWriter>(services));
         Assert.NotNull(FindService<GetReviewJobProtocolHandler>(services));
-        Assert.Null(FindService<IJobRepository>(services));
+        Assert.NotNull(FindService<IJobRepository>(services));
+        Assert.NotNull(FindService<IProtocolRecorder>(services));
     }
 
     [Fact]
-    public void ReviewingModule_WithDatabaseConnectionString_RegistersLegacyAndFeatureReviewingContractsTogether()
+    public void ReviewingModule_WithDatabaseConnectionString_RegistersReviewingContracts()
     {
         var services = new ServiceCollection();
         var configuration = CreateConfiguration(true);
@@ -45,9 +48,9 @@ public sealed class WaveRegistrationSafetyTests
         Assert.NotNull(FindService<IProtocolRecorder>(services));
         Assert.NotNull(FindService<IThreadMemoryRepository>(services));
         Assert.NotNull(FindService<IReviewJobExecutionStore>(services));
-        Assert.NotNull(FindService<IReviewProtocolRecorder>(services));
         Assert.NotNull(FindService<IReviewThreadMemoryStore>(services));
         Assert.NotNull(FindService<IReviewThreadMemoryService>(services));
+        Assert.Null(FindService<IReviewWorkflowRunner>(services));
     }
 
     private static IConfiguration CreateConfiguration(bool withDatabaseConnectionString)

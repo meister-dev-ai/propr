@@ -7,6 +7,7 @@ import { ref } from 'vue'
 
 const mockChangeMyPassword = vi.fn()
 const mockRouterPush = vi.fn()
+const hasLocalPassword = ref(true)
 
 vi.mock('@/services/userSecurityService', () => ({
   changeMyPassword: mockChangeMyPassword,
@@ -27,6 +28,7 @@ vi.mock('@/services/api', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     username: ref('dev-admin'),
+    hasLocalPassword,
     isAdmin: ref(false),
     edition: ref('community'),
     capabilities: ref([]),
@@ -41,6 +43,7 @@ vi.mock('vue-router', () => ({
 describe('SettingsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hasLocalPassword.value = true
   })
 
   it('renders the current username from the session token', async () => {
@@ -78,5 +81,16 @@ describe('SettingsView', () => {
       newPassword: 'new-password-123',
     })
     expect(wrapper.text()).toContain('Password changed. Refresh tokens were revoked and PATs remain valid.')
+  })
+
+  it('shows SSO-only guidance when the current account has no local password', async () => {
+    hasLocalPassword.value = false
+
+    const { default: SettingsView } = await import('@/views/SettingsView.vue')
+    const wrapper = mount(SettingsView)
+
+    expect(wrapper.text()).toContain('does not have a local password to change here')
+    expect(wrapper.text()).toContain('Use your organization\'s identity provider to manage your sign-in credentials.')
+    expect(wrapper.find('input[name="currentPassword"]').exists()).toBe(false)
   })
 })

@@ -11,14 +11,29 @@ const router = createRouter({
       path: '/',
       name: 'home',
       redirect: () => {
-        const { isAuthenticated, isAdmin, clientRoles } = useSession()
+        const { isAuthenticated, isAdmin, clientRoles, tenantRoles, edition } = useSession()
         if (!isAuthenticated.value) {
           return { name: 'login' }
         }
 
         const hasAnyAdminRole = isAdmin.value || Object.values(clientRoles.value).some((role) => role >= 1)
-        return hasAnyAdminRole ? { name: 'clients' } : { name: 'reviews' }
+        if (hasAnyAdminRole) {
+          return { name: 'clients' }
+        }
+
+        const firstTenantAdminId = Object.entries(tenantRoles.value)
+          .find(([, role]) => role >= 1)?.[0]
+
+        return firstTenantAdminId && edition.value !== 'community'
+          ? { name: 'tenant-directory' }
+          : { name: 'reviews' }
       },
+    },
+    {
+      path: '/tenants',
+      name: 'tenant-directory',
+      component: () => import('@/views/TenantDirectoryView.vue'),
+      meta: { requiresAuth: true, requiresTenantDirectoryAccess: true },
     },
     {
       path: '/login',
@@ -26,10 +41,32 @@ const router = createRouter({
       component: () => import('@/views/LoginView.vue'),
     },
     {
+      path: '/tenants/:tenantSlug/login',
+      name: 'tenant-login',
+      component: () => import('@/views/TenantLoginView.vue'),
+    },
+    {
+      path: '/tenants/:tenantSlug/login/callback',
+      name: 'tenant-login-callback',
+      component: () => import('@/views/TenantExternalCallbackView.vue'),
+    },
+    {
+      path: '/tenants/:tenantId/settings',
+      name: 'tenant-settings',
+      component: () => import('@/views/TenantSettingsView.vue'),
+      meta: { requiresAuth: true, requiresTenantAdmin: true },
+    },
+    {
+      path: '/tenants/:tenantId/members',
+      name: 'tenant-members',
+      component: () => import('@/views/TenantMembersView.vue'),
+      meta: { requiresAuth: true, requiresTenantAdmin: true },
+    },
+    {
       path: '/clients',
       name: 'clients',
       component: () => import('@/views/ClientsView.vue'),
-      meta: { requiresAuth: true, requiresClientAdmin: true },
+      meta: { requiresAuth: true, requiresClientAccess: true },
     },
     {
       path: '/reviews',
@@ -102,7 +139,7 @@ const router = createRouter({
       path: '/:id',
       name: 'client-detail',
       component: () => import('@/views/ClientDetailView.vue'),
-      meta: { requiresAuth: true, requiresClientAdmin: true },
+      meta: { requiresAuth: true, requiresClientAccess: true },
     },
     {
       path: '/:id/procursor/sources/:sourceId/events',
@@ -114,12 +151,27 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const { isAuthenticated, isAdmin, hasClientRole, clientRoles } = useSession()
+  const { isAuthenticated, isAdmin, hasClientRole, hasTenantRole, clientRoles, tenantRoles, edition } = useSession()
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     return { name: 'login' }
   }
   if (to.meta.requiresAdmin && !isAdmin.value) {
     return { name: 'access-denied' }
+  }
+  if ((to.meta.requiresTenantDirectoryAccess || to.meta.requiresTenantAdmin) && edition.value === 'community') {
+    return { name: 'access-denied' }
+  }
+  if (to.meta.requiresTenantDirectoryAccess && !isAdmin.value) {
+    const hasAnyTenantAdminRole = Object.values(tenantRoles.value).some((role) => role >= 1)
+    if (!hasAnyTenantAdminRole) {
+      return { name: 'access-denied' }
+    }
+  }
+  if (to.meta.requiresTenantAdmin && !isAdmin.value) {
+    const routeTenantId = typeof to.params.tenantId === 'string' ? to.params.tenantId : undefined
+    if (!routeTenantId || !hasTenantRole(routeTenantId, 1)) {
+      return { name: 'access-denied' }
+    }
   }
   const requiredClientRole = to.meta.requiresClientAdmin ? 1 : to.meta.requiresClientAccess ? 0 : null
   if (requiredClientRole !== null && !isAdmin.value) {
@@ -140,7 +192,7 @@ router.beforeEach((to) => {
       }
     }
   }
-  if (to.name === 'login' && isAuthenticated.value) {
+  if ((to.name === 'login' || to.name === 'tenant-login') && isAuthenticated.value) {
     return { name: 'home' }
   }
 })

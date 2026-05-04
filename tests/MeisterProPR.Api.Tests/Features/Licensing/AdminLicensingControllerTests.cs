@@ -22,7 +22,7 @@ public sealed class AdminLicensingControllerTests
         licensingService.GetSummaryAsync(Arg.Any<CancellationToken>())
             .Returns(CreateSummary(InstallationEdition.Community));
 
-        var controller = CreateController(licensingService, isAdmin: true);
+        var controller = CreateController(licensingService, true);
 
         var result = await controller.GetLicensing(CancellationToken.None);
 
@@ -44,12 +44,14 @@ public sealed class AdminLicensingControllerTests
                 Arg.Any<CancellationToken>())
             .Returns(CreateSummary(InstallationEdition.Commercial));
 
-        var controller = CreateController(licensingService, isAdmin: true, actorUserId: actorUserId);
+        var controller = CreateController(licensingService, true, actorUserId);
         var request = new PatchAdminLicensingRequest(
             InstallationEdition.Commercial,
-            [new PatchPremiumCapabilityOverrideRequest(
-                PremiumCapabilityKey.MultipleScmProviders,
-                PremiumCapabilityOverrideState.Enabled)]);
+            [
+                new PatchPremiumCapabilityOverrideRequest(
+                    PremiumCapabilityKey.MultipleScmProviders,
+                    PremiumCapabilityOverrideState.Enabled),
+            ]);
 
         var result = await controller.PatchLicensing(request, CancellationToken.None);
 
@@ -57,14 +59,15 @@ public sealed class AdminLicensingControllerTests
         var payload = Assert.IsType<LicensingSummaryDto>(ok.Value);
         Assert.Equal(InstallationEdition.Commercial, payload.Edition);
 
-        await licensingService.Received(1).UpdateAsync(
-            InstallationEdition.Commercial,
-            Arg.Is<IReadOnlyCollection<CapabilityOverrideMutation>>(mutations =>
-                mutations.Count == 1
-                && mutations.First().Key == PremiumCapabilityKey.MultipleScmProviders
-                && mutations.First().OverrideState == PremiumCapabilityOverrideState.Enabled),
-            actorUserId,
-            Arg.Any<CancellationToken>());
+        await licensingService.Received(1)
+            .UpdateAsync(
+                InstallationEdition.Commercial,
+                Arg.Is<IReadOnlyCollection<CapabilityOverrideMutation>>(mutations =>
+                    mutations.Count == 1
+                    && mutations.First().Key == PremiumCapabilityKey.MultipleScmProviders
+                    && mutations.First().OverrideState == PremiumCapabilityOverrideState.Enabled),
+                actorUserId,
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -78,12 +81,14 @@ public sealed class AdminLicensingControllerTests
                 Arg.Any<CancellationToken>())
             .Returns<Task<LicensingSummaryDto>>(_ => throw new InvalidOperationException("Community cannot enable premium capabilities."));
 
-        var controller = CreateController(licensingService, isAdmin: true, actorUserId: Guid.NewGuid());
+        var controller = CreateController(licensingService, true, Guid.NewGuid());
         var request = new PatchAdminLicensingRequest(
             InstallationEdition.Community,
-            [new PatchPremiumCapabilityOverrideRequest(
-                PremiumCapabilityKey.MultipleScmProviders,
-                PremiumCapabilityOverrideState.Enabled)]);
+            [
+                new PatchPremiumCapabilityOverrideRequest(
+                    PremiumCapabilityKey.MultipleScmProviders,
+                    PremiumCapabilityOverrideState.Enabled),
+            ]);
 
         var result = await controller.PatchLicensing(request, CancellationToken.None);
 
@@ -124,13 +129,15 @@ public sealed class AdminLicensingControllerTests
         return new LicensingSummaryDto(
             edition,
             edition == InstallationEdition.Commercial ? DateTimeOffset.UtcNow : null,
-            [new PremiumCapabilityDto(
-                PremiumCapabilityKey.MultipleScmProviders,
-                "Multiple SCM providers",
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                edition == InstallationEdition.Commercial,
-                edition == InstallationEdition.Commercial ? null : "Commercial edition is required.")]);
+            [
+                new PremiumCapabilityDto(
+                    PremiumCapabilityKey.MultipleScmProviders,
+                    "Multiple SCM providers",
+                    true,
+                    true,
+                    PremiumCapabilityOverrideState.Default,
+                    edition == InstallationEdition.Commercial,
+                    edition == InstallationEdition.Commercial ? null : "Commercial edition is required."),
+            ]);
     }
 }

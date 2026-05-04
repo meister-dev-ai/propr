@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorTokenUsageEvent
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorTokenUsageEvent"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorTokenUsageEvent" /> class.
     /// </summary>
     public ProCursorTokenUsageEvent(
         Guid id,

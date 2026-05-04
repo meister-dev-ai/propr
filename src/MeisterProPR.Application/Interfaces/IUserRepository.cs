@@ -12,6 +12,9 @@ public interface IUserRepository
     /// <summary>Returns a user by username (case-insensitive), or null.</summary>
     Task<AppUser?> GetByUsernameAsync(string username, CancellationToken ct = default);
 
+    /// <summary>Returns a user by normalized email, or null when no such user exists.</summary>
+    Task<AppUser?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken ct = default);
+
     /// <summary>Returns a user by id, or null.</summary>
     Task<AppUser?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
@@ -38,4 +41,34 @@ public interface IUserRepository
 
     /// <summary>Returns all client-role assignments for the given user as a dictionary keyed by client ID.</summary>
     Task<Dictionary<Guid, ClientRole>> GetUserClientRolesAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Returns a user linked to the supplied tenant-scoped external identity, or null.</summary>
+    Task<AppUser?> GetByExternalIdentityAsync(
+        Guid tenantId,
+        Guid ssoProviderId,
+        string issuer,
+        string subject,
+        CancellationToken ct = default);
+
+    /// <summary>Returns the tenant membership for the supplied tenant and user, or null.</summary>
+    Task<TenantMembership?> GetTenantMembershipAsync(Guid tenantId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Returns all memberships for the supplied tenant.</summary>
+    Task<IReadOnlyList<TenantMembership>> ListTenantMembershipsAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Creates or updates a tenant membership keyed by tenant and user.</summary>
+    Task<TenantMembership> UpsertTenantMembershipAsync(TenantMembership membership, CancellationToken ct = default);
+
+    /// <summary>Updates the role of an existing tenant membership, or returns null when not found.</summary>
+    Task<TenantMembership?> UpdateTenantMembershipRoleAsync(
+        Guid tenantId,
+        Guid membershipId,
+        TenantRole role,
+        CancellationToken ct = default);
+
+    /// <summary>Deletes a tenant membership when it exists.</summary>
+    Task<bool> RemoveTenantMembershipAsync(Guid tenantId, Guid membershipId, CancellationToken ct = default);
+
+    /// <summary>Persists a new tenant-scoped external identity link.</summary>
+    Task AddExternalIdentityAsync(ExternalIdentity externalIdentity, CancellationToken ct = default);
 }

@@ -200,12 +200,12 @@ public sealed class ProCursorGatewayTests
     public async Task ListSourcesAsync_WhenCapabilityUnavailable_ThrowsInvalidOperationException()
     {
         var clientId = Guid.NewGuid();
-        var licensingService = CreateLicensingService(isAvailable: false, "ProCursor requires a premium license.");
+        var licensingService = CreateLicensingService(false, "ProCursor requires a premium license.");
         var gateway = CreateGateway(
             Substitute.For<IClientAdminService>(),
             CreateProviderRegistry(Substitute.For<IProviderAdminDiscoveryService>()),
             Substitute.For<IProCursorKnowledgeSourceRepository>(),
-            licensingCapabilityService: licensingService);
+            licensingService);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.ListSourcesAsync(clientId, CancellationToken.None));
@@ -217,12 +217,12 @@ public sealed class ProCursorGatewayTests
     public async Task AskKnowledgeAsync_WhenCapabilityUnavailable_ReturnsUnavailableResponse()
     {
         var clientId = Guid.NewGuid();
-        var licensingService = CreateLicensingService(isAvailable: false, "ProCursor requires a premium license.");
+        var licensingService = CreateLicensingService(false, "ProCursor requires a premium license.");
         var gateway = CreateGateway(
             Substitute.For<IClientAdminService>(),
             CreateProviderRegistry(Substitute.For<IProviderAdminDiscoveryService>()),
             Substitute.For<IProCursorKnowledgeSourceRepository>(),
-            licensingCapabilityService: licensingService);
+            licensingService);
 
         var response = await gateway.AskKnowledgeAsync(
             new ProCursorKnowledgeQueryRequest(clientId, "What changed?"),
@@ -312,14 +312,16 @@ public sealed class ProCursorGatewayTests
     {
         var licensingService = Substitute.For<ILicensingCapabilityService>();
         licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new CapabilitySnapshot(
-                PremiumCapabilityKey.ProCursor,
-                PremiumCapabilityKey.ProCursor,
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                isAvailable,
-                message)));
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.ProCursor,
+                        PremiumCapabilityKey.ProCursor,
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Default,
+                        isAvailable,
+                        message)));
         return licensingService;
     }
 

@@ -14,6 +14,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Registered clients table.</summary>
     public DbSet<ClientRecord> Clients => this.Set<ClientRecord>();
 
+    /// <summary>Tenant boundaries for sign-in policy and tenant administration.</summary>
+    public DbSet<TenantRecord> Tenants => this.Set<TenantRecord>();
+
     /// <summary>Crawl configurations table.</summary>
     public DbSet<CrawlConfigurationRecord> CrawlConfigurations => this.Set<CrawlConfigurationRecord>();
 
@@ -55,6 +58,18 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Application users.</summary>
     public DbSet<AppUserRecord> AppUsers => this.Set<AppUserRecord>();
+
+    /// <summary>Tenant-scoped user memberships.</summary>
+    public DbSet<TenantMembershipRecord> TenantMemberships => this.Set<TenantMembershipRecord>();
+
+    /// <summary>Tenant-owned external sign-in provider configurations.</summary>
+    public DbSet<TenantSsoProviderRecord> TenantSsoProviders => this.Set<TenantSsoProviderRecord>();
+
+    /// <summary>Tenant-scoped external identity links.</summary>
+    public DbSet<ExternalIdentityRecord> ExternalIdentities => this.Set<ExternalIdentityRecord>();
+
+    /// <summary>Tenant administration audit history.</summary>
+    public DbSet<TenantAuditEntryRecord> TenantAuditEntries => this.Set<TenantAuditEntryRecord>();
 
     /// <summary>Per-client role assignments for users.</summary>
     public DbSet<UserClientRoleRecord> UserClientRoles => this.Set<UserClientRoleRecord>();

@@ -33,10 +33,11 @@ public sealed partial class ProCursorKnowledgeSourcesController(
 
         return capability is null
             ? null
-            : this.Conflict(new PremiumFeatureUnavailablePayload(
-                "premium_feature_unavailable",
-                capability.Key,
-                capability.Message ?? $"Capability '{capability.Key}' is unavailable."));
+            : this.Conflict(
+                new PremiumFeatureUnavailablePayload(
+                    "premium_feature_unavailable",
+                    capability.Key,
+                    capability.Message ?? $"Capability '{capability.Key}' is unavailable."));
     }
 
     /// <summary>

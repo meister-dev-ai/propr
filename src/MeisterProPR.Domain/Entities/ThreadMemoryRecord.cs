@@ -57,7 +57,7 @@ public sealed class ThreadMemoryRecord
     ///     Indicates how this memory record was created.
     ///     <see cref="Enums.MemorySource.ThreadResolved" /> for records created by the crawl state machine;
     ///     <see cref="Enums.MemorySource.AdminDismissed" /> for records created by an admin explicitly dismissing a finding.
-    ///     Defaults to <see cref="MemorySource.ThreadResolved" /> for backward compatibility with existing records.
+    ///     Defaults to <see cref="Enums.MemorySource.ThreadResolved" /> for backward compatibility with existing records.
     /// </summary>
     public MemorySource MemorySource { get; init; } = MemorySource.ThreadResolved;
 

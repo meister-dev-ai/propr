@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -10,7 +11,6 @@ using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -128,7 +128,8 @@ public sealed partial class AdminWebhookConfigsController(
             config.RepoFilters.Select(ToWebhookRepoFilterResponse).ToList().AsReadOnly(),
             this.BuildListenerUrl(config.ProviderType, config.PublicPathKey),
             generatedSecret,
-            config.CreatedAt);
+            config.CreatedAt,
+            config.ReviewTemperature);
     }
 
     private static WebhookDeliveryLogEntryResponse ToWebhookDeliveryLogEntryResponse(WebhookDeliveryLogEntryDto entry)
@@ -457,7 +458,8 @@ public sealed partial class AdminWebhookConfigsController(
                 protectedSecret,
                 request.EnabledEvents ?? [],
                 resolvedOrganization.OrganizationScopeId,
-                ct);
+                ct,
+                reviewTemperature: request.ReviewTemperature);
 
             if (repoFilters.Count > 0)
             {
@@ -550,7 +552,9 @@ public sealed partial class AdminWebhookConfigsController(
                 request.IsActive,
                 request.EnabledEvents,
                 isAdmin ? null : existing.ClientId,
-                ct);
+                ct,
+                reviewTemperature: request.ReviewTemperature,
+                shouldUpdateReviewTemperature: request.ShouldUpdateReviewTemperature);
 
             if (!updated)
             {
@@ -669,13 +673,45 @@ public sealed record CreateAdminWebhookConfigRequest(
     string? ProviderScopePath = null,
     string ProviderProjectKey = "",
     IReadOnlyList<WebhookEventType>? EnabledEvents = null,
-    IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters = null);
+    IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters = null,
+    float? ReviewTemperature = null);
 
-/// <summary>Request body for patching an admin-managed webhook configuration.</summary>
-public sealed record PatchAdminWebhookConfigRequest(
-    bool? IsActive = null,
-    IReadOnlyList<WebhookEventType>? EnabledEvents = null,
-    IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters = null);
+/// <summary>
+///     Request body for patching an admin-managed webhook configuration.
+///     Omit a field to leave it unchanged. Set <c>reviewTemperature</c> to <see langword="null" /> to clear the override.
+/// </summary>
+public sealed record PatchAdminWebhookConfigRequest
+{
+    /// <summary>Optional activation-state update.</summary>
+    public bool? IsActive { get; init; }
+
+    /// <summary>Optional full-replacement enabled-event set.</summary>
+    public IReadOnlyList<WebhookEventType>? EnabledEvents { get; init; }
+
+    /// <summary>Optional full-replacement repository filter set.</summary>
+    public IReadOnlyList<WebhookRepoFilterRequest>? RepoFilters { get; init; }
+
+    /// <summary>
+    ///     Optional review temperature override. Set this property explicitly to <see langword="null" /> to clear the
+    ///     stored override and fall back to default behavior.
+    /// </summary>
+    public float? ReviewTemperature
+    {
+        get => this._reviewTemperature;
+        init
+        {
+            this._reviewTemperature = value;
+            this._shouldUpdateReviewTemperature = true;
+        }
+    }
+
+    /// <summary>Whether the request should apply a review-temperature update, including clearing it to null.</summary>
+    [JsonIgnore]
+    public bool ShouldUpdateReviewTemperature => this._shouldUpdateReviewTemperature;
+
+    private readonly float? _reviewTemperature;
+    private readonly bool _shouldUpdateReviewTemperature;
+}
 
 /// <summary>A single repo filter entry in a webhook create or patch request.</summary>
 public sealed record WebhookRepoFilterRequest(
@@ -697,7 +733,8 @@ public sealed record WebhookConfigurationResponse(
     IReadOnlyList<WebhookRepoFilterResponse> RepoFilters,
     string ListenerUrl,
     string? GeneratedSecret,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    float? ReviewTemperature = null);
 
 /// <summary>Response payload for one webhook repository filter.</summary>
 public sealed record WebhookRepoFilterResponse(

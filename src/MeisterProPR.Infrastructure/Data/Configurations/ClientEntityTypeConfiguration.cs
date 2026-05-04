@@ -17,6 +17,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
 
+        builder.Property(c => c.TenantId)
+            .HasColumnName("tenant_id")
+            .IsRequired();
+
         builder.Property(c => c.DisplayName)
             .HasColumnName("display_name")
             .IsRequired();
@@ -38,5 +42,13 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
         builder.Property(c => c.CustomSystemMessage)
             .HasColumnName("custom_system_message")
             .IsRequired(false);
+
+        builder.HasIndex(c => c.TenantId)
+            .HasDatabaseName("ix_clients_tenant_id");
+
+        builder.HasOne(c => c.Tenant)
+            .WithMany(t => t.Clients)
+            .HasForeignKey(c => c.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

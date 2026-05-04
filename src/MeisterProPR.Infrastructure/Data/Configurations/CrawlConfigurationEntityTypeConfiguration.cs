@@ -47,6 +47,10 @@ internal sealed class CrawlConfigurationEntityTypeConfiguration : IEntityTypeCon
             .HasColumnName("crawl_interval_seconds")
             .HasDefaultValue(60);
 
+        builder.Property(c => c.ReviewTemperature)
+            .HasColumnName("review_temperature")
+            .IsRequired(false);
+
         builder.Property(c => c.IsActive)
             .HasColumnName("is_active")
             .HasDefaultValue(true);

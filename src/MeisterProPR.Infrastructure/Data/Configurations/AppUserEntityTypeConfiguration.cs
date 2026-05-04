@@ -15,16 +15,27 @@ internal sealed class AppUserEntityTypeConfiguration : IEntityTypeConfiguration<
         builder.HasKey(u => u.Id);
         builder.Property(u => u.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(u => u.Username).HasColumnName("username").IsRequired();
-        builder.Property(u => u.PasswordHash).HasColumnName("password_hash").IsRequired();
+        builder.Property(u => u.Email).HasColumnName("email").IsRequired(false);
+        builder.Property(u => u.NormalizedEmail).HasColumnName("normalized_email").IsRequired(false);
+        builder.Property(u => u.PasswordHash).HasColumnName("password_hash").IsRequired(false);
         builder.Property(u => u.GlobalRole).HasColumnName("global_role").HasConversion<string>().IsRequired();
         builder.Property(u => u.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
         builder.Property(u => u.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.HasIndex(u => u.Username).HasDatabaseName("ix_app_users_username").IsUnique();
+        builder.HasIndex(u => u.NormalizedEmail).HasDatabaseName("ix_app_users_normalized_email");
 
         builder.HasMany(u => u.ClientAssignments)
             .WithOne(r => r.User)
             .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(u => u.TenantMemberships)
+            .WithOne(m => m.User)
+            .HasForeignKey(m => m.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(u => u.ExternalIdentities)
+            .WithOne(e => e.User)
+            .HasForeignKey(e => e.UserId)
             .OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(u => u.Pats).WithOne(p => p.User).HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(u => u.RefreshTokens)

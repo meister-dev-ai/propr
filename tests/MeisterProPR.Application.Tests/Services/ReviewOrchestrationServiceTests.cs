@@ -3,7 +3,6 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -235,7 +234,7 @@ public class ReviewOrchestrationServiceTests
         IRepositoryExclusionFetcher? exclusionFetcher = null,
         IAiConnectionRepository? aiRepo = null,
         IAiChatClientFactory? chatFactory = null,
-        IReviewProtocolRecorder? protocolRecorder = null,
+        IProtocolRecorder? protocolRecorder = null,
         IAiCommentResolutionCore? resolutionCore = null,
         IReviewContextToolsFactory? reviewContextToolsFactory = null,
         ICodeReviewQueryService? queryService = null,
@@ -267,7 +266,7 @@ public class ReviewOrchestrationServiceTests
             clientRegistry,
             prScanRepository,
             resolutionCoreResolved,
-            protocolRecorder ?? Substitute.For<IReviewProtocolRecorder>(),
+            protocolRecorder ?? Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactoryResolved,
             fetcher,
             exclusionFetcherResolved,
@@ -389,7 +388,7 @@ public class ReviewOrchestrationServiceTests
     private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
     {
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), modelId: "gpt-4o");
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), "gpt-4o");
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
 
@@ -578,7 +577,7 @@ public class ReviewOrchestrationServiceTests
             job.ClientId,
             [model],
             [],
-            displayName: "Client Connection");
+            "Client Connection");
         aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(activeConnection));
 
@@ -605,7 +604,7 @@ public class ReviewOrchestrationServiceTests
 
         // Assert
         await jobs.Received(1)
-            .UpdateAiConfigAsync(job.Id, activeConnection.Id, "gpt-4.1", Arg.Any<CancellationToken>());
+            .UpdateAiConfigAsync(job.Id, activeConnection.Id, "gpt-4.1", Arg.Any<CancellationToken>(), Arg.Any<float?>());
     }
 
     [Fact]
@@ -674,7 +673,7 @@ public class ReviewOrchestrationServiceTests
             .ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>());
         await aiRepo.DidNotReceive().GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await jobs.Received(1)
-            .UpdateAiConfigAsync(job.Id, connection.Id, model.RemoteModelId, Arg.Any<CancellationToken>());
+            .UpdateAiConfigAsync(job.Id, connection.Id, model.RemoteModelId, Arg.Any<CancellationToken>(), Arg.Any<float?>());
     }
 
     [Fact]
@@ -690,9 +689,7 @@ public class ReviewOrchestrationServiceTests
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
         aiRepo.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult<AiConnectionDto?>(
-                    AiConnectionTestFactory.CreateConnection(job.ClientId, [], [], displayName: "Broken Connection")));
+            .Returns(Task.FromResult<AiConnectionDto?>(AiConnectionTestFactory.CreateConnection(job.ClientId, [], [], "Broken Connection")));
 
         var chatFactory = Substitute.For<IAiChatClientFactory>();
 
@@ -875,7 +872,7 @@ public class ReviewOrchestrationServiceTests
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
                 instructionFetcher, instructionEvaluator, logger) =
             CreateDeps();
-        var protocolRecorder = Substitute.For<IReviewProtocolRecorder>();
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
         var protocolId = Guid.NewGuid();
         protocolRecorder.BeginAsync(
                 Arg.Any<Guid>(),
@@ -1142,7 +1139,7 @@ public class ReviewOrchestrationServiceTests
                 logger) =
             CreateDeps();
 
-        var protocolRecorder = Substitute.For<IReviewProtocolRecorder>();
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
         protocolRecorder.BeginAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<int>(),
@@ -1234,6 +1231,109 @@ public class ReviewOrchestrationServiceTests
                 Arg.Is<string?>(details => HasDedupDegradedDiagnostics(details)),
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
+    }
+
+
+    [Fact]
+    public async Task ProcessAsync_SummaryOnlyReviewWithNoComments_PublishesSummaryWithoutThreads()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(
+                new ReviewResult(
+                    "Summary-only findings:\n- ReviewComment.Message nullability concern was blocked by a known invariant.",
+                    []));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewPublishedAsync(
+            commentPoster,
+            job,
+            result => result.Comments.Count == 0
+                      && result.Summary.Contains("blocked by a known invariant", StringComparison.Ordinal));
+    }
+
+
+    [Fact]
+    public async Task ProcessAsync_VerificationAlignedSummary_PublishesOnlyThreadCommentsWhilePreservingSummaryText()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(
+                new ReviewResult(
+                    "Verification retained 1 publishable finding. Summary-only findings:\n- Potential architecture concern noted.",
+                    [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Confirmed null dereference in ExecuteAsync.")]));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewPublishedAsync(
+            commentPoster,
+            job,
+            result => result.Comments.Count == 1
+                      && result.Comments[0].Message == "Confirmed null dereference in ExecuteAsync."
+                      && result.Summary.Contains("Potential architecture concern noted", StringComparison.Ordinal));
     }
 
 

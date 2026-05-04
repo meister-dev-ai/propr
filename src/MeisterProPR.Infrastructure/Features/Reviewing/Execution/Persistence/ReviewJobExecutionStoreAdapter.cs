@@ -88,8 +88,13 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         return inner.SetCancelledAsync(id, ct);
     }
 
-    public Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default)
+    public Task UpdateAiConfigAsync(
+        Guid id,
+        Guid? connectionId,
+        string? model,
+        CancellationToken ct = default,
+        float? reviewTemperature = null)
     {
-        return inner.UpdateAiConfigAsync(id, connectionId, model, ct);
+        return inner.UpdateAiConfigAsync(id, connectionId, model, ct, reviewTemperature);
     }
 }

@@ -30,11 +30,12 @@ public sealed class PrCrawlServiceTests
         DateTimeOffset.UtcNow,
         []);
 
+    private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
+
     private readonly ICrawlConfigurationRepository _crawlConfigs = Substitute.For<ICrawlConfigurationRepository>();
     private readonly IJobRepository _jobs = Substitute.For<IJobRepository>();
 
     private readonly IAssignedReviewDiscoveryService _prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
-    private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
 
     private readonly IProviderActivationService _providerActivationService =
         Substitute.For<IProviderActivationService>();
@@ -59,7 +60,13 @@ public sealed class PrCrawlServiceTests
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
         this._clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath), DefaultReviewerId.ToString("D"), "review-bot", "Review Bot", true));
+            .Returns(
+                new ReviewerIdentity(
+                    new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath),
+                    DefaultReviewerId.ToString("D"),
+                    "review-bot",
+                    "Review Bot",
+                    true));
     }
 
     private static AssignedCodeReviewRef MakePr(
@@ -147,8 +154,8 @@ public sealed class PrCrawlServiceTests
             this._statusFetcher,
             NullLogger<PrCrawlService>.Instance,
             pullRequestSynchronizationService: synchronizationService,
-                providerActivationService: this._providerActivationService,
-                clientRegistry: this._clientRegistry);
+            providerActivationService: this._providerActivationService,
+            clientRegistry: this._clientRegistry);
     }
 
     [Fact]
@@ -255,6 +262,7 @@ public sealed class PrCrawlServiceTests
             ProCursorSourceScopeMode = ProCursorSourceScopeMode.SelectedSources,
             ProCursorSourceIds = [sourceId],
             InvalidProCursorSourceIds = [],
+            ReviewTemperature = 0.3f,
         };
 
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
@@ -275,7 +283,8 @@ public sealed class PrCrawlServiceTests
                 Arg.Is<ReviewJob>(job =>
                     job.PullRequestId == pr.CodeReview.Number &&
                     job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources &&
-                    job.ProCursorSourceIds.SequenceEqual(new[] { sourceId })));
+                    job.ProCursorSourceIds.SequenceEqual(new[] { sourceId }) &&
+                    job.ReviewTemperature == 0.3f));
     }
 
     [Fact]
@@ -334,7 +343,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-            DefaultReviewerId,
+                DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -442,7 +451,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-            DefaultReviewerId,
+                DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -498,7 +507,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-            DefaultReviewerId,
+                DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([]));
@@ -565,7 +574,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-            DefaultReviewerId,
+                DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -742,7 +751,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-            DefaultReviewerId,
+                DefaultReviewerId,
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(

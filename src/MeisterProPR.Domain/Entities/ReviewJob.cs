@@ -248,6 +248,9 @@ public sealed class ReviewJob
     /// <summary>Snapshot of the AI model deployment used when the job started. Nullable for backward compat.</summary>
     public string? AiModel { get; private set; }
 
+    /// <summary>Snapshot of the review temperature used by this job. Nullable when default model behavior is used.</summary>
+    public float? ReviewTemperature { get; private set; }
+
     /// <summary>PR display title captured from ADO at job-creation time. Null when unavailable.</summary>
     public string? PrTitle { get; private set; }
 
@@ -301,10 +304,11 @@ public sealed class ReviewJob
     }
 
     /// <summary>Records the AI connection and model used at job-start time.</summary>
-    public void SetAiConfig(Guid? connectionId, string? model)
+    public void SetAiConfig(Guid? connectionId, string? model, float? reviewTemperature = null)
     {
         this.AiConnectionId = connectionId;
         this.AiModel = model;
+        this.ReviewTemperature = reviewTemperature;
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

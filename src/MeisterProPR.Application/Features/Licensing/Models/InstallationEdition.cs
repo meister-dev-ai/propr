@@ -8,6 +8,7 @@ public enum InstallationEdition
 {
     /// <summary>Community edition.</summary>
     Community = 0,
+
     /// <summary>Commercial edition.</summary>
     Commercial = 1,
 }

@@ -53,9 +53,10 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
         string? changeExcerpt,
         ReviewResult draftResult,
         Guid? protocolId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? temperature = null)
     {
-        return inner.RetrieveAndReconsiderAsync(clientId, job, filePath, changeExcerpt, draftResult, protocolId, ct);
+        return inner.RetrieveAndReconsiderAsync(clientId, job, filePath, changeExcerpt, draftResult, protocolId, ct, temperature);
     }
 
     public Task<ThreadMemoryRecord> DismissFindingAsync(

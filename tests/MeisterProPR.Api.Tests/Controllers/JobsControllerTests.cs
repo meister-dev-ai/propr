@@ -362,6 +362,36 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     }
 
     [Fact]
+    public async Task JobDetail_IncludesSnapshottedAiSettings()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            factory.AssignedClientId,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            1234,
+            1);
+        job.SetAiConfig(Guid.NewGuid(), "gpt-4.1", 0.35f);
+        await jobRepo.AddAsync(job);
+
+        var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("gpt-4.1", body.RootElement.GetProperty("aiModel").GetString());
+        Assert.Equal(0.35m, body.RootElement.GetProperty("reviewTemperature").GetDecimal());
+    }
+
+    [Fact]
     public async Task ClientUser_CanAccess_JobResult_ForAssignedClient_Returns200()
     {
         using var scope = factory.Services.CreateScope();

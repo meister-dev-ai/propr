@@ -93,6 +93,99 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.DoesNotContain("secret", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GetClients_ListResponseIncludesTenantOwnershipMetadata()
+    {
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = tenantId,
+                    Slug = "acme",
+                    DisplayName = "Acme Corp",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = tenantId,
+                    DisplayName = "Acme Review Team",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var matchingClient = body.RootElement.EnumerateArray()
+            .Single(element => element.GetProperty("id").GetGuid() == clientId);
+
+        Assert.Equal(tenantId, matchingClient.GetProperty("tenantId").GetGuid());
+        Assert.Equal("acme", matchingClient.GetProperty("tenantSlug").GetString());
+        Assert.Equal("Acme Corp", matchingClient.GetProperty("tenantDisplayName").GetString());
+    }
+
+    [Fact]
+    public async Task GetClient_ResponseIncludesTenantOwnershipMetadata()
+    {
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = tenantId,
+                    Slug = "globex",
+                    DisplayName = "Globex Corp",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = tenantId,
+                    DisplayName = "Globex Platform",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(tenantId, body.GetProperty("tenantId").GetGuid());
+        Assert.Equal("globex", body.GetProperty("tenantSlug").GetString());
+        Assert.Equal("Globex Corp", body.GetProperty("tenantDisplayName").GetString());
+    }
+
 
     [Fact]
     public async Task GetClients_WithValidAdminKey_Returns200WithNoKeys()
@@ -114,9 +207,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "patch-me", "Patch Me Tenant"));
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             DisplayName = "Patch Me",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -141,12 +237,25 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         // Seed the DB with a client first
         var existingClientId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        db.Tenants.Add(
+            new TenantRecord
+            {
+                Id = tenantId,
+                Slug = $"tenant-{tenantId:N}",
+                DisplayName = "Existing Tenant",
+                IsActive = true,
+                LocalLoginEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
         db.Clients.Add(
             new ClientRecord
             {
                 Id = existingClientId,
+                TenantId = tenantId,
                 DisplayName = "Existing",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -156,7 +265,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { displayName = "Existing" });
+        request.Content = JsonContent.Create(new { displayName = "Existing", tenantId });
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -176,23 +285,60 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-
     [Fact]
-    public async Task PostClients_WithValidAdminKey_Returns201()
+    public async Task PostClients_WithoutTenantId_Returns400()
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { displayName = "Test Client" });
+        request.Content = JsonContent.Create(new { displayName = "Tenantless Client" });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+
+    [Fact]
+    public async Task PostClients_WithValidAdminKey_Returns201()
+    {
+        var tenantId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = tenantId,
+                    Slug = $"tenant-{tenantId:N}",
+                    DisplayName = "Test Tenant",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Test Client", tenantId });
 
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var createdClientId = body.RootElement.GetProperty("id").GetGuid();
         Assert.True(body.RootElement.TryGetProperty("id", out _));
         Assert.False(body.RootElement.TryGetProperty("key", out _), "Raw key must never be returned.");
         Assert.Equal("Test Client", body.RootElement.GetProperty("displayName").GetString());
         Assert.True(body.RootElement.GetProperty("isActive").GetBoolean());
+
+        using var verificationScope = factory.Services.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var createdClient = await verificationDb.Clients.SingleAsync(record => record.Id == createdClientId);
+        Assert.Equal(tenantId, createdClient.TenantId);
     }
 
     // T036 — PATCH /clients/{id} customSystemMessage (admin)
@@ -202,9 +348,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "csm-test", "CSM Test Tenant"));
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             DisplayName = "CSM Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -242,9 +391,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "csm-null-test", "CSM Null Tenant"));
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             DisplayName = "CSM Null Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -270,9 +422,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "csm-clear-test", "CSM Clear Tenant"));
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             DisplayName = "CSM Clear Test",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -295,6 +450,20 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             "customSystemMessage should be null after clearing with empty string");
     }
 
+    private static TenantRecord CreateTenantRecord(Guid tenantId, string slug, string displayName)
+    {
+        return new TenantRecord
+        {
+            Id = tenantId,
+            Slug = slug,
+            DisplayName = displayName,
+            IsActive = true,
+            LocalLoginEnabled = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
 
     public sealed class ClientsApiFactory : WebApplicationFactory<Program>
     {
@@ -306,6 +475,8 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         /// <summary>The UUID of the seeded client.</summary>
         public Guid ClientId { get; } = Guid.NewGuid();
+
+        public Guid TenantId { get; } = Guid.NewGuid();
 
         public string GenerateAdminToken()
         {
@@ -377,10 +548,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             // Seed the client record so crawl-config endpoints work
             using var scope = host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(CreateTenantRecord(this.TenantId, "factory-tenant", "Factory Tenant"));
             db.Clients.Add(
                 new ClientRecord
                 {
                     Id = this.ClientId,
+                    TenantId = this.TenantId,
                     DisplayName = "Test Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,

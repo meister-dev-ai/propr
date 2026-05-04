@@ -346,6 +346,26 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
     }
 
     [Fact]
+    public async Task PatchWebhookConfiguration_ExplicitNullReviewTemperature_ClearsStoredOverride()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/admin/webhook-configurations/{factory.TestConfigId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(new { reviewTemperature = (float?)null });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.True(body.TryGetProperty("reviewTemperature", out var reviewTemperature));
+        Assert.Equal(JsonValueKind.Null, reviewTemperature.ValueKind);
+    }
+
+    [Fact]
     public async Task DeleteWebhookConfiguration_NonAdminForUnownedConfig_Returns403()
     {
         var client = factory.CreateClient();
@@ -557,7 +577,8 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
                         "Repository One"),
                 ],
                 guidedOrganizationScopeId,
-                SecretCiphertext: "mpr-protected:v1:existing");
+                SecretCiphertext: "mpr-protected:v1:existing",
+                ReviewTemperature: 0.35f);
 
             var unownedConfig = new WebhookConfigurationDto(
                 unownedConfigId,
@@ -632,7 +653,9 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
                     Arg.Any<bool?>(),
                     Arg.Any<IReadOnlyList<WebhookEventType>?>(),
                     Arg.Any<Guid?>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<float?>(),
+                    Arg.Any<bool>())
                 .Returns(callInfo =>
                 {
                     var configId = callInfo.ArgAt<Guid>(0);
@@ -641,10 +664,14 @@ public sealed class AdminWebhookConfigsControllerTests(AdminWebhookConfigsContro
                         return Task.FromResult(false);
                     }
 
+                    var shouldUpdateReviewTemperature = callInfo.ArgAt<bool>(6);
+                    var reviewTemperature = callInfo.ArgAt<float?>(5);
+
                     configsById[configId] = existing with
                     {
                         IsActive = callInfo.ArgAt<bool?>(1) ?? existing.IsActive,
                         EnabledEvents = callInfo.ArgAt<IReadOnlyList<WebhookEventType>?>(2) ?? existing.EnabledEvents,
+                        ReviewTemperature = shouldUpdateReviewTemperature ? reviewTemperature : existing.ReviewTemperature,
                     };
 
                     return Task.FromResult(true);

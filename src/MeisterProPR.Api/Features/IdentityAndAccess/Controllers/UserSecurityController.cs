@@ -55,6 +55,11 @@ public sealed class UserSecurityController(
             return this.Unauthorized(new { error = "Invalid credentials." });
         }
 
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            return this.Unauthorized(new { error = "This account does not have a local password." });
+        }
+
         if (!passwordHashService.Verify(request.CurrentPassword, user.PasswordHash))
         {
             return this.Unauthorized(new { error = "Current password is incorrect." });

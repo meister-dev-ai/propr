@@ -25,6 +25,7 @@ through the Admin UI. For low-level API automation and scripted examples, use `d
 MEISTER_BOOTSTRAP_ADMIN_USER=admin
 MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password-here>
 MEISTER_JWT_SECRET=<random-string-at-least-32-chars>
+MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api
 
 AZURE_CLIENT_ID=<global-service-principal-appId>
 AZURE_TENANT_ID=<azure-tenant-id>
@@ -38,6 +39,8 @@ docker compose --env-file .env -f example/docker-compose/docker-compose.yml up -
 ```
 
 3. Open the Admin UI at `https://localhost:5443/` and log in with the bootstrap admin credentials.
+
+For the bundled local nginx reverse proxy, keep `MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api` so provider setup screens and live tenant SSO redirects use the externally reachable API origin instead of the internal container host.
 
 ## Configure the system in the Admin UI
 
@@ -64,9 +67,12 @@ Use this order when setting up a new client.
 
 7. Configure crawl jobs.
    - Create crawl configurations and choose whether to use all client sources or only selected sources.
+   - Optionally set a review temperature between `0.0` and `2.0` when you want this automation path to run more deterministically or more creatively than the model default.
 
 8. Configure AI connections.
    - Add the client's AI endpoint and activate the model it should use.
+
+Webhook configurations expose the same optional review temperature field. Use it when webhook-triggered reviews should run with a different temperature than crawl-triggered reviews for the same client.
 
 ## Running locally
 
@@ -83,6 +89,16 @@ dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_PASSWORD" "AdminPass1!" --proje
 
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/MeisterProPR.Api
 ```
+
+If local development goes through a reverse proxy or tunnel, set `MEISTER_PUBLIC_BASE_URL` to that public API base URL. When you run the API directly without a proxy, the callback URL can fall back to the request host.
+
+If you front the Vite dev server with an extra local reverse proxy hostname, add that hostname only in `admin-ui/.env.local` so it stays machine-local:
+
+```env
+VITE_DEV_ALLOWED_HOSTS=my-domain.tld
+```
+
+Use a comma-separated list if you need multiple local proxy hostnames. For tenant SSO through that hostname, also point the API's `MEISTER_PUBLIC_BASE_URL` at the same public proxy base, for example `https://propr-local.arahome.lan/api`.
 
 ## Observability
 

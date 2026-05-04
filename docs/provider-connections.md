@@ -4,7 +4,7 @@ This guide is the canonical reference for configuring source-control provider co
 It explains:
 
 - which providers are supported,
-- which authentication modes are currently accepted,
+- which authentication modes are accepted,
 - what each field means,
 - where to obtain the required values, and
 - how provider connections relate to scopes and reviewer identities.
@@ -12,7 +12,19 @@ It explains:
 Use this document when configuring providers in the Admin UI or when automating the same setup
 through the API.
 
-## Current Support Matrix
+## Tenant Sign-In Providers vs SCM Provider Connections
+
+This page covers SCM provider connections used for repository discovery, crawling, and review publication. Tenant-scoped sign-in providers are a separate configuration surface used only for user authentication.
+
+Tenant sign-in providers are managed under `/api/admin/tenants/{tenantId}/sso-providers` and support the launch identity-provider set:
+
+- `EntraId` over `Oidc`
+- `Google` over `Oidc`
+- `GitHub` over `Oauth2`
+
+Those records store the display name, protected client secret, allowed email domains, enabled state, and auto-provisioning policy for tenant login. They do not replace SCM provider connections, reviewer identities, or webhook configuration.
+
+## Support Matrix
 
 | Provider | Host Base URL | Supported authentication kind | Extra required fields | Secret field expects | Status |
 |---|---|---|---|---|---|
@@ -20,7 +32,7 @@ through the API.
 | GitHub | `https://github.com` or your GitHub Enterprise base URL | `personalAccessToken` | none | GitHub PAT | Supported |
 | GitLab | `https://gitlab.com` or your self-managed base URL | `personalAccessToken` | none | GitLab PAT | Supported |
 | Forgejo | your Forgejo base URL, for example `https://codeberg.org` | `personalAccessToken` | none | Forgejo access token | Supported |
-| Any provider | n/a | `appInstallation` | n/a | n/a | Not implemented yet; rejected by the server |
+| Any provider | n/a | `appInstallation` | n/a | n/a | Not implemented; rejected by the server |
 
 ## Common Provider Connection Fields
 
@@ -70,10 +82,10 @@ place.
 
 ## Azure DevOps
 
-Azure DevOps currently supports only `oauthClientCredentials`.
+Azure DevOps supports only `oauthClientCredentials`.
 
 That means the provider connection is backed by a Microsoft Entra application and client secret.
-`appInstallation` is not currently implemented for Azure DevOps in ProPR.
+`appInstallation` is not implemented for Azure DevOps in ProPR.
 
 ### What Goes Into Each Field
 
@@ -131,7 +143,7 @@ If you use an env file for container startup, do not put spaces around the equal
 
 ## GitHub
 
-GitHub currently supports only `personalAccessToken`.
+GitHub supports only `personalAccessToken`.
 
 ### What Goes Into Each Field
 
@@ -148,7 +160,7 @@ request data ProPR needs for review and publication.
 
 ## GitLab
 
-GitLab currently supports only `personalAccessToken`.
+GitLab supports only `personalAccessToken`.
 
 ### What Goes Into Each Field
 
@@ -167,7 +179,7 @@ requires the legacy `api` scope.
 
 ## Forgejo
 
-Forgejo currently supports only `personalAccessToken`.
+Forgejo supports only `personalAccessToken`.
 
 ### What Goes Into Each Field
 
@@ -184,10 +196,8 @@ pull requests ProPR needs.
 
 ## Unsupported Authentication Modes
 
-`appInstallation` exists in the shared schema as a reserved future auth mode, but it is not currently
-implemented for the supported providers.
-
-Today the server rejects it instead of silently accepting unusable configuration.
+`appInstallation` exists in the shared schema as a reserved authentication mode. The server rejects
+this value for the supported providers instead of silently accepting unusable configuration.
 
 ## Troubleshooting
 
@@ -197,7 +207,7 @@ Check these first:
 
 1. `authenticationKind` must be exactly `oauthClientCredentials`.
 2. `oAuthTenantId` and `oAuthClientId` must both be present for Azure DevOps.
-3. Azure DevOps does not currently accept `appInstallation`.
+3. Azure DevOps does not accept `appInstallation`.
 4. `hostBaseUrl` must stay `https://dev.azure.com`; the organization belongs in the scope.
 5. If you rebuilt the code locally but not the containers, restart the stack so the Admin UI and API
    use the updated code.
@@ -212,7 +222,7 @@ Do not use:
 - the service principal object ID,
 - the secret ID.
 
-### Connection verifies but reviewer identity still fails
+### Connection verifies but reviewer identity resolution fails
 
 Check these in order:
 
@@ -274,7 +284,7 @@ provider ProPR uses for review, memory, and embedding workloads for a client.
 | Field | Meaning | Notes |
 |---|---|---|
 | `displayName` | Friendly profile label | Shown in the Admin UI profile list |
-| `providerKind` | AI provider family | Currently `azureOpenAi`, `openAi`, or `liteLlm` |
+| `providerKind` | AI provider family | Supported values include `azureOpenAi`, `openAi`, and `liteLlm` |
 | `baseUrl` | Exact provider endpoint or gateway URL | Preserved exactly as entered |
 | `auth.mode` | Authentication mode | Usually `apiKey`; Azure-hosted profiles can also use `azureIdentity` |
 | `configuredModels` | Models available under this profile | Chat and embedding models are stored together |

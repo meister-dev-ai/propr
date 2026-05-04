@@ -17,7 +17,8 @@ public interface ICrawlConfigurationRepository
         string projectId,
         int crawlIntervalSeconds,
         Guid? organizationScopeId = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        float? reviewTemperature = null);
 
     /// <summary>Deletes a crawl configuration. Returns false if not found or not owned by clientId.</summary>
     Task<bool> DeleteAsync(Guid configId, Guid clientId, CancellationToken ct = default);
@@ -57,7 +58,9 @@ public interface ICrawlConfigurationRepository
         int? crawlIntervalSeconds,
         bool? isActive,
         Guid? ownerClientId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        float? reviewTemperature = null,
+        bool shouldUpdateReviewTemperature = false);
 
     /// <summary>
     ///     Replaces all repo filters for the given crawl configuration (full-replacement semantics).

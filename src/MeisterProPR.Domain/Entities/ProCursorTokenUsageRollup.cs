@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorTokenUsageRollup
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorTokenUsageRollup"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorTokenUsageRollup" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for the rollup.</param>
     /// <param name="clientId">The client identifier.</param>

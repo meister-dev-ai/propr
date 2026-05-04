@@ -21,6 +21,17 @@
             class="header-search"
             style="width: 100%;"
           />
+          <select
+            v-if="visibleTenants.length > 0"
+            v-model="tenantFilterId"
+            data-testid="tenant-filter-select"
+            class="header-search tenant-filter-select"
+          >
+            <option value="">All tenants</option>
+            <option v-for="tenant in visibleTenants" :key="tenant.id" :value="tenant.id">
+              {{ tenant.displayName }}
+            </option>
+          </select>
         </div>
       </div>
     </aside>
@@ -29,7 +40,7 @@
     <main class="page-main-content">
       <div class="page-toolbar">
         <h2 class="view-title">Clients</h2>
-        <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
+        <button v-if="canCreateClients" class="btn-primary" @click="showCreateForm = true">
           <i class="fi fi-rr-add"></i> New Client
         </button>
       </div>
@@ -48,13 +59,13 @@
           <div v-if="!clients.length" class="clients-empty-state">
             <i class="fi fi-rr-users empty-icon"></i>
             <p class="empty-heading">No clients yet</p>
-            <p class="empty-sub" v-if="isAdmin">Get started by creating your first client.</p>
-            <p class="empty-sub" v-else>No clients are assigned to your account. Contact your administrator.</p>
-            <button v-if="isAdmin" class="btn-primary" @click="showCreateForm = true">
+            <p class="empty-sub" v-if="canCreateClients">Get started by creating your first client.</p>
+            <p class="empty-sub" v-else>No clients are visible to your current tenant or client memberships.</p>
+            <button v-if="canCreateClients" class="btn-primary" @click="showCreateForm = true">
               <i class="fi fi-rr-add"></i> Create First Client
             </button>
           </div>
-          <ClientTable v-else :clients="clients" :filter="filter" />
+          <ClientTable v-else :clients="clients" :filter="filter" :tenant-filter-id="tenantFilterId" />
         </template>
       </div>
 
@@ -69,6 +80,8 @@
               </button>
             </div>
             <ClientForm
+              :tenants="manageableTenants"
+              :initial-tenant-id="typeof route.query.tenantId === 'string' ? route.query.tenantId : ''"
               @client-created="onClientCreated"
               @cancel="showCreateForm = false"
             />
@@ -80,11 +93,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ClientTable from '@/components/ClientTable.vue'
 import ClientForm from '@/components/ClientForm.vue'
 import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
+import { listTenants, type TenantDto } from '@/services/tenantAdminService'
 
 interface Client {
   id: string
@@ -92,25 +107,46 @@ interface Client {
   isActive: boolean
   createdAt: string
   recentUsageTokens?: number
+  tenantId?: string | null
+  tenantSlug?: string | null
+  tenantDisplayName?: string | null
 }
 
-const { isAdmin } = useSession()
+const { isAdmin, tenantRoles } = useSession()
+const route = useRoute()
+const router = useRouter()
 
 const clients = ref<Client[]>([])
+const visibleTenants = ref<TenantDto[]>([])
 const filter = ref('')
+const tenantFilterId = ref('')
 const loading = ref(false)
 const error = ref('')
-const showCreateForm = ref(false)
+const hasAnyTenantAccess = computed(() => Object.keys(tenantRoles.value).length > 0)
+const manageableTenants = computed(() =>
+  visibleTenants.value.filter((tenant) => isAdmin.value || tenantRoles.value[tenant.id] >= 1),
+)
+const canCreateClients = computed(() => isAdmin.value || manageableTenants.value.length > 0)
+const showCreateForm = ref((isAdmin.value || manageableTenants.value.length > 0) && route.query.create === 'true')
 
 onMounted(async () => {
   loading.value = true
   try {
-    const { data, response } = await createAdminClient().GET('/clients', {})
+    const [{ data, response }, tenants] = await Promise.all([
+      createAdminClient().GET('/clients', {}),
+      isAdmin.value || hasAnyTenantAccess.value ? listTenants() : Promise.resolve([]),
+    ])
+
     if (!response.ok) {
       error.value = 'Failed to load clients.'
       return
     }
+
     clients.value = (data as Client[]) ?? []
+    visibleTenants.value = tenants
+    if (route.query.create === 'true' && canCreateClients.value) {
+      showCreateForm.value = true
+    }
   } catch {
     error.value = 'Failed to load clients.'
   } finally {
@@ -118,9 +154,13 @@ onMounted(async () => {
   }
 })
 
-function onClientCreated(client: unknown) {
+async function onClientCreated(client: unknown) {
   clients.value.unshift(client as Client)
   showCreateForm.value = false
+
+  if (route.query.create === 'true' || typeof route.query.tenantId === 'string') {
+    await router.replace({ name: 'clients', query: {} })
+  }
 }
 </script>
 
@@ -142,6 +182,10 @@ function onClientCreated(client: unknown) {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent);
   width: 16rem;
+}
+
+.tenant-filter-select {
+  margin-top: 0.75rem;
 }
 
 .client-dialog {

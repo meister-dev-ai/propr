@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
-using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -32,7 +31,7 @@ public sealed partial class ReviewOrchestrationService(
     IClientRegistry clientRegistry,
     IReviewPrScanRepository prScanRepository,
     IAiCommentResolutionCore resolutionCore,
-    IReviewProtocolRecorder protocolRecorder,
+    IProtocolRecorder protocolRecorder,
     IReviewContextToolsFactory reviewContextToolsFactory,
     IRepositoryInstructionFetcher instructionFetcher,
     IRepositoryExclusionFetcher exclusionFetcher,
@@ -304,8 +303,8 @@ public sealed partial class ReviewOrchestrationService(
             try
             {
                 var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
-                job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId);
-                await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct);
+                job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId, job.ReviewTemperature);
+                await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct, job.ReviewTemperature);
                 return runtime.ChatClient;
             }
             catch (Exception ex)
@@ -339,8 +338,8 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
-        job.SetAiConfig(activeConnection.Id, effectiveModelId);
-        await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct);
+        job.SetAiConfig(activeConnection.Id, effectiveModelId, job.ReviewTemperature);
+        await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct, job.ReviewTemperature);
         return client;
     }
 
@@ -530,8 +529,11 @@ public sealed partial class ReviewOrchestrationService(
 
         var systemContext = new ReviewSystemContext(customSystemMessage, relevantInstructions, reviewTools)
         {
+            DefaultReviewChatClient = chatClient,
+            DefaultReviewModelId = job.AiModel,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
+            Temperature = job.ReviewTemperature,
             PromptOverrides = await LoadPromptOverridesAsync(job.ClientId, promptOverrideService, logger, ct),
         };
 
@@ -988,6 +990,7 @@ public sealed partial class ReviewOrchestrationService(
                         1,
                         resolution.InputTokens,
                         resolution.OutputTokens,
+                        null,
                         null,
                         resolution.ReplyText,
                         ct);

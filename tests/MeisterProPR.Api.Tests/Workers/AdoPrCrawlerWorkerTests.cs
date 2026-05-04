@@ -47,14 +47,16 @@ public sealed class AdoPrCrawlerWorkerTests
     {
         var licensingService = Substitute.For<ILicensingCapabilityService>();
         licensingService.GetCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new CapabilitySnapshot(
-                PremiumCapabilityKey.CrawlConfigs,
-                PremiumCapabilityKey.CrawlConfigs,
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                isAvailable,
-                isAvailable ? null : "Crawl configs requires a premium license.")));
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.CrawlConfigs,
+                        PremiumCapabilityKey.CrawlConfigs,
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Default,
+                        isAvailable,
+                        isAvailable ? null : "Crawl configs requires a premium license.")));
         return licensingService;
     }
 
@@ -184,7 +186,7 @@ public sealed class AdoPrCrawlerWorkerTests
         var fakePrCrawlService = Substitute.For<IPrCrawlService>();
         var scope = Substitute.For<IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
-        var licensingService = CreateLicensingService(isAvailable: false);
+        var licensingService = CreateLicensingService(false);
         scope.ServiceProvider.Returns(serviceProvider);
         serviceProvider.GetService(typeof(ILicensingCapabilityService)).Returns(licensingService);
         serviceProvider.GetService(typeof(IPrCrawlService)).Returns(fakePrCrawlService);

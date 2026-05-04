@@ -142,6 +142,27 @@
           <span v-if="intervalError" class="field-error">{{ intervalError }}</span>
         </div>
 
+        <div class="form-group">
+          <label for="crawlReviewTemperature">Review Temperature</label>
+          <div class="input-wrapper">
+            <input
+              id="crawlReviewTemperature"
+              name="reviewTemperature"
+              v-model="reviewTemperatureInput"
+              type="number"
+              min="0"
+              max="2"
+              step="0.01"
+              placeholder="Default model behavior"
+              :class="{ 'has-error': reviewTemperatureError }"
+            />
+          </div>
+          <span v-if="reviewTemperatureError" class="field-error">{{ reviewTemperatureError }}</span>
+          <span v-else class="field-help">
+            Optional. Override the model temperature for reviews queued by this crawl configuration. Use values between 0.0 and 2.0.
+          </span>
+        </div>
+
         <div v-if="editMode" class="form-group checkbox-group">
           <label>Settings</label>
           <label class="checkbox-label">
@@ -265,7 +286,7 @@
               </div>
             </div>
 
-            <button type="button" class="btn-remove-row" @click="removeFilter(idx)" title="Remove filter row">
+            <button type="button" class="btn-remove-row" :disabled="!canEditRepoFilters" @click="removeFilter(idx)" title="Remove filter row">
               <i class="fi fi-rr-trash"></i>
             </button>
           </div>
@@ -496,6 +517,7 @@ const provider = computed<ScmProvider>(() => normalizeProvider(props.config?.pro
 const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
 const projectId = ref(props.config?.providerProjectKey ?? '')
 const crawlIntervalSeconds = ref<number>(props.config?.crawlIntervalSeconds ?? 60)
+const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
 const isActive = ref(props.config?.isActive ?? true)
 const repairRequiredProCursorSourceIds = ref<string[]>(normalizeStringList(props.config?.invalidProCursorSourceIds))
 const proCursorSourceScopeMode = ref<ProCursorSourceScopeMode>(props.config?.proCursorSourceScopeMode ?? 'allClientSources')
@@ -534,6 +556,7 @@ const clientIdError = ref('')
 const organizationScopeIdError = ref('')
 const projectIdError = ref('')
 const intervalError = ref('')
+const reviewTemperatureError = ref('')
 const repoFiltersError = ref('')
 const proCursorSourceScopeError = ref('')
 const formError = ref('')
@@ -999,6 +1022,10 @@ function addFilter(): void {
 }
 
 function removeFilter(index: number): void {
+  if (!canEditRepoFilters.value) {
+    return
+  }
+
   repoFilters.value.splice(index, 1)
 }
 
@@ -1033,6 +1060,23 @@ function serializeRepoFilters(): CrawlRepoFilterRequest[] {
       .map((pattern) => normalizeText(pattern))
       .filter((pattern) => pattern.length > 0),
   }))
+}
+
+function parseReviewTemperature(): number | undefined {
+  const rawValue = reviewTemperatureInput.value
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return undefined
+  }
+
+  const parsed = typeof rawValue === 'number'
+    ? rawValue
+    : Number.parseFloat(rawValue)
+
+  if (!Number.isFinite(parsed)) {
+    return Number.NaN
+  }
+
+  return parsed
 }
 
 async function loadOverrides(): Promise<void> {
@@ -1098,6 +1142,7 @@ function validate(): boolean {
   organizationScopeIdError.value = ''
   projectIdError.value = ''
   intervalError.value = ''
+  reviewTemperatureError.value = ''
   repoFiltersError.value = ''
   proCursorSourceScopeError.value = ''
   formError.value = ''
@@ -1127,6 +1172,17 @@ function validate(): boolean {
   if (!Number.isInteger(crawlIntervalSeconds.value) || crawlIntervalSeconds.value < 10) {
     intervalError.value = 'Interval must be an integer of at least 10 seconds.'
     valid = false
+  }
+
+  const reviewTemperature = parseReviewTemperature()
+  if (reviewTemperature !== undefined) {
+    if (!Number.isFinite(reviewTemperature)) {
+      reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
+      valid = false
+    } else if (reviewTemperature < 0 || reviewTemperature > 2) {
+      reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
+      valid = false
+    }
   }
 
   if (canEditRepoFilters.value) {
@@ -1162,6 +1218,7 @@ async function handleSubmit(): Promise<void> {
 
   try {
     if (editMode.value && props.config?.id) {
+      const reviewTemperature = parseReviewTemperature()
       const { data, error, response } = await createAdminClient().PATCH('/admin/crawl-configurations/{configId}', {
         params: { path: { configId: props.config.id } },
         body: {
@@ -1170,6 +1227,7 @@ async function handleSubmit(): Promise<void> {
           repoFilters: canEditRepoFilters.value ? serializeRepoFilters() : undefined,
           proCursorSourceScopeMode: proCursorSourceScopeMode.value,
           proCursorSourceIds: serializeProCursorSourceIds(),
+          reviewTemperature,
         },
       })
 
@@ -1197,6 +1255,7 @@ async function handleSubmit(): Promise<void> {
       return
     }
 
+    const reviewTemperature = parseReviewTemperature()
     const body: CreateAdminCrawlConfigRequest = {
       clientId: effectiveClientId.value,
       provider: provider.value,
@@ -1206,6 +1265,7 @@ async function handleSubmit(): Promise<void> {
       repoFilters: serializeRepoFilters(),
       proCursorSourceScopeMode: proCursorSourceScopeMode.value,
       proCursorSourceIds: serializeProCursorSourceIds(),
+      reviewTemperature,
     }
 
     const { data, error, response } = await createAdminClient().POST('/admin/crawl-configurations', {

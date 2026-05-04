@@ -1056,9 +1056,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnName("error");
 
                     b.Property<string>("InputTextSample")
-                        .HasMaxLength(50000)
-                        .HasColumnType("character varying(50000)")
+                        .HasColumnType("text")
                         .HasColumnName("input_text_sample");
+
+                    b.Property<string>("SystemPrompt")
+                        .HasColumnType("text")
+                        .HasColumnName("system_prompt");
 
                     b.Property<long?>("InputTokens")
                         .HasColumnType("bigint")
@@ -1079,8 +1082,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnName("occurred_at");
 
                     b.Property<string>("OutputSummary")
-                        .HasMaxLength(50000)
-                        .HasColumnType("character varying(50000)")
+                        .HasColumnType("text")
                         .HasColumnName("output_summary");
 
                     b.Property<long?>("OutputTokens")
@@ -1293,6 +1295,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("review_patch_identity");
+
+                    b.Property<float?>("ReviewTemperature")
+                        .HasColumnType("real")
+                        .HasColumnName("review_temperature");
 
                     b.Property<string>("RevisionBaseSha")
                         .HasMaxLength(128)
@@ -1959,6 +1965,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("Email")
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
                     b.Property<string>("GlobalRole")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1970,8 +1980,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<string>("NormalizedEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("normalized_email");
+
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
 
@@ -1981,6 +1994,9 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("NormalizedEmail")
+                        .HasDatabaseName("ix_app_users_normalized_email");
 
                     b.HasIndex("Username")
                         .IsUnique()
@@ -2020,7 +2036,18 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<Guid?>("ReviewerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewer_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_clients_tenant_id");
 
                     b.ToTable("clients", (string)null);
                 });
@@ -2333,6 +2360,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("repository_id");
 
+                    b.Property<float?>("ReviewTemperature")
+                        .HasColumnType("real")
+                        .HasColumnName("review_temperature");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId")
@@ -2446,6 +2477,64 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasKey("CapabilityKey");
 
                     b.ToTable("premium_capability_overrides", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ExternalIdentityRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("email_verified");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("issuer");
+
+                    b.Property<DateTimeOffset?>("LastSignInAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sign_in_at");
+
+                    b.Property<Guid>("SsoProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sso_provider_id");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SsoProviderId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "SsoProviderId", "Issuer", "Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_external_identities_tenant_provider_subject");
+
+                    b.ToTable("external_identities", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
@@ -2661,6 +2750,214 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("review_job_procursor_source_scopes", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantAuditEntryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("detail");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_tenant_audit_entries_actor_occurred_at");
+
+                    b.HasIndex("TenantId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_tenant_audit_entries_tenant_occurred_at");
+
+                    b.ToTable("tenant_audit_entries", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantMembershipRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenant_memberships_tenant_user");
+
+                    b.ToTable("tenant_memberships", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("LocalLoginEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("local_login_enabled");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("slug");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenants_slug");
+
+                    b.ToTable("tenants", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantSsoProviderRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AllowedEmailDomains")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("allowed_email_domains");
+
+                    b.Property<bool>("AutoCreateUsers")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("auto_create_users");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("ClientSecretProtected")
+                        .HasColumnType("text")
+                        .HasColumnName("client_secret_protected");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("IssuerOrAuthorityUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("issuer_or_authority_url");
+
+                    b.Property<string>("ProtocolKind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protocol_kind");
+
+                    b.Property<string>("ProviderKind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("provider_kind");
+
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("scopes");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "DisplayName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenant_sso_providers_tenant_display_name");
+
+                    b.ToTable("tenant_sso_providers", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.UserClientRoleRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2791,6 +3088,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("public_path_key");
+
+                    b.Property<float?>("ReviewTemperature")
+                        .HasColumnType("real")
+                        .HasColumnName("review_temperature");
 
                     b.Property<string>("SecretCiphertext")
                         .IsRequired()
@@ -3192,6 +3493,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("ConnectionProfile");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany("Clients")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewerIdentityRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -3289,6 +3601,33 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("CrawlConfiguration");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ExternalIdentityRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantSsoProviderRecord", "SsoProvider")
+                        .WithMany("ExternalIdentities")
+                        .HasForeignKey("SsoProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany("ExternalIdentities")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.AppUserRecord", "User")
+                        .WithMany("ExternalIdentities")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SsoProvider");
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.PromptOverrideRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -3346,6 +3685,54 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("ProCursorSource");
 
                     b.Navigation("ReviewJob");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantAuditEntryRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.AppUserRecord", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany("AuditEntries")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ActorUser");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantMembershipRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany("Memberships")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.AppUserRecord", "User")
+                        .WithMany("TenantMemberships")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantSsoProviderRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
+                        .WithMany("SsoProviders")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.UserClientRoleRecord", b =>
@@ -3455,9 +3842,13 @@ namespace MeisterProPR.Infrastructure.Migrations
                 {
                     b.Navigation("ClientAssignments");
 
+                    b.Navigation("ExternalIdentities");
+
                     b.Navigation("Pats");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("TenantMemberships");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
@@ -3488,6 +3879,24 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("ProCursorSources");
 
                     b.Navigation("RepoFilters");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantRecord", b =>
+                {
+                    b.Navigation("AuditEntries");
+
+                    b.Navigation("Clients");
+
+                    b.Navigation("ExternalIdentities");
+
+                    b.Navigation("Memberships");
+
+                    b.Navigation("SsoProviders");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.TenantSsoProviderRecord", b =>
+                {
+                    b.Navigation("ExternalIdentities");
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", b =>

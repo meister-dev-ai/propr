@@ -560,13 +560,15 @@ public sealed partial class ProCursorGateway(
         return response;
     }
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Skipped ProCursor operation for client {ClientId} because capability {CapabilityKey} is unavailable")]
+    private static partial void LogCapabilityUnavailable(ILogger logger, Guid clientId, string capabilityKey);
+
     private sealed record ResolvedSourceSelection(
         string OrganizationUrl,
         string RepositoryId,
         Guid? OrganizationScopeId,
         CanonicalSourceReferenceDto? CanonicalSourceRef,
         string? SourceDisplayName);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Skipped ProCursor operation for client {ClientId} because capability {CapabilityKey} is unavailable")]
-    private static partial void LogCapabilityUnavailable(ILogger logger, Guid clientId, string capabilityKey);
 }

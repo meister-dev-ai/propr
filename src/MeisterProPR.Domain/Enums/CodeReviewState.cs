@@ -8,10 +8,13 @@ public enum CodeReviewState
 {
     /// <summary>Review is open.</summary>
     Open = 0,
+
     /// <summary>Review is in draft state.</summary>
     Draft = 1,
+
     /// <summary>Review has been merged.</summary>
     Merged = 2,
+
     /// <summary>Review is closed.</summary>
     Closed = 3,
 }

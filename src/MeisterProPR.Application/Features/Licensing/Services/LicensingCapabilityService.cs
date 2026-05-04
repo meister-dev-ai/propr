@@ -57,7 +57,7 @@ public sealed class LicensingCapabilityService(
         ArgumentException.ThrowIfNullOrWhiteSpace(capabilityKey);
 
         var definition = capabilityCatalog.Get(capabilityKey)
-            ?? throw new KeyNotFoundException($"Unknown premium capability '{capabilityKey}'.");
+                         ?? throw new KeyNotFoundException($"Unknown premium capability '{capabilityKey}'.");
         var policy = await policyStore.GetAsync(cancellationToken);
         return this.ResolveSnapshot(definition, policy);
     }
@@ -90,14 +90,13 @@ public sealed class LicensingCapabilityService(
         foreach (var overrideMutation in overrideList)
         {
             var definition = capabilityCatalog.Get(overrideMutation.Key)
-                ?? throw new KeyNotFoundException($"Unknown premium capability '{overrideMutation.Key}'.");
+                             ?? throw new KeyNotFoundException($"Unknown premium capability '{overrideMutation.Key}'.");
 
             if (edition == InstallationEdition.Community
                 && definition.RequiresCommercial
                 && overrideMutation.OverrideState == PremiumCapabilityOverrideState.Enabled)
             {
-                throw new InvalidOperationException(
-                    $"Capability '{overrideMutation.Key}' cannot be enabled while the installation is in Community edition.");
+                throw new InvalidOperationException($"Capability '{overrideMutation.Key}' cannot be enabled while the installation is in Community edition.");
             }
         }
 

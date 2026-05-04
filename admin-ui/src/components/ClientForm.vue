@@ -6,6 +6,22 @@
     <div v-if="formError" class="error">{{ formError }}</div>
 
     <div class="form-field">
+      <label for="tenantId">Tenant</label>
+      <select
+        id="tenantId"
+        v-model="tenantId"
+        data-testid="client-tenant-select"
+        name="tenantId"
+      >
+        <option value="">Select a tenant</option>
+        <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
+          {{ tenant.displayName }}
+        </option>
+      </select>
+      <span v-if="tenantError" class="field-error">{{ tenantError }}</span>
+    </div>
+
+    <div class="form-field">
       <label for="displayName">Display Name</label>
       <input
         id="displayName"
@@ -15,18 +31,6 @@
         placeholder="Client display name"
       />
       <span v-if="displayNameError" class="field-error">{{ displayNameError }}</span>
-    </div>
-
-    <div class="form-field">
-      <label for="key">Client Key</label>
-      <input
-        id="key"
-        name="key"
-        v-model="clientKey"
-        type="text"
-        placeholder="Unique client key"
-      />
-      <span v-if="keyError" class="field-error">{{ keyError }}</span>
     </div>
 
     <div class="form-actions">
@@ -41,31 +45,40 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { createAdminClient } from '@/services/api'
+import type { TenantDto } from '@/services/tenantAdminService'
+
+const props = withDefaults(defineProps<{
+  tenants?: TenantDto[]
+  initialTenantId?: string
+}>(), {
+  tenants: () => [],
+  initialTenantId: '',
+})
 
 const emit = defineEmits<{
   'client-created': [client: unknown]
   cancel: []
 }>()
 
+const tenantId = ref(props.initialTenantId)
 const displayName = ref('')
-const clientKey = ref('')
+const tenantError = ref('')
 const displayNameError = ref('')
-const keyError = ref('')
 const formError = ref('')
 const loading = ref(false)
 
 async function handleSubmit() {
+  tenantError.value = ''
   displayNameError.value = ''
-  keyError.value = ''
   formError.value = ''
 
   let valid = true
-  if (!displayName.value.trim()) {
-    displayNameError.value = 'Display name is required'
+  if (!tenantId.value) {
+    tenantError.value = 'Tenant is required'
     valid = false
   }
-  if (!clientKey.value.trim()) {
-    keyError.value = 'Client key is required'
+  if (!displayName.value.trim()) {
+    displayNameError.value = 'Display name is required'
     valid = false
   }
   if (!valid) return
@@ -73,12 +86,11 @@ async function handleSubmit() {
   loading.value = true
   try {
     const { data, response } = await createAdminClient().POST('/clients', {
-      body: { displayName: displayName.value, key: clientKey.value },
+      body: {
+        displayName: displayName.value.trim(),
+        tenantId: tenantId.value,
+      },
     })
-    if (response.status === 409) {
-      formError.value = 'Key already in use'
-      return
-    }
     if (!response.ok) {
       formError.value = 'Failed to create client.'
       return

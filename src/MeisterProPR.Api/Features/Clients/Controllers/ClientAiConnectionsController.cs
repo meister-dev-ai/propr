@@ -183,10 +183,12 @@ public sealed partial class ClientAiConnectionsController(
 
         if (!await aiConnections.ActivateAsync(connectionId, ct))
         {
-            return this.BadRequest(new
-            {
-                error = "Activation requires a freshly verified profile with valid Review Default, Memory Reconsideration, and Embedding Default bindings. Re-verify the profile after connectivity, auth, model, or binding edits.",
-            });
+            return this.BadRequest(
+                new
+                {
+                    error =
+                        "Activation requires a freshly verified profile with valid Review Default, Memory Reconsideration, and Embedding Default bindings. Re-verify the profile after connectivity, auth, model, or binding edits.",
+                });
         }
 
         var refreshed = await aiConnections.GetByIdAsync(connectionId, ct);
@@ -436,7 +438,9 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         var configuredModels = this.NormalizeConfiguredModels(request.ConfiguredModels ?? existing.ConfiguredModels.Select(ToConfiguredModelRequest).ToList());
-        var purposeBindings = this.NormalizePurposeBindings(request.PurposeBindings ?? existing.PurposeBindings.Select(ToBindingRequest).ToList(), configuredModels);
+        var purposeBindings = this.NormalizePurposeBindings(
+            request.PurposeBindings ?? existing.PurposeBindings.Select(ToBindingRequest).ToList(),
+            configuredModels);
 
         if (!this.ModelState.IsValid)
         {
@@ -485,7 +489,13 @@ public sealed partial class ClientAiConnectionsController(
 
         if (providerKind == AiProviderKind.AzureOpenAi && auth.Mode == AiAuthMode.AzureIdentity)
         {
-            return new AiConnectionProbeOptionsDto(providerKind, baseUrl.Trim(), auth.Mode, null, NormalizeMap(defaultHeaders), NormalizeMap(defaultQueryParams));
+            return new AiConnectionProbeOptionsDto(
+                providerKind,
+                baseUrl.Trim(),
+                auth.Mode,
+                null,
+                NormalizeMap(defaultHeaders),
+                NormalizeMap(defaultQueryParams));
         }
 
         if (auth.Mode != AiAuthMode.ApiKey || string.IsNullOrWhiteSpace(auth.ApiKey))
@@ -494,7 +504,13 @@ public sealed partial class ClientAiConnectionsController(
             return null;
         }
 
-        return new AiConnectionProbeOptionsDto(providerKind, baseUrl.Trim(), auth.Mode, auth.ApiKey.Trim(), NormalizeMap(defaultHeaders), NormalizeMap(defaultQueryParams));
+        return new AiConnectionProbeOptionsDto(
+            providerKind,
+            baseUrl.Trim(),
+            auth.Mode,
+            auth.ApiKey.Trim(),
+            NormalizeMap(defaultHeaders),
+            NormalizeMap(defaultQueryParams));
     }
 
     private static bool IsAzureHostedOpenAiEndpoint(string baseUrl)
@@ -561,13 +577,17 @@ public sealed partial class ClientAiConnectionsController(
 
                 if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
                 {
-                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
+                    this.ModelState.AddModelError(
+                        nameof(requestModels),
+                        $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
                 }
             }
 
             if (protocolModes.Contains(AiProtocolMode.Embeddings) && !operationKinds.Contains(AiOperationKind.Embedding))
             {
-                this.ModelState.AddModelError(nameof(requestModels), $"Model '{remoteModelId}' cannot declare the embeddings protocol without embedding capability.");
+                this.ModelState.AddModelError(
+                    nameof(requestModels),
+                    $"Model '{remoteModelId}' cannot declare the embeddings protocol without embedding capability.");
             }
 
             if ((protocolModes.Contains(AiProtocolMode.ChatCompletions) || protocolModes.Contains(AiProtocolMode.Responses)) &&
@@ -576,21 +596,22 @@ public sealed partial class ClientAiConnectionsController(
                 this.ModelState.AddModelError(nameof(requestModels), $"Model '{remoteModelId}' cannot declare chat protocols without chat capability.");
             }
 
-            models.Add(new AiConfiguredModelDto(
-                requestModel.Id ?? Guid.Empty,
-                remoteModelId,
-                string.IsNullOrWhiteSpace(requestModel.DisplayName) ? remoteModelId : requestModel.DisplayName.Trim(),
-                operationKinds,
-                protocolModes,
-                string.IsNullOrWhiteSpace(requestModel.TokenizerName) ? null : requestModel.TokenizerName.Trim(),
-                requestModel.MaxInputTokens,
-                requestModel.EmbeddingDimensions,
-                requestModel.SupportsStructuredOutput,
-                requestModel.SupportsToolUse,
-                requestModel.Source ?? AiConfiguredModelSource.Manual,
-                requestModel.LastSeenAt,
-                requestModel.InputCostPer1MUsd,
-                requestModel.OutputCostPer1MUsd));
+            models.Add(
+                new AiConfiguredModelDto(
+                    requestModel.Id ?? Guid.Empty,
+                    remoteModelId,
+                    string.IsNullOrWhiteSpace(requestModel.DisplayName) ? remoteModelId : requestModel.DisplayName.Trim(),
+                    operationKinds,
+                    protocolModes,
+                    string.IsNullOrWhiteSpace(requestModel.TokenizerName) ? null : requestModel.TokenizerName.Trim(),
+                    requestModel.MaxInputTokens,
+                    requestModel.EmbeddingDimensions,
+                    requestModel.SupportsStructuredOutput,
+                    requestModel.SupportsToolUse,
+                    requestModel.Source ?? AiConfiguredModelSource.Manual,
+                    requestModel.LastSeenAt,
+                    requestModel.InputCostPer1MUsd,
+                    requestModel.OutputCostPer1MUsd));
         }
 
         return models.AsReadOnly();
@@ -647,7 +668,9 @@ public sealed partial class ClientAiConnectionsController(
 
                 if (requestBinding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
                 {
-                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' must use the embeddings protocol or automatic mode.");
+                    this.ModelState.AddModelError(
+                        nameof(requestBindings),
+                        $"Purpose '{requestBinding.Purpose}' must use the embeddings protocol or automatic mode.");
                 }
             }
             else
@@ -659,17 +682,20 @@ public sealed partial class ClientAiConnectionsController(
 
                 if (requestBinding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(requestBinding.ProtocolMode))
                 {
-                    this.ModelState.AddModelError(nameof(requestBindings), $"Model '{model.RemoteModelId}' does not support protocol '{requestBinding.ProtocolMode}'.");
+                    this.ModelState.AddModelError(
+                        nameof(requestBindings),
+                        $"Model '{model.RemoteModelId}' does not support protocol '{requestBinding.ProtocolMode}'.");
                 }
             }
 
-            bindings.Add(new AiPurposeBindingDto(
-                requestBinding.Id ?? Guid.Empty,
-                requestBinding.Purpose,
-                model.Id == Guid.Empty ? null : model.Id,
-                model.RemoteModelId,
-                requestBinding.ProtocolMode,
-                requestBinding.IsEnabled));
+            bindings.Add(
+                new AiPurposeBindingDto(
+                    requestBinding.Id ?? Guid.Empty,
+                    requestBinding.Purpose,
+                    model.Id == Guid.Empty ? null : model.Id,
+                    model.RemoteModelId,
+                    requestBinding.ProtocolMode,
+                    requestBinding.IsEnabled));
         }
 
         return bindings.AsReadOnly();

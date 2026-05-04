@@ -107,6 +107,26 @@
           <span class="checkbox-text">Webhook Is <strong>{{ isActive ? 'Active' : 'Paused' }}</strong></span>
         </label>
       </div>
+
+      <div class="form-group">
+        <label for="webhookReviewTemperature">Review Temperature</label>
+        <div class="input-wrapper">
+          <input
+            id="webhookReviewTemperature"
+            v-model="reviewTemperatureInput"
+            type="number"
+            min="0"
+            max="2"
+            step="0.01"
+            placeholder="Default model behavior"
+            :class="{ 'has-error': reviewTemperatureError }"
+          />
+        </div>
+        <span v-if="reviewTemperatureError" class="field-error">{{ reviewTemperatureError }}</span>
+        <span v-else class="field-help">
+          Optional. Override the model temperature for reviews activated by this webhook. Use values between 0.0 and 2.0.
+        </span>
+      </div>
     </div>
 
     <div class="form-group full-width">
@@ -144,7 +164,7 @@
           <label>Repository Filters</label>
           <p class="field-hint">Add repository filters to scope this listener. Leave empty to allow all repositories in the selected scope.</p>
         </div>
-        <button id="webhookAddFilter" type="button" class="btn-add-row" :disabled="!projectId" @click="addFilter">
+        <button id="webhookAddFilter" type="button" class="btn-add-row" :disabled="editMode || !projectId" @click="addFilter">
           <i class="fi fi-rr-plus"></i> Add Filter
         </button>
       </div>
@@ -293,6 +313,7 @@ const providerStatuses = ref<ProviderActivationStatusDto[]>([])
 const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
 const manualOrganizationUrl = ref(props.config?.providerScopePath ?? defaultManualOrganizationUrl(props.config?.provider))
 const projectId = ref(props.config?.providerProjectKey ?? '')
+const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
 const isActive = ref(props.config?.isActive ?? true)
 const enabledEvents = ref<WebhookEventType[]>(props.config?.enabledEvents ? [...props.config.enabledEvents] : [])
 const repoFilters = ref<FilterRow[]>(createInitialFilterRows(props.config?.repoFilters))
@@ -311,6 +332,7 @@ const organizationScopeIdError = ref('')
 const projectIdError = ref('')
 const enabledEventsError = ref('')
 const repoFiltersError = ref('')
+const reviewTemperatureError = ref('')
 const crawlFilterOptionsError = ref('')
 const providerOptionsError = ref('')
 const formError = ref('')
@@ -619,11 +641,29 @@ function buildRepoFilters(): WebhookRepoFilterRequest[] {
     }))
 }
 
+function parseReviewTemperature(): number | undefined {
+  const rawValue = reviewTemperatureInput.value
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return undefined
+  }
+
+  const parsed = typeof rawValue === 'number'
+    ? rawValue
+    : Number.parseFloat(rawValue)
+
+  if (!Number.isFinite(parsed)) {
+    return Number.NaN
+  }
+
+  return parsed
+}
+
 function validateForm(): boolean {
   organizationScopeIdError.value = ''
   projectIdError.value = ''
   enabledEventsError.value = ''
   repoFiltersError.value = ''
+  reviewTemperatureError.value = ''
   formError.value = ''
 
   if (isAzureDevOpsProvider.value && !organizationScopeId.value) {
@@ -648,7 +688,20 @@ function validateForm(): boolean {
       : 'Each repository filter must include a repository name.'
   }
 
-  return !organizationScopeIdError.value && !projectIdError.value && !enabledEventsError.value && !repoFiltersError.value
+  const reviewTemperature = parseReviewTemperature()
+  if (reviewTemperature !== undefined) {
+    if (!Number.isFinite(reviewTemperature)) {
+      reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
+    } else if (reviewTemperature < 0 || reviewTemperature > 2) {
+      reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
+    }
+  }
+
+  return !organizationScopeIdError.value
+    && !projectIdError.value
+    && !enabledEventsError.value
+    && !repoFiltersError.value
+    && !reviewTemperatureError.value
 }
 
 async function handleSubmit() {
@@ -665,16 +718,18 @@ async function handleSubmit() {
     providerProjectKey: projectId.value.trim(),
     enabledEvents: buildEnabledEvents(),
     repoFilters: buildRepoFilters(),
+    reviewTemperature: parseReviewTemperature(),
   }
 
   loading.value = true
   formError.value = ''
   try {
     const saved = editMode.value && props.config?.id
-      ? await updateWebhookConfiguration(props.config.id, {
+        ? await updateWebhookConfiguration(props.config.id, {
           isActive: isActive.value,
           enabledEvents: body.enabledEvents,
           repoFilters: body.repoFilters,
+          reviewTemperature: body.reviewTemperature,
         })
       : await createWebhookConfiguration(effectiveClientId.value, body)
 

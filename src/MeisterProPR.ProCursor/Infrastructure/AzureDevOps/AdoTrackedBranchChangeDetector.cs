@@ -22,7 +22,7 @@ public sealed partial class AdoTrackedBranchChangeDetector(
     ILogger<AdoTrackedBranchChangeDetector> logger) : IProCursorTrackedBranchChangeDetector
 {
     /// <summary>
-    /// Gets the latest commit SHA for a tracked branch.
+    ///     Gets the latest commit SHA for a tracked branch.
     /// </summary>
     /// <param name="source">The ProCursor knowledge source.</param>
     /// <param name="trackedBranch">The tracked branch to get the commit SHA for.</param>

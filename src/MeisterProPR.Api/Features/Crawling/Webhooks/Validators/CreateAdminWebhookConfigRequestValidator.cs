@@ -38,6 +38,11 @@ public sealed class CreateAdminWebhookConfigRequestValidator : AbstractValidator
             .Must(events => events is not null && events.Count > 0)
             .WithMessage("At least one enabled event is required.");
 
+        this.RuleFor(request => request.ReviewTemperature)
+            .InclusiveBetween(0.0f, 2.0f)
+            .WithMessage("ReviewTemperature must be between 0.0 and 2.0 when provided.")
+            .When(request => request.ReviewTemperature.HasValue);
+
         this.RuleForEach(request => request.RepoFilters)
             .ChildRules(filter =>
             {

@@ -6,16 +6,48 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Defaults and arg parsing
-DB_CONNECTION_STRING="${1:-${DB_CONNECTION_STRING:-}}"
-BACKEND_PORT="${2:-${BACKEND_PORT:-8080}}"
-
-# detect --skip-ui-install anywhere in args
+DB_CONNECTION_STRING="${DB_CONNECTION_STRING:-}"
+BACKEND_PORT="${BACKEND_PORT:-8080}"
 SKIP_UI_INSTALL=false
-for arg in "$@"; do
-  if [ "$arg" = "--skip-ui-install" ] || [ "$arg" = "-s" ]; then
-    SKIP_UI_INSTALL=true
-  fi
+POSITIONAL_ARGS=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --skip-ui-install|-s)
+      SKIP_UI_INSTALL=true
+      ;;
+    --)
+      shift
+      while [ "$#" -gt 0 ]; do
+        POSITIONAL_ARGS+=("$1")
+        shift
+      done
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      echo "Usage: $0 '<DB_CONNECTION_STRING>' [backend-port] [--skip-ui-install]"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      ;;
+  esac
+  shift
 done
+
+if [ "${#POSITIONAL_ARGS[@]}" -gt 2 ]; then
+  echo "Usage: $0 '<DB_CONNECTION_STRING>' [backend-port] [--skip-ui-install]"
+  exit 1
+fi
+
+if [ "${#POSITIONAL_ARGS[@]}" -ge 1 ]; then
+  DB_CONNECTION_STRING="${POSITIONAL_ARGS[0]}"
+fi
+
+if [ "${#POSITIONAL_ARGS[@]}" -ge 2 ]; then
+  BACKEND_PORT="${POSITIONAL_ARGS[1]}"
+fi
 
 ApiProject="$REPO_ROOT/src/MeisterProPR.Api/MeisterProPR.Api.csproj"
 ApiFolder="$REPO_ROOT/src/MeisterProPR.Api"
@@ -40,10 +72,24 @@ pipe_stream() {
   local output_target="$3"
   local timestamp
   local formatted
+  local in_db_command_block=false
 
   while IFS= read -r line || [ -n "$line" ]; do
-    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
-    formatted="$timestamp [$label] $line"
+    if [[ "$line" =~ ^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\ [A-Z]{3}\] ]]; then
+      timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+      formatted="$timestamp [$label] $line"
+      if [[ "$line" == *"DbCommand ("* ]]; then
+        in_db_command_block=true
+      else
+        in_db_command_block=false
+      fi
+    elif [ "$in_db_command_block" = true ]; then
+      formatted="                    [$label] │ $line"
+    else
+      timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+      formatted="$timestamp [$label] $line"
+    fi
+
     printf '%s\n' "$formatted" >> "$LogFile"
 
     if [ "$output_target" = "stderr" ]; then
@@ -142,6 +188,37 @@ build_env_array_ui() {
   done
 }
 
+wait_for_backend_ready() {
+  local timeout_seconds="${RUN_LOCAL_BACKEND_READY_TIMEOUT_SECONDS:-60}"
+  local waited=0
+
+  if ! command -v curl >/dev/null 2>&1; then
+    write_status "curl not found; starting admin UI without backend readiness check."
+    return 0
+  fi
+
+  write_status "Waiting for backend readiness at http://localhost:$BACKEND_PORT/healthz"
+
+  while [ "$waited" -lt "$timeout_seconds" ]; do
+    if curl -s --max-time 2 -o /dev/null "http://localhost:$BACKEND_PORT/healthz" 2>/dev/null; then
+      write_status "Backend is ready on http://localhost:$BACKEND_PORT"
+      return 0
+    fi
+
+    if [ -n "${API_PID:-}" ] && ! kill -0 "$API_PID" 2>/dev/null; then
+      wait "$API_PID" 2>/dev/null || API_EXIT=$?
+      write_status "API exited before becoming ready"
+      return 1
+    fi
+
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  write_status "Timed out waiting for backend readiness after ${timeout_seconds}s"
+  return 1
+}
+
 # Create temp dir and pipes
 TMPDIR="$(mktemp -d)"
 API_OUT="$TMPDIR/api.out"
@@ -198,6 +275,12 @@ write_status "Local run log: $LogFile"
 # Start API
 ( env "${api_env_assign[@]}" dotnet run --project "$ApiProject" --no-launch-profile ) > "$API_OUT" 2> "$API_ERR" &
 API_PID=$!
+
+if ! wait_for_backend_ready; then
+  [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
+  wait "$API_PID" 2>/dev/null || true
+  exit 1
+fi
 
 # Start UI
 ( env "${ui_env_assign[@]}" npm run dev --prefix "$UiFolder" ) > "$UI_OUT" 2> "$UI_ERR" &

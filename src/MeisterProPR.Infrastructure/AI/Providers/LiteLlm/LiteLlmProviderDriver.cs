@@ -5,6 +5,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI.OpenAiCompatible;
+using MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 using Microsoft.Extensions.AI;
 
 namespace MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
@@ -14,7 +15,7 @@ namespace MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 /// </summary>
 public sealed class LiteLlmProviderDriver(OpenAiCompatibleTransport transport) : IAiProviderDriver
 {
-    private readonly MeisterProPR.Infrastructure.AI.Providers.OpenAi.OpenAiProviderDriver _innerDriver = new(transport);
+    private readonly OpenAiProviderDriver _innerDriver = new(transport);
 
     public AiProviderKind ProviderKind => AiProviderKind.LiteLlm;
 

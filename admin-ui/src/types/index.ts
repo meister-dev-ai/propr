@@ -1343,6 +1343,8 @@ export interface paths {
                 query?: {
                     /** @description Organization-scope identifier. */
                     organizationScopeId?: string;
+                    /** @description Optional discovery purpose. Use `crawl` or `procursor` to enforce premium capability checks. */
+                    purpose?: string;
                 };
                 header?: never;
                 path: {
@@ -1406,6 +1408,17 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The requested premium capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                     };
                 };
             };
@@ -1501,6 +1514,17 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The requested premium capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                     };
                 };
             };
@@ -1602,6 +1626,17 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description The requested premium capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
             };
         };
         put?: never;
@@ -1630,6 +1665,8 @@ export interface paths {
                     organizationScopeId?: string;
                     /** @description Azure DevOps project identifier. */
                     projectId?: string;
+                    /** @description Optional discovery purpose. Use `crawl` to enforce crawl-configuration premium checks. */
+                    purpose?: string;
                 };
                 header?: never;
                 path: {
@@ -1693,6 +1730,17 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The requested premium capability is unavailable. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
                     };
                 };
             };
@@ -6838,6 +6886,1320 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/tenants/{tenantSlug}/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the visible login options for one tenant sign-in route. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantLoginOptionsDto"];
+                        "application/json": components["schemas"]["TenantLoginOptionsDto"];
+                        "text/json": components["schemas"]["TenantLoginOptionsDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/tenants/{tenantSlug}/local-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signs a tenant user in with local credentials when tenant policy allows it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["TenantLocalLoginRequest"];
+                    "text/json": components["schemas"]["TenantLocalLoginRequest"];
+                    "application/*+json": components["schemas"]["TenantLocalLoginRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantAuthSessionDto"];
+                        "application/json": components["schemas"]["TenantAuthSessionDto"];
+                        "text/json": components["schemas"]["TenantAuthSessionDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/challenge/{tenantSlug}/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Starts the tenant-scoped external sign-in flow for the selected provider. */
+        get: {
+            parameters: {
+                query?: {
+                    returnUrl?: string;
+                };
+                header?: never;
+                path: {
+                    tenantSlug: string;
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/callback/{tenantSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Completes tenant-scoped external sign-in and returns the shared application session payload. */
+        get: {
+            parameters: {
+                query?: {
+                    state?: string;
+                    code?: string;
+                    error?: string;
+                    error_description?: string;
+                };
+                header?: never;
+                path: {
+                    tenantSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantAuthSessionDto"];
+                        "application/json": components["schemas"]["TenantAuthSessionDto"];
+                        "text/json": components["schemas"]["TenantAuthSessionDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenantId}/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists tenant memberships for one tenant administrator scope. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMembershipDto"][];
+                        "application/json": components["schemas"]["TenantMembershipDto"][];
+                        "text/json": components["schemas"]["TenantMembershipDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates or updates a tenant membership for one user within the tenant. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpsertTenantMembershipRequest"];
+                    "text/json": components["schemas"]["UpsertTenantMembershipRequest"];
+                    "application/*+json": components["schemas"]["UpsertTenantMembershipRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMembershipDto"];
+                        "application/json": components["schemas"]["TenantMembershipDto"];
+                        "text/json": components["schemas"]["TenantMembershipDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenantId}/memberships/{membershipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one tenant membership. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    membershipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMembershipDto"];
+                        "application/json": components["schemas"]["TenantMembershipDto"];
+                        "text/json": components["schemas"]["TenantMembershipDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Removes a tenant membership when recovery-safe rules allow it. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    membershipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Updates the role for an existing tenant membership. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    membershipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTenantMembershipRequest"];
+                    "text/json": components["schemas"]["UpdateTenantMembershipRequest"];
+                    "application/*+json": components["schemas"]["UpdateTenantMembershipRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMembershipDto"];
+                        "application/json": components["schemas"]["TenantMembershipDto"];
+                        "text/json": components["schemas"]["TenantMembershipDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/admin/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists tenants visible to the current caller. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"][];
+                        "application/json": components["schemas"]["TenantDto"][];
+                        "text/json": components["schemas"]["TenantDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates a new tenant boundary. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateTenantRequest"];
+                    "text/json": components["schemas"]["CreateTenantRequest"];
+                    "application/*+json": components["schemas"]["CreateTenantRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"];
+                        "application/json": components["schemas"]["TenantDto"];
+                        "text/json": components["schemas"]["TenantDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one tenant when the caller belongs to it or is a platform administrator. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"];
+                        "application/json": components["schemas"]["TenantDto"];
+                        "text/json": components["schemas"]["TenantDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Applies partial tenant policy updates. */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTenantRequest"];
+                    "text/json": components["schemas"]["UpdateTenantRequest"];
+                    "application/*+json": components["schemas"]["UpdateTenantRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantDto"];
+                        "application/json": components["schemas"]["TenantDto"];
+                        "text/json": components["schemas"]["TenantDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenantId}/sso-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists tenant-owned SSO providers for one tenant administrator view. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSsoProviderDto"][];
+                        "application/json": components["schemas"]["TenantSsoProviderDto"][];
+                        "text/json": components["schemas"]["TenantSsoProviderDto"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates a tenant-owned SSO provider. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateTenantSsoProviderRequest"];
+                    "text/json": components["schemas"]["CreateTenantSsoProviderRequest"];
+                    "application/*+json": components["schemas"]["CreateTenantSsoProviderRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSsoProviderDto"];
+                        "application/json": components["schemas"]["TenantSsoProviderDto"];
+                        "text/json": components["schemas"]["TenantSsoProviderDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tenants/{tenantId}/sso-providers/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns a single tenant-owned SSO provider configuration. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSsoProviderDto"];
+                        "application/json": components["schemas"]["TenantSsoProviderDto"];
+                        "text/json": components["schemas"]["TenantSsoProviderDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        /** Replaces a tenant-owned SSO provider configuration. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTenantSsoProviderRequest"];
+                    "text/json": components["schemas"]["UpdateTenantSsoProviderRequest"];
+                    "application/*+json": components["schemas"]["UpdateTenantSsoProviderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSsoProviderDto"];
+                        "application/json": components["schemas"]["TenantSsoProviderDto"];
+                        "text/json": components["schemas"]["TenantSsoProviderDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Deletes a tenant-owned SSO provider. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    providerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "application/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                        "text/json": components["schemas"]["PremiumFeatureUnavailablePayload"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/reviewing/thread-memory": {
         parameters: {
             query?: never;
@@ -7840,6 +9202,7 @@ export interface components {
             edition?: components["schemas"]["InstallationEdition"];
             availableSignInMethods?: string[] | null;
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+            publicBaseUrl?: string | null;
         };
         /** @description Authenticated session snapshot shared with the admin UI after sign-in. */
         AuthenticatedSessionDto: {
@@ -7847,6 +9210,10 @@ export interface components {
             clientRoles?: {
                 [key: string]: number;
             } | null;
+            tenantRoles?: {
+                [key: string]: number;
+            } | null;
+            hasLocalPassword?: boolean;
             edition?: components["schemas"]["InstallationEdition"];
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
         };
@@ -7870,6 +9237,10 @@ export interface components {
             createdAt?: string;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
+            /** Format: uuid */
+            tenantId?: string | null;
+            tenantSlug?: string | null;
+            tenantDisplayName?: string | null;
         };
         /** @description Client-scoped provider reviewer identity returned by admin APIs. */
         ClientReviewerIdentityDto: {
@@ -8095,6 +9466,8 @@ export interface components {
         /** @description Request body for creating a client. */
         CreateClientRequest: {
             displayName?: string | null;
+            /** Format: uuid */
+            tenantId?: string;
         };
         /** @description Create-PAT request. */
         CreatePatRequest: {
@@ -8115,6 +9488,24 @@ export interface components {
              * @description Required when scope is `crawlConfigScope`.
              */
             crawlConfigId?: string | null;
+        };
+        /** @description Create-tenant request payload. */
+        CreateTenantRequest: {
+            slug?: string | null;
+            displayName?: string | null;
+        };
+        /** @description Create-tenant-provider request payload. */
+        CreateTenantSsoProviderRequest: {
+            displayName?: string | null;
+            providerKind?: string | null;
+            protocolKind?: string | null;
+            issuerOrAuthorityUrl?: string | null;
+            clientId?: string | null;
+            clientSecret?: string | null;
+            scopes?: string[] | null;
+            allowedEmailDomains?: string[] | null;
+            isEnabled?: boolean;
+            autoCreateUsers?: boolean;
         };
         /** @description Create-user request. */
         CreateUserRequest: {
@@ -8176,6 +9567,9 @@ export interface components {
             /** Format: int64 */
             totalOutputTokens?: number | null;
             errorMessage?: string | null;
+            aiModel?: string | null;
+            /** Format: float */
+            reviewTemperature?: number | null;
             tokenBreakdown?: components["schemas"]["TokenBreakdownEntry"][] | null;
             breakdownConsistent?: boolean | null;
         };
@@ -8413,6 +9807,12 @@ export interface components {
          * @enum {string}
          */
         PremiumCapabilityOverrideState: "default" | "enabled" | "disabled";
+        /** @description JSON payload used for premium-unavailable responses. */
+        PremiumFeatureUnavailablePayload: {
+            error?: string | null;
+            feature?: string | null;
+            message?: string | null;
+        };
         /** @description API request body for creating a ProCursor knowledge source. */
         ProCursorKnowledgeSourceRequest: {
             displayName?: string | null;
@@ -8801,7 +10201,7 @@ export interface components {
          * @description Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent.
          * @enum {string}
          */
-        ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation";
+        ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation" | "operational";
         /** @description Global provider-family activation status for installation-wide administration. */
         ProviderActivationStatusDto: {
             providerFamily?: components["schemas"]["ScmProvider"];
@@ -9117,6 +10517,89 @@ export interface components {
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
             requestedReviewerIdentity?: components["schemas"]["ReviewReviewerIdentityDto"];
         };
+        /** @description Tenant-authenticated session payload returned by tenant login endpoints. */
+        TenantAuthSessionDto: {
+            accessToken?: string | null;
+            refreshToken?: string | null;
+            /** Format: int32 */
+            expiresIn?: number;
+            tokenType?: string | null;
+        };
+        /** @description Tenant boundary data returned by administration and tenant-auth flows. */
+        TenantDto: {
+            /** Format: uuid */
+            id?: string;
+            slug?: string | null;
+            displayName?: string | null;
+            isActive?: boolean;
+            localLoginEnabled?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        /** @description Tenant-local login request payload. */
+        TenantLocalLoginRequest: {
+            username?: string | null;
+            password?: string | null;
+        };
+        /** @description Tenant-scoped login options shown before a tenant user signs in. */
+        TenantLoginOptionsDto: {
+            tenantSlug?: string | null;
+            localLoginEnabled?: boolean;
+            providers?: components["schemas"]["TenantLoginProviderDto"][] | null;
+        };
+        /** @description Public metadata for an enabled tenant-owned sign-in provider. */
+        TenantLoginProviderDto: {
+            /** Format: uuid */
+            providerId?: string;
+            displayName?: string | null;
+            providerKind?: string | null;
+            providerLabel?: string | null;
+        };
+        /** @description Tenant membership data returned by administration flows. */
+        TenantMembershipDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            tenantId?: string;
+            /** Format: uuid */
+            userId?: string;
+            username?: string | null;
+            email?: string | null;
+            userIsActive?: boolean;
+            role?: components["schemas"]["TenantRole"];
+            /** Format: date-time */
+            assignedAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        /**
+         * @description Tenant-scoped authorization role for a tenant membership.
+         * @enum {string}
+         */
+        TenantRole: "tenantUser" | "tenantAdministrator";
+        /** @description Tenant-owned external sign-in provider metadata returned by admin APIs. */
+        TenantSsoProviderDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            tenantId?: string;
+            displayName?: string | null;
+            providerKind?: string | null;
+            protocolKind?: string | null;
+            issuerOrAuthorityUrl?: string | null;
+            clientId?: string | null;
+            secretConfigured?: boolean;
+            scopes?: string[] | null;
+            allowedEmailDomains?: string[] | null;
+            isEnabled?: boolean;
+            autoCreateUsers?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         /** @description DTO for a stored thread memory embedding (admin view). */
         ThreadMemoryRecordDto: {
             /**
@@ -9217,6 +10700,36 @@ export interface components {
         UpdatePromptOverrideRequest: {
             /** @description New full replacement text. */
             overrideText?: string | null;
+        };
+        /** @description Tenant membership role update payload. */
+        UpdateTenantMembershipRequest: {
+            role?: string | null;
+        };
+        /** @description Patch-tenant request payload. */
+        UpdateTenantRequest: {
+            displayName?: string | null;
+            isActive?: boolean | null;
+            localLoginEnabled?: boolean | null;
+        };
+        /** @description Replace-tenant-provider request payload. */
+        UpdateTenantSsoProviderRequest: {
+            displayName?: string | null;
+            providerKind?: string | null;
+            protocolKind?: string | null;
+            issuerOrAuthorityUrl?: string | null;
+            clientId?: string | null;
+            clientSecret?: string | null;
+            scopes?: string[] | null;
+            allowedEmailDomains?: string[] | null;
+            isEnabled?: boolean;
+            autoCreateUsers?: boolean;
+        };
+        /** @description Tenant membership create-or-update request payload. */
+        UpsertTenantMembershipRequest: {
+            /** Format: uuid */
+            userId?: string | null;
+            userIdentifier?: string | null;
+            role?: string | null;
         };
         /** @description Response payload for one webhook configuration. */
         WebhookConfigurationResponse: {

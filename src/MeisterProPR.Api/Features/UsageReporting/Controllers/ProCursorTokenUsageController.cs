@@ -62,7 +62,7 @@ public sealed class ProCursorTokenUsageController(
         [FromQuery] string? groupBy = null,
         CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
@@ -126,7 +126,7 @@ public sealed class ProCursorTokenUsageController(
         [FromQuery] int limit = 10,
         CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
@@ -190,7 +190,7 @@ public sealed class ProCursorTokenUsageController(
         [FromQuery] string granularity = "daily",
         CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
@@ -248,7 +248,7 @@ public sealed class ProCursorTokenUsageController(
         [FromQuery] int limit = 50,
         CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
@@ -295,7 +295,7 @@ public sealed class ProCursorTokenUsageController(
         [FromQuery] Guid? sourceId = null,
         CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
@@ -335,7 +335,7 @@ public sealed class ProCursorTokenUsageController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetFreshness(Guid clientId, CancellationToken ct = default)
     {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;

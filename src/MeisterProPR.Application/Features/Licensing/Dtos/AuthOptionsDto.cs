@@ -9,4 +9,5 @@ namespace MeisterProPR.Application.Features.Licensing.Dtos;
 public sealed record AuthOptionsDto(
     InstallationEdition Edition,
     IReadOnlyList<string> AvailableSignInMethods,
-    IReadOnlyList<PremiumCapabilityDto> Capabilities);
+    IReadOnlyList<PremiumCapabilityDto> Capabilities,
+    string? PublicBaseUrl = null);

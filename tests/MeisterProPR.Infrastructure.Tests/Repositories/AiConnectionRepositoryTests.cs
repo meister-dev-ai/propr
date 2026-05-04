@@ -63,7 +63,8 @@ public sealed class AiConnectionRepositoryTests
         var chatModelId = Guid.NewGuid();
         var embeddingModelId = Guid.NewGuid();
         var resolvedPurposes = purposes.Length == 0
-            ? [
+            ?
+            [
                 AiPurpose.ReviewDefault,
                 AiPurpose.ReviewLowEffort,
                 AiPurpose.ReviewMediumEffort,
@@ -146,7 +147,8 @@ public sealed class AiConnectionRepositoryTests
             IsEnabled = true,
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
-        }).ToList();
+        })
+            .ToList();
 
         return profile;
     }
@@ -169,8 +171,7 @@ public sealed class AiConnectionRepositoryTests
             null,
             null,
             true,
-            true,
-            AiConfiguredModelSource.Manual);
+            true);
 
         var embeddingModel = new AiConfiguredModelDto(
             Guid.Empty,
@@ -180,10 +181,7 @@ public sealed class AiConnectionRepositoryTests
             [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
             "cl100k_base",
             8192,
-            3072,
-            false,
-            false,
-            AiConfiguredModelSource.Manual);
+            3072);
 
         return new AiConnectionWriteRequestDto(
             displayName,
@@ -193,12 +191,12 @@ public sealed class AiConnectionRepositoryTests
             AiDiscoveryMode.ManualOnly,
             [chatModel, embeddingModel],
             [
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, chatModelId, AiProtocolMode.Auto, true),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewLowEffort, null, chatModelId, AiProtocolMode.Auto, true),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewMediumEffort, null, chatModelId, AiProtocolMode.Auto, true),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewHighEffort, null, chatModelId, AiProtocolMode.Auto, true),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.MemoryReconsideration, null, chatModelId, AiProtocolMode.Auto, true),
-                new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, embeddingModelId, AiProtocolMode.Embeddings, true),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewLowEffort, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewMediumEffort, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewHighEffort, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.MemoryReconsideration, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, embeddingModelId, AiProtocolMode.Embeddings),
             ],
             null,
             null,
@@ -224,7 +222,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var activeProfile = MakeProfile(clientId, isActive: true, displayName: "Active Profile");
+        var activeProfile = MakeProfile(clientId, true, displayName: "Active Profile");
         db.AiConnectionProfiles.Add(activeProfile);
         db.AiConnectionProfiles.Add(MakeProfile(clientId, displayName: "Draft Profile"));
         await db.SaveChangesAsync();
@@ -248,7 +246,7 @@ public sealed class AiConnectionRepositoryTests
         await using var db = new MeisterProPRDbContext(options);
         var factory = new PooledDbContextFactory<MeisterProPRDbContext>(options);
         var clientId = Guid.NewGuid();
-        var activeProfile = MakeProfile(clientId, isActive: true);
+        var activeProfile = MakeProfile(clientId, true);
         db.AiConnectionProfiles.Add(activeProfile);
         await db.SaveChangesAsync();
 
@@ -266,7 +264,7 @@ public sealed class AiConnectionRepositoryTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var profileA = MakeProfile(clientId, isActive: true, displayName: "Primary");
+        var profileA = MakeProfile(clientId, true, displayName: "Primary");
         var profileB = MakeProfile(clientId, displayName: "Secondary");
         db.AiConnectionProfiles.AddRange(profileA, profileB);
         await db.SaveChangesAsync();
@@ -344,7 +342,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var profile = MakeProfile(clientId, isActive: true);
+        var profile = MakeProfile(clientId, true);
         db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
@@ -391,7 +389,7 @@ public sealed class AiConnectionRepositoryTests
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var profileA = MakeProfile(clientId, isActive: true, displayName: "Primary");
+        var profileA = MakeProfile(clientId, true, displayName: "Primary");
         var profileB = MakeProfile(clientId, displayName: "Secondary");
         db.AiConnectionProfiles.AddRange(profileA, profileB);
 
@@ -482,7 +480,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var profile = MakeProfile(clientId, isActive: false, verified: true);
+        var profile = MakeProfile(clientId);
         db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
@@ -507,7 +505,7 @@ public sealed class AiConnectionRepositoryTests
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
-        var profile = MakeProfile(clientId, isActive: false, verified: true);
+        var profile = MakeProfile(clientId);
         db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
@@ -561,7 +559,7 @@ public sealed class AiConnectionRepositoryTests
                         0.4m),
                 ],
                 [
-                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", AiProtocolMode.Embeddings, true),
+                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", AiProtocolMode.Embeddings),
                 ],
                 null,
                 null,
@@ -602,11 +600,10 @@ public sealed class AiConnectionRepositoryTests
                         null,
                         null,
                         true,
-                        true,
-                        AiConfiguredModelSource.Manual),
+                        true),
                 ],
                 [
-                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, "gpt-4o", AiProtocolMode.Auto, true),
+                    new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, "gpt-4o"),
                 ],
                 null,
                 null,

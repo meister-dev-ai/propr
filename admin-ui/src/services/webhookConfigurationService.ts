@@ -2,57 +2,21 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
-import type { CanonicalSourceReferenceDto } from '@/services/adoDiscoveryService'
+import type { components } from '@/services/generated/openapi'
 
-export type WebhookProviderType = 'azureDevOps' | 'github' | 'gitLab' | 'forgejo'
-export type WebhookEventType = 'pullRequestCreated' | 'pullRequestUpdated' | 'pullRequestCommented'
+export type WebhookProviderType = components['schemas']['WebhookProviderType']
+export type WebhookEventType = components['schemas']['WebhookEventType']
 export type WebhookDeliveryOutcome = 'accepted' | 'ignored' | 'rejected' | 'failed'
 
-export interface WebhookRepoFilterRequest {
-  repositoryName?: string | null
-  targetBranchPatterns: string[]
-  canonicalSourceRef?: CanonicalSourceReferenceDto | null
-  displayName?: string | null
-}
+export type WebhookRepoFilterRequest = components['schemas']['WebhookRepoFilterRequest']
 
-export interface CreateWebhookConfigurationRequest {
-  clientId: string
-  provider: WebhookProviderType
-  organizationScopeId?: string | null
-  providerScopePath?: string | null
-  providerProjectKey: string
-  enabledEvents: WebhookEventType[]
-  repoFilters?: WebhookRepoFilterRequest[]
-}
+export type CreateWebhookConfigurationRequest = components['schemas']['CreateAdminWebhookConfigRequest']
 
-export interface UpdateWebhookConfigurationRequest {
-  isActive?: boolean
-  enabledEvents?: WebhookEventType[]
-  repoFilters?: WebhookRepoFilterRequest[]
-}
+export type UpdateWebhookConfigurationRequest = components['schemas']['PatchAdminWebhookConfigRequest']
 
-export interface WebhookRepoFilterResponse {
-  id: string
-  repositoryName: string
-  targetBranchPatterns: string[]
-  canonicalSourceRef?: CanonicalSourceReferenceDto | null
-  displayName?: string | null
-}
+export type WebhookRepoFilterResponse = components['schemas']['WebhookRepoFilterResponse']
 
-export interface WebhookConfigurationResponse {
-  id: string
-  clientId: string
-  provider: WebhookProviderType
-  organizationScopeId?: string | null
-  providerScopePath: string
-  providerProjectKey: string
-  isActive: boolean
-  enabledEvents: WebhookEventType[]
-  repoFilters: WebhookRepoFilterResponse[]
-  listenerUrl: string
-  generatedSecret?: string | null
-  createdAt: string
-}
+export type WebhookConfigurationResponse = components['schemas']['WebhookConfigurationResponse']
 
 export interface WebhookDeliveryLogEntryResponse {
   id: string

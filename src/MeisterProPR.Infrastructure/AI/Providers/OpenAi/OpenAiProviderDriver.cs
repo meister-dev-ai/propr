@@ -50,7 +50,8 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
         var result = await transport.DiscoverModelsAsync(options, ct);
         return (int)result.StatusCode >= 400
             ? DriverFailureMapper.Failed(result.StatusCode, result.ErrorMessage)
-            : DriverFailureMapper.Verified($"Verified OpenAI connectivity for '{options.BaseUrl}'.",
+            : DriverFailureMapper.Verified(
+                $"Verified OpenAI connectivity for '{options.BaseUrl}'.",
                 result.Models.Count == 0 ? ["No models were discovered from the provider. Manual model entry remains available."] : []);
     }
 

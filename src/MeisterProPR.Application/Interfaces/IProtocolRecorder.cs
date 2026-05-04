@@ -44,6 +44,7 @@ public interface IProtocolRecorder
     /// <param name="inputTokens">Input token count reported by the AI provider, or <see langword="null" />.</param>
     /// <param name="outputTokens">Output token count reported by the AI provider, or <see langword="null" />.</param>
     /// <param name="inputTextSample">Truncated input text (≤ 50,000 characters), or <see langword="null" />.</param>
+    /// <param name="systemPrompt">Truncated system prompt text (≤ 50,000 characters), or <see langword="null" />.</param>
     /// <param name="outputTextSample">Truncated AI response text (≤ 50,000 characters), or <see langword="null" />.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <param name="name">
@@ -57,6 +58,7 @@ public interface IProtocolRecorder
         long? inputTokens,
         long? outputTokens,
         string? inputTextSample,
+        string? systemPrompt,
         string? outputTextSample,
         CancellationToken ct = default,
         string? name = null,
@@ -67,9 +69,9 @@ public interface IProtocolRecorder
     /// </summary>
     /// <param name="protocolId">The protocol this event belongs to.</param>
     /// <param name="toolName">Name of the tool that was invoked.</param>
-    /// <param name="arguments">Serialised arguments passed to the tool (truncated to 4,000 characters).</param>
+    /// <param name="arguments">Serialised arguments passed to the tool.</param>
     /// <param name="result">Serialised result returned by the tool.</param>
-    /// <param name="iteration">Current loop iteration number (1-based); used to apply depth-conditioned excerpt truncation.</param>
+    /// <param name="iteration">Current loop iteration number (1-based).</param>
     /// <param name="ct">Cancellation token.</param>
     Task RecordToolCallAsync(
         Guid protocolId,
@@ -153,6 +155,53 @@ public interface IProtocolRecorder
         Guid protocolId,
         string eventName,
         string? details,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records a comment-relevance filter event on the existing protocol path. Never throws.
+    ///     Valid <paramref name="eventName" /> values are defined by the Reviewing module's
+    ///     comment-relevance protocol event family.
+    /// </summary>
+    /// <param name="protocolId">The protocol this event belongs to.</param>
+    /// <param name="eventName">The comment-relevance event name.</param>
+    /// <param name="details">JSON-serialised event metadata, or <see langword="null" />.</param>
+    /// <param name="output">JSON-serialised comparable filter output payload, or <see langword="null" />.</param>
+    /// <param name="error">Error message if event generation failed, or <see langword="null" />.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RecordCommentRelevanceEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records a deterministic review-finding-gate event on the existing protocol path. Never throws.
+    /// </summary>
+    /// <param name="protocolId">The protocol this event belongs to.</param>
+    /// <param name="eventName">The final-gate event name.</param>
+    /// <param name="details">JSON-serialised event metadata, or <see langword="null" />.</param>
+    /// <param name="output">JSON-serialised final-gate payload, or <see langword="null" />.</param>
+    /// <param name="error">Error message if event generation failed, or <see langword="null" />.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RecordReviewFindingGateEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records a verification workflow event on the existing protocol path. Never throws.
+    /// </summary>
+    Task RecordVerificationEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
         string? error,
         CancellationToken ct = default);
 }

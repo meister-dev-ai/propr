@@ -49,7 +49,7 @@ packages/
 
 # Speckit / feature specs
 .specify/
-specs/
+specs
 
 # Claude / Copilot / Gemini
 .claude
@@ -58,12 +58,18 @@ specs/
 .github/instructions
 .github/prompts
 .github/skills
+.github/copilot-instructions.md
 .gemini
 .agents
 skills-lock.json
 AGENTS.md
 
+.playwright-mcp
+
 # Node / admin-ui
+node_modules/
+dist/
+build/
 admin-ui/node_modules/
 admin-ui/dist/
 admin-ui/coverage/

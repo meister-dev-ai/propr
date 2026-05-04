@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorSymbolRecord
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorSymbolRecord"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorSymbolRecord" /> class.
     /// </summary>
     public ProCursorSymbolRecord(
         Guid id,
@@ -35,8 +35,8 @@ public sealed class ProCursorSymbolRecord
             throw new ArgumentException("SnapshotId must not be empty.", nameof(snapshotId));
         }
 
-        ArgumentOutOfRangeException.ThrowIfLessThan(lineStart, 1, nameof(lineStart));
-        ArgumentOutOfRangeException.ThrowIfLessThan(lineEnd, lineStart, nameof(lineEnd));
+        ArgumentOutOfRangeException.ThrowIfLessThan(lineStart, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(lineEnd, lineStart);
 
         this.Id = id;
         this.SnapshotId = snapshotId;

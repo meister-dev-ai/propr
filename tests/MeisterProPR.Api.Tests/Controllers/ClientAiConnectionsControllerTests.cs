@@ -99,7 +99,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                 apiKey = "secret-api-key",
             },
             discoveryMode = "manualOnly",
-            configuredModels = resolvedChatModels.Select(model => BuildConfiguredModel(model)).Concat([BuildConfiguredModel(embeddingModel, embedding: true)]),
+            configuredModels = resolvedChatModels.Select(model => BuildConfiguredModel(model)).Concat([BuildConfiguredModel(embeddingModel, true)]),
             purposeBindings = BuildBindings(resolvedChatModels[0], embeddingModel, includeEffortOverrides),
         };
     }
@@ -173,7 +173,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             configuredModels = new[]
             {
                 BuildConfiguredModel("gpt-4o"),
-                BuildConfiguredModel("text-embedding-3-large", embedding: true),
+                BuildConfiguredModel("text-embedding-3-large", true),
             },
             purposeBindings = BuildBindings("gpt-4o", "text-embedding-3-large"),
         };
@@ -196,10 +196,10 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             new
             {
                 baseUrl = "https://updated.openai.azure.com/",
-                configuredModels = new object[]
+                configuredModels = new[]
                 {
                     BuildConfiguredModel("gpt-4.1"),
-                    BuildConfiguredModel("text-embedding-3-large", embedding: true),
+                    BuildConfiguredModel("text-embedding-3-large", true),
                 },
                 purposeBindings = BuildBindings("gpt-4.1", "text-embedding-3-large"),
             });

@@ -19,5 +19,5 @@ public sealed record AiVerificationResultDto(
 {
     /// <summary>A reusable empty verification snapshot.</summary>
     public static AiVerificationResultDto NeverVerified { get; } =
-        new(AiVerificationStatus.NeverVerified, null, null, null, null, [], null);
+        new(AiVerificationStatus.NeverVerified, null, null, null, null, []);
 }

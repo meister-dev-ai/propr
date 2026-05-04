@@ -11,6 +11,7 @@ public sealed class ClientRecord
     public bool IsActive { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>
@@ -21,6 +22,8 @@ public sealed class ClientRecord
 
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
+
+    public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];
 

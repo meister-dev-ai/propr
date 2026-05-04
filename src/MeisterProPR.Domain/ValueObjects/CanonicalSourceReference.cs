@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 public sealed record CanonicalSourceReference
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="CanonicalSourceReference"/> class.
+    ///     Initializes a new instance of the <see cref="CanonicalSourceReference" /> class.
     /// </summary>
     /// <param name="provider">The provider name.</param>
     /// <param name="value">The reference value.</param>

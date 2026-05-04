@@ -9,7 +9,7 @@ namespace MeisterProPR.Application.Features.Licensing.Support;
 /// <summary>Convenience helpers for resolving whether a premium capability should block the current operation.</summary>
 public static class LicensingCapabilityGuard
 {
-    /// <summary>Returns the blocking capability snapshot when the requested capability is unavailable; otherwise returns <see langword="null"/>.</summary>
+    /// <summary>Returns the blocking capability snapshot when the requested capability is unavailable; otherwise returns <see langword="null" />.</summary>
     public static async Task<CapabilitySnapshot?> GetUnavailableCapabilityAsync(
         ILicensingCapabilityService? licensingCapabilityService,
         string capabilityKey,

@@ -10,7 +10,6 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Api.Workers;
@@ -92,7 +91,7 @@ public sealed partial class ReviewJobWorker(
         var jobRepository = tickScope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
         var licensingCapabilityService = tickScope.ServiceProvider.GetService<ILicensingCapabilityService>();
         var parallelReviewExecutionEnabled = licensingCapabilityService is null
-            || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
+                                             || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
 
         foreach (var job in jobRepository.GetPendingJobs())
         {

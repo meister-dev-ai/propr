@@ -8,7 +8,7 @@ namespace MeisterProPR.Application.Exceptions;
 /// <summary>Thrown when a premium capability is required for the requested operation.</summary>
 public sealed class PremiumFeatureUnavailableException : Exception
 {
-    /// <summary>Initializes a new instance of the <see cref="PremiumFeatureUnavailableException"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="PremiumFeatureUnavailableException" /> class.</summary>
     public PremiumFeatureUnavailableException(CapabilitySnapshot capability)
         : base(capability.Message ?? $"Capability '{capability.Key}' is unavailable.")
     {

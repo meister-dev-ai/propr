@@ -7,7 +7,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 public sealed record ReviewThreadRef
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ReviewThreadRef"/> class.
+    ///     Initializes a new instance of the <see cref="ReviewThreadRef" /> class.
     /// </summary>
     /// <param name="review">The code review reference.</param>
     /// <param name="externalThreadId">The external thread identifier.</param>

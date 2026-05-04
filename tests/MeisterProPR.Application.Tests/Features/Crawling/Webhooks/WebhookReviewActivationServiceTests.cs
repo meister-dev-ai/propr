@@ -59,7 +59,8 @@ public sealed class WebhookReviewActivationServiceTests
                     request.ProviderProjectKey == configuration.ProjectId &&
                     request.RepositoryId == delivery.RepositoryId &&
                     request.PullRequestId == delivery.PullRequestId &&
-                    request.IterationId == 7),
+                    request.IterationId == 7 &&
+                    request.ReviewTemperature == configuration.ReviewTemperature),
                 Arg.Any<CancellationToken>())
             .Returns(createdJob);
 
@@ -234,7 +235,8 @@ public sealed class WebhookReviewActivationServiceTests
                 WebhookEventType.PullRequestCommented,
             ],
             [],
-            SecretCiphertext: "ciphertext");
+            SecretCiphertext: "ciphertext",
+            ReviewTemperature: 0.25f);
     }
 
     private static IncomingAdoWebhookDelivery CreateDelivery(IReadOnlyList<Guid>? reviewerIds = null)

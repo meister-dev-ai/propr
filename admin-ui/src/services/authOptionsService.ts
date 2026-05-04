@@ -15,6 +15,15 @@ export interface AuthOptions {
   edition: InstallationEdition
   availableSignInMethods: string[]
   capabilities: PremiumCapability[]
+  publicBaseUrl: string | null
+}
+
+export function supportsTenantSignIn(options: AuthOptions | null | undefined): boolean {
+  if (!options || options.edition !== 'commercial' || !options.availableSignInMethods.includes('sso')) {
+    return false
+  }
+
+  return options.capabilities.find((capability) => capability.key === 'sso-authentication')?.isAvailable === true
 }
 
 function normalizeAuthOptions(options: AuthOptionsDto | null | undefined): AuthOptions {
@@ -22,6 +31,7 @@ function normalizeAuthOptions(options: AuthOptionsDto | null | undefined): AuthO
     edition: options?.edition ?? 'community',
     availableSignInMethods: options?.availableSignInMethods ?? ['password'],
     capabilities: (options?.capabilities ?? []).map((capability) => normalizeCapability(capability)),
+    publicBaseUrl: options?.publicBaseUrl ?? null,
   }
 }
 

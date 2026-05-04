@@ -46,12 +46,13 @@ public sealed record ReviewJobProtocolDto(
 ///     Carries data for a single event in a review protocol.
 /// </summary>
 /// <param name="Id">Unique identifier of the event.</param>
-/// <param name="Kind">The kind of event (AiCall or ToolCall).</param>
+/// <param name="Kind">The kind of event (AiCall, ToolCall, MemoryOperation, or Operational).</param>
 /// <param name="Name">Human-readable name of the event (e.g. "ai_call_iter_1", "get_changed_files").</param>
 /// <param name="OccurredAt">UTC timestamp when the event occurred.</param>
 /// <param name="InputTokens">Input tokens for this event, or null.</param>
 /// <param name="OutputTokens">Output tokens for this event, or null.</param>
 /// <param name="InputTextSample">First 4000 characters of input text, or null.</param>
+/// <param name="SystemPrompt">First 4000 characters of the system prompt used for this AI call, or null.</param>
 /// <param name="OutputSummary">First 1000 characters of output, or null.</param>
 /// <param name="Error">Error message if this event failed, or null.</param>
 public sealed record ProtocolEventDto(
@@ -62,5 +63,6 @@ public sealed record ProtocolEventDto(
     long? InputTokens,
     long? OutputTokens,
     string? InputTextSample,
+    string? SystemPrompt,
     string? OutputSummary,
     string? Error);

@@ -8,7 +8,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Normalized provider-family plus host authority reference.</summary>
 public sealed record ProviderHostRef
 {
-    /// <summary>Initializes a new instance of the <see cref="ProviderHostRef"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ProviderHostRef" /> class.</summary>
     /// <param name="provider">The SCM provider.</param>
     /// <param name="hostBaseUrl">The base URL of the host authority.</param>
     /// <exception cref="ArgumentException">Thrown when hostBaseUrl is null, whitespace, or not an absolute URL.</exception>

@@ -10,14 +10,85 @@ const REFRESH_TOKEN_KEY = 'meisterpropr_refresh_token'
 const CLIENT_ROLES_KEY = 'meisterpropr_client_roles'
 const EDITION_KEY = 'meisterpropr_installation_edition'
 const CAPABILITIES_KEY = 'meisterpropr_capabilities'
+const TENANT_ROLES_KEY = 'meisterpropr_tenant_roles'
+const LOCAL_PASSWORD_KEY = 'meisterpropr_has_local_password'
 
 type InstallationEdition = components['schemas']['InstallationEdition']
 type PremiumCapabilityDto = components['schemas']['PremiumCapabilityDto']
 type SessionSnapshot = {
   globalRole?: string
   clientRoles?: Record<string, number>
+  tenantRoles?: Record<string, number>
+  hasLocalPassword?: boolean
   edition?: InstallationEdition
   capabilities?: PremiumCapabilityDto[] | null
+}
+
+type JwtPayload = {
+  exp?: number
+  global_role?: string
+  unique_name?: string
+}
+
+function decodeBase64UrlSegment(segment: string): string | null {
+  if (!segment) return null
+
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const paddingLength = (4 - (normalized.length % 4)) % 4
+  const base64 = normalized.padEnd(normalized.length + paddingLength, '=')
+
+  try {
+    const binary = atob(base64)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+function decodeJwtPayload(token: string | null): JwtPayload | null {
+  const payloadSegment = token?.split('.')[1]
+  if (!payloadSegment) return null
+
+  const payloadJson = decodeBase64UrlSegment(payloadSegment)
+  if (!payloadJson) return null
+
+  try {
+    const payload = JSON.parse(payloadJson) as unknown
+    return payload !== null && typeof payload === 'object' ? (payload as JwtPayload) : null
+  } catch {
+    return null
+  }
+}
+
+function readStoredJsonObject(key: string): Record<string, number> {
+  const rawValue = sessionStorage.getItem(key)
+  if (!rawValue) return {}
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+
+    return Object.entries(parsed).every(([, value]) => typeof value === 'number')
+      ? (parsed as Record<string, number>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function readStoredJsonArray(key: string): PremiumCapabilityDto[] {
+  const rawValue = sessionStorage.getItem(key)
+  if (!rawValue) return []
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+    return Array.isArray(parsed) ? (parsed as PremiumCapabilityDto[]) : []
+  } catch {
+    return []
+  }
 }
 
 // Initialize shared reactive state FROM storage
@@ -25,18 +96,20 @@ const accessToken = ref<string | null>(sessionStorage.getItem(ACCESS_TOKEN_KEY))
 const refreshToken = ref<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY))
 
 /** clientRoles: clientId → 0 (ClientUser) | 1 (ClientAdministrator) */
-const clientRoles = ref<Record<string, number>>(
-  JSON.parse(sessionStorage.getItem(CLIENT_ROLES_KEY) ?? '{}') as Record<string, number>,
-)
+const clientRoles = ref<Record<string, number>>(readStoredJsonObject(CLIENT_ROLES_KEY))
 
 const edition = ref<InstallationEdition>((sessionStorage.getItem(EDITION_KEY) as InstallationEdition | null) ?? 'community')
-const capabilities = ref<PremiumCapabilityDto[]>(
-  JSON.parse(sessionStorage.getItem(CAPABILITIES_KEY) ?? '[]') as PremiumCapabilityDto[],
-)
+const capabilities = ref<PremiumCapabilityDto[]>(readStoredJsonArray(CAPABILITIES_KEY))
+
+/** tenantRoles: tenantId -> 0 (TenantUser) | 1 (TenantAdministrator) */
+const tenantRoles = ref<Record<string, number>>(readStoredJsonObject(TENANT_ROLES_KEY))
+
+const hasLocalPassword = ref(sessionStorage.getItem(LOCAL_PASSWORD_KEY) === 'true')
 
 export function useSession() {
   function setTokens(at: string, rt: string): void {
     setClientRoles({})
+    setTenantRoles({})
     setLicensingState('community', [])
     sessionStorage.setItem(ACCESS_TOKEN_KEY, at)
     localStorage.setItem(REFRESH_TOKEN_KEY, rt)
@@ -58,9 +131,13 @@ export function useSession() {
     sessionStorage.removeItem(CLIENT_ROLES_KEY)
     sessionStorage.removeItem(EDITION_KEY)
     sessionStorage.removeItem(CAPABILITIES_KEY)
+    sessionStorage.removeItem(TENANT_ROLES_KEY)
+    sessionStorage.removeItem(LOCAL_PASSWORD_KEY)
     accessToken.value = null
     refreshToken.value = null
     clientRoles.value = {}
+    tenantRoles.value = {}
+    hasLocalPassword.value = false
     edition.value = 'community'
     capabilities.value = []
   }
@@ -68,6 +145,11 @@ export function useSession() {
   function setAccessToken(token: string): void {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, token)
     accessToken.value = token
+  }
+
+  async function establishSession(session: { accessToken: string; refreshToken: string }): Promise<void> {
+    setTokens(session.accessToken, session.refreshToken)
+    await loadClientRoles()
   }
 
   /** Returns true when an access token is present in this session. */
@@ -78,15 +160,13 @@ export function useSession() {
    * Reads the `exp` claim from the JWT payload (no signature verification needed client-side).
    */
   function accessTokenExpiresIn(): number {
-    const token = getAccessToken()
-    if (!token) return 0
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      const expiresAt = (payload.exp as number) * 1000
-      return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
-    } catch {
+    const payload = decodeJwtPayload(getAccessToken())
+    if (typeof payload?.exp !== 'number') {
       return 0
     }
+
+    const expiresAt = payload.exp * 1000
+    return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
   }
 
   /**
@@ -94,14 +174,7 @@ export function useSession() {
    * or null if no token is present or the claim is absent.
    */
   function getGlobalRole(): string | null {
-    const token = getAccessToken()
-    if (!token) return null
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      return (payload.global_role as string) ?? null
-    } catch {
-      return null
-    }
+    return decodeJwtPayload(getAccessToken())?.global_role ?? null
   }
 
   /** Returns true when the current user has the Admin global role. */
@@ -109,14 +182,7 @@ export function useSession() {
 
   /** Returns the username from the JWT `unique_name` claim, or null when unavailable. */
   function getUsername(): string | null {
-    const token = getAccessToken()
-    if (!token) return null
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      return (payload.unique_name as string) ?? null
-    } catch {
-      return null
-    }
+    return decodeJwtPayload(getAccessToken())?.unique_name ?? null
   }
 
   const username = computed(() => getUsername())
@@ -148,6 +214,16 @@ export function useSession() {
 
   const isCommercialEdition = computed(() => edition.value === 'commercial')
 
+  function setTenantRoles(roles: Record<string, number>): void {
+    sessionStorage.setItem(TENANT_ROLES_KEY, JSON.stringify(roles))
+    tenantRoles.value = roles
+  }
+
+  function setHasLocalPassword(value: boolean): void {
+    sessionStorage.setItem(LOCAL_PASSWORD_KEY, String(value))
+    hasLocalPassword.value = value
+  }
+
   /**
    * Returns true if the current user has at least `minRole` for `clientId`,
    * or if they are a global admin.
@@ -155,6 +231,12 @@ export function useSession() {
   function hasClientRole(clientId: string, minRole: 0 | 1): boolean {
     if (isAdmin.value) return true
     const role = clientRoles.value[clientId]
+    return role !== undefined && role >= minRole
+  }
+
+  function hasTenantRole(tenantId: string, minRole: 0 | 1): boolean {
+    if (isAdmin.value) return true
+    const role = tenantRoles.value[tenantId]
     return role !== undefined && role >= minRole
   }
 
@@ -166,6 +248,8 @@ export function useSession() {
     const token = getAccessToken()
     if (!token) {
       setClientRoles({})
+      setTenantRoles({})
+      setHasLocalPassword(false)
       setLicensingState('community', [])
       return
     }
@@ -177,13 +261,19 @@ export function useSession() {
       if (res.ok) {
         const data = (await res.json()) as SessionSnapshot
         setClientRoles(data.clientRoles ?? {})
+        setTenantRoles(data.tenantRoles ?? {})
+        setHasLocalPassword(data.hasLocalPassword === true)
         setLicensingState(data.edition ?? 'community', data.capabilities ?? [])
       } else {
         setClientRoles({})
+        setTenantRoles({})
+        setHasLocalPassword(false)
         setLicensingState('community', [])
       }
     } catch {
       setClientRoles({})
+      setTenantRoles({})
+      setHasLocalPassword(false)
       setLicensingState('community', [])
     }
   }
@@ -205,6 +295,7 @@ export function useSession() {
     getRefreshToken,
     clearTokens,
     setAccessToken,
+    establishSession,
     accessTokenExpiresIn,
     isAuthenticated,
     isAdmin,
@@ -215,11 +306,16 @@ export function useSession() {
     edition,
     capabilities,
     isCommercialEdition,
+    tenantRoles,
+    hasLocalPassword,
     setClientRoles,
     setLicensingState,
     getCapability,
     isCapabilityAvailable,
+    setTenantRoles,
+    setHasLocalPassword,
     hasClientRole,
+    hasTenantRole,
     loadClientRoles,
     // Legacy aliases
     setAdminKey,
@@ -227,5 +323,3 @@ export function useSession() {
     clearAdminKey,
   }
 }
-
-

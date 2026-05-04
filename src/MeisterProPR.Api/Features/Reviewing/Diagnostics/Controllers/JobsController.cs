@@ -168,6 +168,8 @@ public sealed class JobsController(
                 job.TotalInputTokensAggregated,
                 job.TotalOutputTokensAggregated,
                 job.ErrorMessage,
+                job.AiModel,
+                job.ReviewTemperature,
                 breakdown,
                 breakdownConsistent));
     }
@@ -526,6 +528,8 @@ public sealed class JobsController(
         long? TotalInputTokens,
         long? TotalOutputTokens,
         string? ErrorMessage,
+        string? AiModel,
+        float? ReviewTemperature,
         IReadOnlyList<TokenBreakdownEntry> TokenBreakdown,
         bool? BreakdownConsistent);
 

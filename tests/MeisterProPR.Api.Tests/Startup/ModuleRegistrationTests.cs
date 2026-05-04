@@ -1,8 +1,11 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Reflection;
 using Azure.Core;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Interfaces;
@@ -13,6 +16,7 @@ using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Features.Mentions;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -37,7 +41,7 @@ public sealed class ModuleRegistrationTests
             contents,
             StringComparison.Ordinal);
         Assert.Contains(
-            "AddReviewingModule(builder.Configuration, builder.Environment)",
+            "selectedCommentRelevanceFilterId: Program.GetSelectedCommentRelevanceFilterId()",
             contents,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -216,6 +220,33 @@ public sealed class ModuleRegistrationTests
     }
 
     [Fact]
+    public void ReviewingModule_WithoutDatabaseConnectionString_RegistersOfflineHarnessExecutionServices()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(false);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+
+        Assert.NotNull(FindService<IJobRepository>(services));
+        Assert.NotNull(FindService<IProtocolRecorder>(services));
+        Assert.NotNull(FindService<IReviewWorkflowRunner>(services));
+        Assert.NotNull(FindService<IEvaluationArtifactWriter>(services));
+    }
+
+    [Fact]
+    public void ReviewingModule_WithDatabaseConnectionString_DoesNotRegisterOfflineWorkflowRunner()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+
+        Assert.Null(FindService<IReviewWorkflowRunner>(services));
+    }
+
+    [Fact]
     public void ComposedModules_RegisterAzureDevOpsAsCompleteProviderInRegistry()
     {
         var services = new ServiceCollection();
@@ -282,7 +313,90 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IWebhookIngressService>(services));
     }
 
-    private static IConfiguration CreateConfiguration(bool withDatabaseConnectionString)
+    [Fact]
+    public void ReviewingModule_WithoutSelectedCommentRelevanceFilter_RegistersBaselineSelection()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var selection = provider.GetRequiredService<CommentRelevanceFilterSelection>();
+        var registry = provider.GetRequiredService<CommentRelevanceFilterRegistry>();
+        var evaluator = provider.GetRequiredService<ICommentRelevanceAmbiguityEvaluator>();
+
+        Assert.False(selection.HasSelection);
+        Assert.Null(selection.SelectedImplementationId);
+        Assert.False(registry.HasSelection);
+        Assert.Equal("AiCommentRelevanceAmbiguityEvaluator", evaluator.GetType().Name);
+    }
+
+    [Theory]
+    [InlineData("pass-through-v1")]
+    [InlineData("heuristic-v1")]
+    public void ReviewingModule_WithSelectedCommentRelevanceFilter_ResolvesNamedImplementation(string selectedFilterId)
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration, selectedCommentRelevanceFilterId: selectedFilterId);
+
+        using var provider = services.BuildServiceProvider();
+        var selection = provider.GetRequiredService<CommentRelevanceFilterSelection>();
+        var registry = provider.GetRequiredService<CommentRelevanceFilterRegistry>();
+
+        Assert.True(selection.HasSelection);
+        Assert.Equal(selectedFilterId, selection.SelectedImplementationId);
+        Assert.True(registry.TryResolveSelected(out var filter));
+        Assert.NotNull(filter);
+        Assert.Equal(selectedFilterId, filter!.ImplementationId);
+    }
+
+    [Fact]
+    public void Program_SelectedCommentRelevanceFilter_UsesHybridByDefault()
+    {
+        var selectedFilterId = InvokeSelectedCommentRelevanceFilterId();
+
+        Assert.Equal("hybrid-v1", selectedFilterId);
+    }
+
+    [Fact]
+    public void ReviewingModule_RegistersDeterministicReviewFindingGateAndInvariantProviders()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var gate = provider.GetRequiredService<IDeterministicReviewFindingGate>();
+        var invariantProviders = provider.GetServices<IReviewInvariantFactProvider>().ToList();
+
+        Assert.Equal("DeterministicReviewFindingGate", gate.GetType().Name);
+        Assert.Contains(invariantProviders, service => service.GetType().Name == "DomainReviewInvariantFactProvider");
+        Assert.Contains(invariantProviders, service => service.GetType().Name == "PersistenceReviewInvariantFactProvider");
+    }
+
+    private static string InvokeSelectedCommentRelevanceFilterId()
+    {
+        var method = typeof(Program).GetMethod(
+            "GetSelectedCommentRelevanceFilterId",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, []);
+        Assert.IsType<string>(result);
+        return (string)result;
+    }
+
+    private static IConfiguration CreateConfiguration(
+        bool withDatabaseConnectionString,
+        IEnumerable<KeyValuePair<string, string?>>? overrides = null)
     {
         var values = new Dictionary<string, string?>
         {
@@ -293,6 +407,14 @@ public sealed class ModuleRegistrationTests
                 ? "Host=localhost;Database=meister;Username=test;Password=test"
                 : null,
         };
+
+        if (overrides is not null)
+        {
+            foreach (var (key, value) in overrides)
+            {
+                values[key] = value;
+            }
+        }
 
         return new ConfigurationBuilder()
             .AddInMemoryCollection(values)

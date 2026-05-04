@@ -754,15 +754,20 @@ public sealed class AiConnectionRepository(
                 modelCategory == AiConnectionModelCategory.Embedding || modelName.Contains("embedding", StringComparison.OrdinalIgnoreCase)
                     ? [AiProtocolMode.Auto, AiProtocolMode.Embeddings]
                     : [AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions],
-                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))?.TokenizerName,
-                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))?.MaxInputTokens,
-                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))?.EmbeddingDimensions,
+                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.TokenizerName,
+                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.MaxInputTokens,
+                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.EmbeddingDimensions,
                 modelCategory != AiConnectionModelCategory.Embedding,
                 modelCategory != AiConnectionModelCategory.Embedding,
                 AiConfiguredModelSource.Manual,
                 null,
-                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))?.InputCostPer1MUsd,
-                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))?.OutputCostPer1MUsd))
+                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.InputCostPer1MUsd,
+                modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.OutputCostPer1MUsd))
             .ToList()
             .AsReadOnly();
 
@@ -784,8 +789,7 @@ public sealed class AiConnectionRepository(
                     },
                     null,
                     resolvedModel,
-                    modelCategory == AiConnectionModelCategory.Embedding ? AiProtocolMode.Embeddings : AiProtocolMode.Auto,
-                    true),
+                    modelCategory == AiConnectionModelCategory.Embedding ? AiProtocolMode.Embeddings : AiProtocolMode.Auto),
             }.AsReadOnly();
 
         return this.AddAsync(

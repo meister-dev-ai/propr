@@ -78,6 +78,7 @@ public sealed class PullRequestSynchronizationServiceTests
             {
                 CandidateIterationId = 7,
                 RequestedReviewerIdentity = CreateRequestedReviewerIdentity(),
+                ReviewTemperature = 0.4f,
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
@@ -94,7 +95,8 @@ public sealed class PullRequestSynchronizationServiceTests
                     job.ProjectId == "project" &&
                     job.RepositoryId == "repo-1" &&
                     job.PullRequestId == 42 &&
-                    job.IterationId == 7));
+                    job.IterationId == 7 &&
+                    job.ReviewTemperature == 0.4f));
         await threadMemoryService.Received(1)
             .HandleThreadResolvedAsync(
                 Arg.Is<ThreadResolvedDomainEvent>(evt =>

@@ -9,7 +9,8 @@ namespace MeisterProPR.Domain.Enums;
 public enum ScmProvider
 {
     /// <summary>Azure DevOps provider.</summary>
-    [JsonStringEnumMemberName("azureDevOps")] AzureDevOps = 0,
+    [JsonStringEnumMemberName("azureDevOps")]
+    AzureDevOps = 0,
 
     /// <summary>GitHub provider.</summary>
     [JsonStringEnumMemberName("github")] GitHub = 1,

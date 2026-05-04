@@ -19,9 +19,10 @@ public interface IClientAdminService
     Task<ClientDto?> GetByIdAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>Creates a new active client and returns its data.</summary>
+    /// <param name="tenantId">Tenant that owns the client.</param>
     /// <param name="displayName">Human-readable name for the client.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<ClientDto> CreateAsync(string displayName, CancellationToken ct = default);
+    Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default);
 
     /// <summary>
     ///     Applies partial updates to a client.

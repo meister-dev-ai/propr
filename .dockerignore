@@ -42,6 +42,9 @@ logs/
 packages/
 
 # Node / admin-ui
+node_modules/
+dist/
+build/
 admin-ui/node_modules/
 admin-ui/dist/
 admin-ui/coverage/

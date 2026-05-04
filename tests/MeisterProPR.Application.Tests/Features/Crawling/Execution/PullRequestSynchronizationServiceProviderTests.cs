@@ -117,12 +117,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             {
                 CandidateIterationId = 11,
                 RequestedReviewerIdentity =
-                    new ReviewerIdentity(
-                        new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
-                        ReviewerId.ToString("D"),
-                        "meister-dev-bot",
-                        "Meister Dev Bot",
-                        true),
+                new ReviewerIdentity(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    ReviewerId.ToString("D"),
+                    "meister-dev-bot",
+                    "Meister Dev Bot",
+                    true),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
@@ -187,12 +187,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             {
                 CandidateIterationId = 11,
                 RequestedReviewerIdentity =
-                    new ReviewerIdentity(
-                        new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
-                        ReviewerId.ToString("D"),
-                        "meister-dev-bot",
-                        "Meister Dev Bot",
-                        true),
+                new ReviewerIdentity(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    ReviewerId.ToString("D"),
+                    "meister-dev-bot",
+                    "Meister Dev Bot",
+                    true),
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.NoReviewChanges, outcome.ReviewDecision);

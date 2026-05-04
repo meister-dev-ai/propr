@@ -20,8 +20,7 @@ internal static class AiConnectionTestFactory
             null,
             null,
             true,
-            true,
-            AiConfiguredModelSource.Manual);
+            true);
     }
 
     public static AiConfiguredModelDto CreateEmbeddingModel(
@@ -37,10 +36,7 @@ internal static class AiConnectionTestFactory
             [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
             "cl100k_base",
             8192,
-            dimensions,
-            false,
-            false,
-            AiConfiguredModelSource.Manual);
+            dimensions);
     }
 
     public static AiPurposeBindingDto CreateBinding(

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -54,7 +55,8 @@ public sealed partial class AdminCrawlConfigsController(
                 .AsReadOnly(),
             c.ProCursorSourceScopeMode,
             c.ProCursorSourceIds,
-            c.InvalidProCursorSourceIds);
+            c.InvalidProCursorSourceIds,
+            c.ReviewTemperature);
     }
 
     private IActionResult? Validate(ValidationResult result)
@@ -413,7 +415,8 @@ public sealed partial class AdminCrawlConfigsController(
                 request.ProviderProjectKey.Trim(),
                 request.CrawlIntervalSeconds,
                 resolvedOrganization.OrganizationScopeId,
-                ct);
+                ct,
+                reviewTemperature: request.ReviewTemperature);
 
             if (repoFilters.Count > 0)
             {
@@ -525,7 +528,9 @@ public sealed partial class AdminCrawlConfigsController(
                 request.CrawlIntervalSeconds,
                 request.IsActive,
                 ownerScope,
-                ct);
+                ct,
+                reviewTemperature: request.ReviewTemperature,
+                shouldUpdateReviewTemperature: request.ShouldUpdateReviewTemperature);
 
             if (!updated)
             {
@@ -643,18 +648,51 @@ public sealed record CreateAdminCrawlConfigRequest(
     int CrawlIntervalSeconds = 60,
     IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
-    IReadOnlyList<Guid>? ProCursorSourceIds = null);
+    IReadOnlyList<Guid>? ProCursorSourceIds = null,
+    float? ReviewTemperature = null);
 
 /// <summary>
 ///     Request body for patching an admin-managed crawl configuration.
-///     Omit a field to leave it unchanged.
+///     Omit a field to leave it unchanged. Set <c>reviewTemperature</c> to <see langword="null" /> to clear the override.
 /// </summary>
-public sealed record PatchAdminCrawlConfigRequest(
-    int? CrawlIntervalSeconds = null,
-    bool? IsActive = null,
-    IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters = null,
-    ProCursorSourceScopeMode? ProCursorSourceScopeMode = null,
-    IReadOnlyList<Guid>? ProCursorSourceIds = null);
+public sealed record PatchAdminCrawlConfigRequest
+{
+    /// <summary>Optional crawl interval override in seconds.</summary>
+    public int? CrawlIntervalSeconds { get; init; }
+
+    /// <summary>Optional activation-state update.</summary>
+    public bool? IsActive { get; init; }
+
+    /// <summary>Optional full-replacement repository filter set.</summary>
+    public IReadOnlyList<CrawlRepoFilterRequest>? RepoFilters { get; init; }
+
+    /// <summary>Optional ProCursor source-scope mode update.</summary>
+    public ProCursorSourceScopeMode? ProCursorSourceScopeMode { get; init; }
+
+    /// <summary>Optional selected ProCursor source IDs.</summary>
+    public IReadOnlyList<Guid>? ProCursorSourceIds { get; init; }
+
+    /// <summary>
+    ///     Optional review temperature override. Set this property explicitly to <see langword="null" /> to clear the
+    ///     stored override and fall back to default behavior.
+    /// </summary>
+    public float? ReviewTemperature
+    {
+        get => this._reviewTemperature;
+        init
+        {
+            this._reviewTemperature = value;
+            this._shouldUpdateReviewTemperature = true;
+        }
+    }
+
+    /// <summary>Whether the request should apply a review-temperature update, including clearing it to null.</summary>
+    [JsonIgnore]
+    public bool ShouldUpdateReviewTemperature => this._shouldUpdateReviewTemperature;
+
+    private readonly float? _reviewTemperature;
+    private readonly bool _shouldUpdateReviewTemperature;
+}
 
 /// <summary>A single repo filter entry in a PATCH request.</summary>
 public sealed record CrawlRepoFilterRequest(

@@ -13,10 +13,11 @@ public sealed class PremiumFeatureUnavailableResult : ObjectResult
     public PremiumFeatureUnavailableResult(
         CapabilitySnapshot capability,
         int statusCode = StatusCodes.Status409Conflict)
-        : base(new PremiumFeatureUnavailablePayload(
-            "premium_feature_unavailable",
-            capability.Key,
-            capability.Message ?? $"Capability '{capability.Key}' is unavailable."))
+        : base(
+            new PremiumFeatureUnavailablePayload(
+                "premium_feature_unavailable",
+                capability.Key,
+                capability.Message ?? $"Capability '{capability.Key}' is unavailable."))
     {
         this.StatusCode = statusCode;
     }

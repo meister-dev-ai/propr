@@ -467,6 +467,26 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task PatchCrawlConfig_ExplicitNullReviewTemperature_ClearsStoredOverride()
+    {
+        var configId = factory.TestConfigId;
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/crawl-configurations/{configId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+        request.Content = JsonContent.Create(new { reviewTemperature = (float?)null });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.True(body.TryGetProperty("reviewTemperature", out var reviewTemperature));
+        Assert.Equal(JsonValueKind.Null, reviewTemperature.ValueKind);
+    }
+
     // --- DELETE /admin/crawl-configurations/{configId} ---
 
     [Fact]
@@ -553,14 +573,16 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
         public void SetCrawlConfigsCapabilityAvailability(bool isAvailable, string? message = null)
         {
             this.LicensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult(new CapabilitySnapshot(
-                    PremiumCapabilityKey.CrawlConfigs,
-                    PremiumCapabilityKey.CrawlConfigs,
-                    true,
-                    true,
-                    PremiumCapabilityOverrideState.Default,
-                    isAvailable,
-                    message)));
+                .Returns(
+                    Task.FromResult(
+                        new CapabilitySnapshot(
+                            PremiumCapabilityKey.CrawlConfigs,
+                            PremiumCapabilityKey.CrawlConfigs,
+                            true,
+                            true,
+                            PremiumCapabilityOverrideState.Default,
+                            isAvailable,
+                            message)));
         }
 
         /// <summary>Generates a JWT token for the given user ID and role.</summary>
@@ -751,7 +773,8 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                 true,
                 DateTimeOffset.UtcNow,
                 [],
-                guidedOrganizationScopeId);
+                guidedOrganizationScopeId,
+                ReviewTemperature: 0.35f);
 
             var unownedConfig = new CrawlConfigurationDto(
                 unownedConfigId,
@@ -805,7 +828,9 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                     Arg.Any<int?>(),
                     Arg.Any<bool?>(),
                     Arg.Any<Guid?>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<float?>(),
+                    Arg.Any<bool>())
                 .Returns(callInfo =>
                 {
                     var configId = callInfo.ArgAt<Guid>(0);
@@ -814,10 +839,14 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                         return Task.FromResult(false);
                     }
 
+                    var shouldUpdateReviewTemperature = callInfo.ArgAt<bool>(6);
+                    var reviewTemperature = callInfo.ArgAt<float?>(5);
+
                     var updatedConfig = existingConfig with
                     {
                         CrawlIntervalSeconds = callInfo.ArgAt<int?>(1) ?? existingConfig.CrawlIntervalSeconds,
                         IsActive = callInfo.ArgAt<bool?>(2) ?? existingConfig.IsActive,
+                        ReviewTemperature = shouldUpdateReviewTemperature ? reviewTemperature : existingConfig.ReviewTemperature,
                     };
                     configsById[configId] = updatedConfig;
                     return Task.FromResult(true);

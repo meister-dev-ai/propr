@@ -32,8 +32,15 @@
         <div class="settings-page-header">
           <h2 class="view-title">Profile & Password</h2>
           <p class="settings-description">
-            Change the password for
-            <strong>{{ usernameLabel }}</strong>.
+            <template v-if="hasLocalPassword">
+              Change the password for
+              <strong>{{ usernameLabel }}</strong>.
+            </template>
+            <template v-else>
+              Review how
+              <strong>{{ usernameLabel }}</strong>
+              signs in.
+            </template>
           </p>
         </div>
 
@@ -41,12 +48,13 @@
           <div class="section-card-header settings-card-header">
             <div>
               <h3>Password</h3>
-              <p class="settings-subtitle">Changing your password revokes refresh tokens. Personal access tokens remain valid.</p>
+              <p v-if="hasLocalPassword" class="settings-subtitle">Changing your password revokes refresh tokens. Personal access tokens remain valid.</p>
+              <p v-else class="settings-subtitle">This account signs in through single sign-on and does not have a local password to change here.</p>
             </div>
             <span class="chip chip-muted">{{ usernameLabel }}</span>
           </div>
 
-          <div class="section-card-body">
+          <div v-if="hasLocalPassword" class="section-card-body">
             <form class="settings-form" @submit.prevent="handleSubmit">
               <div class="settings-form-grid">
                 <div class="form-field">
@@ -74,6 +82,12 @@
               </div>
             </form>
           </div>
+
+          <div v-else class="section-card-body">
+            <p class="muted-hint">
+              Use your organization's identity provider to manage your sign-in credentials. Personal access tokens remain available from this page.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -93,7 +107,7 @@ import { useSession } from '@/composables/useSession'
 import PatsView from '@/views/PatsView.vue'
 
 const router = useRouter()
-const { username } = useSession()
+const { username, hasLocalPassword } = useSession()
 
 const activeTab = ref<'profile' | 'pats'>('profile')
 

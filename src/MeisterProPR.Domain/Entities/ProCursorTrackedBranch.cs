@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorTrackedBranch
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorTrackedBranch"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorTrackedBranch" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for this tracked branch.</param>
     /// <param name="knowledgeSourceId">The unique identifier of the knowledge source.</param>

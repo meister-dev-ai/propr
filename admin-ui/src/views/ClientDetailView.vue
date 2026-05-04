@@ -18,7 +18,7 @@
             </div>
 
             <div v-if="!notFound && !loading && client" class="sidebar-nav">
-                <div class="sidebar-nav-group">
+                <div v-if="canManageClient" class="sidebar-nav-group">
                     <h4>Configuration</h4>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'config' }" @click="activeTab = 'config'">
                         <i class="fi fi-rr-settings"></i> System
@@ -51,14 +51,14 @@
                 </div>
 
                 <div class="sidebar-nav-group">
-                    <h4>Reviews & Overrides</h4>
+                    <h4>{{ canManageClient ? 'Reviews & Overrides' : 'Reviews' }}</h4>
                     <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'history' }" @click="activeTab = 'history'">
                         <i class="fi fi-rr-time-past"></i> Review History
                     </button>
-                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'dismissals' }" @click="activeTab = 'dismissals'; loadDismissals()">
+                    <button v-if="canManageClient" class="sidebar-nav-link" :class="{ 'active': activeTab === 'dismissals' }" @click="activeTab = 'dismissals'; loadDismissals()">
                         <i class="fi fi-rr-ban"></i> Dismissed Findings
                     </button>
-                    <button class="sidebar-nav-link" :class="{ 'active': activeTab === 'prompt-overrides' }" @click="activeTab = 'prompt-overrides'; loadPromptOverrides()">
+                    <button v-if="canManageClient" class="sidebar-nav-link" :class="{ 'active': activeTab === 'prompt-overrides' }" @click="activeTab = 'prompt-overrides'; loadPromptOverrides()">
                         <i class="fi fi-rr-code-simple"></i> Prompt Overrides
                     </button>
                 </div>
@@ -81,7 +81,7 @@
             <template v-else-if="client">
 
             <!-- Tab: Configuration -->
-            <div v-show="activeTab === 'config'">
+            <div v-if="canManageClient" v-show="activeTab === 'config'">
 
                 <!-- Section 1: Client Identity -->
                 <div class="section-card">
@@ -143,15 +143,15 @@
                 </div>
             </div>
 
-            <div v-show="activeTab === 'crawl-configs'">
+            <div v-if="canManageClient" v-show="activeTab === 'crawl-configs'">
                 <ClientCrawlConfigsTab :clientId="client.id" />
             </div>
 
-            <div v-show="activeTab === 'webhooks'">
+            <div v-if="canManageClient" v-show="activeTab === 'webhooks'">
                 <ClientWebhookConfigsTab :clientId="client.id" @update:isDetailOpen="isWebhookDetailOpen = $event" />
             </div>
 
-            <div v-show="activeTab === 'providers'" class="provider-operations-tab">
+            <div v-if="canManageClient" v-show="activeTab === 'providers'" class="provider-operations-tab">
                 <div v-if="providerUpgradeMessage" class="section-card provider-upgrade-note">
                     <div class="section-card-body">
                         <p class="muted">{{ providerUpgradeMessage }}</p>
@@ -163,7 +163,7 @@
                 />
             </div>
 
-            <div v-show="activeTab === 'procursor'">
+            <div v-if="canManageClient" v-show="activeTab === 'procursor'">
                 <ClientProCursorTab :clientId="client.id" />
             </div>
 
@@ -187,7 +187,7 @@
             </div>
 
             <!-- Tab: Dismissed Findings -->
-            <div v-show="activeTab === 'dismissals'">
+            <div v-if="canManageClient" v-show="activeTab === 'dismissals'">
                 <div class="section-card">
                     <div class="section-card-header">
                         <h3>Dismiss Finding</h3>
@@ -239,7 +239,7 @@
             </div>
 
             <!-- Tab: Prompt Overrides -->
-            <div v-show="activeTab === 'prompt-overrides'">
+            <div v-if="canManageClient" v-show="activeTab === 'prompt-overrides'">
                 <div class="section-card">
                     <div class="section-card-header">
                         <h3>Prompt Overrides</h3>
@@ -322,7 +322,7 @@
             </div>
 
             <!-- Tab: AI Connections -->
-            <div v-show="activeTab === 'ai'">
+            <div v-if="canManageClient" v-show="activeTab === 'ai'">
                 <ClientAiConnectionsTab :client-id="client.id" />
             </div>
         </template>
@@ -356,7 +356,7 @@ import {
     dismissFinding,
 } from '@/services/findingDismissalsService'
 import { listOverrides, createOverride, deleteOverride } from '@/services/promptOverridesService'
-import type { components } from '@/types'
+import type { components } from '@/services/generated/openapi'
 import { useSession } from '@/composables/useSession'
 type PromptOverrideDto = components['schemas']['PromptOverrideDto']
 
@@ -372,7 +372,7 @@ interface Client {
 
 const router = useRouter()
 const route = useRoute()
-const { getCapability } = useSession()
+const { getCapability, hasClientRole } = useSession()
 const clientId = route.params.id as string
 const isProviderDetailOpen = ref(false)
 const isWebhookDetailOpen = ref(false)
@@ -384,7 +384,23 @@ const saving = ref(false)
 const saveError = ref('')
 const showDeleteDialog = ref(false)
 const editedDisplayName = ref('')
-const activeTab = ref<DetailTab>('config')
+const canManageClient = computed(() => hasClientRole(clientId, 1))
+const canViewClient = computed(() => hasClientRole(clientId, 0))
+const availableTabs = computed<DetailTab[]>(() => {
+    const tabs: DetailTab[] = ['history']
+
+    if (canManageClient.value) {
+        return [...detailTabs]
+    }
+
+    if (isUsageTabAvailable.value) {
+        tabs.push('usage')
+    }
+
+    return tabs
+})
+const defaultDetailTab = computed<DetailTab>(() => canManageClient.value ? 'config' : 'history')
+const activeTab = ref<DetailTab>(defaultDetailTab.value)
 const isProCursorTokenUsageReportingEnabled = import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false'
 const providerUpgradeMessage = computed(() => getCapability('multiple-scm-providers')?.message ?? '')
 const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
@@ -458,6 +474,12 @@ watch(() => route.query?.tab, () => {
     syncActiveTabFromRoute()
 })
 
+watch(availableTabs, () => {
+    if (!availableTabs.value.includes(activeTab.value)) {
+        activeTab.value = defaultDetailTab.value
+    }
+})
+
 watch(activeTab, (tab) => {
     const nextTab = tab === 'config' ? undefined : tab
     const currentTab = typeof route.query?.tab === 'string' ? route.query.tab : undefined
@@ -483,9 +505,12 @@ watch(activeTab, (tab) => {
 
 function syncActiveTabFromRoute() {
     const requestedTab = typeof route.query?.tab === 'string' ? route.query.tab : null
-    if (requestedTab && isDetailTab(requestedTab)) {
+    if (requestedTab && isDetailTab(requestedTab) && availableTabs.value.includes(requestedTab)) {
         activeTab.value = requestedTab
+        return
     }
+
+    activeTab.value = defaultDetailTab.value
 }
 
 function handleOverviewNavigate(tab: string) {
@@ -493,7 +518,7 @@ function handleOverviewNavigate(tab: string) {
         return
     }
 
-    if (tab === 'usage' && !isUsageTabAvailable.value) {
+    if (!availableTabs.value.includes(tab) || (tab === 'usage' && !isUsageTabAvailable.value)) {
         return
     }
 
@@ -505,6 +530,7 @@ function isDetailTab(value: string): value is DetailTab {
 }
 
 async function saveDisplayName() {
+    if (!canManageClient.value) return
     if (!client.value) return
     saving.value = true
     saveError.value = ''
@@ -522,6 +548,7 @@ async function saveDisplayName() {
 }
 
 async function toggleStatus() {
+    if (!canManageClient.value) return
     if (!client.value) return
     saving.value = true
     try {
@@ -538,6 +565,7 @@ async function toggleStatus() {
 }
 
 async function handleDelete() {
+    if (!canManageClient.value) return
     try {
         await createAdminClient().DELETE('/clients/{clientId}', {
             params: {path: {clientId}},
@@ -551,10 +579,12 @@ async function handleDelete() {
 // ─── Dismissed Findings handlers ─────────────────────────────────────────────
 
 async function loadDismissals() {
+    if (!canManageClient.value) return
     // No-op: dismissals are now stored as memory records and viewed through the Memory tab.
 }
 
 async function handleCreateDismissal() {
+    if (!canManageClient.value) return
     dismissalCreateError.value = ''
     dismissalSaving.value = true
     dismissalSuccess.value = false
@@ -576,6 +606,7 @@ async function handleCreateDismissal() {
 }
 
 async function loadPromptOverrides() {
+    if (!canManageClient.value) return
     if (overridesLoading.value) return
     overridesLoading.value = true
     overridesError.value = ''
@@ -589,6 +620,7 @@ async function loadPromptOverrides() {
 }
 
 async function handleCreateOverride() {
+    if (!canManageClient.value) return
     overrideCreateError.value = ''
     overrideSaving.value = true
     try {
@@ -609,6 +641,7 @@ async function handleCreateOverride() {
 }
 
 async function handleDeleteOverride(id: string) {
+    if (!canManageClient.value) return
     try {
         await deleteOverride(clientId, id)
         promptOverrides.value = promptOverrides.value.filter(o => o.id !== id)

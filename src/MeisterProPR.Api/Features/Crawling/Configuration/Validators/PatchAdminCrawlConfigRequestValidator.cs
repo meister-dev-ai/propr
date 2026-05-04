@@ -18,6 +18,11 @@ public sealed class PatchAdminCrawlConfigRequestValidator : AbstractValidator<Pa
             .WithMessage("CrawlIntervalSeconds must be >= 10.")
             .When(r => r.CrawlIntervalSeconds.HasValue);
 
+        this.RuleFor(r => r.ReviewTemperature)
+            .InclusiveBetween(0.0f, 2.0f)
+            .WithMessage("ReviewTemperature must be between 0.0 and 2.0 when provided.")
+            .When(r => r.ReviewTemperature.HasValue);
+
         this.RuleForEach(r => r.RepoFilters)
             .ChildRules(filter =>
             {

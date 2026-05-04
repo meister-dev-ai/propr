@@ -4,6 +4,7 @@
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -95,7 +96,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             .FirstOrDefaultAsync();
 
         Assert.NotNull(stored);
-        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
         Assert.Equal(eventName, stored.Name);
         Assert.Contains("key", stored.InputTextSample ?? "");
     }
@@ -150,7 +151,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             .FirstOrDefaultAsync();
 
         Assert.NotNull(stored);
-        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
         Assert.Contains("candidateCount", stored.InputTextSample ?? string.Empty);
     }
 
@@ -181,6 +182,113 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
         Assert.Contains(
             "thread_memory_embedding",
             storedEvents.First(e => e.Name == "dedup_degraded_mode").InputTextSample ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task RecordCommentRelevanceEventAsync_PersistsComparableOutputAndDegradedMarkers()
+    {
+        const string details = """
+                               {"implementationId":"hybrid-v1","degradedComponents":["comment_relevance_evaluator"],"fallbackChecks":["pre_filter_comments_retained"],"degradedCause":"Evaluator timeout."}
+                               """;
+        const string output = """
+                              {"implementationId":"hybrid-v1","implementationVersion":"1.0.0","filePath":"src/Foo.cs","originalCommentCount":1,"keptCount":1,"discardedCount":0,"reasonBuckets":{},"decisionSources":{"fallback_mode":1},"degradedComponents":["comment_relevance_evaluator"],"fallbackChecks":["pre_filter_comments_retained"],"degradedCause":"Evaluator timeout.","aiTokenUsage":{"inputTokens":320,"outputTokens":71},"discarded":[]}
+                              """;
+
+        await this._recorder.RecordCommentRelevanceEventAsync(
+            this._protocolId,
+            ReviewProtocolEventNames.CommentRelevanceEvaluatorDegraded,
+            details,
+            output,
+            null);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == ReviewProtocolEventNames.CommentRelevanceEvaluatorDegraded)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Contains("comment_relevance_evaluator", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("pre_filter_comments_retained", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("\"inputTokens\":320", stored.OutputSummary ?? string.Empty);
+        Assert.Contains("\"discarded\":[]", stored.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task RecordReviewFindingGateEventAsync_PersistsDecisionPayloads()
+    {
+        const string details = """
+                               {"candidateCount":2,"publishCount":1,"summaryOnlyCount":1,"dropCount":0}
+                               """;
+        const string output = """
+                              {"findingId":"finding-001","disposition":"SummaryOnly","category":"cross_cutting","ruleSource":"cross_cutting_evidence_rules","reasonCodes":["missing_multi_file_evidence"],"blockedInvariantIds":[],"summaryText":"Needs stronger evidence."}
+                              """;
+
+        await this._recorder.RecordReviewFindingGateEventAsync(
+            this._protocolId,
+            ReviewProtocolEventNames.ReviewFindingGateDecision,
+            details,
+            output,
+            null);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == ReviewProtocolEventNames.ReviewFindingGateDecision)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Contains("summaryOnlyCount", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("finding-001", stored.OutputSummary ?? string.Empty);
+        Assert.Contains("SummaryOnly", stored.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task RecordAiCallAsync_PersistsFullTextWithoutTruncation_AndStripsNullBytes()
+    {
+        var inputText = new string('I', 60_000) + "\0TAIL";
+        var outputText = new string('O', 60_000) + "\0DONE";
+
+        await this._recorder.RecordAiCallAsync(
+            this._protocolId,
+            iteration: 1,
+            inputTokens: 123,
+            outputTokens: 456,
+            inputTextSample: inputText,
+            systemPrompt: null,
+            outputTextSample: outputText);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == "ai_call_iter_1")
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.NotNull(stored.InputTextSample);
+        Assert.NotNull(stored.OutputSummary);
+        Assert.Equal(new string('I', 60_000) + "TAIL", stored.InputTextSample);
+        Assert.Equal(new string('O', 60_000) + "DONE", stored.OutputSummary);
+        Assert.DoesNotContain('\0', stored.InputTextSample);
+        Assert.DoesNotContain('\0', stored.OutputSummary);
+    }
+
+    [Fact]
+    public async Task RecordToolCallAsync_WithDeepIteration_PersistsFullResultWithoutExcerptTruncation()
+    {
+        var result = new string('R', 2_500) + " final-tail";
+
+        await this._recorder.RecordToolCallAsync(
+            this._protocolId,
+            "read_file",
+            "{\"path\":\"src/Foo.cs\"}",
+            result,
+            iteration: 4);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == "read_file")
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(result, stored.OutputSummary);
+        Assert.DoesNotContain("[TRUNCATED]", stored.OutputSummary);
+        Assert.EndsWith("final-tail", stored.OutputSummary);
     }
 
     [Fact]

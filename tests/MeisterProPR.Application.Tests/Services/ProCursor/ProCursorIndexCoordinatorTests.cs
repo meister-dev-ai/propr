@@ -163,14 +163,16 @@ public sealed class ProCursorIndexCoordinatorTests
         var job = new ProCursorIndexJob(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, "refresh", "dedup-key");
 
         licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new CapabilitySnapshot(
-                PremiumCapabilityKey.ProCursor,
-                PremiumCapabilityKey.ProCursor,
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                false,
-                "ProCursor requires a premium license.")));
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.ProCursor,
+                        PremiumCapabilityKey.ProCursor,
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Default,
+                        false,
+                        "ProCursor requires a premium license.")));
 
         jobRepository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
 

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -12,8 +13,10 @@ using MeisterProPR.Infrastructure.Features.Providers.Forgejo.DependencyInjection
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
@@ -37,9 +40,12 @@ public static class ReviewingModuleServiceCollectionExtensions
     public static IServiceCollection AddReviewingModule(
         this IServiceCollection services,
         IConfiguration configuration,
-        IHostEnvironment? environment = null)
+        IHostEnvironment? environment = null,
+        string? selectedCommentRelevanceFilterId = null)
     {
-        if (configuration.HasDatabaseConnectionString())
+        var hasDatabase = configuration.HasDatabaseConnectionString();
+
+        if (hasDatabase)
         {
             services.TryAddScoped<IScmProviderRegistry, ScmProviderRegistry>();
             services.AddAzureDevOpsProviderAdapters();
@@ -48,17 +54,21 @@ public static class ReviewingModuleServiceCollectionExtensions
             services.AddForgejoProviderAdapters();
         }
 
-        services.AddReviewingIntake(configuration);
+        services.AddReviewingIntake();
 
-        if (configuration.HasDatabaseConnectionString())
+        if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
             services.AddScoped<IMemoryActivityLog, MemoryActivityLogRepository>();
         }
+        else
+        {
+            services.AddOfflineReviewing(configuration);
+        }
 
-        services.AddReviewingExecution();
+        services.AddReviewingExecution(selectedCommentRelevanceFilterId);
         services.AddReviewingDiagnostics();
         services.AddReviewingThreadMemory();
         services.TryAddScoped<IRepositoryInstructionFetcher, ProviderRepositoryInstructionFetcher>();
@@ -78,10 +88,26 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IAiConnectionRepository>(),
             sp.GetService<IAiChatClientFactory>(),
             sp.GetService<IThreadMemoryService>(),
-            sp.GetService<IAiRuntimeResolver>()));
+            sp.GetService<IAiRuntimeResolver>(),
+            sp.GetService<CommentRelevanceFilterRegistry>(),
+            sp.GetService<IDeterministicReviewFindingGate>(),
+            sp.GetServices<IReviewInvariantFactProvider>(),
+            sp.GetService<IReviewClaimExtractor>(),
+            sp.GetService<IReviewFindingVerifier>(),
+            sp.GetService<IReviewEvidenceCollector>(),
+            sp.GetService<ISummaryReconciliationService>()));
+        if (!hasDatabase)
+        {
+            services.AddScoped<IReviewWorkflowRunner, ReviewWorkflowRunner>();
+        }
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
-        services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
-        services.AddScoped<IThreadMemoryService, ThreadMemoryService>();
+
+        if (hasDatabase)
+        {
+            services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
+            services.AddScoped<IThreadMemoryService, ThreadMemoryService>();
+        }
+
         services.TryAddScoped<IReviewerThreadStatusFetcher, ProviderReviewerThreadStatusFetcher>();
         services.AddTransient<ReviewOrchestrationService>();
 

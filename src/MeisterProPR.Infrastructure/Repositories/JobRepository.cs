@@ -383,7 +383,12 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default)
+    public async Task UpdateAiConfigAsync(
+        Guid id,
+        Guid? connectionId,
+        string? model,
+        CancellationToken ct = default,
+        float? reviewTemperature = null)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
         if (job is null)
@@ -391,7 +396,7 @@ public sealed class JobRepository(
             return;
         }
 
-        job.SetAiConfig(connectionId, model);
+        job.SetAiConfig(connectionId, model, reviewTemperature);
         await dbContext.SaveChangesAsync(ct);
     }
 

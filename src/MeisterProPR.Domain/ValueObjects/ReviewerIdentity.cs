@@ -6,7 +6,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Normalized reviewer or bot identity for provider interactions.</summary>
 public sealed record ReviewerIdentity
 {
-    /// <summary>Initializes a new instance of the <see cref="ReviewerIdentity"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ReviewerIdentity" /> class.</summary>
     /// <param name="host">The provider host reference.</param>
     /// <param name="externalUserId">The external user identifier.</param>
     /// <param name="login">The login name.</param>

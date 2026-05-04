@@ -184,7 +184,7 @@ public sealed class ProCursorIndexWorkerTests
                 RefreshPollSeconds = 1,
                 ChunkTargetLines = 50,
             },
-            CreateLicensingService(isAvailable: false));
+            CreateLicensingService(false));
         var worker = provider.GetRequiredService<ProCursorIndexWorker>();
 
         await worker.StartAsync(CancellationToken.None);
@@ -226,7 +226,7 @@ public sealed class ProCursorIndexWorkerTests
         services.AddSingleton<IProCursorEmbeddingService, EmptyEmbeddingService>();
         services.AddSingleton<IProCursorSymbolExtractor, EmptySymbolExtractor>();
         services.AddSingleton<IProCursorTrackedBranchChangeDetector, NoOpTrackedBranchChangeDetector>();
-        services.AddSingleton(licensingCapabilityService ?? CreateLicensingService(isAvailable: true));
+        services.AddSingleton(licensingCapabilityService ?? CreateLicensingService(true));
 
         services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorIndexCoordinator>();
@@ -240,14 +240,16 @@ public sealed class ProCursorIndexWorkerTests
     {
         var licensingService = Substitute.For<ILicensingCapabilityService>();
         licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new CapabilitySnapshot(
-                PremiumCapabilityKey.ProCursor,
-                PremiumCapabilityKey.ProCursor,
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                isAvailable,
-                isAvailable ? null : "ProCursor requires a premium license.")));
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.ProCursor,
+                        PremiumCapabilityKey.ProCursor,
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Default,
+                        isAvailable,
+                        isAvailable ? null : "ProCursor requires a premium license.")));
         return licensingService;
     }
 

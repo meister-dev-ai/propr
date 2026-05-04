@@ -12,7 +12,8 @@ public sealed record SubmitReviewJobRequestDto(
     string ProviderProjectKey,
     string RepositoryId,
     int PullRequestId,
-    int IterationId)
+    int IterationId,
+    float? ReviewTemperature = null)
 {
     /// <summary>Normalized SCM provider family for the submitted review target.</summary>
     public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;

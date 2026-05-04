@@ -80,4 +80,7 @@ public sealed record PullRequestSynchronizationRequest
 
     /// <summary>Selected ProCursor source IDs that are known to be invalid and should suppress queuing.</summary>
     public IReadOnlyList<Guid> InvalidProCursorSourceIds { get; init; } = [];
+
+    /// <summary>Snapshotted review temperature to apply to any queued review job.</summary>
+    public float? ReviewTemperature { get; init; }
 }

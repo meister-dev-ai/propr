@@ -85,6 +85,7 @@ public sealed partial class ToolAwareAiReviewCore(
         {
             MaxOutputTokens = 8192,
             ModelId = effectiveModelId,
+            Temperature = systemContext.Temperature,
             Tools = registeredTools.Count > 0 ? [.. registeredTools] : null,
         };
 
@@ -117,15 +118,16 @@ public sealed partial class ToolAwareAiReviewCore(
             {
                 LogIterationStarted(logger, state.Iteration, effectiveMaxIterations);
 
-                // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
-                // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
-                var inputSample = GetInputSample(state.Messages);
-
                 // On iterations 2+, exclude the global persona system message (index 0) from the per-file
                 // review path to avoid retransmitting the large static prompt on every loop turn.
                 var messagesToSend = state.Iteration > 1 && systemContext.PerFileHint is not null
                     ? (IList<ChatMessage>)state.Messages.Skip(1).ToList()
                     : state.Messages;
+
+                // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
+                // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
+                var inputSample = GetInputSample(messagesToSend);
+                var systemPrompt = GetSystemPrompt(messagesToSend);
 
                 var response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
                 state.Messages.AddRange(response.Messages);
@@ -146,6 +148,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         inputTokens,
                         outputTokens,
                         inputSample,
+                        systemPrompt,
                         outputSample,
                         cancellationToken);
                 }
@@ -231,7 +234,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
                         "The response must start with '{' and end with '}'."));
                 var finalOptions = new ChatOptions
-                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
+                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
                 var finalResponse = await effectiveClient.GetResponseAsync(
                     state.Messages,
                     finalOptions,
@@ -268,7 +271,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         "\"loop_complete\": true. " +
                         "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
                 var correctionOptions = new ChatOptions
-                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId };
+                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
                 var correctionResponse = await effectiveClient.GetResponseAsync(
                     state.Messages,
                     correctionOptions,
@@ -406,6 +409,18 @@ public sealed partial class ToolAwareAiReviewCore(
         }
 
         return null;
+    }
+
+    private static string? GetSystemPrompt(IList<ChatMessage> messages)
+    {
+        var prompts = messages
+            .Where(message => message.Role == ChatRole.System && !string.IsNullOrWhiteSpace(message.Text))
+            .Select(message => message.Text!)
+            .ToList();
+
+        return prompts.Count > 0
+            ? string.Join("\n\n---\n\n", prompts)
+            : null;
     }
 
     private static string? GetFunctionCallSummary(ChatMessage message)

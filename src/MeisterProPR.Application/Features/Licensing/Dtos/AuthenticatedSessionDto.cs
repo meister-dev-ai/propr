@@ -9,5 +9,7 @@ namespace MeisterProPR.Application.Features.Licensing.Dtos;
 public sealed record AuthenticatedSessionDto(
     string GlobalRole,
     Dictionary<string, int> ClientRoles,
+    Dictionary<string, int> TenantRoles,
+    bool HasLocalPassword,
     InstallationEdition Edition,
     IReadOnlyList<PremiumCapabilityDto> Capabilities);

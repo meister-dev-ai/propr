@@ -192,6 +192,7 @@ describe('CrawlConfigForm', () => {
         providerScopePath: 'https://dev.azure.com/example',
         providerProjectKey: 'project-1',
         crawlIntervalSeconds: 60,
+        reviewTemperature: 0.25,
         isActive: true,
         repoFilters: [
           {
@@ -217,6 +218,7 @@ describe('CrawlConfigForm', () => {
         providerScopePath: 'https://dev.azure.com/example',
         providerProjectKey: 'project-1',
         crawlIntervalSeconds: 60,
+        reviewTemperature: 0.45,
         isActive: true,
         repoFilters: [],
         proCursorSourceScopeMode: 'selectedSources',
@@ -239,6 +241,7 @@ describe('CrawlConfigForm', () => {
     await wrapper.get('#crawlAddFilter').trigger('click')
     await wrapper.get('[data-testid="crawl-filter-select-0"]').setValue('azureDevOps::repo-1')
     await flushPromises()
+    await wrapper.get('#crawlReviewTemperature').setValue('0.2')
 
     await findButtonByText(wrapper, 'release/2026').trigger('click')
     await wrapper.find('form').trigger('submit')
@@ -257,6 +260,7 @@ describe('CrawlConfigForm', () => {
           organizationScopeId: SCOPE_ID,
           providerProjectKey: 'project-1',
           crawlIntervalSeconds: 60,
+          reviewTemperature: 0.2,
           repoFilters: [
             {
               repositoryName: 'Repository One',
@@ -274,6 +278,55 @@ describe('CrawlConfigForm', () => {
       }),
     )
     expect(wrapper.emitted('config-saved')).toBeTruthy()
+  })
+
+  it('includes review temperature when editing an existing crawl configuration', async () => {
+    const wrapper = await mountEditForm({
+      id: 'config-1',
+      clientId: CLIENT_ID,
+      organizationScopeId: SCOPE_ID,
+      providerScopePath: 'https://dev.azure.com/example',
+      providerProjectKey: 'project-1',
+      crawlIntervalSeconds: 60,
+      reviewTemperature: 0.15,
+      isActive: true,
+      repoFilters: [],
+      proCursorSourceScopeMode: 'allClientSources',
+      proCursorSourceIds: [],
+      invalidProCursorSourceIds: [],
+    })
+    await flushPromises()
+
+    await wrapper.get('#crawlReviewTemperature').setValue('0.4')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/admin/crawl-configurations/{configId}',
+      expect.objectContaining({
+        params: { path: { configId: 'config-1' } },
+        body: expect.objectContaining({
+          reviewTemperature: 0.4,
+        }),
+      }),
+    )
+  })
+
+  it('rejects crawl review temperature outside the supported range', async () => {
+    const wrapper = await mountForm()
+    await flushPromises()
+
+    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await flushPromises()
+    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await flushPromises()
+    await wrapper.get('#crawlReviewTemperature').setValue('2.5')
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Review temperature must be between 0.0 and 2.0.')
+    expect(mockPost).not.toHaveBeenCalled()
   })
 
   it('submits a selected-source scope with the chosen ProCursor sources', async () => {
@@ -381,6 +434,54 @@ describe('CrawlConfigForm', () => {
         body: expect.objectContaining({
           proCursorSourceScopeMode: 'selectedSources',
           proCursorSourceIds: [SOURCE_ID_1],
+        }),
+      }),
+    )
+  })
+
+  it('does not allow removing repository filters in legacy edit mode when filter edits are disabled', async () => {
+    const wrapper = await mountEditForm({
+      id: 'config-1',
+      clientId: CLIENT_ID,
+      provider: 'azureDevOps',
+      organizationScopeId: null,
+      providerScopePath: 'https://dev.azure.com/example',
+      providerProjectKey: 'project-1',
+      crawlIntervalSeconds: 60,
+      isActive: true,
+      repoFilters: [
+        {
+          id: 'filter-legacy',
+          repositoryName: 'Repository One',
+          displayName: 'Repository One',
+          canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' },
+          targetBranchPatterns: ['main'],
+        },
+      ],
+      proCursorSourceScopeMode: 'allClientSources',
+      proCursorSourceIds: [],
+      invalidProCursorSourceIds: [],
+    })
+    await flushPromises()
+
+    const removeButton = wrapper.get('.btn-remove-row')
+    expect((removeButton.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.findAll('.filter-row')).toHaveLength(1)
+
+    await removeButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.filter-row')).toHaveLength(1)
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/admin/crawl-configurations/{configId}',
+      expect.objectContaining({
+        params: { path: { configId: 'config-1' } },
+        body: expect.objectContaining({
+          repoFilters: undefined,
         }),
       }),
     )

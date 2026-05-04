@@ -32,14 +32,15 @@ public sealed partial class WebhookReviewActivationService(
             ct);
 
         var result = await submitReviewJobHandler.HandleAsync(
-            new SubmitReviewJobCommand(
+                new SubmitReviewJobCommand(
                 configuration.ClientId,
                 new SubmitReviewJobRequestDto(
                     configuration.OrganizationUrl,
                     configuration.ProjectId,
                     delivery.RepositoryId,
                     delivery.PullRequestId,
-                    iterationId)),
+                    iterationId,
+                    configuration.ReviewTemperature)),
             ct);
 
         if (result.IsDuplicate)

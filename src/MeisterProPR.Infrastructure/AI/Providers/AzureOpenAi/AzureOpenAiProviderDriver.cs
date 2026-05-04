@@ -75,13 +75,14 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding)
     {
-        var client = CreateAzureClient(new AiConnectionProbeOptionsDto(
-            connection.ProviderKind,
-            connection.BaseUrl,
-            connection.AuthMode,
-            connection.Secret,
-            connection.DefaultHeaders,
-            connection.DefaultQueryParams));
+        var client = CreateAzureClient(
+            new AiConnectionProbeOptionsDto(
+                connection.ProviderKind,
+                connection.BaseUrl,
+                connection.AuthMode,
+                connection.Secret,
+                connection.DefaultHeaders,
+                connection.DefaultQueryParams));
 
         return binding.ProtocolMode == AiProtocolMode.ChatCompletions
             ? client.GetChatClient(model.RemoteModelId).AsIChatClient()
@@ -97,13 +98,14 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         _ = binding;
         _ = dimensions;
 
-        var client = CreateAzureClient(new AiConnectionProbeOptionsDto(
-            connection.ProviderKind,
-            connection.BaseUrl,
-            connection.AuthMode,
-            connection.Secret,
-            connection.DefaultHeaders,
-            connection.DefaultQueryParams));
+        var client = CreateAzureClient(
+            new AiConnectionProbeOptionsDto(
+                connection.ProviderKind,
+                connection.BaseUrl,
+                connection.AuthMode,
+                connection.Secret,
+                connection.DefaultHeaders,
+                connection.DefaultQueryParams));
 
         return client.GetEmbeddingClient(model.RemoteModelId).AsIEmbeddingGenerator();
     }

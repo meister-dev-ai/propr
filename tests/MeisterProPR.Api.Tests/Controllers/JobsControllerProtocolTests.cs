@@ -241,6 +241,60 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         Assert.Contains(events, ev => ev.GetProperty("name").GetString() == "dedup_degraded_mode");
     }
 
+    [Fact]
+    public async Task GetJobProtocol_ReturnsFullProtocolEventTextWithoutApiTruncation()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 6, 1);
+        var inputText = new string('A', 60_000) + "-input-tail";
+        var outputText = new string('B', 60_000) + "-output-tail";
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Long.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = inputText,
+                OutputSummary = outputText,
+            });
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var ev = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single()
+            .GetProperty("events")
+            .EnumerateArray()
+            .Single();
+
+        Assert.Equal(inputText, ev.GetProperty("inputTextSample").GetString());
+        Assert.Equal(outputText, ev.GetProperty("outputSummary").GetString());
+        Assert.EndsWith("-input-tail", ev.GetProperty("inputTextSample").GetString());
+        Assert.EndsWith("-output-tail", ev.GetProperty("outputSummary").GetString());
+    }
+
     public sealed class ProtocolApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-protocol-jwt-secret-32chars!";

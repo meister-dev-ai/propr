@@ -123,6 +123,15 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<long?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        recorder.RecordReviewFindingGateEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         return recorder;
@@ -460,6 +469,7 @@ public class FileByFileReviewOrchestratorTests
                 0,
                 0,
                 Arg.Any<string?>(),
+                Arg.Any<string?>(),
                 Arg.Is<string?>(output => output == null),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<string?>(),
@@ -623,8 +633,8 @@ public class FileByFileReviewOrchestratorTests
 
         var tierDto = AiConnectionTestFactory.CreateChatConnection(
             job.ClientId,
-            modelId: "gpt-4o-high",
-            purpose: AiPurpose.ReviewHighEffort,
+            "gpt-4o-high",
+            AiPurpose.ReviewHighEffort,
             baseUrl: "https://high.openai.azure.com/");
         var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepo.GetForTierAsync(

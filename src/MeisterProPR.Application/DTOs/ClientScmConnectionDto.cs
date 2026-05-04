@@ -27,7 +27,7 @@ public sealed record ClientScmConnectionDto(
     string HostVariant = "unknown",
     IReadOnlyList<string>? MissingReadinessCriteria = null)
 {
-    /// <summary>Initializes a new instance of the <see cref="ClientScmConnectionDto"/> record with required parameters only.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ClientScmConnectionDto" /> record with required parameters only.</summary>
     public ClientScmConnectionDto(
         Guid id,
         Guid clientId,

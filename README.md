@@ -35,12 +35,16 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 ### Review Optimizations
 
 - **Token-optimized reviews** — diff-only input (full file available on demand via tool call), cache-friendly parallel message structure, system prompt pruned from step 2+ of review loops, tool result excerpts capped at 1 000 chars in deep loops
+- **Per-automation temperature control** - crawl configurations and webhook configurations can override the review temperature with a value between `0.0` and `2.0`
+- **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
+- **Verification-backed publication control** — structured claim extraction, local contradiction checks, PR-level evidence attempt recording, bounded AI micro-verification, and deterministic final gating reduce false positives without replacing the existing staged review flow; support hints and fetched files do not publish broad findings without explicit supported claim outcomes
 - **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the admin UI
 - **Per-client and per Crawl Config prompt overrides** - Override predefined prompts to improve the AI output towards specific use cases
 
 ### Privacy
 
 - **Per-user authentication** — username/password login with 15-minute JWT + 7-day refresh tokens; no shared secrets
+- **Tenant-scoped sign-in** — each tenant exposes only its own enabled local-login policy and external identity providers, with least-privilege auto-provisioning for first-time external users
 - **Personal access tokens** — users can issue scoped PATs for CI pipelines (`mpr_…` prefix) to submit reviews without crawling
 - **Per-client dismissals** - Dismiss specific findings for a client, preventing them from appearing in future reviews
 
@@ -53,6 +57,8 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 
 - **File exclusion rules** — generated files (EF Core migrations etc.) are skipped automatically; per-repo custom patterns via `.meister-propr/exclude` on the target branch using gitignore-style globs; excluded files are recorded in the audit trail with zero token cost
 - **Review history** - all reviews, protocols, comments, calls to AI, tools and more are store and can be checked from the management interface
+- **Filter decision diagnostics** — job protocol inspection shows per-file comment-relevance events, discarded-comment reasons, degraded fallback markers, implementation identity, and any hybrid evaluator token cost without reading raw logs
+- **Verification diagnostics** — job protocol inspection also shows claim extraction, local verification, evidence-source attempts, ProCursor result status, degraded verification states, final-gate decisions, and summary reconciliation for each review run
 - **Token usage dashboard** — per-client AI token consumption tracked by model and date
 
 ### Knowledge
@@ -77,6 +83,7 @@ cat > .env <<'EOF'
 MEISTER_JWT_SECRET=<random-32+-char-string>
 MEISTER_BOOTSTRAP_ADMIN_USER=admin
 MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password>
+MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api
 EOF
 
 # 2. Start the API + PostgreSQL (examples)
@@ -128,6 +135,16 @@ Log in via `POST /api/auth/login` to receive a 15-minute JWT access token and a 
 when you are calling the default nginx front door on `https://localhost:5443/`. The admin UI handles
 token refresh automatically.
 
+## Tenant-Scoped SSO And Recovery
+
+Tenant users sign in through the tenant login route and the related tenant auth endpoints. Each tenant controls:
+
+- whether local username/password sign-in is available,
+- which external providers are enabled, and
+- which email domains are allowed for first-time external provisioning.
+
+Tenant administrators manage those settings and memberships under `/api/admin/tenants/{tenantId}/...`. Platform administrators stay outside tenant-local policy and always retain the recovery sign-in path at `/auth/login`.
+
 ---
 
 ## Editions and Premium Capabilities
@@ -163,7 +180,7 @@ For the internal processing flow and the implementation checklist for new licens
 |------------------------------------|---------------|---------------------------------------------------------------------------------|
 | `DB_CONNECTION_STRING`             | Yes           | PostgreSQL connection string; required for all persistent state                 |
 | `MEISTER_DATA_PROTECTION_KEYS_PATH`| Docker default| File-system path used for the ASP.NET Core Data Protection key ring             |
-| `MEISTER_PUBLIC_BASE_URL`          | Optional      | Public external base URL used when generating webhook listener URLs behind proxies |
+| `MEISTER_PUBLIC_BASE_URL`          | Optional      | Public external API base URL used for webhook listener URLs and tenant SSO callback redirects behind proxies |
 | `MEISTER_JWT_SECRET`               | Yes           | HS256 signing secret — minimum 32 characters                                    |
 | `MEISTER_BOOTSTRAP_ADMIN_USER`     | Yes           | Username for the initial admin account seeded on first startup                  |
 | `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Yes           | Password for the initial admin account                                          |
@@ -202,5 +219,3 @@ and are skipped automatically when `DB_CONNECTION_STRING` is not set.
 - [Commercial License](COMMERCIAL.md) — for businesses that need managed-service rights, negotiated commercial terms, or professional
   support
 - [Security Policy](SECURITY.md) — report vulnerabilities privately
-
-

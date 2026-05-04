@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorIndexSnapshot
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorIndexSnapshot"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorIndexSnapshot" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for the snapshot.</param>
     /// <param name="knowledgeSourceId">The identifier of the knowledge source.</param>

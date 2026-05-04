@@ -108,4 +108,21 @@ public sealed class ReviewSystemContext
     ///     global fallback configured in <c>AiReviewOptions</c>.
     /// </summary>
     public string? ModelId { get; set; }
+
+    /// <summary>
+    ///     The client-scoped default review chat client resolved before any tier-specific override is applied.
+    ///     Comment relevance evaluation uses this runtime so it consistently follows the client's primary
+    ///     review binding rather than the current file's complexity tier.
+    /// </summary>
+    public IChatClient? DefaultReviewChatClient { get; set; }
+
+    /// <summary>
+    ///     The client-scoped default review model deployment resolved before any tier-specific override is applied.
+    /// </summary>
+    public string? DefaultReviewModelId { get; set; }
+
+    /// <summary>
+    ///     The effective review temperature to pass into chat calls for this job-scoped execution context.
+    /// </summary>
+    public float? Temperature { get; set; }
 }

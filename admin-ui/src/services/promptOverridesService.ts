@@ -7,11 +7,11 @@
  */
 
 import { createAdminClient } from '@/services/api'
-import type {
-  CreatePromptOverrideRequest,
-  PromptOverrideDto,
-  UpdatePromptOverrideRequest,
-} from '@/types'
+import type { components } from '@/services/generated/openapi'
+
+type CreatePromptOverrideRequest = components['schemas']['CreatePromptOverrideRequest']
+type PromptOverrideDto = components['schemas']['PromptOverrideDto']
+type UpdatePromptOverrideRequest = components['schemas']['UpdatePromptOverrideRequest']
 
 /** Lists all prompt overrides for the given client. */
 export async function listOverrides(clientId: string): Promise<PromptOverrideDto[]> {

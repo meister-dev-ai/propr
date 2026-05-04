@@ -21,7 +21,7 @@ public sealed class AgentMentionAnswerServiceTests
     {
         return AiConnectionTestFactory.CreateChatConnection(
             ClientId,
-            modelId: "gpt-4o",
+            "gpt-4o",
             baseUrl: "https://ai.example.com",
             secret: "test-key");
     }

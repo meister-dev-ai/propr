@@ -61,6 +61,7 @@ public sealed class AdoAssignedPrFetcherTests
             reviewerRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
                 .Returns(CreateConfiguredReviewer(DefaultConfig));
         }
+
         var fetcher = new AdoAssignedPrFetcher(
             factory,
             connectionRepository,

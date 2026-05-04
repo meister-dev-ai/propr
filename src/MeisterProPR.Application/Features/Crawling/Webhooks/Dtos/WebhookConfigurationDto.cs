@@ -20,7 +20,8 @@ public sealed record WebhookConfigurationDto(
     IReadOnlyList<WebhookRepoFilterDto> RepoFilters,
     Guid? OrganizationScopeId = null,
     string? GeneratedSecret = null,
-    string? SecretCiphertext = null);
+    string? SecretCiphertext = null,
+    float? ReviewTemperature = null);
 
 /// <summary>Data transfer object for a webhook repository filter entry.</summary>
 public sealed record WebhookRepoFilterDto(

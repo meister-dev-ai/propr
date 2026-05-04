@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorIndexJob
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorIndexJob"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorIndexJob" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for the job.</param>
     /// <param name="knowledgeSourceId">The knowledge source identifier.</param>

@@ -38,9 +38,9 @@ public sealed partial class ThreadMemoryService(
     private const string EmbeddingDegradedComponent = "thread_memory_embedding";
     private const string RepositoryDegradedComponent = "thread_memory_repository";
     private const string FilePathFallbackCheck = "pull_request_file_path_memory";
+    private readonly ConcurrentDictionary<Guid, byte> _embeddingLookupFailuresByClient = new();
 
     private readonly AiReviewOptions _opts = options.Value;
-    private readonly ConcurrentDictionary<Guid, byte> _embeddingLookupFailuresByClient = new();
 
     /// <inheritdoc />
     public async Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
@@ -359,7 +359,8 @@ public sealed partial class ThreadMemoryService(
         string? changeExcerpt,
         ReviewResult draftResult,
         Guid? protocolId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? temperature = null)
     {
         try
         {
@@ -437,6 +438,7 @@ public sealed partial class ThreadMemoryService(
                 matches,
                 effectiveModelId,
                 protocolId,
+                temperature,
                 ct);
 
             if (protocolId.HasValue && reconsideredResult is not null)
@@ -557,6 +559,7 @@ public sealed partial class ThreadMemoryService(
         IReadOnlyList<ThreadMemoryMatchDto> matches,
         string modelId,
         Guid? protocolId,
+        float? temperature,
         CancellationToken ct)
     {
         var effectiveChatClient = chatClient;
@@ -622,7 +625,7 @@ public sealed partial class ThreadMemoryService(
 
             var response = await effectiveChatClient.GetResponseAsync(
                 messages,
-                new ChatOptions { ModelId = effectiveModelId },
+                new ChatOptions { ModelId = effectiveModelId, Temperature = temperature },
                 ct);
             var text = response.Text;
             if (string.IsNullOrWhiteSpace(text))
@@ -641,6 +644,7 @@ public sealed partial class ThreadMemoryService(
                     inputTokens,
                     outputTokens,
                     userMsg,
+                    systemMsg,
                     text,
                     ct,
                     "ai_call_memory_reconsideration");

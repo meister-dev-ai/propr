@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorKnowledgeChunk
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeChunk"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeChunk" /> class.
     /// </summary>
     /// <param name="id">The unique identifier for the knowledge chunk.</param>
     /// <param name="snapshotId">The unique identifier for the snapshot.</param>

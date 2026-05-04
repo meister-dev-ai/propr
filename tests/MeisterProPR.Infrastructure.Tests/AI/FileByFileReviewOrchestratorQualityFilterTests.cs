@@ -154,6 +154,24 @@ public class FileByFileReviewOrchestratorQualityFilterTests
         Assert.Null(result[0].FilePath);
     }
 
+    [Fact]
+    public void ParseQualityFilterResponse_LineNumberZero_NormalizesToNull()
+    {
+        const string json = """
+                            {
+                              "comments": [
+                                { "file_path": "src/Foo.cs", "line_number": 0, "severity": "warning", "message": "Bad inline anchor" }
+                              ]
+                            }
+                            """;
+
+        var result = FileByFileReviewOrchestrator.ParseQualityFilterResponse(json);
+
+        var comment = Assert.Single(result);
+        Assert.Equal("src/Foo.cs", comment.FilePath);
+        Assert.Null(comment.LineNumber);
+    }
+
     // ── T022: RunQualityFilterAsync fallback behavior ────────────────────────────
 
     [Fact]
@@ -189,12 +207,14 @@ public class FileByFileReviewOrchestratorQualityFilterTests
     public async Task RunQualityFilterAsync_UsesContextModelId_WhenProvided()
     {
         string? observedModelId = null;
+        float? observedTemperature = null;
         var client = Substitute.For<IChatClient>();
         client
             .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 observedModelId = callInfo.Arg<ChatOptions?>()?.ModelId;
+                observedTemperature = callInfo.Arg<ChatOptions?>()?.Temperature;
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"comments\":[]}"));
             });
 
@@ -202,6 +222,7 @@ public class FileByFileReviewOrchestratorQualityFilterTests
         var context = new ReviewSystemContext(null, [], null)
         {
             ModelId = "quality-filter-deployment",
+            Temperature = 0.18f,
         };
 
         var result = await sut.RunQualityFilterAsync(
@@ -212,6 +233,7 @@ public class FileByFileReviewOrchestratorQualityFilterTests
             CancellationToken.None);
 
         Assert.Equal("quality-filter-deployment", observedModelId);
+        Assert.Equal(0.18f, observedTemperature);
         Assert.Single(result);
         Assert.Equal("Some warning", result[0].Message);
     }

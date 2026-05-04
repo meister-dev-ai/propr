@@ -40,7 +40,8 @@ public sealed class CrawlConfigurationRepository(
         string projectId,
         int crawlIntervalSeconds,
         Guid? organizationScopeId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? reviewTemperature = null)
     {
         var record = new CrawlConfigurationRecord
         {
@@ -51,6 +52,7 @@ public sealed class CrawlConfigurationRepository(
             ProjectId = projectId,
             OrganizationScopeId = organizationScopeId,
             CrawlIntervalSeconds = crawlIntervalSeconds,
+            ReviewTemperature = reviewTemperature,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -67,7 +69,8 @@ public sealed class CrawlConfigurationRepository(
             record.IsActive,
             record.CreatedAt,
             [],
-            record.OrganizationScopeId);
+            record.OrganizationScopeId,
+            ReviewTemperature: record.ReviewTemperature);
     }
 
     /// <inheritdoc />
@@ -188,7 +191,9 @@ public sealed class CrawlConfigurationRepository(
         int? crawlIntervalSeconds,
         bool? isActive,
         Guid? ownerClientId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? reviewTemperature = null,
+        bool shouldUpdateReviewTemperature = false)
     {
         var query = dbContext.CrawlConfigurations.Where(c => c.Id == configId);
         if (ownerClientId.HasValue)
@@ -210,6 +215,11 @@ public sealed class CrawlConfigurationRepository(
         if (isActive.HasValue)
         {
             record.IsActive = isActive.Value;
+        }
+
+        if (shouldUpdateReviewTemperature)
+        {
+            record.ReviewTemperature = reviewTemperature;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -327,7 +337,8 @@ public sealed class CrawlConfigurationRepository(
             c.OrganizationScopeId,
             c.ProCursorSourceScopeMode,
             proCursorSourceIds,
-            invalidProCursorSourceIds);
+            invalidProCursorSourceIds,
+            c.ReviewTemperature);
     }
 
     private IQueryable<CrawlConfigurationRecord> BaseQuery()

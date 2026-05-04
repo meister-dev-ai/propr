@@ -57,6 +57,10 @@ internal sealed class WebhookConfigurationEntityTypeConfiguration : IEntityTypeC
             .HasColumnType("jsonb")
             .IsRequired();
 
+        builder.Property(c => c.ReviewTemperature)
+            .HasColumnName("review_temperature")
+            .IsRequired(false);
+
         builder.Property(c => c.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

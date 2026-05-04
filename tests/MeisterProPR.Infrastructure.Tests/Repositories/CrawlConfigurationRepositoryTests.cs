@@ -245,12 +245,76 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             "project",
             60,
             organizationScopeId,
-            CancellationToken.None);
+            CancellationToken.None,
+            reviewTemperature: 0.2f);
 
         var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
 
         Assert.Equal(organizationScopeId, created.OrganizationScopeId);
         Assert.Equal(organizationScopeId, stored.OrganizationScopeId);
+        Assert.Equal(0.2f, created.ReviewTemperature);
+        Assert.Equal(0.2f, stored.ReviewTemperature);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_PersistsReviewTemperature()
+    {
+        var created = await this._repo.AddAsync(
+            this._clientId,
+            ScmProvider.AzureDevOps,
+            "https://dev.azure.com/org",
+            "project",
+            60,
+            null,
+            CancellationToken.None);
+
+        var updated = await this._repo.UpdateAsync(
+            created.Id,
+            null,
+            null,
+            this._clientId,
+            CancellationToken.None,
+            reviewTemperature: 0.45f,
+            shouldUpdateReviewTemperature: true);
+
+        var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
+        var fetched = await this._repo.GetByIdAsync(created.Id, CancellationToken.None);
+
+        Assert.True(updated);
+        Assert.Equal(0.45f, stored.ReviewTemperature);
+        Assert.NotNull(fetched);
+        Assert.Equal(0.45f, fetched.ReviewTemperature);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ClearsReviewTemperature_WhenExplicitlySpecifiedAsNull()
+    {
+        var created = await this._repo.AddAsync(
+            this._clientId,
+            ScmProvider.AzureDevOps,
+            "https://dev.azure.com/org",
+            "project",
+            60,
+            null,
+            CancellationToken.None,
+            reviewTemperature: 0.45f);
+
+        var updated = await this._repo.UpdateAsync(
+            created.Id,
+            null,
+            null,
+            this._clientId,
+            CancellationToken.None,
+            reviewTemperature: null,
+            shouldUpdateReviewTemperature: true);
+
+        var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
+        var fetched = await this._repo.GetByIdAsync(created.Id, CancellationToken.None);
+
+        Assert.True(updated);
+        Assert.Null(stored.ReviewTemperature);
+        Assert.NotNull(fetched);
+        Assert.Null(fetched.ReviewTemperature);
     }
 
     [Fact]

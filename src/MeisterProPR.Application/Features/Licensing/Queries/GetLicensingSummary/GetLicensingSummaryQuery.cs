@@ -4,4 +4,4 @@
 namespace MeisterProPR.Application.Features.Licensing.Queries.GetLicensingSummary;
 
 /// <summary>Marker query for loading the current installation licensing summary.</summary>
-public sealed record GetLicensingSummaryQuery();
+public sealed record GetLicensingSummaryQuery;

@@ -113,7 +113,7 @@ curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/s
     "displayName": "Platform Docs",
     "sourceKind": "repository",
     "organizationScopeId": "<scope-id>",
-    "projectId": "my-project",
+    "providerProjectKey": "my-project",
     "canonicalSourceRef": {
       "provider": "azureDevOps",
       "value": "repo-1"
@@ -146,8 +146,9 @@ curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
   -d '{
     "clientId": "<client-id>",
     "organizationScopeId": "<scope-id>",
-    "projectId": "my-project",
+    "providerProjectKey": "my-project",
     "crawlIntervalSeconds": 60,
+    "reviewTemperature": 0.2,
     "repoFilters": [
       {
         "displayName": "platform-docs",
@@ -164,6 +165,7 @@ curl -k -X POST https://localhost:5443/api/admin/crawl-configurations \
 ```
 
 When `selectedSources` is used the chosen source IDs are snapshotted onto queued review jobs.
+`reviewTemperature` is optional. Omit it to keep the model's default temperature behavior.
 
 ## Webhook Configurations
 
@@ -186,7 +188,8 @@ curl -k -X POST https://localhost:5443/admin/webhook-configurations \
     "clientId": "<client-id>",
     "provider": "azureDevOps",
     "organizationScopeId": "<scope-id>",
-    "projectId": "my-project",
+    "providerProjectKey": "my-project",
+    "reviewTemperature": 0.15,
     "enabledEvents": [
       "pullRequestCreated",
       "pullRequestUpdated",
@@ -204,6 +207,8 @@ curl -k -X POST https://localhost:5443/admin/webhook-configurations \
     ]
   }'
 ```
+
+Webhook configurations also accept optional `reviewTemperature` values between `0.0` and `2.0`.
 
 Expected create response highlights:
 
@@ -234,6 +239,7 @@ curl -k -X PATCH https://localhost:5443/admin/webhook-configurations/<config-id>
   -H "Authorization: Bearer <accessToken>" \
   -d '{
     "isActive": false,
+    "reviewTemperature": 0.0,
     "enabledEvents": ["pullRequestUpdated"],
     "repoFilters": []
   }'
@@ -276,7 +282,7 @@ even if the event is intentionally ignored:
 
 After acknowledgement, the delivery history for the matching configuration records the sanitized
 event summary, final outcome, and shared synchronization actions. Webhook-triggered and
-crawler-triggered PR activity now converge on the same pull-request synchronization path before any
+crawler-triggered PR activity converge on the same pull-request synchronization path before any
 review job is queued or cancelled.
 
 The receiver acknowledges authenticated deliveries quickly and returns a small status payload.

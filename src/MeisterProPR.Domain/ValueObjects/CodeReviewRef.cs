@@ -9,7 +9,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 public sealed record CodeReviewRef
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="CodeReviewRef"/> class.
+    ///     Initializes a new instance of the <see cref="CodeReviewRef" /> class.
     /// </summary>
     /// <param name="repository">The repository reference.</param>
     /// <param name="platform">The code review platform kind.</param>

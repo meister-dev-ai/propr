@@ -17,6 +17,7 @@ const mockRoute = {
   params: { id: 'client-1' },
   query: {} as Record<string, string>,
 }
+const hasClientRoleMock = vi.fn((_clientId: string, minRole: 0 | 1) => minRole <= 1)
 let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
 
 vi.mock('vue-router', () => ({
@@ -27,6 +28,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
+    hasClientRole: hasClientRoleMock,
     getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
     setLicensingState: (_edition: string, capabilities: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }>) => {
       capabilityState = capabilities
@@ -110,6 +112,22 @@ vi.mock('@/components/UsageDashboard.vue', () => ({
   },
 }))
 
+vi.mock('@/components/ReviewHistorySection.vue', () => ({
+  default: {
+    name: 'ReviewHistorySection',
+    props: ['clientId'],
+    template: '<div class="review-history-section-stub" :data-client-id="clientId">review history</div>',
+  },
+}))
+
+vi.mock('@/components/TextViewerModal.vue', () => ({
+  default: {
+    name: 'TextViewerModal',
+    props: ['isOpen', 'title', 'text', 'plainText'],
+    template: '<div class="text-viewer-modal-stub" />',
+  },
+}))
+
 vi.mock('@/components/ClientAiConnectionsTab.vue', () => ({
   default: {
     name: 'ClientAiConnectionsTab',
@@ -144,6 +162,7 @@ describe('ClientDetailView', () => {
     vi.stubEnv('VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING', 'true')
     mockRoute.query = {}
     mockRouterReplace.mockReset()
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: 0 | 1) => minRole <= 1)
     capabilityState = []
     setCapabilities([
       { key: 'crawl-configs', isAvailable: true },

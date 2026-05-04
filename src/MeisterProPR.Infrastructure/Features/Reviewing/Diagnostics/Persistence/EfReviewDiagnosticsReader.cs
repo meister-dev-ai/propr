@@ -48,6 +48,7 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
                         e.InputTokens,
                         e.OutputTokens,
                         e.InputTextSample,
+                        e.SystemPrompt,
                         e.OutputSummary,
                         e.Error))
                     .ToList()

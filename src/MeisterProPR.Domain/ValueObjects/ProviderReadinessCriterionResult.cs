@@ -6,7 +6,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Describes the state of one readiness criterion used to evaluate a provider connection.</summary>
 public sealed record ProviderReadinessCriterionResult
 {
-    /// <summary>Initializes a new instance of the <see cref="ProviderReadinessCriterionResult"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ProviderReadinessCriterionResult" /> class.</summary>
     /// <param name="criterionKey">The key of the readiness criterion.</param>
     /// <param name="scope">The scope of the criterion.</param>
     /// <param name="status">The status of the criterion.</param>

@@ -7,8 +7,10 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Features.Clients.Controllers;
 using MeisterProPR.Api.Features.Crawling.Webhooks.Validators;
+using MeisterProPR.Api.Features.IdentityAndAccess.Validators;
 using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
@@ -56,6 +58,7 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    builder.Services.AddHttpContextAccessor();
 
     // Ensure user-secrets are part of the application's IConfiguration in Development
     // so values can come from env vars, user secrets, or appsettings.
@@ -148,7 +151,10 @@ try
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
 
     builder.Services.AddInfrastructureSupport(builder.Configuration, builder.Environment);
-    builder.Services.AddReviewingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddReviewingModule(
+        builder.Configuration,
+        builder.Environment,
+        selectedCommentRelevanceFilterId: Program.GetSelectedCommentRelevanceFilterId());
     builder.Services.AddCrawlingModule(builder.Configuration, builder.Environment);
     builder.Services.AddClientsModule(builder.Configuration, builder.Environment);
     builder.Services.AddIdentityAndAccessModule(builder.Configuration, builder.Environment);
@@ -204,6 +210,13 @@ try
         .AddSingleton<IValidator<PatchClientProviderScopeRequest>, PatchClientProviderScopeRequestValidator>();
     builder.Services
         .AddSingleton<IValidator<SetClientReviewerIdentityRequest>, SetClientReviewerIdentityRequestValidator>();
+    builder.Services.AddSingleton<IValidator<CreateTenantRequest>, CreateTenantRequestValidator>();
+    builder.Services.AddSingleton<IValidator<UpdateTenantRequest>, UpdateTenantRequestValidator>();
+    builder.Services.AddSingleton<IValidator<UpdateTenantMembershipRequest>, UpdateTenantMembershipRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<CreateTenantSsoProviderRequest>, CreateTenantSsoProviderRequestValidator>();
+    builder.Services
+        .AddSingleton<IValidator<UpdateTenantSsoProviderRequest>, UpdateTenantSsoProviderRequestValidator>();
     builder.Services.AddSingleton<IValidator<CreateAdminCrawlConfigRequest>, CreateAdminCrawlConfigRequestValidator>();
     builder.Services.AddSingleton<IValidator<PatchAdminCrawlConfigRequest>, PatchAdminCrawlConfigRequestValidator>();
     builder.Services
@@ -269,17 +282,7 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
     }
 
-    // Fixed origins: testbed (localhost:3000) and Azure DevOps.
-    // Additional origins can be added via CORS_ORIGINS (comma-separated).
-    var fixedOrigins = new[]
-    {
-        "http://localhost:3000",
-        "https://localhost:3000",
-        "https://dev.azure.com",
-    };
-    var extraOrigins = (builder.Configuration["CORS_ORIGINS"] ?? "")
-        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    var allowedOrigins = fixedOrigins.Concat(extraOrigins).ToArray();
+    var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(builder.Configuration);
 
     builder.Services.AddCors(options =>
     {
@@ -289,11 +292,7 @@ try
                 .WithOrigins(allowedOrigins)
                 // *.visualstudio.com cannot be expressed as a static origin string;
                 // use a predicate so any subdomain is matched.
-                .SetIsOriginAllowed(origin =>
-                    allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase) ||
-                    (Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
-                     (uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase) ||
-                      uri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))))
+                .SetIsOriginAllowed(origin => BrowserOriginPolicy.IsAllowedOrigin(origin, allowedOrigins))
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -395,6 +394,12 @@ try
         // Apply any pending migrations automatically on startup
         await db.Database.MigrateAsync();
 
+        var systemTenantBootstrapService = scope.ServiceProvider.GetService<SystemTenantBootstrapService>();
+        if (systemTenantBootstrapService is not null)
+        {
+            await systemTenantBootstrapService.SeedAsync();
+        }
+
         var secretBackfillService = scope.ServiceProvider.GetRequiredService<SecretBackfillService>();
         await secretBackfillService.BackfillAsync();
 
@@ -448,6 +453,7 @@ try
     });
 
     app.UseCors();
+    // Populate admin, client-role, and tenant-role auth context before controller dispatch.
     app.UseMiddleware<AuthMiddleware>();
     app.MapControllers();
     app.MapHealthChecks(
@@ -472,4 +478,8 @@ finally
 /// <summary>Entry point for the API application used by tests and host.</summary>
 public partial class Program
 {
+    internal static string GetSelectedCommentRelevanceFilterId()
+    {
+        return "hybrid-v1";
+    }
 }

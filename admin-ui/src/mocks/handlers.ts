@@ -7,6 +7,178 @@ import { API_BASE_URL } from '@/services/apiBase'
 
 const base = API_BASE_URL
 
+const tenantSsoCapabilityKey = 'sso-authentication'
+const mockLicensingStateKey = 'mock-licensing-state'
+
+let mockEdition = 'commercial'
+let mockSsoCapabilityAvailable = true
+
+hydrateMockLicensingState()
+
+let mockTenants = [
+  {
+    id: 'tenant-1',
+    slug: 'acme',
+    displayName: 'Acme Corp',
+    isActive: true,
+    localLoginEnabled: true,
+    createdAt: '2026-04-24T12:00:00Z',
+    updatedAt: '2026-04-24T12:00:00Z',
+  },
+]
+
+let mockTenantSsoProviders: Record<string, any[]> = {
+  'tenant-1': [
+    {
+      id: 'provider-1',
+      tenantId: 'tenant-1',
+      displayName: 'Acme Entra',
+      providerKind: 'EntraId',
+      protocolKind: 'Oidc',
+      issuerOrAuthorityUrl: 'https://identity.example.test/acme',
+      clientId: 'acme-client-id',
+      secretConfigured: true,
+      scopes: ['openid', 'profile', 'email'],
+      allowedEmailDomains: ['acme.test'],
+      isEnabled: true,
+      autoCreateUsers: true,
+      createdAt: '2026-04-24T12:00:00Z',
+      updatedAt: '2026-04-24T12:00:00Z',
+    },
+  ],
+}
+
+function getMockSsoCapability() {
+  return {
+    key: tenantSsoCapabilityKey,
+    displayName: 'Single sign-on authentication',
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: mockSsoCapabilityAvailable,
+    message: mockSsoCapabilityAvailable ? null : 'Commercial edition is required to use single sign-on.',
+  }
+}
+
+function getMockTenantBySlug(tenantSlug: string) {
+  return mockTenants.find((tenant) => tenant.slug === tenantSlug) ?? null
+}
+
+function getMockTenantById(tenantId: string) {
+  return mockTenants.find((tenant) => tenant.id === tenantId) ?? null
+}
+
+function createPremiumFeatureUnavailableResponse() {
+  return HttpResponse.json(
+    {
+      error: 'premium_feature_unavailable',
+      feature: tenantSsoCapabilityKey,
+      message: 'Commercial edition is required to use single sign-on.',
+    },
+    { status: 409 },
+  )
+}
+
+function persistMockLicensingState() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(mockLicensingStateKey, JSON.stringify({
+    edition: mockEdition,
+    ssoAvailable: mockSsoCapabilityAvailable,
+  }))
+}
+
+function hydrateMockLicensingState() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(mockLicensingStateKey)
+    if (!rawValue) {
+      return
+    }
+
+    const parsed = JSON.parse(rawValue) as {
+      edition?: string
+      ssoAvailable?: boolean
+    }
+
+    if (parsed.edition === 'community' || parsed.edition === 'commercial') {
+      mockEdition = parsed.edition
+    }
+
+    if (typeof parsed.ssoAvailable === 'boolean') {
+      mockSsoCapabilityAvailable = parsed.ssoAvailable
+    }
+  } catch {
+    // Ignore invalid persisted mock state and keep defaults.
+  }
+}
+
+function decodeBase64UrlSegment(segment: string): string | null {
+  if (!segment) {
+    return null
+  }
+
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const paddingLength = (4 - (normalized.length % 4)) % 4
+  const base64 = normalized.padEnd(normalized.length + paddingLength, '=')
+
+  try {
+    const binary = atob(base64)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+function encodeBase64Url(value: string): string {
+  return btoa(value)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+function createMockJwt(payload: { global_role: string; unique_name: string }): string {
+  const header = encodeBase64Url(JSON.stringify({ alg: 'none', typ: 'JWT' }))
+  const body = encodeBase64Url(JSON.stringify({
+    ...payload,
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    probe: 'a~',
+  }))
+
+  return `${header}.${body}.dummySignature`
+}
+
+const mockAdminAccessToken = createMockJwt({ global_role: 'Admin', unique_name: 'mock.admin' })
+const mockTenantAccessToken = createMockJwt({ global_role: 'User', unique_name: 'tenant.user' })
+const mockTenantSsoAccessToken = createMockJwt({ global_role: 'User', unique_name: 'tenant.sso.user' })
+
+function parseJwtPayload(authorizationHeader: string | null) {
+  if (!authorizationHeader?.startsWith('Bearer ')) {
+    return null
+  }
+
+  const token = authorizationHeader.slice('Bearer '.length)
+  const payloadJson = decodeBase64UrlSegment(token.split('.')[1] ?? '')
+  if (!payloadJson) {
+    return null
+  }
+
+  try {
+    return JSON.parse(payloadJson) as {
+      global_role?: string
+      unique_name?: string
+    }
+  } catch {
+    return null
+  }
+}
+
 let jobTick = 0
 
 let crawlConfigs = [
@@ -1144,21 +1316,270 @@ let memoryActivityLog = [
 ]
 
 export const handlers = [
+  http.get(`${base}/auth/options`, async () => {
+    return HttpResponse.json({
+      edition: mockEdition,
+      availableSignInMethods: mockSsoCapabilityAvailable ? ['password', 'sso'] : ['password'],
+      capabilities: [getMockSsoCapability()],
+    })
+  }),
+
+  http.patch(`${base}/admin/licensing/mock`, async ({ request }) => {
+    const body = await request.json() as {
+      edition?: string
+      ssoAvailable?: boolean
+    }
+
+    if (body.edition === 'community' || body.edition === 'commercial') {
+      mockEdition = body.edition
+    }
+
+    if (typeof body.ssoAvailable === 'boolean') {
+      mockSsoCapabilityAvailable = body.ssoAvailable
+    }
+
+    persistMockLicensingState()
+
+    return HttpResponse.json({
+      edition: mockEdition,
+      capabilities: [getMockSsoCapability()],
+    })
+  }),
+
   http.post(`${base}/auth/login`, async () => {
     await delay(500)
-    // The dummy token contains a base64 payload with both role and username claims.
+    // The dummy token contains a base64url payload with both role and username claims.
     return HttpResponse.json({
-      accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIiwidW5pcXVlX25hbWUiOiJtb2NrLmFkbWluIn0=.dummySignature',
+      accessToken: mockAdminAccessToken,
       refreshToken: 'mock-refresh'
     })
   }),
 
   http.post(`${base}/auth/refresh`, async () => {
-    return HttpResponse.json({ accessToken: 'dummyHeader.eyJnbG9iYWxfcm9sZSI6IkFkbWluIiwidW5pcXVlX25hbWUiOiJtb2NrLmFkbWluIn0=.dummySignature' })
+    return HttpResponse.json({ accessToken: mockAdminAccessToken })
   }),
 
-  http.get(`${base}/auth/me`, async () => {
-    return HttpResponse.json({ globalRole: 'Admin', clientRoles: { '1': 1, '2': 1 } })
+  http.get(`${base}/auth/me`, async ({ request }) => {
+    const payload = parseJwtPayload(request.headers.get('Authorization'))
+    const isAdmin = payload?.global_role === 'Admin'
+    const username = payload?.unique_name ?? ''
+
+    return HttpResponse.json({
+      globalRole: isAdmin ? 'Admin' : 'User',
+      clientRoles: isAdmin ? { '1': 1, '2': 1 } : {},
+      tenantRoles: isAdmin ? { 'tenant-1': 1 } : { 'tenant-1': 0 },
+      hasLocalPassword: isAdmin || !username.includes('sso'),
+      edition: mockEdition,
+      capabilities: [getMockSsoCapability()],
+    })
+  }),
+
+  http.get(`${base}/auth/tenants/:tenantSlug/providers`, async ({ params }) => {
+    await delay(180)
+    const tenantSlug = String(params.tenantSlug)
+    const tenant = getMockTenantBySlug(tenantSlug)
+    if (!tenant || tenant.isActive === false) {
+      return HttpResponse.json({ error: 'Tenant sign-in is not available.' }, { status: 404 })
+    }
+
+    const providers = mockSsoCapabilityAvailable
+      ? (mockTenantSsoProviders[tenant.id] ?? [])
+        .filter((provider) => provider.isEnabled)
+        .map((provider) => ({
+          providerId: provider.id,
+          displayName: provider.displayName,
+          providerKind: provider.providerKind,
+        }))
+      : []
+
+    return HttpResponse.json({
+      tenantSlug: tenant.slug,
+      localLoginEnabled: tenant.localLoginEnabled,
+      providers,
+    })
+  }),
+
+  http.post(`${base}/auth/tenants/:tenantSlug/local-login`, async ({ params }) => {
+    await delay(220)
+    const tenantSlug = String(params.tenantSlug)
+    const tenant = getMockTenantBySlug(tenantSlug)
+    if (!tenant || !tenant.localLoginEnabled) {
+      return HttpResponse.json({ error: 'Local sign-in is disabled for this tenant.' }, { status: 401 })
+    }
+
+    return HttpResponse.json({
+      accessToken: mockTenantAccessToken,
+      refreshToken: 'tenant-refresh-token',
+      expiresIn: 900,
+      tokenType: 'Bearer',
+    })
+  }),
+
+  http.get(`${base}/auth/external/challenge/:tenantSlug/:providerId`, async ({ params, request }) => {
+    await delay(160)
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    const tenantSlug = String(params.tenantSlug)
+    const providerId = String(params.providerId)
+    const tenant = getMockTenantBySlug(tenantSlug)
+    const provider = tenant ? (mockTenantSsoProviders[tenant.id] ?? []).find((candidate) => candidate.id === providerId && candidate.isEnabled) : null
+
+    if (!tenant || !provider) {
+      return HttpResponse.json({ error: 'Provider not found.' }, { status: 404 })
+    }
+
+    const returnUrl = new URL(request.url).searchParams.get('returnUrl')
+    if (returnUrl) {
+      return HttpResponse.redirect(`${returnUrl}#accessToken=${mockTenantSsoAccessToken}&refreshToken=tenant-sso-refresh-token&expiresIn=900&tokenType=Bearer`)
+    }
+
+    return HttpResponse.redirect(`${base}/auth/external/callback/${tenant.slug}`)
+  }),
+
+  http.get(`${base}/auth/external/callback/:tenantSlug`, async ({ params }) => {
+    await delay(180)
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    const tenantSlug = String(params.tenantSlug)
+    const tenant = getMockTenantBySlug(tenantSlug)
+    const provider = tenant ? (mockTenantSsoProviders[tenant.id] ?? []).find((candidate) => candidate.isEnabled) : null
+
+    if (!tenant || !provider) {
+      return HttpResponse.json({ error: 'Provider not found.' }, { status: 404 })
+    }
+
+    return HttpResponse.json({
+      accessToken: mockTenantSsoAccessToken,
+      refreshToken: 'tenant-sso-refresh-token',
+      expiresIn: 900,
+      tokenType: 'Bearer',
+    })
+  }),
+
+  http.get(`${base}/api/admin/tenants/:tenantId`, async ({ params }) => {
+    await delay(180)
+    const tenantId = String(params.tenantId)
+    const tenant = getMockTenantById(tenantId)
+
+    return tenant
+      ? HttpResponse.json(tenant)
+      : new HttpResponse(null, { status: 404 })
+  }),
+
+  http.patch(`${base}/api/admin/tenants/:tenantId`, async ({ params, request }) => {
+    await delay(220)
+    const tenantId = String(params.tenantId)
+    const tenant = getMockTenantById(tenantId)
+    if (!tenant) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    const updatedTenant = {
+      ...tenant,
+      displayName: body.displayName ?? tenant.displayName,
+      isActive: body.isActive ?? tenant.isActive,
+      localLoginEnabled: body.localLoginEnabled ?? tenant.localLoginEnabled,
+      updatedAt: new Date().toISOString(),
+    }
+
+    mockTenants = mockTenants.map((candidate) => candidate.id === tenantId ? updatedTenant : candidate)
+    return HttpResponse.json(updatedTenant)
+  }),
+
+  http.get(`${base}/api/admin/tenants`, async () => {
+    await delay(180)
+    return HttpResponse.json(mockTenants)
+  }),
+
+  http.post(`${base}/api/admin/tenants`, async ({ request }) => {
+    await delay(220)
+    const body = await request.json() as any
+    const created = {
+      id: `tenant-${Math.random().toString(36).slice(2, 10)}`,
+      slug: body.slug ?? 'new-tenant',
+      displayName: body.displayName ?? 'New Tenant',
+      isActive: true,
+      localLoginEnabled: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    mockTenants = [...mockTenants, created]
+    mockTenantSsoProviders[created.id] = []
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.get(`${base}/api/admin/tenants/:tenantId/sso-providers`, async ({ params }) => {
+    await delay(180)
+    const tenantId = String(params.tenantId)
+    const tenant = getMockTenantById(tenantId)
+    if (!tenant) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    return HttpResponse.json(mockTenantSsoProviders[tenantId] ?? [])
+  }),
+
+  http.post(`${base}/api/admin/tenants/:tenantId/sso-providers`, async ({ params, request }) => {
+    await delay(240)
+    const tenantId = String(params.tenantId)
+    const tenant = getMockTenantById(tenantId)
+    if (!tenant) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    const body = await request.json() as any
+    const created = {
+      id: `provider-${Math.random().toString(36).slice(2, 10)}`,
+      tenantId,
+      displayName: body.displayName ?? 'New provider',
+      providerKind: body.providerKind ?? 'EntraId',
+      protocolKind: body.protocolKind ?? 'Oidc',
+      issuerOrAuthorityUrl: body.issuerOrAuthorityUrl ?? null,
+      clientId: body.clientId ?? 'generated-client-id',
+      secretConfigured: Boolean(body.clientSecret),
+      scopes: body.scopes ?? [],
+      allowedEmailDomains: body.allowedEmailDomains ?? [],
+      isEnabled: body.isEnabled ?? true,
+      autoCreateUsers: body.autoCreateUsers ?? true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    mockTenantSsoProviders[tenantId] = [...(mockTenantSsoProviders[tenantId] ?? []), created]
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.delete(`${base}/api/admin/tenants/:tenantId/sso-providers/:providerId`, async ({ params }) => {
+    await delay(200)
+    const tenantId = String(params.tenantId)
+    const providerId = String(params.providerId)
+
+    if (!getMockTenantById(tenantId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    mockTenantSsoProviders[tenantId] = (mockTenantSsoProviders[tenantId] ?? []).filter((provider) => provider.id !== providerId)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.get(`${base}/clients`, async () => {
@@ -1177,7 +1598,8 @@ export const handlers = [
         displayName: 'Mocked Client ' + params.id,
         isActive: true,
         createdAt: new Date().toISOString(),
-        recentUsageTokens: 14520
+        recentUsageTokens: 14520,
+        reviewerId: '0000-1111-2222-3333'
     })
   }),
 

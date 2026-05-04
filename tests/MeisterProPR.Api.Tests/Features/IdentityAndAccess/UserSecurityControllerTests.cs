@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -61,8 +62,9 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
         var passwordHashService = scope.ServiceProvider.GetRequiredService<IPasswordHashService>();
         var user = await userRepository.GetByIdAsync(userId);
         Assert.NotNull(user);
-        Assert.True(passwordHashService.Verify("NewPassword2!", user!.PasswordHash));
-        Assert.False(passwordHashService.Verify("OldPassword1!", user.PasswordHash));
+        Assert.NotNull(user!.PasswordHash);
+        Assert.True(passwordHashService.Verify("NewPassword2!", user.PasswordHash!));
+        Assert.False(passwordHashService.Verify("OldPassword1!", user.PasswordHash!));
         Assert.All(factory.RefreshTokens.Tokens.Where(t => t.UserId == userId), t => Assert.NotNull(t.RevokedAt));
     }
 
@@ -84,6 +86,28 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
         var response = await http.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangePassword_WithoutExistingLocalPassword_Returns401()
+    {
+        var userId = await this.SeedUserWithoutPasswordAsync("sso-only");
+
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/identity/users/me/password");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(userId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                currentPassword = "Anything1!",
+                newPassword = "NewPassword2!",
+            });
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("This account does not have a local password.", body.GetProperty("error").GetString());
     }
 
     [Fact]
@@ -133,6 +157,23 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
             Id = Guid.NewGuid(),
             Username = username,
             PasswordHash = passwordHashService.Hash(password),
+            GlobalRole = AppUserRole.User,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        await userRepository.AddAsync(user);
+        return user.Id;
+    }
+
+    private async Task<Guid> SeedUserWithoutPasswordAsync(string username)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+        var user = new AppUser
+        {
+            Id = Guid.NewGuid(),
+            Username = username,
+            PasswordHash = null,
             GlobalRole = AppUserRole.User,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

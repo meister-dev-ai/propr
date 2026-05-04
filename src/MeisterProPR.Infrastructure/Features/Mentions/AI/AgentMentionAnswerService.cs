@@ -64,8 +64,8 @@ internal sealed partial class AgentMentionAnswerService(
                                    ?? throw new InvalidOperationException($"No active AI connection configured for client {clientId}.");
 
             modelId = activeConnection.GetBoundModelId(AiPurpose.ReviewDefault)
-                ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
-                ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
+                      ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
+                      ?? throw new InvalidOperationException($"No active AI model configured for client {clientId}.");
 
             chatClient = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         }

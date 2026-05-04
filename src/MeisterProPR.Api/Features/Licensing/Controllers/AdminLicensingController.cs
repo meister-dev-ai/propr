@@ -67,10 +67,10 @@ public sealed class AdminLicensingController(
                 new UpdateLicensingCommand(
                     request.Edition,
                     (request.CapabilityOverrides ?? [])
-                        .Select(overrideRequest => new CapabilityOverrideMutation(
-                            overrideRequest.Key,
-                            overrideRequest.OverrideState))
-                        .ToArray(),
+                    .Select(overrideRequest => new CapabilityOverrideMutation(
+                        overrideRequest.Key,
+                        overrideRequest.OverrideState))
+                    .ToArray(),
                     AuthHelpers.GetUserId(this.HttpContext)),
                 ct);
 

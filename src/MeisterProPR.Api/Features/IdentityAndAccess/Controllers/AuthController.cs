@@ -32,7 +32,8 @@ public sealed class AuthController(
         }
 
         var user = await userRepository.GetByUsernameAsync(request.Username, ct);
-        if (user is null || !user.IsActive || !passwordHashService.Verify(request.Password, user.PasswordHash))
+        if (user is null || !user.IsActive || string.IsNullOrWhiteSpace(user.PasswordHash) ||
+            !passwordHashService.Verify(request.Password, user.PasswordHash))
         {
             return this.Unauthorized(new { error = "Invalid credentials." });
         }
@@ -117,7 +118,11 @@ public sealed class AuthController(
 
         var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
         var clientRoles = AuthHelpers.GetClientRoles(this.HttpContext);
+        var tenantRoles = AuthHelpers.GetTenantRoles(this.HttpContext);
         var globalRole = isAdmin ? "Admin" : "User";
+        var userId = AuthHelpers.GetUserId(this.HttpContext);
+        var user = userId.HasValue ? await userRepository.GetByIdAsync(userId.Value, ct) : null;
+        var hasLocalPassword = user is { IsActive: true, PasswordHash.Length: > 0 };
         var licensingSummary = licensingCapabilityService is null
             ? CreateCommunityFallbackSummary()
             : await licensingCapabilityService.GetSummaryAsync(ct);
@@ -127,6 +132,10 @@ public sealed class AuthController(
             clientRoles.ToDictionary(
                 kvp => kvp.Key.ToString(),
                 kvp => (int)kvp.Value),
+            tenantRoles.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => (int)kvp.Value),
+            hasLocalPassword,
             licensingSummary.Edition,
             licensingSummary.Capabilities);
     }

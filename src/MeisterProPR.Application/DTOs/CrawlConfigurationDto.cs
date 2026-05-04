@@ -35,7 +35,8 @@ public sealed record CrawlConfigurationDto(
     Guid? OrganizationScopeId = null,
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
     IReadOnlyList<Guid>? ProCursorSourceIds = null,
-    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null);
+    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null,
+    float? ReviewTemperature = null);
 
 /// <summary>Data transfer object for a crawl repository filter entry.</summary>
 /// <param name="Id">Unique identifier.</param>

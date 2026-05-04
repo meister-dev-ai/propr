@@ -1,13 +1,12 @@
 # Data Model
 
-This page groups the main persistence slices instead of keeping every entity in one long ER diagram.
-The goal is to make the architecture easier to read by separating configuration state, ProCursor
-state, and the core review and access model.
+This document describes the main persistence slices for ProPR. The diagrams separate guided
+configuration, ProCursor persistence, the core review and access model, and tenancy and identity.
 
 ## Guided Configuration Slice
 
-The guided admin surface adds durable organization-scope state, canonical crawl filters, optional
-selected-source associations, and review-job snapshots beneath the existing client boundary.
+The guided configuration slice persists organization-scoped state, canonical crawl filters,
+optional selected-source associations, and review-job source snapshots beneath the client boundary.
 
 ```mermaid
 erDiagram
@@ -59,13 +58,13 @@ erDiagram
     }
 ```
 
-Read models surface invalid associations as `invalidProCursorSourceIds` instead of dropping them
-silently, so administrators can repair stale selections from the guided UI.
+Read models expose invalid associations through `invalidProCursorSourceIds`. This preserves stale
+references for administrative repair instead of discarding them during projection.
 
 ## ProCursor Persistence Slice
 
-The ProCursor tables hang off the existing client boundary and add their own durable job queue,
-versioned snapshots, searchable chunks, and symbol graph rows.
+The ProCursor persistence slice extends the client boundary with a durable index-job queue,
+versioned snapshots, searchable knowledge chunks, and symbol graph records.
 
 ```mermaid
 erDiagram
@@ -118,8 +117,23 @@ erDiagram
 
 ## Core Review And Access Slice
 
-The operational core still centers on clients, review jobs, protocols, identity, and client-owned
-configuration such as AI connections, prompt overrides, and dismissals.
+The core review and access slice centers on clients, review jobs, review protocols, identity, and
+client-owned configuration such as AI connections, prompt overrides, and finding dismissals.
+
+Verification metadata is stored in review-domain records and protocol payloads:
+
+- `CandidateReviewFinding` stores structured claim metadata, provenance, evidence references, and
+    optional `VerificationOutcome`.
+- `EvidenceBundle` stores concrete evidence items, evidence-source attempt records, and aggregate
+    ProCursor attempt/result status so operators can distinguish fetched context from proof.
+- `ReviewFileResult` stores only the surviving publishable local findings plus a verification-aligned
+  per-file summary for newly reviewed files. Carried-forward rows remain outside the verification
+  scope of the associated run.
+- `ReviewJobProtocol` records claim extraction, local verification, evidence collection, PR-level
+    verification, degraded verification states, summary reconciliation, and final-gate audit
+    payloads.
+- Final-gate payloads store summary reconciliation metadata, including original and final summary
+    text, dropped finding ids, summary-only finding ids, and whether a summary rewrite was required.
 
 ```mermaid
 erDiagram
@@ -290,3 +304,84 @@ erDiagram
     ReviewPrScan ||--o{ ReviewPrScanThread : "has"
     CrawlConfiguration ||--o{ PromptOverride : "can have (crawl-config scope)"
 ```
+
+## Tenancy And Identity Slice
+
+The tenancy and identity slice places `Tenant` above the client boundary. Each user keeps one
+global `AppUser` identity, while access and sign-in policy are defined by tenant-scoped membership
+and provider records.
+
+```mermaid
+erDiagram
+    Tenant ||--o{ Client : "owns"
+    Tenant ||--o{ TenantMembership : "grants"
+    Tenant ||--o{ TenantSsoProvider : "configures"
+    Tenant ||--o{ ExternalIdentity : "scopes"
+    Tenant ||--o{ TenantAuditEntry : "audits"
+    AppUser ||--o{ TenantMembership : "belongs to"
+    AppUser ||--o{ ExternalIdentity : "maps"
+    AppUser ||--o{ TenantAuditEntry : "acts as"
+    TenantSsoProvider ||--o{ ExternalIdentity : "issues"
+
+    Tenant {
+        uuid Id PK
+        string Slug
+        string DisplayName
+        bool IsActive
+        bool LocalLoginEnabled
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
+
+    TenantMembership {
+        uuid Id PK
+        uuid TenantId FK
+        uuid UserId FK
+        string Role
+        datetime AssignedAt
+        datetime UpdatedAt
+    }
+
+    TenantSsoProvider {
+        uuid Id PK
+        uuid TenantId FK
+        string DisplayName
+        string ProviderKind
+        string ProtocolKind
+        string ClientId
+        string ClientSecretProtected
+        bool IsEnabled
+        bool AutoCreateUsers
+    }
+
+    ExternalIdentity {
+        uuid Id PK
+        uuid TenantId FK
+        uuid UserId FK
+        uuid SsoProviderId FK
+        string Issuer
+        string Subject
+        string Email
+        bool EmailVerified
+        datetime LastSignInAt
+    }
+
+    TenantAuditEntry {
+        uuid Id PK
+        uuid TenantId FK
+        uuid ActorUserId FK
+        string EventType
+        string Summary
+        string Detail
+        datetime OccurredAt
+    }
+```
+
+`GlobalRole` defines platform-administrator authority and the recovery path. `TenantMembership`
+defines tenant-local administration and user access. `UserClientRole` defines client-local
+operations. Client-scoped actions also require membership in the tenant that owns the target
+client.
+
+Tenant sign-in providers and external identities are tenant-scoped. Enabled providers, allowed
+email domains, and returning-login identity matching remain isolated per tenant.
+`TenantAuditEntry` stores append-only history for tenant policy, provider, and membership changes.

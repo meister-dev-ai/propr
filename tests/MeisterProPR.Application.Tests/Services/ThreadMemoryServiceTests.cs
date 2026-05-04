@@ -390,6 +390,7 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<long?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Is<string?>(n => n == "ai_call_memory_reconsideration"));
     }

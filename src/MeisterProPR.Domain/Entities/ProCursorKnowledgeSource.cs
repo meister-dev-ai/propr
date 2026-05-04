@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.Entities;
 public sealed class ProCursorKnowledgeSource
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeSource"/> class.
+    ///     Initializes a new instance of the <see cref="ProCursorKnowledgeSource" /> class.
     /// </summary>
     public ProCursorKnowledgeSource(
         Guid id,

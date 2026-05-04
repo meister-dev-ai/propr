@@ -36,9 +36,11 @@ public sealed class LicensingPolicyRepositoryTests
 
         var policy = await sut.UpdateAsync(
             InstallationEdition.Commercial,
-            [new CapabilityOverrideMutation(
-                PremiumCapabilityKey.MultipleScmProviders,
-                PremiumCapabilityOverrideState.Disabled)],
+            [
+                new CapabilityOverrideMutation(
+                    PremiumCapabilityKey.MultipleScmProviders,
+                    PremiumCapabilityOverrideState.Disabled),
+            ],
             actorUserId,
             CancellationToken.None);
 
@@ -61,17 +63,21 @@ public sealed class LicensingPolicyRepositoryTests
 
         await sut.UpdateAsync(
             InstallationEdition.Commercial,
-            [new CapabilityOverrideMutation(
-                PremiumCapabilityKey.SsoAuthentication,
-                PremiumCapabilityOverrideState.Disabled)],
+            [
+                new CapabilityOverrideMutation(
+                    PremiumCapabilityKey.SsoAuthentication,
+                    PremiumCapabilityOverrideState.Disabled),
+            ],
             Guid.NewGuid(),
             CancellationToken.None);
 
         var downgradedPolicy = await sut.UpdateAsync(
             InstallationEdition.Community,
-            [new CapabilityOverrideMutation(
-                PremiumCapabilityKey.SsoAuthentication,
-                PremiumCapabilityOverrideState.Default)],
+            [
+                new CapabilityOverrideMutation(
+                    PremiumCapabilityKey.SsoAuthentication,
+                    PremiumCapabilityOverrideState.Default),
+            ],
             Guid.NewGuid(),
             CancellationToken.None);
 

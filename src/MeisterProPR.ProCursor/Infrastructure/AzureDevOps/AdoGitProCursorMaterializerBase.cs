@@ -158,7 +158,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Lists all file paths in the repository at the specified commit.
+    ///     Lists all file paths in the repository at the specified commit.
     /// </summary>
     /// <param name="source">The ProCursor knowledge source.</param>
     /// <param name="commitSha">The commit SHA to list paths from.</param>
@@ -207,7 +207,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Gets the content of a file from the repository at the specified commit.
+    ///     Gets the content of a file from the repository at the specified commit.
     /// </summary>
     /// <param name="source">The ProCursor knowledge source.</param>
     /// <param name="commitSha">The commit SHA to retrieve the file from.</param>
@@ -254,7 +254,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Resolves the repository ID from the given ProCursor knowledge source.
+    ///     Resolves the repository ID from the given ProCursor knowledge source.
     /// </summary>
     /// <param name="source">The ProCursor knowledge source.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -267,7 +267,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Resolves the connection credentials for the given ProCursor knowledge source.
+    ///     Resolves the connection credentials for the given ProCursor knowledge source.
     /// </summary>
     /// <param name="source">The ProCursor knowledge source.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -285,7 +285,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Normalizes the branch name by removing the "refs/heads/" prefix if present.
+    ///     Normalizes the branch name by removing the "refs/heads/" prefix if present.
     /// </summary>
     /// <param name="branch">The branch name to normalize.</param>
     /// <returns>The normalized branch name.</returns>
@@ -297,7 +297,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    /// Logs the materialized source information.
+    ///     Logs the materialized source information.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     /// <param name="sourceId">The source identifier.</param>
@@ -312,7 +312,7 @@ public abstract class AdoGitProCursorMaterializerBase(
         int fileCount);
 
     /// <summary>
-    /// Normalizes a repository path by converting backslashes to forward slashes and ensuring it starts with a forward slash.
+    ///     Normalizes a repository path by converting backslashes to forward slashes and ensuring it starts with a forward slash.
     /// </summary>
     /// <param name="value">The repository path to normalize.</param>
     /// <returns>The normalized repository path.</returns>

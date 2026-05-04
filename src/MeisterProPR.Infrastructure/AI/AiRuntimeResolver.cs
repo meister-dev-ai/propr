@@ -20,7 +20,7 @@ public sealed class AiRuntimeResolver(
         CancellationToken ct = default)
     {
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
-            ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
+                       ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
 
         if (!resolved.Model.SupportsChat)
         {
@@ -39,7 +39,7 @@ public sealed class AiRuntimeResolver(
         CancellationToken ct = default)
     {
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
-            ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
+                       ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
 
         if (!resolved.Model.SupportsEmbedding)
         {

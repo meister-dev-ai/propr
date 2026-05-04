@@ -101,6 +101,7 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         Assert.Equal("User", body.GetProperty("globalRole").GetString());
         var clientRoles = body.GetProperty("clientRoles");
         Assert.Equal((int)ClientRole.ClientAdministrator, clientRoles.GetProperty(clientId.ToString()).GetInt32());
+        Assert.True(body.GetProperty("hasLocalPassword").GetBoolean());
     }
 
     [Fact]

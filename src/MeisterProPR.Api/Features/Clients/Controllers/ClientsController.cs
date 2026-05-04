@@ -8,6 +8,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -16,7 +17,7 @@ namespace MeisterProPR.Api.Controllers;
 [ApiController]
 public sealed partial class ClientsController(
     IClientAdminService clientAdminService,
-    IUserRepository userRepository) : ControllerBase
+    ITenantAdminService tenantAdminService) : ControllerBase
 {
     private static ClientResponse ToClientResponse(ClientDto client)
     {
@@ -26,7 +27,10 @@ public sealed partial class ClientsController(
             client.IsActive,
             client.CreatedAt,
             client.CommentResolutionBehavior,
-            client.CustomSystemMessage);
+            client.CustomSystemMessage,
+            client.TenantId,
+            client.TenantSlug,
+            client.TenantDisplayName);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -49,9 +53,9 @@ public sealed partial class ClientsController(
     ///     Returns 403 Forbidden if the caller is authenticated but not admin.
     ///     Returns 401 Unauthorized if the caller is unauthenticated.
     /// </summary>
-    private IActionResult? RequireAdmin()
+    private IActionResult? RequirePlatformAdmin()
     {
-        return AuthHelpers.RequireAdmin(this.HttpContext);
+        return AuthHelpers.RequirePlatformAdmin(this.HttpContext);
     }
 
     private IActionResult? RequireClientAccess(Guid clientId, ClientRole minimumRole)
@@ -79,10 +83,24 @@ public sealed partial class ClientsController(
         [FromServices] IValidator<CreateClientRequest> validator,
         CancellationToken ct = default)
     {
-        var auth = this.RequireAdmin();
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (!AuthHelpers.IsAdmin(this.HttpContext))
+        {
+            var tenantAuth = request.TenantId == TenantCatalog.SystemTenantId
+                ? this.StatusCode(StatusCodes.Status403Forbidden, new { error = "You do not have the required role for this tenant." })
+                : AuthHelpers.RequireTenantRole(
+                    this.HttpContext,
+                    request.TenantId,
+                    TenantRole.TenantAdministrator);
+            if (tenantAuth is not null)
+            {
+                return tenantAuth;
+            }
         }
 
         var validation = this.ValidateRequest(await validator.ValidateAsync(request, ct));
@@ -91,12 +109,24 @@ public sealed partial class ClientsController(
             return validation;
         }
 
-        var client = await clientAdminService.CreateAsync(request.DisplayName, ct);
+        if (await tenantAdminService.GetByIdAsync(request.TenantId, ct) is null)
+        {
+            return this.NotFound();
+        }
 
-        return this.CreatedAtAction(
-            nameof(this.GetClient),
-            new { clientId = client.Id },
-            ToClientResponse(client));
+        try
+        {
+            var client = await clientAdminService.CreateAsync(request.TenantId, request.DisplayName, ct);
+
+            return this.CreatedAtAction(
+                nameof(this.GetClient),
+                new { clientId = client.Id },
+                ToClientResponse(client));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return this.Conflict(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -113,7 +143,7 @@ public sealed partial class ClientsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteClient(Guid clientId)
     {
-        var auth = this.RequireAdmin();
+        var auth = this.RequirePlatformAdmin();
         if (auth is not null)
         {
             return auth;
@@ -146,23 +176,15 @@ public sealed partial class ClientsController(
         }
 
         var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
-        var userId = AuthHelpers.GetUserId(this.HttpContext);
-
         var client = await clientAdminService.GetByIdAsync(clientId, ct);
         if (client is null)
         {
             return this.NotFound();
         }
 
-        // Non-admin users can only see clients they're assigned to
-        if (!isAdmin && userId is not null)
+        if (!isAdmin && !AuthHelpers.GetClientRoles(this.HttpContext).ContainsKey(clientId))
         {
-            var user = await userRepository.GetByIdWithAssignmentsAsync(userId.Value, ct);
-            var hasAccess = user?.ClientAssignments.Any(a => a.ClientId == clientId) ?? false;
-            if (!hasAccess)
-            {
-                return this.StatusCode(403, new { error = "Access denied." });
-            }
+            return this.StatusCode(403, new { error = "Access denied." });
         }
 
         return this.Ok(ToClientResponse(client));
@@ -188,17 +210,13 @@ public sealed partial class ClientsController(
         }
 
         var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
-        var userId = AuthHelpers.GetUserId(this.HttpContext);
-
         if (isAdmin)
         {
             var all = await clientAdminService.GetAllAsync(ct);
             return this.Ok(all.Select(ToClientResponse).ToList());
         }
 
-        // Non-admin: return scoped clients
-        var user = await userRepository.GetByIdWithAssignmentsAsync(userId!.Value, ct);
-        var clientIds = user?.ClientAssignments.Select(a => a.ClientId).ToList() ?? [];
+        var clientIds = AuthHelpers.GetClientRoles(this.HttpContext).Keys.ToList();
         if (clientIds.Count == 0)
         {
             return this.Ok(Array.Empty<ClientResponse>());
@@ -231,7 +249,7 @@ public sealed partial class ClientsController(
         [FromServices] IValidator<PatchClientRequest> validator,
         CancellationToken ct = default)
     {
-        var auth = this.RequireAdmin();
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
         if (auth is not null)
         {
             return auth;
@@ -252,7 +270,6 @@ public sealed partial class ClientsController(
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
-
 }
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
@@ -262,7 +279,10 @@ public sealed record ClientResponse(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
-    string? CustomSystemMessage);
+    string? CustomSystemMessage,
+    Guid? TenantId,
+    string? TenantSlug,
+    string? TenantDisplayName);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(
@@ -278,7 +298,8 @@ public sealed record CrawlConfigResponse(
     IReadOnlyList<CrawlRepoFilterResponse>? RepoFilters = null,
     ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
     IReadOnlyList<Guid>? ProCursorSourceIds = null,
-    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null);
+    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null,
+    float? ReviewTemperature = null);
 
 /// <summary>A single repo filter entry in a crawl config response.</summary>
 public sealed record CrawlRepoFilterResponse(
@@ -289,7 +310,7 @@ public sealed record CrawlRepoFilterResponse(
     string? DisplayName = null);
 
 /// <summary>Request body for creating a client.</summary>
-public sealed record CreateClientRequest(string DisplayName);
+public sealed record CreateClientRequest(string DisplayName, Guid TenantId);
 
 /// <summary>
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
@@ -300,4 +321,3 @@ public sealed record PatchClientRequest(
     string? DisplayName = null,
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null);
-

@@ -35,6 +35,46 @@ JWTs and PATs establish the caller identity used by admin endpoints and review-s
 checks. `X-Ado-Token` is validated separately on review intake and status endpoints so the backend
 can verify the caller against Azure DevOps without storing or logging the token.
 
+## Tenant Authentication Flow
+
+Tenant users authenticate through an explicit tenant context. The tenant slug selects the enabled provider list, allowed email domains, and local-login policy before any tenant-user sign-in path is shown.
+
+```mermaid
+sequenceDiagram
+    actor User as Tenant User
+    participant UI as TenantLoginView
+    participant TA as TenantAuthController
+    participant TS as TenantAuthService
+    participant UR as UserRepository
+    participant SF as SessionFactory
+
+    User->>UI: Open /tenants/{slug}/login
+    UI->>TA: GET /auth/tenants/{slug}/providers
+    TA->>TS: GetLoginOptionsAsync(slug)
+    TS-->>TA: enabled providers + localLoginEnabled
+    TA-->>UI: tenant-specific login options
+
+    alt Local login enabled
+        User->>TA: POST /auth/tenants/{slug}/local-login
+        TA->>TS: AuthenticateLocalAsync(...)
+        TS->>UR: GetTenantMembershipAsync(tenantId, userId)
+        TA->>SF: CreateAsync(user)
+        TA-->>User: JWT + refresh token session
+    else External provider
+        User->>TA: GET /auth/external/challenge/{slug}/{providerId}
+        TA->>TS: BuildExternalChallengeAsync(...)
+        TA-->>User: Redirect to provider
+        User->>TA: GET /auth/external/callback/{slug}/{providerId}
+        TA->>TS: CompleteExternalSignInAsync(...)
+        Note over TS: Re-validates tenant active state and provider enabled state at callback entry
+        TS->>UR: Create tenant user + membership + external identity when allowed
+        TA->>SF: CreateAsync(user)
+        TA-->>User: JWT + refresh token session
+    end
+```
+
+First-time external sign-in never auto-links to an existing local account by email alone. A verified and allowed email can create a new `AppUser`, `TenantMembership`, and `ExternalIdentity`, but an existing unlinked account with the same email is rejected until an explicit linking flow exists.
+
 ## Protected Provider Secrets
 
 Provider connection secrets, webhook secrets, and per-client Azure DevOps credentials are stored
@@ -59,14 +99,15 @@ flowchart TD
     DEFAULT --> NEXT
 ```
 
-`AuthMiddleware` resolves application identity in-process and loads client roles eagerly so later
-controllers can enforce authorization without re-deriving user context.
+`AuthMiddleware` resolves application identity in-process and loads both client roles and tenant roles eagerly so later controllers can enforce authorization without re-deriving user context.
 
 Client-specific controller actions must validate the caller against the target client, not just any
 client assignment. For those endpoints, use the requested `clientId` in the authorization check so a
 user with access to one client cannot act on another client by reusing a broad client-admin role.
 Broad client-role checks are only appropriate for collection-level flows that intentionally span
 multiple clients.
+
+Tenant-specific controller actions must likewise validate the caller against the requested tenant. Tenant administrators can manage only their own tenant's memberships, local-login policy, and external providers. Platform administrators remain separate from tenant-local policy and keep the recovery path at `/auth/login`, even if a tenant disables local login or misconfigures all tenant-user external providers.
 
 ## Azure DevOps Credential Resolution
 

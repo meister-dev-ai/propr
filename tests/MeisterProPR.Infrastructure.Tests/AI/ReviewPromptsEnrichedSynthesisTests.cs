@@ -47,6 +47,23 @@ public class ReviewPromptsEnrichedSynthesisTests
     }
 
     [Fact]
+    public void BuildSynthesisUserMessage_WithComments_RequestsStructuredCrossCuttingEvidenceFields()
+    {
+        var comments = new List<ReviewComment>
+        {
+            new("src/Foo.cs", 5, CommentSeverity.Warning, "Some issue"),
+            new("src/Bar.cs", 8, CommentSeverity.Warning, "Related issue"),
+        };
+
+        var result = ReviewPrompts.BuildSynthesisUserMessage(SingleFileSummaries, "My PR", null, comments);
+
+        Assert.Contains("supportingFindingIds", result);
+        Assert.Contains("supportingFiles", result);
+        Assert.Contains("evidenceResolutionState", result);
+        Assert.Contains("candidateSummaryText", result);
+    }
+
+    [Fact]
     public void BuildSynthesisUserMessage_WithNoComments_DoesNotIncludeFindingsTableOrDirective()
     {
         var result = ReviewPrompts.BuildSynthesisUserMessage(SingleFileSummaries, "My PR", null, []);

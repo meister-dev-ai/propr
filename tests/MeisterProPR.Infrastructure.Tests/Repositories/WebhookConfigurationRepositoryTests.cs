@@ -102,14 +102,82 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             "ciphertext",
             [WebhookEventType.PullRequestCreated, WebhookEventType.PullRequestUpdated],
             null,
-            CancellationToken.None);
+            CancellationToken.None,
+            reviewTemperature: 0.15f);
 
         var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
 
         Assert.Equal(this._clientId, created.ClientId);
         Assert.Equal("path-key-1", created.PublicPathKey);
         Assert.Equal([WebhookEventType.PullRequestCreated, WebhookEventType.PullRequestUpdated], created.EnabledEvents);
+        Assert.Equal(0.15f, created.ReviewTemperature);
         Assert.Equal("ciphertext", stored.SecretCiphertext);
+        Assert.Equal(0.15f, stored.ReviewTemperature);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_PersistsReviewTemperature()
+    {
+        var created = await this._configRepo.AddAsync(
+            this._clientId,
+            WebhookProviderType.AzureDevOps,
+            "path-key-temp",
+            "https://dev.azure.com/org",
+            "project",
+            "ciphertext",
+            [WebhookEventType.PullRequestCreated],
+            null,
+            CancellationToken.None);
+
+        var updated = await this._configRepo.UpdateAsync(
+            created.Id,
+            null,
+            null,
+            this._clientId,
+            CancellationToken.None,
+            reviewTemperature: 0.35f,
+            shouldUpdateReviewTemperature: true);
+
+        var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
+        var fetched = await this._configRepo.GetByIdAsync(created.Id, CancellationToken.None);
+
+        Assert.True(updated);
+        Assert.Equal(0.35f, stored.ReviewTemperature);
+        Assert.NotNull(fetched);
+        Assert.Equal(0.35f, fetched.ReviewTemperature);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ClearsReviewTemperature_WhenExplicitlySpecifiedAsNull()
+    {
+        var created = await this._configRepo.AddAsync(
+            this._clientId,
+            WebhookProviderType.AzureDevOps,
+            "path-key-temp-clear",
+            "https://dev.azure.com/org",
+            "project",
+            "ciphertext",
+            [WebhookEventType.PullRequestCreated],
+            null,
+            CancellationToken.None,
+            reviewTemperature: 0.35f);
+
+        var updated = await this._configRepo.UpdateAsync(
+            created.Id,
+            null,
+            null,
+            this._clientId,
+            CancellationToken.None,
+            reviewTemperature: null,
+            shouldUpdateReviewTemperature: true);
+
+        var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
+        var fetched = await this._configRepo.GetByIdAsync(created.Id, CancellationToken.None);
+
+        Assert.True(updated);
+        Assert.Null(stored.ReviewTemperature);
+        Assert.NotNull(fetched);
+        Assert.Null(fetched.ReviewTemperature);
     }
 
     [Fact]

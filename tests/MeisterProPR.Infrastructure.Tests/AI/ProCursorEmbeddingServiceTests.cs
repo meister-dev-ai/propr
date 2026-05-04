@@ -4,7 +4,6 @@
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.AI.ProCursor;
 using Microsoft.Extensions.AI;
 using NSubstitute;
@@ -29,10 +28,12 @@ public sealed class ProCursorEmbeddingServiceTests
                 Arg.Any<IEnumerable<string>>(),
                 Arg.Any<EmbeddingGenerationOptions?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new GeneratedEmbeddings<Embedding<float>>([
-                new Embedding<float>(firstVector),
-                new Embedding<float>(secondVector),
-            ]));
+            .Returns(
+                new GeneratedEmbeddings<Embedding<float>>(
+                [
+                    new Embedding<float>(firstVector),
+                    new Embedding<float>(secondVector),
+                ]));
 
         var runtime = Substitute.For<IResolvedAiEmbeddingRuntime>();
         runtime.Connection.Returns(connection);
@@ -50,12 +51,13 @@ public sealed class ProCursorEmbeddingServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(runtime);
 
-        var options = Microsoft.Extensions.Options.Options.Create(new ProCursorOptions
-        {
-            EmbeddingDimensions = model.EmbeddingDimensions!.Value,
-        });
+        var options = Microsoft.Extensions.Options.Options.Create(
+            new ProCursorOptions
+            {
+                EmbeddingDimensions = model.EmbeddingDimensions!.Value,
+            });
 
-        var service = new ProCursorEmbeddingService(options, runtimeResolver, null);
+        var service = new ProCursorEmbeddingService(options, runtimeResolver);
 
         var result = await service.GenerateEmbeddingsAsync(ClientId, ["alpha", "beta"]);
 

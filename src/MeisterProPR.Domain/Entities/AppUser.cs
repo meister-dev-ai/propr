@@ -5,7 +5,7 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Domain.Entities;
 
-/// <summary>An application user who authenticates with username and password.</summary>
+/// <summary>An application user who may authenticate through local credentials or tenant-scoped external sign-in.</summary>
 public sealed class AppUser
 {
     /// <summary>Unique identifier.</summary>
@@ -14,8 +14,14 @@ public sealed class AppUser
     /// <summary>Login username (unique, case-insensitive).</summary>
     public string Username { get; set; } = string.Empty;
 
-    /// <summary>BCrypt hash of the user's password.</summary>
-    public string PasswordHash { get; set; } = string.Empty;
+    /// <summary>Optional email address used for sign-in, account recovery, and SSO provisioning.</summary>
+    public string? Email { get; set; }
+
+    /// <summary>Normalized email for case-insensitive lookups.</summary>
+    public string? NormalizedEmail { get; set; }
+
+    /// <summary>Optional BCrypt hash of the user's password for tenants that allow local sign-in.</summary>
+    public string? PasswordHash { get; set; }
 
     /// <summary>
     ///     Global role. Admins have access across all clients; other users are scoped via
@@ -31,6 +37,12 @@ public sealed class AppUser
 
     /// <summary>Per-client role assignments. Only used when <see cref="GlobalRole" /> is <see cref="AppUserRole.User" />.</summary>
     public ICollection<UserClientRole> ClientAssignments { get; } = [];
+
+    /// <summary>Tenant memberships that grant access within specific tenants.</summary>
+    public ICollection<TenantMembership> TenantMemberships { get; } = [];
+
+    /// <summary>External identities linked to this user for tenant-scoped sign-in.</summary>
+    public ICollection<ExternalIdentity> ExternalIdentities { get; } = [];
 
     /// <summary>Personal access tokens issued by this user.</summary>
     public ICollection<UserPat> Pats { get; } = [];

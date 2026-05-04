@@ -131,6 +131,22 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetByClientAndDateRange_ClientUserForAssignedClient_Returns200()
+    {
+        var http = factory.CreateClient();
+        var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7)).ToString("yyyy-MM-dd");
+        var to = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     public sealed class TokenUsageApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-token-usage-jwt-32-chars!!x";
@@ -139,8 +155,19 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
         public Guid ClientId { get; } = Guid.NewGuid();
+        public Guid ClientUserId { get; } = Guid.NewGuid();
 
         public string GenerateAdminToken()
+        {
+            return GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+        }
+
+        public string GenerateClientUserToken()
+        {
+            return GenerateToken(this.ClientUserId, AppUserRole.User);
+        }
+
+        private static string GenerateToken(Guid userId, AppUserRole role)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
@@ -148,8 +175,8 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
             {
                 Subject = new ClaimsIdentity(
                 [
-                    new Claim("sub", Guid.NewGuid().ToString()),
-                    new Claim("global_role", "Admin"),
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", role.ToString()),
                 ]),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
@@ -183,10 +210,32 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
                     opts.UseInMemoryDatabase(dbName, dbRoot));
 
                 var userRepo = Substitute.For<IUserRepository>();
-                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                userRepo.GetByIdWithAssignmentsAsync(this.ClientUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<AppUser?>(
+                            new AppUser
+                            {
+                                Id = this.ClientUserId,
+                                Username = "client.user",
+                                GlobalRole = AppUserRole.User,
+                                IsActive = true,
+                                CreatedAt = DateTimeOffset.UtcNow,
+                                ClientAssignments =
+                                {
+                                    new UserClientRole
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        UserId = this.ClientUserId,
+                                        ClientId = this.ClientId,
+                                        Role = ClientRole.ClientUser,
+                                        AssignedAt = DateTimeOffset.UtcNow,
+                                    },
+                                },
+                            }));
+
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Is<Guid>(id => id != this.ClientUserId), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
-                userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
+
                 services.AddSingleton(userRepo);
 
                 // Register the real ClientTokenUsageRepository backed by InMemory EF
@@ -199,7 +248,9 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
             var host = base.CreateHost(builder);
 
             using var scope = host.Services.CreateScope();
+
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+
             db.Clients.Add(
                 new ClientRecord
                 {

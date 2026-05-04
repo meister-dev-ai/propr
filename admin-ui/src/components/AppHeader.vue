@@ -14,18 +14,19 @@
       </div>
     </a>
     <nav class="app-nav">
-      <RouterLink v-if="isClientAdmin" :to="{ name: 'clients' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
-      <RouterLink :to="{ name: 'reviews' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
-      <div v-if="isAdmin" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' }" @click="adminDropdownOpen = !adminDropdownOpen">
+      <RouterLink v-if="canViewClients" :to="{ name: 'clients' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
+      <RouterLink :to="{ name: 'reviews' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'reviews' || $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
+      <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
-          <RouterLink :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
-          <RouterLink :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
-          <RouterLink :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
-          <RouterLink :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
+          <RouterLink v-if="defaultTenantAdminRoute" :to="defaultTenantAdminRoute" class="dropdown-item" :class="{ 'active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-building"></i> Tenants</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
+          <RouterLink v-if="isAdmin" :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
         </div>
       </div>
     </nav>
@@ -49,12 +50,28 @@ import { useSession } from '@/composables/useSession'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { clearTokens, isAdmin, clientRoles, edition } = useSession()
+const { clearTokens, isAdmin, clientRoles, tenantRoles, edition } = useSession()
 
-/** True for global admins or users with at least one ClientAdministrator role. */
-const isClientAdmin = computed(
-  () => isAdmin.value || Object.values(clientRoles.value).some((r) => r >= 1),
+/** True for global admins or users with any visible client role. */
+const canViewClients = computed(
+  () => isAdmin.value || Object.values(clientRoles.value).some((r) => r >= 0),
 )
+
+const canAccessTenantAdministration = computed(
+  () => edition.value !== 'community' && (isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1)),
+)
+
+const hasAnyTenantAdminRole = computed(
+  () => isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1),
+)
+
+const hasAnyAdministrationAccess = computed(
+  () => isAdmin.value || canAccessTenantAdministration.value,
+)
+
+const defaultTenantAdminRoute = computed(() => {
+  return canAccessTenantAdministration.value ? { name: 'tenant-directory' } : null
+})
 
 const adminDropdownOpen = ref(false)
 

@@ -14,4 +14,7 @@ public enum ProtocolEventKind
 
     /// <summary>A memory-system operation (store, remove, retrieve, reconsider, or failure).</summary>
     MemoryOperation = 2,
+
+    /// <summary>A non-memory operational diagnostic event such as comment relevance, final gate, or verification.</summary>
+    Operational = 3,
 }

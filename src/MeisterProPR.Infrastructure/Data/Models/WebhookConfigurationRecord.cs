@@ -20,6 +20,7 @@ public sealed class WebhookConfigurationRecord
     public string SecretCiphertext { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string[] EnabledEvents { get; set; } = [];
+    public float? ReviewTemperature { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public ICollection<WebhookRepoFilterRecord> RepoFilters { get; set; } = [];
     public ICollection<WebhookDeliveryLogEntryRecord> DeliveryLogs { get; set; } = [];

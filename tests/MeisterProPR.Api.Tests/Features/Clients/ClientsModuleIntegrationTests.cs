@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using MeisterProPR.Api.Tests;
 using MeisterProPR.Api.Tests.Controllers;
 
 namespace MeisterProPR.Api.Tests.Features.Clients;
@@ -21,7 +20,7 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
 
         using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/clients");
         createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        createRequest.Content = JsonContent.Create(new { displayName });
+        createRequest.Content = JsonContent.Create(new { displayName, tenantId = factory.TenantId });
 
         var createResponse = await http.SendAsync(createRequest);
 
@@ -77,7 +76,6 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
 public sealed class ClientsAiConnectionsModuleIntegrationTests(ClientsControllerTests.ClientsApiFactory factory)
     : IClassFixture<ClientsControllerTests.ClientsApiFactory>
 {
-
     [Fact]
     public async Task CreateAiConnection_ThenListConnections_ReturnsPersistedSanitizedConnection()
     {

@@ -93,7 +93,7 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
-        var resolvedLicensingService = licensingCapabilityService ?? CreateLicensingService(isAvailable: true);
+        var resolvedLicensingService = licensingCapabilityService ?? CreateLicensingService(true);
 
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
@@ -108,14 +108,16 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
     {
         var licensingService = Substitute.For<ILicensingCapabilityService>();
         licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new CapabilitySnapshot(
-                PremiumCapabilityKey.ProCursor,
-                PremiumCapabilityKey.ProCursor,
-                true,
-                true,
-                PremiumCapabilityOverrideState.Default,
-                isAvailable,
-                isAvailable ? null : "ProCursor requires a premium license.")));
+            .Returns(
+                Task.FromResult(
+                    new CapabilitySnapshot(
+                        PremiumCapabilityKey.ProCursor,
+                        PremiumCapabilityKey.ProCursor,
+                        true,
+                        true,
+                        PremiumCapabilityOverrideState.Default,
+                        isAvailable,
+                        isAvailable ? null : "ProCursor requires a premium license.")));
         return licensingService;
     }
 
@@ -127,7 +129,7 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
         var scopeFactory = CreateScopeFactory(
             aggregationService,
             retentionService,
-            CreateLicensingService(isAvailable: false));
+            CreateLicensingService(false));
         var worker = BuildWorker(scopeFactory);
 
         await worker.StartAsync(CancellationToken.None);

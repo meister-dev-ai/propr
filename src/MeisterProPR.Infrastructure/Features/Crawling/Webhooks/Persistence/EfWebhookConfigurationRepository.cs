@@ -26,7 +26,8 @@ public sealed class EfWebhookConfigurationRepository(
         string secretCiphertext,
         IReadOnlyList<WebhookEventType> enabledEvents,
         Guid? organizationScopeId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? reviewTemperature = null)
     {
         var record = new WebhookConfigurationRecord
         {
@@ -40,6 +41,7 @@ public sealed class EfWebhookConfigurationRepository(
             SecretCiphertext = secretCiphertext,
             IsActive = true,
             EnabledEvents = SerializeEnabledEvents(enabledEvents),
+            ReviewTemperature = reviewTemperature,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -197,7 +199,9 @@ public sealed class EfWebhookConfigurationRepository(
         bool? isActive,
         IReadOnlyList<WebhookEventType>? enabledEvents,
         Guid? ownerClientId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        float? reviewTemperature = null,
+        bool shouldUpdateReviewTemperature = false)
     {
         var query = dbContext.WebhookConfigurations.Where(config => config.Id == configId);
         if (ownerClientId.HasValue)
@@ -219,6 +223,11 @@ public sealed class EfWebhookConfigurationRepository(
         if (enabledEvents is not null)
         {
             record.EnabledEvents = SerializeEnabledEvents(enabledEvents);
+        }
+
+        if (shouldUpdateReviewTemperature)
+        {
+            record.ReviewTemperature = reviewTemperature;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -287,7 +296,8 @@ public sealed class EfWebhookConfigurationRepository(
                 .ToList()
                 .AsReadOnly(),
             record.OrganizationScopeId,
-            SecretCiphertext: record.SecretCiphertext);
+            SecretCiphertext: record.SecretCiphertext,
+            ReviewTemperature: record.ReviewTemperature);
     }
 
     private static string[] SerializeEnabledEvents(IReadOnlyList<WebhookEventType> enabledEvents)

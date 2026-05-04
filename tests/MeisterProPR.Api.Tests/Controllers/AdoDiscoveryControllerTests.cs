@@ -330,14 +330,16 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         public void SetCapabilityAvailability(string capabilityKey, bool isAvailable, string? message = null)
         {
             this.LicensingCapabilityService.GetCapabilityAsync(capabilityKey, Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult(new CapabilitySnapshot(
-                    capabilityKey,
-                    capabilityKey,
-                    true,
-                    true,
-                    PremiumCapabilityOverrideState.Default,
-                    isAvailable,
-                    message)));
+                .Returns(
+                    Task.FromResult(
+                        new CapabilitySnapshot(
+                            capabilityKey,
+                            capabilityKey,
+                            true,
+                            true,
+                            PremiumCapabilityOverrideState.Default,
+                            isAvailable,
+                            message)));
         }
 
         public string GenerateClientUserToken()

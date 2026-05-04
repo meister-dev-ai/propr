@@ -142,7 +142,7 @@ public interface IJobRepository
         CancellationToken ct = default);
 
     /// <summary>Persists the AI connection snapshot captured at job-start time.</summary>
-    Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default);
+    Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null);
 
     /// <summary>Persists the PR context snapshot captured after job creation.</summary>
     Task UpdatePrContextAsync(

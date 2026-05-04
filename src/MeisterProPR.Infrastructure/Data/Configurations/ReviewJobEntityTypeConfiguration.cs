@@ -158,6 +158,10 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasMaxLength(200)
             .IsRequired(false);
 
+        builder.Property(j => j.ReviewTemperature)
+            .HasColumnName("review_temperature")
+            .IsRequired(false);
+
         builder.Property(j => j.PrTitle)
             .HasColumnName("pr_title")
             .HasMaxLength(500)

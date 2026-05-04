@@ -78,8 +78,20 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
     }
 
     [Fact]
-    public async Task GetClientUsage_ClientUser_Returns403()
+    public async Task GetClientUsage_ClientUser_ReturnsAggregatedUsage()
     {
+        var sourceId = await factory.SeedSourceAsync(
+            "Platform Wiki",
+            repositoryId: "wiki-client-user",
+            defaultBranch: "wikiMain");
+        await this.SeedUsageEventAsync(
+            sourceId,
+            "Platform Wiki",
+            new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+            120,
+            0,
+            0.00012m);
+
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
@@ -88,7 +100,9 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
 
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(120, body.GetProperty("totals").GetProperty("totalTokens").GetInt64());
     }
 
     [Fact]
@@ -209,10 +223,13 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
             "Platform Wiki",
             repositoryId: "wiki-source",
             defaultBranch: "wikiMain");
+
+        var occurredAtUtc = DateTimeOffset.UtcNow.AddDays(-1);
+
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
-            new DateTimeOffset(2026, 4, 4, 8, 0, 0, TimeSpan.Zero),
+            occurredAtUtc,
             120,
             0,
             0.00012m,
@@ -220,7 +237,7 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
         await this.SeedUsageEventAsync(
             sourceId,
             "Platform Wiki",
-            new DateTimeOffset(2026, 4, 4, 9, 0, 0, TimeSpan.Zero),
+            occurredAtUtc.AddHours(1),
             80,
             40,
             0.0002m,
@@ -249,12 +266,21 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
     }
 
     [Fact]
-    public async Task GetSourceUsage_ClientUser_Returns403()
+    public async Task GetSourceUsage_ClientUser_ReturnsSourceAggregate()
     {
         var sourceId = await factory.SeedSourceAsync(
             "Platform Wiki",
             repositoryId: "wiki-forbidden",
             defaultBranch: "wikiMain");
+        var occurredAtUtc = DateTimeOffset.UtcNow.AddDays(-1);
+        await this.SeedUsageEventAsync(
+            sourceId,
+            "Platform Wiki",
+            occurredAtUtc,
+            50,
+            20,
+            0.00007m,
+            modelName: "gpt-4.1-mini");
 
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -264,7 +290,10 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
 
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(sourceId.ToString(), body.GetProperty("sourceId").GetString());
+        Assert.Equal(70, body.GetProperty("totals").GetProperty("totalTokens").GetInt64());
     }
 
     [Fact]

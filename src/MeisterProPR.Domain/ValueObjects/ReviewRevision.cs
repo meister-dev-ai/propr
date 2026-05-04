@@ -6,7 +6,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Provider-neutral revision identity for a reviewable change state.</summary>
 public sealed record ReviewRevision
 {
-    /// <summary>Initializes a new instance of the <see cref="ReviewRevision"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ReviewRevision" /> class.</summary>
     /// <param name="headSha">The head SHA of the revision.</param>
     /// <param name="baseSha">The base SHA of the revision.</param>
     /// <param name="startSha">The optional start SHA of the revision.</param>

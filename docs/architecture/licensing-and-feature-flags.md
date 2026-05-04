@@ -73,8 +73,8 @@ behavior.
 - `GetAuthOptionsAsync()` builds the pre-login auth bootstrap payload.
 - `UpdateAsync()` validates requested overrides and persists the new policy.
 
-The service supports both Commercial-only features and non-Commercial toggles. Today, the shipped
-catalog entries are Commercial-only, but the resolver already supports features with
+The service supports both Commercial-only features and non-Commercial toggles. The shipped catalog
+entries are Commercial-only, and the resolver also supports features with
 `RequiresCommercial = false`.
 
 ### Feature Management Integration
@@ -91,23 +91,23 @@ into ProPR's structured `premium_feature_unavailable` response.
 This keeps feature-gated endpoints aligned with the same capability resolution logic used by
 services and workers.
 
-## Current API and UI Contracts
+## API And UI Contracts
 
-The current public and admin contracts are:
+The public and admin contracts are:
 
 - `GET /api/admin/licensing`: returns the current edition and resolved capability list.
 - `PATCH /api/admin/licensing`: updates edition and capability overrides.
 - `GET /api/auth/options`: returns pre-login auth bootstrap data.
 - `GET /api/auth/me`: returns authenticated session data including edition and capabilities.
 
-The admin UI should keep consuming generated OpenAPI types for these contracts. The current split is:
+The admin UI consumes generated OpenAPI types for these contracts through:
 
 - `authOptionsService.ts` for pre-login bootstrap data
 - `licensingService.ts` for admin licensing operations
 - `useSession.ts` for authenticated session hydration and capability lookup
 
 That separation is intentional: login/bootstrap concerns can evolve independently from admin
-licensing management while still using the same backend source of truth.
+licensing management while using the same backend source of truth.
 
 ## When To Use Direct Checks vs Feature Gates
 
@@ -123,9 +123,9 @@ Use MVC feature gates when:
 - a 403-style premium-unavailable response is sufficient
 - the gated action should stay thin and declarative
 
-Current code already uses direct capability checks for review intake, worker execution, and client
-provider connection limits. Feature management is available for new endpoint-level gates where that
-shape is a better fit.
+The codebase uses direct capability checks for review intake, worker execution, and client provider
+connection limits. Feature management is available for endpoint-level gates where that shape is a
+better fit.
 
 ## Adding a New Licensed Feature
 

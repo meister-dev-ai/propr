@@ -39,6 +39,40 @@
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
+
+      <section v-if="canUseTenantSignIn" class="tenant-login-entry">
+        <div>
+          <h2 class="tenant-login-entry-title">Single sign-on</h2>
+          <p class="tenant-login-entry-copy">Continue with your tenant's SSO provider, then enter the tenant slug in the next step.</p>
+        </div>
+
+        <button
+          v-if="!showTenantSlugPrompt"
+          data-testid="tenant-login-start"
+          type="button"
+          class="btn-secondary tenant-login-entry-button"
+          @click="showTenantSlugPrompt = true"
+        >
+          Sign in with SSO
+        </button>
+
+        <form v-else class="tenant-login-entry-form" @submit.prevent="handleTenantLogin">
+          <div v-if="tenantValidationError" class="error">{{ tenantValidationError }}</div>
+          <label for="tenant-login-slug">Tenant slug</label>
+          <input
+            id="tenant-login-slug"
+            v-model="tenantSlug"
+            data-testid="tenant-login-slug"
+            type="text"
+            placeholder="acme"
+            autocomplete="organization"
+          />
+          <div class="tenant-login-entry-actions">
+            <button data-testid="tenant-login-submit" type="submit">Continue to SSO</button>
+            <button type="button" class="btn-secondary" @click="closeTenantPrompt">Cancel</button>
+          </div>
+        </form>
+      </section>
     </div>
   </div>
 </template>
@@ -48,19 +82,22 @@ import { computed, onMounted, ref } from 'vue'
 import {useRouter} from 'vue-router'
 import {useSession} from '@/composables/useSession'
 import { API_BASE_URL } from '@/services/apiBase'
-import { getAuthOptions, type AuthOptions } from '@/services/authOptionsService'
+import { getAuthOptions, supportsTenantSignIn, type AuthOptions } from '@/services/authOptionsService'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { setTokens, loadClientRoles } = useSession()
+const { establishSession } = useSession()
 
 const authOptions = ref<AuthOptions | null>(null)
 const authOptionsError = ref('')
 const username = ref('')
 const password = ref('')
+const tenantSlug = ref('')
+const showTenantSlugPrompt = ref(false)
 const loading = ref(false)
 const validationError = ref('')
 const authError = ref('')
+const tenantValidationError = ref('')
 
 const signInMessage = computed(() => {
   if (!authOptions.value) {
@@ -75,6 +112,8 @@ const signInMessage = computed(() => {
 const ssoCapabilityMessage = computed(() =>
   authOptions.value?.capabilities.find((capability) => capability.key === 'sso-authentication')?.message ?? '',
 )
+
+const canUseTenantSignIn = computed(() => supportsTenantSignIn(authOptions.value))
 
 onMounted(async () => {
   try {
@@ -116,14 +155,35 @@ async function handleSubmit() {
     }
 
     const data = await res.json() as { accessToken: string; refreshToken: string }
-    setTokens(data.accessToken, data.refreshToken)
-    await loadClientRoles()
-    router.push({ name: 'home' })
+    await establishSession(data)
+    await router.push({ name: 'home' })
   } catch {
     authError.value = 'Connection error. Please try again.'
   } finally {
     loading.value = false
   }
+}
+
+async function handleTenantLogin() {
+  tenantValidationError.value = ''
+
+  if (!tenantSlug.value.trim()) {
+    tenantValidationError.value = 'Tenant slug is required'
+    return
+  }
+
+  await router.push({
+    name: 'tenant-login',
+    params: {
+      tenantSlug: tenantSlug.value.trim(),
+    },
+  })
+}
+
+function closeTenantPrompt() {
+  tenantValidationError.value = ''
+  tenantSlug.value = ''
+  showTenantSlugPrompt.value = false
 }
 </script>
 
@@ -142,5 +202,37 @@ async function handleSubmit() {
 .login-auth-submessage {
   color: var(--color-text-muted);
 }
-</style>
 
+.tenant-login-entry {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.tenant-login-entry-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tenant-login-entry-copy {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-muted);
+}
+
+.tenant-login-entry-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.tenant-login-entry-button {
+  margin-top: 1rem;
+}
+
+.tenant-login-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+</style>

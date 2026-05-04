@@ -6,7 +6,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <summary>Normalized provider-neutral webhook delivery context.</summary>
 public sealed record WebhookDeliveryEnvelope
 {
-    /// <summary>Initializes a new instance of the <see cref="WebhookDeliveryEnvelope"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="WebhookDeliveryEnvelope" /> class.</summary>
     /// <param name="host">The provider host reference.</param>
     /// <param name="deliveryId">The delivery identifier.</param>
     /// <param name="deliveryKind">The delivery kind.</param>

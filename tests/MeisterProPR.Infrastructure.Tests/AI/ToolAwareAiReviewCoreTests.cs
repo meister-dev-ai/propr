@@ -144,6 +144,35 @@ public class ToolAwareAiReviewCoreTests
     }
 
     [Fact]
+    public async Task ReviewAsync_ContextTemperature_UsesConfiguredTemperature()
+    {
+        float? observedTemperature = null;
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                observedTemperature = callInfo.Arg<ChatOptions?>()?.Temperature;
+                return CreateFinalReviewResponse("Looks good.");
+            });
+
+        var context = CreateContext();
+        context.Temperature = 0.22f;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(modelId: "global-fallback-model"),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        Assert.Equal(0.22f, observedTemperature);
+    }
+
+    [Fact]
     public async Task ReviewAsync_AllConfidenceAboveThreshold_ExitsLoop()
     {
         // Arrange
@@ -374,6 +403,7 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<int>(),
                 Arg.Any<long?>(),
                 Arg.Any<long?>(),
+                Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>());
