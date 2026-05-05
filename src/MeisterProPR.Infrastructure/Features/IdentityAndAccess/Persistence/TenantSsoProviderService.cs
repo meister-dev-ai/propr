@@ -90,13 +90,17 @@ public sealed class TenantSsoProviderService(
         dbContext.TenantSsoProviders.Add(provider);
         await dbContext.SaveChangesAsync(ct);
 
+        var safeDisplayName = provider.DisplayName.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        var safeProviderKind = provider.ProviderKind.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        var safeProtocolKind = provider.ProtocolKind.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+
         logger?.LogInformation(
             "TenantSSOProviderCreated TenantId={TenantId} ProviderId={ProviderId} DisplayName={DisplayName} ProviderKind={ProviderKind} ProtocolKind={ProtocolKind}",
             provider.TenantId,
             provider.Id,
-            provider.DisplayName,
-            provider.ProviderKind,
-            provider.ProtocolKind);
+            safeDisplayName,
+            safeProviderKind,
+            safeProtocolKind);
         await this.AddAuditEntryAsync(
             provider.TenantId,
             "tenant.provider.created",
@@ -152,13 +156,17 @@ public sealed class TenantSsoProviderService(
 
         await dbContext.SaveChangesAsync(ct);
 
+        var safeDisplayName = provider.DisplayName.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        var safeProviderKind = provider.ProviderKind.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        var safeProtocolKind = provider.ProtocolKind.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+
         logger?.LogInformation(
             "TenantSSOProviderUpdated TenantId={TenantId} ProviderId={ProviderId} DisplayName={DisplayName} ProviderKind={ProviderKind} ProtocolKind={ProtocolKind} SecretRotated={SecretRotated}",
             provider.TenantId,
             provider.Id,
-            provider.DisplayName,
-            provider.ProviderKind,
-            provider.ProtocolKind,
+            safeDisplayName,
+            safeProviderKind,
+            safeProtocolKind,
             clientSecret is not null);
 
         if (!wasEnabled && provider.IsEnabled)
@@ -167,7 +175,7 @@ public sealed class TenantSsoProviderService(
                 "TenantSSOProviderEnabled TenantId={TenantId} ProviderId={ProviderId} DisplayName={DisplayName}",
                 provider.TenantId,
                 provider.Id,
-                provider.DisplayName);
+                safeDisplayName);
         }
         else if (wasEnabled && !provider.IsEnabled)
         {
@@ -175,7 +183,7 @@ public sealed class TenantSsoProviderService(
                 "TenantSSOProviderDisabled TenantId={TenantId} ProviderId={ProviderId} DisplayName={DisplayName}",
                 provider.TenantId,
                 provider.Id,
-                provider.DisplayName);
+                safeDisplayName);
         }
 
         await this.AddAuditEntryAsync(
@@ -203,11 +211,13 @@ public sealed class TenantSsoProviderService(
         dbContext.TenantSsoProviders.Remove(provider);
         await dbContext.SaveChangesAsync(ct);
 
+        var safeDisplayName = provider.DisplayName.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+
         logger?.LogWarning(
             "TenantSSOProviderDeleted TenantId={TenantId} ProviderId={ProviderId} DisplayName={DisplayName}",
             provider.TenantId,
             provider.Id,
-            provider.DisplayName);
+            safeDisplayName);
         await this.AddAuditEntryAsync(
             provider.TenantId,
             "tenant.provider.deleted",

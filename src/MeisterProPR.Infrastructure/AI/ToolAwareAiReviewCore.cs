@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.Interfaces;
@@ -90,6 +91,7 @@ public sealed partial class ToolAwareAiReviewCore(
         };
 
         var lastTextResponse = "";
+        var seenAssistantTurns = new HashSet<string>(StringComparer.Ordinal);
 
         // T037: per-file override wins over the global option
         var effectiveMaxIterations = systemContext.PerFileHint?.MaxIterationsOverride ?? opts.MaxIterations;
@@ -155,6 +157,19 @@ public sealed partial class ToolAwareAiReviewCore(
 
                 var functionCalls = responseMessage.Contents.OfType<FunctionCallContent>().ToList();
 
+                var text = response.Text ?? "";
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    lastTextResponse = text;
+                }
+
+                var turnFingerprint = BuildAssistantTurnFingerprint(text, functionCalls);
+                if (turnFingerprint is not null && !seenAssistantTurns.Add(turnFingerprint))
+                {
+                    LogRepeatedAssistantTurn(logger, pullRequest.PullRequestId, state.Iteration);
+                    break;
+                }
+
                 if (functionCalls.Count > 0)
                 {
                     LogToolCallsReceived(logger, functionCalls.Count, state.Iteration);
@@ -181,12 +196,6 @@ public sealed partial class ToolAwareAiReviewCore(
                     state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
                     state.Iteration++;
                     continue;
-                }
-
-                var text = response.Text ?? "";
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    lastTextResponse = text;
                 }
 
                 if (TryParseAgenticResponse(text, out var dto) && dto?.ConfidenceEvaluations is not null)
@@ -434,6 +443,26 @@ public sealed partial class ToolAwareAiReviewCore(
         return "[tool calls: " + string.Join(", ", calls.Select(c => c.Name)) + "]";
     }
 
+    private static string? BuildAssistantTurnFingerprint(string text, IReadOnlyList<FunctionCallContent> functionCalls)
+    {
+        var normalizedText = string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : NormalizeJsonPayload(text);
+
+        if (string.IsNullOrWhiteSpace(normalizedText) && functionCalls.Count == 0)
+        {
+            return null;
+        }
+
+        var toolFingerprint = functionCalls.Count == 0
+            ? string.Empty
+            : string.Join(
+                "|",
+                functionCalls.Select(call => $"{call.Name}:{JsonSerializer.Serialize(call.Arguments)}"));
+
+        return $"{normalizedText}\n---tools---\n{toolFingerprint}";
+    }
+
     /// <summary>
     ///     Returns <see langword="true" /> when <paramref name="json" /> is a non-trivial response
     ///     that parsed successfully but with <c>Comments == null</c> (the key is entirely absent,
@@ -446,42 +475,15 @@ public sealed partial class ToolAwareAiReviewCore(
     /// </summary>
     private static bool ResponseNeedsSchemaCorrection(string json)
     {
-        if (string.IsNullOrWhiteSpace(json) || json.Length <= 20)
+        var normalized = NormalizeJsonPayload(json);
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length <= 20)
         {
             return false;
         }
 
-        var trimmed = json.Trim();
-        if (trimmed.StartsWith("```", StringComparison.Ordinal))
-        {
-            var firstNewline = trimmed.IndexOf('\n');
-            if (firstNewline >= 0)
-            {
-                trimmed = trimmed[(firstNewline + 1)..];
-            }
-            else
-            {
-                // Single-line fence (no newline): skip opening ``` and optional language tag
-                // by finding the first '{' that starts the JSON payload.
-                var braceStart = trimmed.IndexOf('{');
-                if (braceStart >= 0)
-                {
-                    trimmed = trimmed[braceStart..];
-                }
-            }
-
-            var closingFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-            if (closingFence >= 0)
-            {
-                trimmed = trimmed[..closingFence];
-            }
-
-            trimmed = trimmed.Trim();
-        }
-
         try
         {
-            var dto = JsonSerializer.Deserialize<AgenticResponseDto>(trimmed, JsonOptions);
+            var dto = JsonSerializer.Deserialize<AgenticResponseDto>(normalized, JsonOptions);
             if (dto is null || dto.Comments is not null)
             {
                 // Either unparseable or Comments was present (possibly empty — that's valid).
@@ -491,7 +493,7 @@ public sealed partial class ToolAwareAiReviewCore(
             // Secondary guard: scan the raw JSON for any "comments"-named key (case-insensitive).
             // This catches alternate casings or key names that the DTO normaliser already handles,
             // preventing a spurious schema-correction call when the field is genuinely present.
-            using var doc = JsonDocument.Parse(trimmed);
+            using var doc = JsonDocument.Parse(normalized);
             foreach (var property in doc.RootElement.EnumerateObject())
             {
                 if (property.Name.Equals("comments", StringComparison.OrdinalIgnoreCase))
@@ -512,14 +514,15 @@ public sealed partial class ToolAwareAiReviewCore(
     private static bool TryParseAgenticResponse(string json, out AgenticResponseDto? dto)
     {
         dto = null;
-        if (string.IsNullOrWhiteSpace(json))
+        var normalized = NormalizeJsonPayload(json);
+        if (string.IsNullOrWhiteSpace(normalized))
         {
             return false;
         }
 
         try
         {
-            dto = JsonSerializer.Deserialize<AgenticResponseDto>(json, JsonOptions);
+            dto = JsonSerializer.Deserialize<AgenticResponseDto>(normalized, JsonOptions);
             return dto?.ConfidenceEvaluations != null;
         }
         catch
@@ -530,42 +533,13 @@ public sealed partial class ToolAwareAiReviewCore(
 
     private static ReviewResult ParseReviewResult(string json)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        var normalized = NormalizeJsonPayload(json);
+        if (string.IsNullOrWhiteSpace(normalized))
         {
             return new ReviewResult("", new List<ReviewComment>().AsReadOnly());
         }
 
-        // Strip markdown code fences the model sometimes wraps around its JSON response.
-        // Handles ```json ... ``` and plain ``` ... ``` variants, including single-line fences.
-        var trimmed = json.Trim();
-        if (trimmed.StartsWith("```", StringComparison.Ordinal))
-        {
-            var firstNewline = trimmed.IndexOf('\n');
-            if (firstNewline >= 0)
-            {
-                trimmed = trimmed[(firstNewline + 1)..];
-            }
-            else
-            {
-                // Single-line fence: skip the opening ``` and optional language tag
-                // by finding the first '{' that begins the JSON payload.
-                var braceStart = trimmed.IndexOf('{');
-                if (braceStart >= 0)
-                {
-                    trimmed = trimmed[braceStart..];
-                }
-            }
-
-            var closingFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-            if (closingFence >= 0)
-            {
-                trimmed = trimmed[..closingFence];
-            }
-
-            json = trimmed.Trim();
-        }
-
-        var dto = JsonSerializer.Deserialize<AgenticResponseDto>(json, JsonOptions);
+        var dto = JsonSerializer.Deserialize<AgenticResponseDto>(normalized, JsonOptions);
         if (dto is null)
         {
             return new ReviewResult("", new List<ReviewComment>().AsReadOnly());
@@ -579,6 +553,82 @@ public sealed partial class ToolAwareAiReviewCore(
             .ToList();
 
         return new ReviewResult(dto.Summary ?? "", comments.AsReadOnly());
+    }
+
+    private static string NormalizeJsonPayload(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = StripMarkdownFence(json.Trim());
+        var firstBrace = trimmed.IndexOf('{');
+        if (firstBrace > 0)
+        {
+            trimmed = trimmed[firstBrace..].TrimStart();
+        }
+
+        return TryExtractFirstJsonValue(trimmed, out var payload)
+            ? payload
+            : trimmed;
+    }
+
+    private static string StripMarkdownFence(string text)
+    {
+        if (!text.StartsWith("```", StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        var firstNewline = text.IndexOf('\n');
+        if (firstNewline >= 0)
+        {
+            text = text[(firstNewline + 1)..];
+        }
+        else
+        {
+            var braceStart = text.IndexOf('{');
+            if (braceStart >= 0)
+            {
+                text = text[braceStart..];
+            }
+        }
+
+        var closingFence = text.LastIndexOf("```", StringComparison.Ordinal);
+        if (closingFence >= 0)
+        {
+            text = text[..closingFence];
+        }
+
+        return text.Trim();
+    }
+
+    private static bool TryExtractFirstJsonValue(string text, out string payload)
+    {
+        payload = string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var reader = new Utf8JsonReader(bytes);
+            if (!reader.Read())
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.ParseValue(ref reader);
+            payload = document.RootElement.GetRawText();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static ReviewLoopMetrics BuildLoopMetrics(ReviewLoopState state)
@@ -655,6 +705,12 @@ public sealed partial class ToolAwareAiReviewCore(
         Message =
             "Agentic review loop for PR#{PrId} hit iteration limit at {Iteration} without a text response — forcing final review call")]
     private static partial void LogForcingFinalReview(ILogger logger, int prId, int iteration);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "Agentic review loop for PR#{PrId} repeated an earlier assistant response at iteration {Iteration}; using the latest response")]
+    private static partial void LogRepeatedAssistantTurn(ILogger logger, int prId, int iteration);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

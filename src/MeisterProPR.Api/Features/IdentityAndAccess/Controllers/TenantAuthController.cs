@@ -75,10 +75,12 @@ public sealed class TenantAuthController(
         var user = await tenantAuthService.AuthenticateLocalAsync(tenantSlug, request.Username, request.Password, ct);
         if (user is null)
         {
+            var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+            var safeUsername = request.Username.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             logger.LogWarning(
                 "TenantLocalLoginRejected TenantSlug={TenantSlug} Username={Username}",
-                tenantSlug,
-                request.Username);
+                safeTenantSlug,
+                safeUsername);
             return this.Unauthorized(new { error = "Invalid credentials or tenant policy denial." });
         }
 
@@ -142,10 +144,12 @@ public sealed class TenantAuthController(
 
         if (completion.User is null)
         {
+            var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+            var safeProviderError = (error ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} ProviderError={ProviderError}",
-                tenantSlug,
-                error);
+                safeTenantSlug,
+                safeProviderError);
 
             var failureCode = completion.FailureCode ?? "external_identity_rejected";
             var failureMessage = completion.FailureMessage ?? "External identity rejected by tenant policy.";
@@ -208,6 +212,18 @@ public sealed class TenantAuthController(
         IReadOnlyDictionary<string, string?> fragmentValues)
     {
         if (!Uri.TryCreate(frontendReturnUrl, UriKind.Absolute, out var returnUri))
+        {
+            return null;
+        }
+
+        if (!string.Equals(returnUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(returnUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var origin = returnUri.GetLeftPart(UriPartial.Authority);
+        if (!BrowserOriginPolicy.IsAllowedOrigin(origin, configuration))
         {
             return null;
         }

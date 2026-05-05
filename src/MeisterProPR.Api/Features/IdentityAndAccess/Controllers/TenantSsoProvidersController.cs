@@ -153,11 +153,13 @@ public sealed class TenantSsoProvidersController(
                 request.AutoCreateUsers,
                 ct);
 
+            var safeProviderKind = created.ProviderKind.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+
             logger.LogInformation(
                 "TenantSsoProviderCreated TenantId={TenantId} ProviderId={ProviderId} ProviderKind={ProviderKind}",
                 tenantId,
                 created.Id,
-                created.ProviderKind);
+                safeProviderKind);
 
             return this.CreatedAtAction(nameof(this.GetProvider), new { tenantId, providerId = created.Id }, created);
         }

@@ -31,6 +31,7 @@ public sealed class TenantAuthService(
 
     public async Task<TenantLoginOptionsDto?> GetLoginOptionsAsync(string tenantSlug, CancellationToken ct = default)
     {
+        var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         var tenant = await dbContext.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(record => record.Slug == tenantSlug, ct);
@@ -39,7 +40,7 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantLoginOptionsUnavailable TenantSlug={TenantSlug} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 tenant is null ? "tenant_not_found" : "tenant_inactive");
             return null;
         }
@@ -60,7 +61,7 @@ public sealed class TenantAuthService(
 
         logger.LogInformation(
             "TenantLoginOptionsResolved TenantSlug={TenantSlug} LocalLoginEnabled={LocalLoginEnabled} ProviderCount={ProviderCount}",
-            tenant.Slug,
+            safeTenantSlug,
             tenant.LocalLoginEnabled,
             providerOptions.Count);
 
@@ -69,6 +70,8 @@ public sealed class TenantAuthService(
 
     public async Task<AppUser?> AuthenticateLocalAsync(string tenantSlug, string username, string password, CancellationToken ct = default)
     {
+        var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+        var safeUsername = username.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         var tenant = await dbContext.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(record => record.Slug == tenantSlug, ct);
@@ -77,8 +80,8 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
-                tenantSlug,
-                username,
+                safeTenantSlug,
+                safeUsername,
                 tenant is null ? "tenant_not_found" : !tenant.IsActive ? "tenant_inactive" : "local_login_disabled");
             return null;
         }
@@ -88,8 +91,8 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
-                tenantSlug,
-                username,
+                safeTenantSlug,
+                safeUsername,
                 user is null ? "user_not_found" : !user.IsActive ? "user_inactive" : "missing_password_hash");
             return null;
         }
@@ -98,8 +101,8 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
-                tenantSlug,
-                username,
+                safeTenantSlug,
+                safeUsername,
                 "invalid_password");
             return null;
         }
@@ -109,15 +112,15 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
-                tenantSlug,
-                username,
+                safeTenantSlug,
+                safeUsername,
                 "missing_tenant_membership");
             return null;
         }
 
         logger.LogInformation(
             "TenantLocalLoginSucceeded TenantSlug={TenantSlug} UserId={UserId}",
-            tenantSlug,
+            safeTenantSlug,
             user.Id);
         return user;
     }
@@ -129,12 +132,13 @@ public sealed class TenantAuthService(
         Uri? frontendReturnUrl = null,
         CancellationToken ct = default)
     {
+        var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         var provider = await this.GetActiveProviderAsync(tenantSlug, providerId, true, ct);
         if (provider is null)
         {
             logger.LogWarning(
                 "TenantExternalChallengeUnavailable TenantSlug={TenantSlug} ProviderId={ProviderId}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId);
             return null;
         }
@@ -144,7 +148,7 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantExternalChallengeUnavailable TenantSlug={TenantSlug} ProviderId={ProviderId} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId,
                 "unsupported_provider_configuration");
             return null;
@@ -153,12 +157,13 @@ public sealed class TenantAuthService(
         var callbackUrl = BuildCallbackUrl(applicationBaseUri, tenantSlug);
         var protectedState = this.ProtectChallengeState(tenantSlug, providerId, callbackUrl, frontendReturnUrl?.ToString());
         var redirectUrl = BuildAuthorizationUrl(provider, providerConfiguration, callbackUrl, protectedState);
+        var safeCallbackUrl = callbackUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
 
         logger.LogInformation(
             "TenantExternalChallengeBuilt TenantSlug={TenantSlug} ProviderId={ProviderId} CallbackUrl={CallbackUrl}",
-            tenantSlug,
+            safeTenantSlug,
             providerId,
-            callbackUrl);
+            safeCallbackUrl);
 
         return new TenantExternalChallengeResult(redirectUrl, callbackUrl, protectedState);
     }
@@ -169,13 +174,14 @@ public sealed class TenantAuthService(
         TenantExternalCallbackRequest callback,
         CancellationToken ct = default)
     {
+        var safeTenantSlug = tenantSlug.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         var callbackUrl = BuildCallbackUrl(applicationBaseUri, tenantSlug);
         var challengeState = this.TryValidateChallengeState(callback.State, tenantSlug, callbackUrl);
         if (challengeState is null)
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 "invalid_state");
             return Failure("invalid_state", "The tenant sign-in request is invalid or has expired.");
         }
@@ -185,11 +191,12 @@ public sealed class TenantAuthService(
 
         if (!string.IsNullOrWhiteSpace(callback.Error))
         {
+            var safeProviderError = callback.Error.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} ProviderId={ProviderId} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId,
-                $"provider_error:{callback.Error}");
+                $"provider_error:{safeProviderError}");
             return Failure(
                 "provider_error",
                 callback.ErrorDescription ?? "The external identity provider rejected the sign-in request.",
@@ -200,7 +207,7 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} ProviderId={ProviderId} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId,
                 "missing_authorization_code");
             return Failure(
@@ -214,7 +221,7 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} ProviderId={ProviderId} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId,
                 "tenant_or_provider_inactive");
             return Failure(
@@ -228,7 +235,7 @@ public sealed class TenantAuthService(
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantSlug={TenantSlug} ProviderId={ProviderId} Reason={Reason}",
-                tenantSlug,
+                safeTenantSlug,
                 providerId,
                 "unsupported_provider_configuration");
             return Failure(
@@ -319,11 +326,10 @@ public sealed class TenantAuthService(
             && !provider.AllowedEmailDomains.Contains(domain, StringComparer.OrdinalIgnoreCase))
         {
             logger.LogWarning(
-                "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} EmailDomain={EmailDomain}",
+                "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
                 provider.TenantId,
                 provider.Id,
-                "disallowed_domain",
-                domain);
+                "disallowed_domain");
 
             throw new TenantExternalSignInPolicyException(
                 "disallowed_domain",
@@ -410,11 +416,10 @@ public sealed class TenantAuthService(
         await this.LinkExternalIdentityAsync(provider.TenantId, provider.Id, user.Id, payload, ct);
 
         logger.LogInformation(
-            "TenantExternalUserProvisioned TenantId={TenantId} ProviderId={ProviderId} UserId={UserId} Username={Username}",
+            "TenantExternalUserProvisioned TenantId={TenantId} ProviderId={ProviderId} UserId={UserId}",
             provider.TenantId,
             provider.Id,
-            user.Id,
-            user.Username);
+            user.Id);
 
         return user;
     }

@@ -82,6 +82,20 @@ public class ToolAwareAiReviewCoreTests
         return new ChatResponse(message);
     }
 
+    private static ChatResponse CreateMixedTextAndFunctionCallResponse(
+        string text,
+        string callId,
+        string functionName,
+        string argsJson)
+    {
+        var funcCallContent = new FunctionCallContent(
+            callId,
+            functionName,
+            JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson));
+        var message = new ChatMessage(ChatRole.Assistant, [new TextContent(text), funcCallContent]);
+        return new ChatResponse(message);
+    }
+
     [Fact]
     public async Task ReviewAsync_LoopCompleteFlag_ExitsAfterFirstIteration()
     {
@@ -218,23 +232,28 @@ public class ToolAwareAiReviewCoreTests
     {
         // Arrange — AI always returns a response that does NOT complete the loop and requires more work
         var mockClient = Substitute.For<IChatClient>();
-        var lowConfidenceJson = JsonSerializer.Serialize(
-            new
-            {
-                summary = "Still investigating.",
-                comments = Array.Empty<object>(),
-                confidence_evaluations = new[]
-                {
-                    new { concern = "security", confidence = 30 }, // below threshold
-                },
-                loop_complete = false,
-            });
+        var callCount = 0;
         mockClient
             .GetResponseAsync(
                 Arg.Any<IEnumerable<ChatMessage>>(),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson)));
+            .Returns(_ =>
+            {
+                callCount++;
+                var lowConfidenceJson = JsonSerializer.Serialize(
+                    new
+                    {
+                        summary = $"Still investigating {callCount}.",
+                        comments = Array.Empty<object>(),
+                        confidence_evaluations = new[]
+                        {
+                            new { concern = "security", confidence = 30 }, // below threshold
+                        },
+                        loop_complete = false,
+                    });
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson));
+            });
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
@@ -296,6 +315,123 @@ public class ToolAwareAiReviewCoreTests
         // Assert — AI was called twice (once for tool call, once for final response)
         Assert.Equal(2, callCount);
         Assert.Equal("Done.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_MixedTextAndToolCall_PreservesLatestTextWithoutForcedFinalCall()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ChangedFileSummary>>([]));
+
+        var mixedJson = JsonSerializer.Serialize(
+            new
+            {
+                summary = "Provisional review.",
+                comments = Array.Empty<object>(),
+                confidence_evaluations = new[] { new { concern = "correctness", confidence = 20 } },
+                loop_complete = false,
+            });
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateMixedTextAndFunctionCallResponse(mixedJson, "call-1", "get_changed_files", "{}"),
+                CreateFunctionCallResponse("call-2", "get_changed_files", "{}"));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(2),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        await mockClient.Received(2)
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+        Assert.Equal("Provisional review.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_RepeatedMixedTextAndToolCall_StopsAfterDuplicateTurn()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ChangedFileSummary>>([]));
+
+        var repeatedJson = JsonSerializer.Serialize(
+            new
+            {
+                summary = "Still investigating.",
+                comments = Array.Empty<object>(),
+                confidence_evaluations = new[] { new { concern = "correctness", confidence = 20 } },
+                loop_complete = false,
+            });
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateMixedTextAndFunctionCallResponse(repeatedJson, "call-1", "get_changed_files", "{}"),
+                CreateMixedTextAndFunctionCallResponse(repeatedJson, "call-1", "get_changed_files", "{}"));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        await mockClient.Received(2)
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+        await mockTools.Received(1).GetChangedFilesAsync(Arg.Any<CancellationToken>());
+        Assert.Equal("Still investigating.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_RepeatedToolOnlyTurn_ForcesFinalReviewAfterDuplicateTurn()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ChangedFileSummary>>([]));
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+                CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+                CreateFinalReviewResponse("Forced final review."));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        await mockClient.Received(3)
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+        await mockTools.Received(1).GetChangedFilesAsync(Arg.Any<CancellationToken>());
+        Assert.Equal("Forced final review.", result.Summary);
     }
 
     [Fact]
@@ -1018,6 +1154,30 @@ public class ToolAwareAiReviewCoreTests
         Assert.Equal("Fence stripped.", result.Summary);
     }
 
+    [Fact]
+    public async Task ReviewAsync_ConcatenatedJsonObjects_UsesFirstValidObject()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var json = "{" +
+                   "\"summary\":\"First object wins.\",\"comments\":[],\"loop_complete\":true" +
+                   "}{\"summary\":\"Second object ignored.\",\"comments\":[],\"loop_complete\":true}";
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, json)));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext());
+
+        Assert.Equal("First object wins.", result.Summary);
+    }
+
     // ─── T036: MaxIterationsOverride ────────────────────────────────────────────
 
     [Fact]
@@ -1025,23 +1185,28 @@ public class ToolAwareAiReviewCoreTests
     {
         // Arrange — AI always returns low confidence (loop never self-terminates)
         var mockClient = Substitute.For<IChatClient>();
-        var lowConfidenceJson = JsonSerializer.Serialize(
-            new
-            {
-                summary = "Still investigating.",
-                comments = Array.Empty<object>(),
-                confidence_evaluations = new[]
-                {
-                    new { concern = "security", confidence = 30 },
-                },
-                loop_complete = false,
-            });
+        var callCount = 0;
         mockClient
             .GetResponseAsync(
                 Arg.Any<IEnumerable<ChatMessage>>(),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson)));
+            .Returns(_ =>
+            {
+                callCount++;
+                var lowConfidenceJson = JsonSerializer.Serialize(
+                    new
+                    {
+                        summary = $"Still investigating {callCount}.",
+                        comments = Array.Empty<object>(),
+                        confidence_evaluations = new[]
+                        {
+                            new { concern = "security", confidence = 30 },
+                        },
+                        loop_complete = false,
+                    });
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, lowConfidenceJson));
+            });
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,
