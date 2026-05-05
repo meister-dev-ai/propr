@@ -113,7 +113,29 @@ public sealed class TenantAuthController(
             this.GetApplicationBaseUri(),
             frontendReturnUrl,
             ct);
-        return challenge is null ? this.NotFound() : this.Redirect(challenge.RedirectUrl);
+        if (challenge is null)
+        {
+            return this.NotFound();
+        }
+
+        if (!Uri.TryCreate(challenge.RedirectUrl, UriKind.Absolute, out var challengeRedirectUri))
+        {
+            return this.NotFound();
+        }
+
+        if (!string.Equals(challengeRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(challengeRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return this.NotFound();
+        }
+
+        var challengeRedirectOrigin = challengeRedirectUri.GetLeftPart(UriPartial.Authority);
+        if (!string.Equals(challengeRedirectOrigin, challenge.AllowedRedirectOrigin, StringComparison.OrdinalIgnoreCase))
+        {
+            return this.NotFound();
+        }
+
+        return this.Redirect(challengeRedirectUri.ToString());
     }
 
     /// <summary>Completes tenant-scoped external sign-in and returns the shared application session payload.</summary>
@@ -160,10 +182,22 @@ public sealed class TenantAuthController(
                     ["error"] = failureCode,
                     ["message"] = failureMessage,
                 });
+            if (failedRedirectUrl is not null
+                && Uri.TryCreate(failedRedirectUrl, UriKind.Absolute, out var failedRedirectUri)
+                && (string.Equals(failedRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(failedRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            {
+                var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(configuration);
+                var failedRedirectOrigin = failedRedirectUri.GetLeftPart(UriPartial.Authority);
+                if (allowedOrigins.Contains(failedRedirectOrigin, StringComparer.OrdinalIgnoreCase)
+                    || failedRedirectUri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase)
+                    || failedRedirectUri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))
+                {
+                    return this.Redirect(failedRedirectUri.ToString());
+                }
+            }
 
-            return failedRedirectUrl is not null
-                ? this.Redirect(failedRedirectUrl)
-                : this.Unauthorized(new { error = failureCode, message = failureMessage });
+            return this.Unauthorized(new { error = failureCode, message = failureMessage });
         }
 
         var session = await sessionFactory.CreateAsync(completion.User, ct);
@@ -177,10 +211,22 @@ public sealed class TenantAuthController(
                 ["expiresIn"] = sessionDto.ExpiresIn.ToString(CultureInfo.InvariantCulture),
                 ["tokenType"] = sessionDto.TokenType,
             });
+        if (successfulRedirectUrl is not null
+            && Uri.TryCreate(successfulRedirectUrl, UriKind.Absolute, out var successfulRedirectUri)
+            && (string.Equals(successfulRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(successfulRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(configuration);
+            var successfulRedirectOrigin = successfulRedirectUri.GetLeftPart(UriPartial.Authority);
+            if (allowedOrigins.Contains(successfulRedirectOrigin, StringComparer.OrdinalIgnoreCase)
+                || successfulRedirectUri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase)
+                || successfulRedirectUri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))
+            {
+                return this.Redirect(successfulRedirectUri.ToString());
+            }
+        }
 
-        return successfulRedirectUrl is not null
-            ? this.Redirect(successfulRedirectUrl)
-            : this.Ok(sessionDto);
+        return this.Ok(sessionDto);
     }
 
     private Uri GetApplicationBaseUri()

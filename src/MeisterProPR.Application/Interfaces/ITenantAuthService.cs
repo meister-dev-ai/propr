@@ -28,7 +28,11 @@ public interface ITenantAuthService
 }
 
 /// <summary>Redirect metadata for starting an external tenant sign-in flow.</summary>
-public sealed record TenantExternalChallengeResult(string RedirectUrl, string CallbackUrl, string State);
+public sealed record TenantExternalChallengeResult(
+    string RedirectUrl,
+    string CallbackUrl,
+    string State,
+    string AllowedRedirectOrigin);
 
 /// <summary>Provider callback query parameters that must be validated server-side.</summary>
 public sealed record TenantExternalCallbackRequest(

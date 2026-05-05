@@ -165,7 +165,11 @@ public sealed class TenantAuthService(
             providerId,
             safeCallbackUrl);
 
-        return new TenantExternalChallengeResult(redirectUrl, callbackUrl, protectedState);
+        return new TenantExternalChallengeResult(
+            redirectUrl,
+            callbackUrl,
+            protectedState,
+            providerConfiguration.AuthorizationEndpoint.GetLeftPart(UriPartial.Authority));
     }
 
     public async Task<TenantExternalSignInCompletionResult> CompleteExternalSignInAsync(
