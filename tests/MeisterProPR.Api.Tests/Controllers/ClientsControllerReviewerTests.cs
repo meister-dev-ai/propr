@@ -56,6 +56,35 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task PatchClient_ClientAdministratorCanUpdateScmCommentPostingEnabled()
+    {
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{factory.ClientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(new { scmCommentPostingEnabled = false });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(body.GetProperty("scmCommentPostingEnabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task PatchClient_ClientAdministratorCannotUpdateDifferentClientScmCommentPostingEnabled()
+    {
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{factory.OtherClientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(new { scmCommentPostingEnabled = false });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     public sealed class ReviewerApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-reviewer-jwt-secret-32chars!";
@@ -105,7 +134,38 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 var userRepo = Substitute.For<IUserRepository>();
-                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                var clientAdminUser = new AppUser
+                {
+                    Id = clientAdministratorUserId,
+                    Username = "client.admin",
+                    GlobalRole = AppUserRole.User,
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                clientAdminUser.ClientAssignments.Add(
+                    new UserClientRole
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = clientAdministratorUserId,
+                        ClientId = clientId,
+                        Role = ClientRole.ClientAdministrator,
+                        AssignedAt = DateTimeOffset.UtcNow,
+                    });
+                clientAdminUser.TenantMemberships.Add(
+                    new TenantMembership
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = this.TenantId,
+                        UserId = clientAdministratorUserId,
+                        Role = TenantRole.TenantUser,
+                        AssignedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                    });
+                userRepo.GetByIdWithAssignmentsAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
+                    .Returns(clientAdminUser);
+                userRepo.GetByIdWithAssignmentsAsync(
+                        Arg.Is<Guid>(id => id != clientAdministratorUserId),
+                        Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
                     .Returns(

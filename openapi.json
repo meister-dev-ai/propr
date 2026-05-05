@@ -14150,6 +14150,9 @@
             "type": "string",
             "nullable": true
           },
+          "scmCommentPostingEnabled": {
+            "type": "boolean"
+          },
           "tenantId": {
             "type": "string",
             "format": "uuid",
@@ -15532,6 +15535,10 @@
           },
           "customSystemMessage": {
             "type": "string",
+            "nullable": true
+          },
+          "scmCommentPostingEnabled": {
+            "type": "boolean",
             "nullable": true
           }
         },

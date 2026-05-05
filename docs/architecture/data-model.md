@@ -147,6 +147,7 @@ erDiagram
         datetime KeyRotatedAt
         int AllowedScopes
         string DisplayName
+        bool ScmCommentPostingEnabled "default true; suppresses new outbound SCM comments when false"
         bool IsActive
         datetime CreatedAt
     }

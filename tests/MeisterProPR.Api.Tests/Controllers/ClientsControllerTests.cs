@@ -450,6 +450,72 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             "customSystemMessage should be null after clearing with empty string");
     }
 
+    [Fact]
+    public async Task PatchClient_ScmCommentPostingEnabled_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "scm-comments-test", "SCM Comments Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "SCM Comments Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ScmCommentPostingEnabled = true,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { scmCommentPostingEnabled = false });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(body.RootElement.GetProperty("scmCommentPostingEnabled").GetBoolean());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.False(updated.ScmCommentPostingEnabled);
+    }
+
+    [Fact]
+    public async Task PatchClient_OmittedScmCommentPostingEnabled_LeavesExistingValueUnchanged()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "scm-comments-omit", "SCM Comments Omit Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "SCM Comments Omit",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ScmCommentPostingEnabled = false,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Renamed Client" });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(body.RootElement.GetProperty("scmCommentPostingEnabled").GetBoolean());
+    }
+
     private static TenantRecord CreateTenantRecord(Guid tenantId, string slug, string displayName)
     {
         return new TenantRecord

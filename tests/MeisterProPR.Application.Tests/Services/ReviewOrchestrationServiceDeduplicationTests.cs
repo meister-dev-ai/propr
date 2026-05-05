@@ -191,6 +191,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
+        clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
 
         var pr = new PullRequest(
             job.OrganizationUrl,
@@ -278,6 +280,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
+        clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
 
         var pr = new PullRequest(
             job.OrganizationUrl,

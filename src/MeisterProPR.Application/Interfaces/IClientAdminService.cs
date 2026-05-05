@@ -36,6 +36,7 @@ public interface IClientAdminService
     ///     When non-null, updates the custom AI system message.
     ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
     /// </param>
+    /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -43,6 +44,7 @@ public interface IClientAdminService
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
+        bool? scmCommentPostingEnabled = null,
         CancellationToken ct = default);
 
     /// <summary>

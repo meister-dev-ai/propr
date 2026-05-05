@@ -28,6 +28,7 @@ public sealed partial class ClientsController(
             client.CreatedAt,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage,
+            client.ScmCommentPostingEnabled,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName);
@@ -227,7 +228,7 @@ public sealed partial class ClientsController(
     }
 
     /// <summary>
-    ///     Updates one or more fields of a client (display name, active status, custom system message).
+    ///     Updates one or more fields of a client (display name, active status, review settings, custom system message).
     ///     Requires a global admin JWT or <c>X-User-Pat</c>.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
@@ -267,6 +268,7 @@ public sealed partial class ClientsController(
             request.DisplayName,
             request.CommentResolutionBehavior,
             request.CustomSystemMessage,
+            request.ScmCommentPostingEnabled,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -280,6 +282,7 @@ public sealed record ClientResponse(
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage,
+    bool ScmCommentPostingEnabled,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName);
@@ -320,4 +323,5 @@ public sealed record PatchClientRequest(
     bool? IsActive = null,
     string? DisplayName = null,
     CommentResolutionBehavior? CommentResolutionBehavior = null,
-    string? CustomSystemMessage = null);
+    string? CustomSystemMessage = null,
+    bool? ScmCommentPostingEnabled = null);

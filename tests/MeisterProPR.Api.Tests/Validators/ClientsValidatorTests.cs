@@ -150,4 +150,14 @@ public sealed class ClientsValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.CustomSystemMessage));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PatchClient_ScmCommentPostingEnabledBoolean_Passes(bool value)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(ScmCommentPostingEnabled: value));
+
+        Assert.True(result.IsValid);
+    }
 }

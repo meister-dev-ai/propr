@@ -25,7 +25,9 @@ and Forgejo-family hosts integrate through shared provider-neutral review, webho
 and observability seams without forking lifecycle, mention, or audit logic. The reviewing flow
 includes structured verification before publication: local contradiction checks precede per-file
 persistence, PR-level evidence retrieval and bounded AI micro-verification precede the deterministic
-final gate, and summary reconciliation aligns the final summary with surviving outcomes.
+final gate, summary reconciliation aligns the final summary with surviving outcomes, and a
+client-owned publication policy can suppress outbound SCM comments without skipping internal review
+result persistence or diagnostics.
 
 ```mermaid
 flowchart TD

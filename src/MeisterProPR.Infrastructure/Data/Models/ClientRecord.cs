@@ -23,6 +23,12 @@ public sealed class ClientRecord
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
 
+    /// <summary>
+    ///     Controls whether newly generated review comments are published back to the SCM provider.
+    ///     Defaults to <see langword="true" /> so existing clients continue using visible review publication.
+    /// </summary>
+    public bool ScmCommentPostingEnabled { get; set; } = true;
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

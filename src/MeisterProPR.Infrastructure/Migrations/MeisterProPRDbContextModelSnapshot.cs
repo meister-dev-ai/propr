@@ -2025,6 +2025,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("custom_system_message");
 
+                    b.Property<bool>("ScmCommentPostingEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("scm_comment_posting_enabled");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasColumnType("text")

@@ -228,15 +228,23 @@ public sealed partial class ReviewOrchestrationService(
         try
         {
             var publicationResult = this.PrepareResultForPublication(job, pr, result);
-            var publicationRevision = await this.ResolvePublicationReviewRevisionAsync(job, ct);
-            var diagnostics = await providerRegistry.GetCodeReviewPublicationService(job.Provider)
-                .PublishReviewAsync(
-                    job.ClientId,
-                    job.CodeReviewReference,
-                    publicationRevision,
-                    publicationResult,
-                    reviewer,
-                    ct);
+            var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
+            var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
+                publicationResult.Comments.Count + publicationResult.CarriedForwardCandidatesSkipped,
+                publicationResult.CarriedForwardCandidatesSkipped);
+
+            if (scmCommentPostingEnabled)
+            {
+                var publicationRevision = await this.ResolvePublicationReviewRevisionAsync(job, ct);
+                diagnostics = await providerRegistry.GetCodeReviewPublicationService(job.Provider)
+                    .PublishReviewAsync(
+                        job.ClientId,
+                        job.CodeReviewReference,
+                        publicationRevision,
+                        publicationResult,
+                        reviewer,
+                        ct);
+            }
 
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
 

@@ -157,6 +157,26 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task GetScmCommentPostingEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.ScmCommentPostingEnabled = false;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetScmCommentPostingEnabledAsync(client.Id, CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetScmCommentPostingEnabledAsync_UnknownClient_DefaultsToTrue()
+    {
+        var result = await this._registry.GetScmCommentPostingEnabledAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result);
+    }
+
     private async Task<ClientRecord> SeedClientAsync()
     {
         var record = new ClientRecord

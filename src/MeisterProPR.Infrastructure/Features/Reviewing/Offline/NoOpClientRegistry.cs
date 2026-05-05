@@ -29,4 +29,9 @@ public sealed class NoOpClientRegistry : IClientRegistry
     {
         return Task.FromResult<string?>(null);
     }
+
+    public Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(true);
+    }
 }

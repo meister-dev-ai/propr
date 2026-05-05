@@ -38,4 +38,12 @@ public interface IClientRegistry
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns whether newly generated review comments should be published back to SCM for the given client.
+    ///     Defaults to <see langword="true" /> if the client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default);
 }

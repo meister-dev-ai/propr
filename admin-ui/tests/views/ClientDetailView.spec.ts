@@ -141,6 +141,7 @@ const sampleClient = {
   displayName: 'Acme Corp',
   isActive: true,
   createdAt: '2024-01-01T00:00:00Z',
+  scmCommentPostingEnabled: true,
 }
 
 function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
@@ -220,6 +221,49 @@ describe('ClientDetailView', () => {
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
       expect.objectContaining({ params: { path: { clientId: 'client-1' } }, body: { isActive: false } })
+    )
+  })
+
+  it('loads the SCM comment posting setting and saves the disabled value', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    mockPatch.mockResolvedValue({ data: { ...sampleClient, scmCommentPostingEnabled: false }, response: { ok: true } })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const checkbox = wrapper.find('input[name="scmCommentPostingEnabled"]')
+    expect(checkbox.exists()).toBe(true)
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+
+    await checkbox.setValue(false)
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/clients/{clientId}',
+      expect.objectContaining({ params: { path: { clientId: 'client-1' } }, body: { scmCommentPostingEnabled: false } })
+    )
+  })
+
+  it('saves the SCM comment posting setting when re-enabled', async () => {
+    mockGet.mockResolvedValue({ data: { ...sampleClient, scmCommentPostingEnabled: false } })
+    mockPatch.mockResolvedValue({ data: sampleClient, response: { ok: true } })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const checkbox = wrapper.find('input[name="scmCommentPostingEnabled"]')
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+
+    await checkbox.setValue(true)
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/clients/{clientId}',
+      expect.objectContaining({ params: { path: { clientId: 'client-1' } }, body: { scmCommentPostingEnabled: true } })
     )
   })
 

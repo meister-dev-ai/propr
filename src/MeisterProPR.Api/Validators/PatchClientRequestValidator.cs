@@ -16,5 +16,9 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .MaximumLength(20_000)
             .WithMessage("CustomSystemMessage must not exceed 20,000 characters.")
             .When(r => r.CustomSystemMessage is not null);
+
+        this.RuleFor(r => r.ScmCommentPostingEnabled)
+            .Must(_ => true)
+            .When(r => r.ScmCommentPostingEnabled.HasValue);
     }
 }

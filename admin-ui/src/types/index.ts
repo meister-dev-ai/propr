@@ -9237,6 +9237,7 @@ export interface components {
             createdAt?: string;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
+            scmCommentPostingEnabled?: boolean;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -9746,6 +9747,7 @@ export interface components {
             displayName?: string | null;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
+            scmCommentPostingEnabled?: boolean | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {

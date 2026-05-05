@@ -16,6 +16,7 @@ public sealed record ClientDto(
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
     string? CustomSystemMessage,
+    bool ScmCommentPostingEnabled,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null);

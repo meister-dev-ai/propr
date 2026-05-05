@@ -89,6 +89,7 @@ describe('ClientDetailView', () => {
         displayName: 'Acme Review Team',
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
       },
       response: { status: 200 },
     })
@@ -116,5 +117,21 @@ describe('ClientDetailView', () => {
     expect(wrapper.text()).toContain('SCM Providers')
     expect(wrapper.text()).toContain('Dismissed Findings')
     expect(wrapper.text()).toContain('Prompt Overrides')
+  })
+
+  it('shows the SCM comment posting setting only for client administrators', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const adminWrapper = await mountView()
+    await flushPromises()
+
+    expect(adminWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(true)
+
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole === 0)
+
+    const userWrapper = await mountView()
+    await flushPromises()
+
+    expect(userWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(false)
   })
 })

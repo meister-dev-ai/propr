@@ -62,4 +62,14 @@ public sealed class DbClientRegistry(
             .Select(c => c.CustomSystemMessage)
             .FirstOrDefaultAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => (bool?)c.ScmCommentPostingEnabled)
+            .FirstOrDefaultAsync(ct)
+            ?? true;
+    }
 }

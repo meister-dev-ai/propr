@@ -43,6 +43,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("custom_system_message")
             .IsRequired(false);
 
+        builder.Property(c => c.ScmCommentPostingEnabled)
+            .HasColumnName("scm_comment_posting_enabled")
+            .HasDefaultValue(true);
+
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

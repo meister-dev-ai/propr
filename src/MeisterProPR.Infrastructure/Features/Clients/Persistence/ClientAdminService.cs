@@ -62,6 +62,7 @@ public sealed class ClientAdminService(
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
+        bool? scmCommentPostingEnabled = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -97,6 +98,11 @@ public sealed class ClientAdminService(
             client.CustomSystemMessage = string.IsNullOrEmpty(customSystemMessage)
                 ? null
                 : customSystemMessage;
+        }
+
+        if (scmCommentPostingEnabled.HasValue)
+        {
+            client.ScmCommentPostingEnabled = scmCommentPostingEnabled.Value;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -248,6 +254,7 @@ public sealed class ClientAdminService(
             client.CreatedAt,
             client.CommentResolutionBehavior,
             client.CustomSystemMessage,
+            client.ScmCommentPostingEnabled,
             tenantId,
             tenantSlug,
             tenantDisplayName);

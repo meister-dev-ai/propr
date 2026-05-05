@@ -163,9 +163,10 @@ flowchart TD
    results from synthesis summaries, cross-file deduplication, and quality-filter input, while
    preserving `CarriedForwardFilePaths` and a carried-forward skip count on the final `ReviewResult`.
 3. `ReviewOrchestrationService.PublishReviewResultAsync(...)` opens a dedicated
-    `ReviewJobProtocol` pass labeled `posting`, calls the provider-specific
-    `ICodeReviewPublicationService`, persists the posted `ReviewResult`, and records aggregate
-    duplicate-suppression diagnostics.
+    `ReviewJobProtocol` pass labeled `posting`, reads the client-level
+    `ScmCommentPostingEnabled` policy, conditionally calls the provider-specific
+    `ICodeReviewPublicationService`, persists the final `ReviewResult`, and records aggregate
+    duplicate-suppression diagnostics even when outbound SCM publication is skipped.
 4. The publication service evaluates each candidate finding against existing bot-authored PR
     threads
    using normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text
@@ -175,8 +176,9 @@ flowchart TD
    only when historical duplicate protection had to fall back to reduced checks.
 
 This keeps incremental reviews additive: carried-forward findings remain visible in stored review
-history,
-but only genuinely fresh findings are allowed to create new provider-native threads.
+history, but only genuinely fresh findings are allowed to create new provider-native threads, and
+clients with SCM publication disabled still retain internal review history plus posting-pass
+diagnostics without creating new provider-native comments.
 
 ## Verification Responsibilities
 

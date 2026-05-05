@@ -147,6 +147,163 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ProcessAsync_WhenScmCommentPostingDisabled_PreservesDiagnosticsWithoutPublishing()
+    {
+        var job = CreateJob();
+        var proCursorGateway = Substitute.For<IProCursorGateway>();
+
+        var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(new ReviewResult("Knowledge-assisted review", [new ReviewComment("src/Greeter.cs", 3, CommentSeverity.Warning, "Issue")]));
+
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        jobs.GetById(job.Id).Returns(job);
+
+        var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                Arg.Any<int?>(),
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(CreatePullRequest(job));
+
+        var reviewerManager = Substitute.For<IReviewAssignmentService>();
+        reviewerManager.Provider.Returns(ScmProvider.AzureDevOps);
+        reviewerManager.AddOptionalReviewerAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var reviewerId = Guid.NewGuid();
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+        clientRegistry.GetCommentResolutionBehaviorAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(CommentResolutionBehavior.Silent);
+        clientRegistry.GetCustomSystemMessageAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var prScanRepository = Substitute.For<IReviewPrScanRepository>();
+        prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())
+            .Returns((ReviewPrScan?)null);
+
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        instructionFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
+
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        exclusionFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewExclusionRules.Empty));
+
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        instructionEvaluator.EvaluateRelevanceAsync(
+                Arg.Any<IReadOnlyList<RepositoryInstruction>>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
+
+        var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
+        aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, "gpt-4o", baseUrl: "https://ai.test.local"));
+
+        var chatClientFactory = Substitute.For<IAiChatClientFactory>();
+        chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(Substitute.For<IChatClient>());
+
+        var publicationService = Substitute.For<ICodeReviewPublicationService>();
+        publicationService.Provider.Returns(ScmProvider.AzureDevOps);
+
+        var threadStatusWriter = Substitute.For<IReviewThreadStatusWriter>();
+        threadStatusWriter.Provider.Returns(ScmProvider.AzureDevOps);
+        threadStatusWriter.UpdateThreadStatusAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var threadReplyPublisher = Substitute.For<IReviewThreadReplyPublisher>();
+        threadReplyPublisher.Provider.Returns(ScmProvider.AzureDevOps);
+        threadReplyPublisher.ReplyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewThreadRef>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        providerRegistry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
+        providerRegistry.GetReviewAssignmentService(Arg.Any<ScmProvider>()).Returns(reviewerManager);
+        providerRegistry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);
+        providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>()).Returns(threadReplyPublisher);
+        providerRegistry.GetRegisteredCapabilities(Arg.Any<ScmProvider>())
+            .Returns(["reviewAssignment", "reviewThreadStatus", "reviewThreadReply"]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
+
+        var reviewContextToolsFactory = new AdoReviewContextToolsFactory(
+            new VssConnectionFactory(Substitute.For<TokenCredential>()),
+            connectionRepository,
+            proCursorGateway,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
+            NullLoggerFactory.Instance);
+
+        var service = new ReviewOrchestrationService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            providerRegistry,
+            clientRegistry,
+            prScanRepository,
+            Substitute.For<IAiCommentResolutionCore>(),
+            Substitute.For<IProtocolRecorder>(),
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewRetries = 3, ModelId = "gpt-4o" }),
+            NullLogger<ReviewOrchestrationService>.Instance,
+            aiConnectionRepository,
+            chatClientFactory);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+        await publicationService.DidNotReceiveWithAnyArgs()
+            .PublishReviewAsync(default, default!, default!, default!, default!, default);
+    }
+
     private static ReviewOrchestrationService CreateService(
         ReviewJob job,
         IFileByFileReviewOrchestrator orchestrator,
@@ -183,6 +340,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(CommentResolutionBehavior.Silent);
         clientRegistry.GetCustomSystemMessageAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns((string?)null);
+        clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
         prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, Arg.Any<CancellationToken>())

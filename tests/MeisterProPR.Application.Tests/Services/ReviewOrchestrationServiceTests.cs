@@ -42,6 +42,8 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
+        clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         instructionFetcher
             .FetchAsync(
@@ -944,6 +946,115 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>());
         await protocolRecorder.Received(1)
             .SetCompletedAsync(protocolId, "Failed", 0, 0, 0, 0, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ScmCommentPostingDisabled_DoesNotPublishReviewButStillPersistsResult()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                _, _, logger) =
+            CreateDeps();
+
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = new ReviewResult("Summary", [new ReviewComment("src/Foo.cs", 42, CommentSeverity.Warning, "Issue")]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(result);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewNotPublishedAsync(commentPoster);
+        await jobs.Received(1).SetResultAsync(job.Id, Arg.Is<ReviewResult>(posted => posted.Summary == result.Summary));
+        await protocolRecorder.Received()
+            .SetCompletedAsync(Arg.Any<Guid>(), "Completed", 0, 0, 0, 0, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ScmCommentPostingReEnabled_PublishesReview()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = new ReviewResult("Summary", [new ReviewComment("src/Foo.cs", 42, CommentSeverity.Warning, "Issue")]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(result);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewPublishedAsync(commentPoster, job);
     }
 
     [Fact]
