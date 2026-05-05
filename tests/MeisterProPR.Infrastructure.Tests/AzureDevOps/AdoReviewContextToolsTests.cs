@@ -127,6 +127,23 @@ public class AdoReviewContextToolsTests
         Assert.Equal(1, sut.FetchCallCount);
     }
 
+    [Fact]
+    public async Task GetFileTreeAsync_AlwaysUsesStoredSourceBranch_IgnoresAiSuppliedBranch()
+    {
+        // Arrange
+        const string sourceBranch = "feature/my-pr";
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch);
+        sut.SetTree("src/Example.cs", ".meister-propr/exclude");
+
+        // Act
+        var tree = await sut.GetFileTreeAsync("main", CancellationToken.None);
+
+        // Assert
+        Assert.Equal(sourceBranch, sut.LastFetchedTreeBranch);
+        Assert.Contains("src/Example.cs", tree);
+        Assert.Contains(".meister-propr/exclude", tree);
+    }
+
     [Theory]
     [InlineData(VersionControlChangeType.Add, ChangeType.Add)]
     [InlineData(VersionControlChangeType.Edit, ChangeType.Edit)]
@@ -201,6 +218,7 @@ public class AdoReviewContextToolsTests
     private sealed class TestableAdoReviewContextTools : AdoReviewContextTools
     {
         private readonly Dictionary<string, string?> _files = new(StringComparer.Ordinal);
+        private IReadOnlyList<string> _tree = [];
 
         public TestableAdoReviewContextTools(
             IOptions<AiReviewOptions> options,
@@ -228,10 +246,26 @@ public class AdoReviewContextToolsTests
         /// <summary>Gets the branch name last passed to <see cref="AdoReviewContextTools.FetchRawFileContentAsync" />.</summary>
         public string? LastFetchedBranch { get; private set; }
 
+        /// <summary>Gets the branch name last passed to <see cref="AdoReviewContextTools.FetchFileTreePathsAsync" />.</summary>
+        public string? LastFetchedTreeBranch { get; private set; }
+
         /// <summary>Registers a file path with its content for retrieval.</summary>
         public void SetFile(string path, string? content)
         {
             this._files[path] = content;
+        }
+
+        /// <summary>Registers a repository tree returned by <see cref="GetFileTreeAsync" />.</summary>
+        public void SetTree(params string[] paths)
+        {
+            this._tree = paths.ToList().AsReadOnly();
+        }
+
+        /// <inheritdoc />
+        protected internal override Task<IReadOnlyList<string>> FetchFileTreePathsAsync(string branch, CancellationToken ct)
+        {
+            this.LastFetchedTreeBranch = branch;
+            return Task.FromResult(this._tree);
         }
 
         /// <inheritdoc />

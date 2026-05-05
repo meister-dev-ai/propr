@@ -107,42 +107,49 @@ public partial class AdoReviewContextTools : IReviewContextTools
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(ct);
         var normalizedBranch = NormalizeBranchName(this._sourceBranch);
 
-        GitBranchStats? branchRef;
+        return await this.FetchFileTreePathsAsync(normalizedBranch, ct);
+    }
+
+    /// <summary>
+    ///     Fetches the repository file tree for a branch using ADO's item listing API.
+    ///     Overridable in tests to avoid the ADO network layer.
+    /// </summary>
+    /// <param name="branch">Normalized branch name.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected internal virtual async Task<IReadOnlyList<string>> FetchFileTreePathsAsync(
+        string branch,
+        CancellationToken ct)
+    {
+        var gitClient = await this.GetGitClientAsync(ct);
+
+        var versionDescriptor = new GitVersionDescriptor
+        {
+            VersionType = GitVersionType.Branch,
+            Version = branch,
+        };
+
+        List<GitItem>? items;
         try
         {
-            branchRef = await gitClient.GetBranchAsync(
+            items = await gitClient.GetItemsAsync(
                 this._projectId,
                 this._repositoryId,
-                normalizedBranch,
+                null,
+                VersionControlRecursionType.Full,
+                versionDescriptor: versionDescriptor,
                 cancellationToken: ct);
         }
         catch (VssServiceResponseException)
         {
-            // Branch does not exist in this repository.
+            // Branch does not exist in this repository, or the tree cannot be resolved.
             return [];
         }
 
-        var commitSha = branchRef?.Commit?.CommitId;
-        if (string.IsNullOrEmpty(commitSha))
-        {
-            return [];
-        }
-
-        var tree = await gitClient.GetTreeAsync(
-            projectId: this._projectId,
-            repositoryId: this._repositoryId,
-            sha1: commitSha,
-            recursive: true,
-            fileName: null,
-            userState: null,
-            cancellationToken: ct);
-
-        return (tree?.TreeEntries ?? [])
-            .Where(e => e.GitObjectType == GitObjectType.Blob)
-            .Select(e => e.RelativePath ?? string.Empty)
+        return (items ?? [])
+            .Where(item => item.IsFolder != true)
+            .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
             .Where(p => !string.IsNullOrEmpty(p))
             .ToList()
             .AsReadOnly();
@@ -318,6 +325,11 @@ public partial class AdoReviewContextTools : IReviewContextTools
         return branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
             ? branch["refs/heads/".Length..]
             : branch;
+    }
+
+    private static string NormalizeRepositoryPath(string path)
+    {
+        return path.TrimStart('/');
     }
 
     private async Task<GitHttpClient> GetGitClientAsync(CancellationToken ct)
