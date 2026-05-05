@@ -4,6 +4,7 @@
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
                     new ClientRecord
                     {
                         Id = clientId,
+                        TenantId = TenantCatalog.SystemTenantId,
                         DisplayName = $"Memory Test Client {clientId:N}",
                         IsActive = true,
                         CreatedAt = DateTimeOffset.UtcNow,

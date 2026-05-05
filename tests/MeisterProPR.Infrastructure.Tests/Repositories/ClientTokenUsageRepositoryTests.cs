@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,7 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
             new ClientRecord
             {
                 Id = this._clientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Test Client for Token Usage",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,

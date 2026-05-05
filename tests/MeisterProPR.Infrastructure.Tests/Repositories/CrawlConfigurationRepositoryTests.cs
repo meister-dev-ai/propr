@@ -7,6 +7,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,7 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             new ClientRecord
             {
                 Id = this._clientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -49,6 +51,7 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             new ClientRecord
             {
                 Id = this._otherClientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Other Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,

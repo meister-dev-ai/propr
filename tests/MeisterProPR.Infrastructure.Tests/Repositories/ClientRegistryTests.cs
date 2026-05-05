@@ -6,6 +6,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
@@ -26,6 +27,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     private MeisterProPRDbContext _dbContext = null!;
     private DbClientRegistry _registry = null!;
     private ClientReviewerIdentityRepository _reviewerIdentityRepository = null!;
+    private readonly List<Guid> _seededClientIds = [];
 
     public async Task InitializeAsync()
     {
@@ -35,9 +37,6 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
-        await this._dbContext.ClientReviewerIdentities.ExecuteDeleteAsync();
-        await this._dbContext.ClientScmConnections.ExecuteDeleteAsync();
-        await this._dbContext.Clients.ExecuteDeleteAsync();
         var codec = CreateCodec();
         this._connectionRepository = new ClientScmConnectionRepository(this._dbContext, codec);
         this._reviewerIdentityRepository = new ClientReviewerIdentityRepository(this._dbContext);
@@ -51,6 +50,22 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     {
         if (this._dbContext is not null)
         {
+            if (this._seededClientIds.Count > 0)
+            {
+                await this._dbContext.ClientReviewerIdentities
+                    .Where(identity => this._seededClientIds.Contains(identity.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.ClientScmScopes
+                    .Where(scope => this._seededClientIds.Contains(scope.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.ClientScmConnections
+                    .Where(connection => this._seededClientIds.Contains(connection.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.Clients
+                    .Where(client => this._seededClientIds.Contains(client.Id))
+                    .ExecuteDeleteAsync();
+            }
+
             await this._dbContext.DisposeAsync();
         }
     }
@@ -147,12 +162,14 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         var record = new ClientRecord
         {
             Id = Guid.NewGuid(),
+            TenantId = TenantCatalog.SystemTenantId,
             DisplayName = "Test Client",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         this._dbContext.Clients.Add(record);
         await this._dbContext.SaveChangesAsync();
+        this._seededClientIds.Add(record.Id);
         return record;
     }
 }

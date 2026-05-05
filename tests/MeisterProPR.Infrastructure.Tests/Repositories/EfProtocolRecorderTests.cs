@@ -206,7 +206,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             .FirstOrDefaultAsync();
 
         Assert.NotNull(stored);
-        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
         Assert.Contains("comment_relevance_evaluator", stored.InputTextSample ?? string.Empty);
         Assert.Contains("pre_filter_comments_retained", stored.InputTextSample ?? string.Empty);
         Assert.Contains("\"inputTokens\":320", stored.OutputSummary ?? string.Empty);
@@ -235,7 +235,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             .FirstOrDefaultAsync();
 
         Assert.NotNull(stored);
-        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
         Assert.Contains("summaryOnlyCount", stored.InputTextSample ?? string.Empty);
         Assert.Contains("finding-001", stored.OutputSummary ?? string.Empty);
         Assert.Contains("SummaryOnly", stored.OutputSummary ?? string.Empty);

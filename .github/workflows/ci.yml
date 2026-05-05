@@ -109,8 +109,17 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Run tests
-        run: dotnet test --no-restore --configuration Release --verbosity normal
+      - name: Run domain tests
+        run: dotnet test tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+      - name: Run application tests
+        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+      - name: Run infrastructure tests
+        run: dotnet test tests/MeisterProPR.Infrastructure.Tests/MeisterProPR.Infrastructure.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+      - name: Run API tests
+        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
 
   admin-ui-tests:
     name: Admin UI tests

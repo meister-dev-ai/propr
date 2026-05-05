@@ -6,6 +6,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             new ClientRecord
             {
                 Id = job.ClientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,

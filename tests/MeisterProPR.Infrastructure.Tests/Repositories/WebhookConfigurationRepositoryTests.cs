@@ -7,6 +7,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Features.Crawling.Webhooks.Persistence;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
@@ -39,6 +40,7 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             new ClientRecord
             {
                 Id = this._clientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Webhook Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -47,6 +49,7 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             new ClientRecord
             {
                 Id = this._otherClientId,
+                TenantId = TenantCatalog.SystemTenantId,
                 DisplayName = "Other Webhook Test Client",
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,

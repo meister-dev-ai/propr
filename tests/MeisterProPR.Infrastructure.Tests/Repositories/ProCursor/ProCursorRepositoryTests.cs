@@ -5,6 +5,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,7 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
                 new ClientRecord
                 {
                     Id = ClientId,
+                    TenantId = TenantCatalog.SystemTenantId,
                     DisplayName = "ProCursor Test Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,

@@ -4,6 +4,7 @@
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,7 @@ public sealed class EfMentionScanRepositoryTests(PostgresContainerFixture fixtur
                 new ClientRecord
                 {
                     Id = SeedClientId,
+                    TenantId = TenantCatalog.SystemTenantId,
                     DisplayName = "Test Scan Client",
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
