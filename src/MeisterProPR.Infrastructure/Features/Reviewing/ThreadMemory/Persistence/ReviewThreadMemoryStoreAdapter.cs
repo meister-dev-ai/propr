@@ -27,7 +27,7 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
     public Task<bool> RemoveByThreadAsync(
         Guid clientId,
         string repositoryId,
-        int threadId,
+        long threadId,
         CancellationToken ct = default)
     {
         return inner.RemoveByThreadAsync(clientId, repositoryId, threadId, ct);

@@ -53,7 +53,7 @@ public sealed class ThreadMemoryRepository(
     public async Task<bool> RemoveByThreadAsync(
         Guid clientId,
         string repositoryId,
-        int threadId,
+        long threadId,
         CancellationToken ct = default)
     {
         var deleted = await this.WithDbAsync(

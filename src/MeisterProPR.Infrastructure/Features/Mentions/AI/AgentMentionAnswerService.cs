@@ -43,7 +43,7 @@ internal sealed partial class AgentMentionAnswerService(
         PullRequest pullRequest,
         Guid clientId,
         string question,
-        int threadId,
+        long threadId,
         CancellationToken cancellationToken = default)
     {
         var cleanQuestion = MentionPrefixRegex.Replace(question, string.Empty).Trim();
@@ -89,7 +89,7 @@ internal sealed partial class AgentMentionAnswerService(
         return response.Text ?? "";
     }
 
-    private static string BuildUserMessage(PullRequest pr, string question, int threadId)
+    private static string BuildUserMessage(PullRequest pr, string question, long threadId)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"PR: {pr.Title}");

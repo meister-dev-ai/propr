@@ -32,8 +32,8 @@ public sealed class MentionReplyJob
         string projectId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
-        int commentId,
+        long threadId,
+        long commentId,
         string mentionText,
         string? threadFilePath = null,
         int? threadLineNumber = null,
@@ -182,10 +182,10 @@ public sealed class MentionReplyJob
     public int PullRequestId { get; init; }
 
     /// <summary>ADO thread ID containing the mention.</summary>
-    public int ThreadId { get; init; }
+    public long ThreadId { get; init; }
 
     /// <summary>ADO comment ID of the mention comment.</summary>
-    public int CommentId { get; init; }
+    public long CommentId { get; init; }
 
     /// <summary>Raw content of the mention comment.</summary>
     public string MentionText { get; init; }

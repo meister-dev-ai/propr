@@ -199,7 +199,7 @@ public sealed partial class ThreadMemoryController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetActivityLog(
         [FromQuery] Guid clientId,
-        [FromQuery] int? threadId = null,
+        [FromQuery] long? threadId = null,
         [FromQuery] int? pullRequestId = null,
         [FromQuery] string? repositoryId = null,
         [FromQuery] MemoryActivityAction? action = null,
@@ -241,7 +241,7 @@ public sealed partial class ThreadMemoryController(
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
+        long threadId,
         CancellationToken ct)
     {
         try
@@ -310,7 +310,7 @@ public sealed partial class ThreadMemoryController(
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to reset last_seen_status for thread {ThreadId} after admin deletion")]
-    private static partial void LogResetLastSeenStatusFailed(ILogger logger, int threadId, Exception ex);
+    private static partial void LogResetLastSeenStatusFailed(ILogger logger, long threadId, Exception ex);
 }
 
 /// <summary>DTO for a stored thread memory embedding (admin view).</summary>
@@ -326,7 +326,7 @@ public sealed partial class ThreadMemoryController(
 public sealed record ThreadMemoryRecordDto(
     Guid Id,
     Guid ClientId,
-    int ThreadId,
+    long ThreadId,
     string RepositoryId,
     int PullRequestId,
     string? FilePath,

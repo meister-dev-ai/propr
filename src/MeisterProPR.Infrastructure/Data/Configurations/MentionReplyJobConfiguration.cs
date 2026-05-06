@@ -103,10 +103,12 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
             .HasColumnName("pull_request_id");
 
         builder.Property(j => j.ThreadId)
-            .HasColumnName("thread_id");
+            .HasColumnName("thread_id")
+            .HasColumnType("bigint");
 
         builder.Property(j => j.CommentId)
-            .HasColumnName("comment_id");
+            .HasColumnName("comment_id")
+            .HasColumnType("bigint");
 
         builder.Property(j => j.MentionText)
             .HasColumnName("mention_text")

@@ -29,7 +29,7 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
+        long threadId,
         string? previousStatus,
         string currentStatus,
         string reason,

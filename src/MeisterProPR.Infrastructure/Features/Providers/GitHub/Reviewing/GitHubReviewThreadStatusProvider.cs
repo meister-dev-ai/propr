@@ -52,7 +52,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
                 reviewer.Login,
                 StringComparison.OrdinalIgnoreCase))
             .Select(thread => new PrThreadStatusEntry(
-                thread.Comments.Nodes[0].DatabaseId,
+                thread.Comments.Nodes[0].DatabaseId ?? 0,
                 thread.IsResolved ? "Fixed" : "Active",
                 thread.Path,
                 BuildCommentHistory(thread.Comments.Nodes),
@@ -206,7 +206,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
 
     private sealed record GitHubReviewCommentNode(
         [property: JsonPropertyName("databaseId")]
-        int DatabaseId,
+        long? DatabaseId,
         [property: JsonPropertyName("body")] string? Body,
         [property: JsonPropertyName("createdAt")]
         DateTimeOffset CreatedAt,

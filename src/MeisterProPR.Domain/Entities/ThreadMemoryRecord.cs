@@ -20,7 +20,7 @@ public sealed class ThreadMemoryRecord
     public Guid ClientId { get; init; }
 
     /// <summary>ADO thread identifier. Must be &gt; 0. Unique per (ClientId, RepositoryId, ThreadId).</summary>
-    public int ThreadId { get; init; }
+    public long ThreadId { get; init; }
 
     /// <summary>ADO repository identifier. Required, ≤ 256 characters.</summary>
     public string RepositoryId { get; init; } = string.Empty;

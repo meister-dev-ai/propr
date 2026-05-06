@@ -20,7 +20,7 @@ namespace MeisterProPR.Application.DTOs;
 ///     creating a duplicate review job for unchanged pull requests.
 /// </param>
 public sealed record PrThreadStatusEntry(
-    int ThreadId,
+    long ThreadId,
     string Status,
     string? FilePath,
     string CommentHistory,

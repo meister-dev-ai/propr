@@ -26,7 +26,7 @@ public sealed partial class MentionScanService
     [LoggerMessage(
         Level = LogLevel.Trace,
         Message = "MentionScanService: evaluating comment thread={ThreadId} commentId={CommentId} content='{Content}'")]
-    private static partial void LogCommentContent(ILogger logger, int threadId, int commentId, string content);
+    private static partial void LogCommentContent(ILogger logger, long threadId, long commentId, string content);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
@@ -45,14 +45,14 @@ public sealed partial class MentionScanService
     private static partial void LogDuplicateMentionSkipped(
         ILogger logger,
         int pullRequestId,
-        int threadId,
-        int commentId);
+        long threadId,
+        long commentId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message =
             "MentionScanService: enqueued mention reply job for PR #{PullRequestId} thread {ThreadId} comment {CommentId}")]
-    private static partial void LogMentionEnqueued(ILogger logger, int pullRequestId, int threadId, int commentId);
+    private static partial void LogMentionEnqueued(ILogger logger, int pullRequestId, long threadId, long commentId);
 
     [LoggerMessage(
         Level = LogLevel.Trace,

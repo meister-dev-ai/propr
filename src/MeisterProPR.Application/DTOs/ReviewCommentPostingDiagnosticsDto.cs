@@ -86,7 +86,7 @@ public sealed record HistoricalDuplicateSuppressionMatchDto
     public string? ReasonCode { get; init; }
 
     /// <summary>Historical thread identifier that triggered the match, when available.</summary>
-    public int? ThreadId { get; init; }
+    public long? ThreadId { get; init; }
 
     /// <summary>Historical memory-record identifier that triggered the match, when available.</summary>
     public Guid? MemoryRecordId { get; init; }
@@ -126,7 +126,7 @@ public sealed record HistoricalDuplicateSuppressionMatchDto
     /// <summary>Returns a duplicate match for the current candidate finding.</summary>
     public static HistoricalDuplicateSuppressionMatchDto Match(
         string reasonCode,
-        int? threadId = null,
+        long? threadId = null,
         Guid? memoryRecordId = null,
         float? similarityScore = null,
         IReadOnlyList<string>? degradedComponents = null,

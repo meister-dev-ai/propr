@@ -152,7 +152,7 @@ public sealed partial class ThreadMemoryService(
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
+        long threadId,
         string? previousStatus,
         string currentStatus,
         string reason,

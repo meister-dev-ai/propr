@@ -15,7 +15,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     <c>null</c> when not provided or unknown.
 /// </param>
 public sealed record PrCommentThread(
-    int ThreadId,
+    long ThreadId,
     string? FilePath,
     int? LineNumber,
     IReadOnlyList<PrThreadComment> Comments,
@@ -42,5 +42,5 @@ public sealed record PrThreadComment(
     string AuthorName,
     string Content,
     Guid? AuthorId = null,
-    int CommentId = 0,
+    long CommentId = 0,
     DateTimeOffset? PublishedAt = null);

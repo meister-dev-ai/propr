@@ -11,12 +11,12 @@ public sealed partial class ThreadMemoryService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Memory embedding stored for thread {ThreadId} client {ClientId}")]
-    private static partial void LogEmbeddingStored(ILogger logger, int threadId, Guid clientId);
+    private static partial void LogEmbeddingStored(ILogger logger, long threadId, Guid clientId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Memory embedding {Outcome} for thread {ThreadId} client {ClientId}")]
-    private static partial void LogEmbeddingRemoved(ILogger logger, int threadId, Guid clientId, string outcome);
+    private static partial void LogEmbeddingRemoved(ILogger logger, long threadId, Guid clientId, string outcome);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -24,7 +24,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogProcessResolvedFailedCore(
         ILogger logger,
         Exception exception,
-        int threadId,
+        long threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -33,7 +33,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogProcessReopenedFailedCore(
         ILogger logger,
         Exception exception,
-        int threadId,
+        long threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -42,7 +42,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogRecordNoOpFailedCore(
         ILogger logger,
         Exception exception,
-        int threadId,
+        long threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -85,17 +85,17 @@ public sealed partial class ThreadMemoryService
         int pullRequestId,
         Guid clientId);
 
-    private static void LogProcessResolvedFailed(ILogger logger, int threadId, Guid clientId, Exception exception)
+    private static void LogProcessResolvedFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
     {
         LogProcessResolvedFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogProcessReopenedFailed(ILogger logger, int threadId, Guid clientId, Exception exception)
+    private static void LogProcessReopenedFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
     {
         LogProcessReopenedFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogRecordNoOpFailed(ILogger logger, int threadId, Guid clientId, Exception exception)
+    private static void LogRecordNoOpFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
     {
         LogRecordNoOpFailedCore(logger, exception, threadId, clientId);
     }
