@@ -90,6 +90,22 @@ public sealed class CrawlConfigurationRepository(
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<CrawlConfigurationDto>> GetAllAsync(CancellationToken ct = default)
+    {
+        var records = await this.BaseQuery()
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(ct);
+
+        if (providerActivationService is not null)
+        {
+            var enabledProviders = await providerActivationService.GetEnabledProvidersAsync(ct);
+            records = records.Where(record => enabledProviders.Contains(record.Provider)).ToList();
+        }
+
+        return records.Select(ToDto).ToList().AsReadOnly();
+    }
+
+    /// <inheritdoc />
     public Task<bool> ExistsAsync(
         Guid clientId,
         string organizationUrl,

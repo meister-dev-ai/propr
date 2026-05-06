@@ -71,4 +71,29 @@ describe('ClientCrawlConfigsTab', () => {
     expect(wrapper.text()).not.toContain('New Config')
     expect(wrapper.text()).not.toContain('Create Config')
   })
+
+  it('shows paused configurations so they can be reactivated', async () => {
+    getMock.mockResolvedValue({
+      data: [{
+        id: 'config-1',
+        clientId: 'client-1',
+        provider: 'azureDevOps',
+        providerProjectKey: 'Paused project',
+        providerScopePath: 'https://dev.azure.com/testorg',
+        repoFilters: [],
+        crawlIntervalSeconds: 120,
+        isActive: false,
+        proCursorSourceScopeMode: 'allClientSources',
+        proCursorSourceIds: [],
+        invalidProCursorSourceIds: [],
+      }],
+      response: { ok: true },
+    })
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Paused')
+    expect(wrapper.text()).toContain('Paused project')
+  })
 })

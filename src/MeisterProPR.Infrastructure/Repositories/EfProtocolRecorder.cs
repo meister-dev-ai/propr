@@ -230,7 +230,7 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, null, error, ct, "memory");
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.MemoryOperation, eventName, details, null, error, ct, "memory");
     }
 
     /// <inheritdoc />
@@ -241,7 +241,7 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, null, error, ct, "duplicate-suppression");
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, null, error, ct, "duplicate-suppression");
     }
 
     /// <inheritdoc />
@@ -253,7 +253,7 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "comment-relevance");
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "comment-relevance");
     }
 
     /// <inheritdoc />
@@ -265,7 +265,7 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "review-finding-gate");
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "review-finding-gate");
     }
 
     /// <inheritdoc />
@@ -277,11 +277,12 @@ public sealed class EfProtocolRecorder(
         string? error,
         CancellationToken ct = default)
     {
-        await this.RecordOperationalEventAsync(protocolId, eventName, details, output, error, ct, "verification");
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "verification");
     }
 
-    private async Task RecordOperationalEventAsync(
+    private async Task RecordEventAsync(
         Guid protocolId,
+        ProtocolEventKind kind,
         string eventName,
         string? details,
         string? output,
@@ -296,7 +297,7 @@ public sealed class EfProtocolRecorder(
             {
                 Id = Guid.NewGuid(),
                 ProtocolId = protocolId,
-                Kind = ProtocolEventKind.Operational,
+                Kind = kind,
                 Name = eventName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(details),

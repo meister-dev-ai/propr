@@ -49,6 +49,8 @@ public sealed class ReviewingModuleTests
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     []),
             ]);
 
@@ -87,6 +89,8 @@ public sealed class ReviewingModuleTests
                     5,
                     1,
                     0,
+                    null,
+                    null,
                     null,
                     null,
                     null,

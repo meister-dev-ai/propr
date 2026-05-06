@@ -293,6 +293,7 @@ public sealed class JobRepository(
         var job = await dbContext.ReviewJobs
             .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber))
             .ThenInclude(p => p.Events.OrderBy(e => e.OccurredAt))
+            .Include(j => j.FileReviewResults)
             .FirstOrDefaultAsync(j => j.Id == id, ct);
 
         if (job is not null)

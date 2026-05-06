@@ -263,6 +263,28 @@
                             <div><dt>Out Tokens</dt><dd class="fat-tokens">{{ formatTokens(activePass.totalOutputTokens) }}</dd></div>
                         </dl>
 
+                        <section v-if="activePass.finalSummary || activePassFinalComments.length" class="pass-final-result-section">
+                            <div class="pass-final-result-header">
+                                <h4>Final File Result</h4>
+                                <span v-if="activePassFinalComments.length" class="chip chip-muted">{{ activePassFinalComments.length }} final comment{{ activePassFinalComments.length === 1 ? '' : 's' }}</span>
+                            </div>
+
+                            <div v-if="activePass.finalSummary" class="markdown-content pass-final-summary-text" v-html="renderMarkdown(activePass.finalSummary)"></div>
+                            <p v-else class="pass-final-summary-empty">No final per-file summary was captured for this pass.</p>
+
+                            <ul v-if="activePassFinalComments.length" class="json-comments-list synthesis-comments pass-final-comments-list">
+                                <li v-for="(comment, idx) in activePassFinalComments" :key="`final-${idx}`" class="json-comment-item synthesis-comment" :class="`severity-${comment.severity}`">
+                                    <div class="comment-header">
+                                        <strong class="comment-sev">{{ (comment.severity ?? 'note').toUpperCase() }}</strong>
+                                        <span class="monospace-value">{{ comment.filePath ?? (comment as any).file_path }}:L{{ comment.lineNumber ?? (comment as any).line_number }}</span>
+                                    </div>
+                                    <div class="comment-msg-container markdown-content">
+                                        <div v-html="renderMarkdown(comment.message)"></div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </section>
+
                         <section class="events-section">
                             <h4>Events ({{ activePass.events?.length ? Math.ceil(activePass.events.length / 2) : 0 }})</h4>
                             <p v-if="!activePass.events?.length" class="empty-state">{{ emptyPassMessage(activePass) }}</p>
@@ -284,7 +306,7 @@
                                         class="row-clickable"
                                         :class="{
                                             'row-error': !!merged.callDetails.error || !!merged.resultDetails?.error,
-                                            'row-processing': !merged.resultDetails
+                                            'row-processing': isMergedEventProcessing(merged)
                                         }"
                                         @click="openMergedModal(merged)"
                                     >
@@ -294,7 +316,7 @@
                                         </td>
                                         <td class="name-cell" :class="{ 'tool-name': merged.callDetails.kind === 'toolCall', 'ai-name': merged.callDetails.kind === 'aiCall', 'memory-name': merged.callDetails.kind === 'memoryOperation', 'operational-name': merged.callDetails.kind === 'operational' }">
                                             {{ merged.name }}
-                                            <span v-if="merged.resultDetails?.outputSummary === null && merged.resultDetails?.error === null && merged.callDetails.kind !== 'memoryOperation'" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
+                                            <span v-if="isMergedEventProcessing(merged)" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
                                         </td>
                                         <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.inputTokens) }}</td>
                                         <td class="tokens-cell fat-tokens">{{ formatTokens(merged.callDetails.outputTokens) }}</td>
@@ -653,7 +675,8 @@
                                 <i class="fi fi-rr-check-circle memory-no-output-icon"></i>
                                 <span>No output recorded for this memory operation.</span>
                             </div>
-                            <p v-else-if="selectedMergedEvent.resultDetails.outputSummary === null && selectedMergedEvent.resultDetails.error === null" class="no-content" style="color: var(--color-accent); font-weight: bold;">Currently Executing...</p>
+                            <p v-else-if="isMergedEventProcessing(selectedMergedEvent)" class="no-content" style="color: var(--color-accent); font-weight: bold;">Currently Executing...</p>
+                            <p v-else class="no-content">No output captured for this completed step.</p>
                         </template>
                     </section>
                 </div>
@@ -905,6 +928,14 @@ interface FinalGateDecisionRecord {
     blockedInvariantIds?: string[]
     ruleSource?: string
     summaryText?: string | null
+    includedInFinalSummary?: boolean | null
+}
+
+type ReviewCommentRecord = {
+    filePath?: string | null
+    lineNumber?: number | null
+    severity?: string | null
+    message: string
 }
 
 interface MergedEvent {
@@ -927,6 +958,8 @@ type ReviewProtocolPass = ReviewJobProtocolDto & {
     totalOutputTokens?: number | null
     iterationCount?: number | null
     toolCallCount?: number | null
+    finalSummary?: string | null
+    finalComments?: ReviewCommentRecord[] | null
 }
 
 const loading = ref(false)
@@ -1289,6 +1322,10 @@ const groupedReviewComments = computed(() => {
             comments: sortedComments
         }
     })
+})
+
+const activePassFinalComments = computed<ReviewCommentRecord[]>(() => {
+    return activePass.value?.finalComments ?? []
 })
 
 const activePass = computed<ReviewProtocolPass | null>(() => {
@@ -1754,6 +1791,10 @@ function processEvents(events: ProtocolEventDto[] | undefined | null): MergedEve
         callDetails: ev,
         resultDetails: ev
     }))
+}
+
+function isMergedEventProcessing(event: MergedEvent | null | undefined): boolean {
+    return !event?.resultDetails
 }
 
 function compareProtocols(left: ReviewProtocolPass, right: ReviewProtocolPass): number {
@@ -2392,6 +2433,36 @@ function formatConfidence(val: number | string | null | undefined): string {
 }
 
 .pass-summary {
+    margin-bottom: 0;
+}
+
+.pass-final-result-section {
+    padding: 1.25rem 1.5rem 0;
+}
+
+.pass-final-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.pass-final-result-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.pass-final-summary-text,
+.pass-final-summary-empty {
+    margin-bottom: 1rem;
+}
+
+.pass-final-comments-list {
     margin-bottom: 0;
 }
 

@@ -61,6 +61,27 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
     }
 
     [Fact]
+    public async Task GetCrawlConfigs_WithAdminKey_ReturnsPausedConfigsToo()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/crawl-configurations");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(Guid.NewGuid(), "Admin"));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement
+            .EnumerateArray()
+            .ToList();
+
+        Assert.Contains(items, item => item.GetProperty("isActive").GetBoolean() is false);
+    }
+
+    [Fact]
     public async Task GetCrawlConfigs_NoCredentials_Returns401()
     {
         var client = factory.CreateClient();
@@ -793,7 +814,24 @@ public sealed class AdminCrawlConfigsControllerTests(AdminCrawlConfigsController
                 [unownedConfig.Id] = unownedConfig,
             };
 
-            // Admin GET: GetAllActiveAsync
+            var pausedConfig = new CrawlConfigurationDto(
+                Guid.NewGuid(),
+                testClientId,
+                ScmProvider.AzureDevOps,
+                "https://dev.azure.com/testorg",
+                "PausedProject",
+                120,
+                false,
+                DateTimeOffset.UtcNow,
+                [],
+                guidedOrganizationScopeId);
+
+            configsById[pausedConfig.Id] = pausedConfig;
+
+            // Admin GET: GetAllAsync
+            crawlRepo.GetAllAsync(Arg.Any<CancellationToken>())
+                .Returns(_ => Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>(configsById.Values.ToList().AsReadOnly()));
+
             crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                 .Returns(_ => Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>(configsById.Values.Where(config => config.IsActive).ToList().AsReadOnly()));
 

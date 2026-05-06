@@ -5990,7 +5990,7 @@
         "tags": [
           "Clients"
         ],
-        "summary": "Updates one or more fields of a client (display name, active status, custom system message).\nRequires a global admin JWT or `X-User-Pat`.",
+        "summary": "Updates one or more fields of a client (display name, active status, review settings, custom system message).\nRequires a global admin JWT or `X-User-Pat`.",
         "parameters": [
           {
             "name": "clientId",
@@ -16681,6 +16681,32 @@
         "type": "string",
         "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
       },
+      "ProtocolReviewCommentDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Repository-relative file path, when available.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "One-based line number, when available.",
+            "format": "int32",
+            "nullable": true
+          },
+          "severity": {
+            "$ref": "#/components/schemas/CommentSeverity"
+          },
+          "message": {
+            "type": "string",
+            "description": "Final comment text.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Carries one final review comment attributable to a protocol pass."
+      },
       "ProviderActivationStatusDto": {
         "type": "object",
         "properties": {
@@ -17147,6 +17173,19 @@
           "modelId": {
             "type": "string",
             "description": "The AI model deployment name used for this protocol pass. Null for legacy records.",
+            "nullable": true
+          },
+          "finalSummary": {
+            "type": "string",
+            "description": "Final review summary attributable to this protocol pass, when available.",
+            "nullable": true
+          },
+          "finalComments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProtocolReviewCommentDto"
+            },
+            "description": "Final review comments attributable to this protocol pass, when available.",
             "nullable": true
           },
           "events": {

@@ -23,6 +23,8 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="FinalConfidence">Final aggregated confidence score (0–100), or null if unavailable.</param>
 /// <param name="AiConnectionCategory">The effort tier used for this protocol pass. Null for legacy records.</param>
 /// <param name="ModelId">The AI model deployment name used for this protocol pass. Null for legacy records.</param>
+/// <param name="FinalSummary">Final review summary attributable to this protocol pass, when available.</param>
+/// <param name="FinalComments">Final review comments attributable to this protocol pass, when available.</param>
 /// <param name="Events">Ordered list of events captured during the loop.</param>
 public sealed record ReviewJobProtocolDto(
     Guid Id,
@@ -40,6 +42,8 @@ public sealed record ReviewJobProtocolDto(
     int? FinalConfidence,
     AiConnectionModelCategory? AiConnectionCategory,
     string? ModelId,
+    string? FinalSummary,
+    IReadOnlyList<ProtocolReviewCommentDto>? FinalComments,
     IReadOnlyList<ProtocolEventDto> Events);
 
 /// <summary>
@@ -66,3 +70,16 @@ public sealed record ProtocolEventDto(
     string? SystemPrompt,
     string? OutputSummary,
     string? Error);
+
+/// <summary>
+///     Carries one final review comment attributable to a protocol pass.
+/// </summary>
+/// <param name="FilePath">Repository-relative file path, when available.</param>
+/// <param name="LineNumber">One-based line number, when available.</param>
+/// <param name="Severity">Normalized comment severity.</param>
+/// <param name="Message">Final comment text.</param>
+public sealed record ProtocolReviewCommentDto(
+    string? FilePath,
+    int? LineNumber,
+    CommentSeverity Severity,
+    string Message);

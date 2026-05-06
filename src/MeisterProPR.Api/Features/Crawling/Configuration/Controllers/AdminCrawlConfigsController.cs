@@ -293,7 +293,7 @@ public sealed partial class AdminCrawlConfigsController(
         IReadOnlyList<CrawlConfigurationDto> configs;
         if (isAdmin)
         {
-            configs = await crawlConfigRepo.GetAllActiveAsync(ct);
+            configs = await crawlConfigRepo.GetAllAsync(ct);
         }
         else
         {
