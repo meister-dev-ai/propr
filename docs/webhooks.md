@@ -95,8 +95,9 @@ Example GitHub delivery:
 pwsh scripts/send-github-webhook.ps1 `
   -u "http://your-propr-host/webhooks/v1/providers/github/<pathKey>" `
   -s "<generated-secret>" `
-  -r "101" `
+  -r "propr" `
   -O "acme" `
+  -S "feature/providers" `
   -i 24
 ```
 
@@ -106,10 +107,15 @@ Equivalent Bash usage:
 bash scripts/send-github-webhook.sh \
   -u "http://your-propr-host/webhooks/v1/providers/github/<pathKey>" \
   -s "<generated-secret>" \
-  -r "101" \
+  -r "propr" \
   -O "acme" \
+  -S "feature/providers" \
   -i 24
 ```
+
+For GitHub, the helper stores the durable repository identity as `owner/repo`. Pass the repo name with `-r`
+and the owner with `-O`, or provide `-P owner/repo` directly if you prefer. Pass the real PR head branch with
+`-S`; the helper no longer guesses a synthetic source branch.
 
 Example Codeberg/Forgejo delivery:
 

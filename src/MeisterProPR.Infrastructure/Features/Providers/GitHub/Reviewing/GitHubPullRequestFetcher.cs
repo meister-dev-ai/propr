@@ -94,6 +94,11 @@ internal sealed class GitHubPullRequestFetcher(
         string repositoryId,
         CancellationToken ct)
     {
+        if (LooksLikeRepositoryPath(repositoryId))
+        {
+            return NormalizeRepositoryPath(repositoryId);
+        }
+
         using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
             GitHubConnectionVerifier.BuildApiUri(host, $"/repositories/{Uri.EscapeDataString(repositoryId)}"),
             context.Connection.Secret);
@@ -111,6 +116,20 @@ internal sealed class GitHubPullRequestFetcher(
         }
 
         return repository.FullName.Trim();
+    }
+
+    private static bool LooksLikeRepositoryPath(string repositoryId)
+    {
+        return !string.IsNullOrWhiteSpace(repositoryId)
+               && repositoryId.Contains('/', StringComparison.Ordinal)
+               && repositoryId.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 2;
+    }
+
+    private static string NormalizeRepositoryPath(string repositoryId)
+    {
+        return string.Join(
+            '/',
+            repositoryId.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private async Task<GitHubPullRequestResponse> GetPullRequestAsync(

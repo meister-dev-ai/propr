@@ -3,24 +3,26 @@ set -euo pipefail
 
 # send-github-webhook.sh
 # Sends one or more synthetic GitHub pull request webhook deliveries to a ProPR listener.
-# Usage: send-github-webhook.sh -u URL -s SECRET -r REPO_ID -i PR_NUMBER [options]
+# Usage: send-github-webhook.sh -u URL -s SECRET -r REPO -i PR_NUMBER [options]
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") -u URL -s SECRET -r REPO_ID -i PR_NUMBER [options]
+Usage: $(basename "$0") -u URL -s SECRET -r REPO -i PR_NUMBER [options]
 
 Required:
   -u URL        Listener URL (e.g. http://localhost:8080/webhooks/v1/providers/github/<pathKey>)
   -s SECRET     GitHub webhook secret (must match the ProPR webhook secret)
-  -r REPO_ID    Repository id or name (string)
+  -r REPO       Repository name (for example: propr)
   -i PR_NUMBER  Pull request number (integer)
+  -S SOURCE     Source branch (required for realistic deliveries)
 
 Options:
   -O OWNER      Repository owner/namespace (default: acme)
+  -P REPO_PATH  Full repository path override (for example: acme/propr).
+                When omitted, the script derives it from -O and -r.
   -a ACTION     Pull request action; can be provided multiple times.
                 Defaults: opened, review_requested
                 Add closed explicitly when you want to test lifecycle cancellation.
-  -S SOURCE     Source branch (default: feature/test-branch)
   -T TARGET     Target branch (default: main)
   -R REVIEWER   Requested reviewer login for review_requested events (default: meister-review-bot)
   -M            Mark closed events as merged (default: false)
@@ -30,15 +32,17 @@ Options:
 Example:
   $(basename "$0") -u http://localhost:8080/webhooks/v1/providers/github/ddfccfe1645e40c4a8e61c4516a11a74 \
     -s 95F0E081F5524B81E287179AFDF31E0F6B03408EED1601A3643209A0AAD3E1BD \
-    -r 101 -O acme -i 24
+    -r propr -O acme -i 24 -S feature/providers
 
 EOF
 }
 
 REPO_ID=""
+REPO_PATH=""
 OWNER="acme"
+REPO_NAME=""
 PR_NUMBER=""
-SOURCE_BRANCH="feature/test-branch"
+SOURCE_BRANCH=""
 TARGET_BRANCH="main"
 REVIEWER_LOGIN="meister-review-bot"
 MARK_MERGED=false
@@ -109,12 +113,13 @@ generate_delivery_uuid() {
   printf '%s-%s' "$(date +%s%N)" "$$"
 }
 
-while getopts ":u:s:r:i:O:a:S:T:R:Mn:h" opt; do
+while getopts ":u:s:r:i:P:O:a:S:T:R:Mn:h" opt; do
   case "$opt" in
     u) URL="$OPTARG" ;;
     s) SECRET="$OPTARG" ;;
     r) REPO_ID="$OPTARG" ;;
     i) PR_NUMBER="$OPTARG" ;;
+    P) REPO_PATH="$OPTARG" ;;
     O) OWNER="$OPTARG" ;;
     a) ACTIONS+=("$OPTARG") ;;
     S) SOURCE_BRANCH="$OPTARG" ;;
@@ -128,7 +133,7 @@ while getopts ":u:s:r:i:O:a:S:T:R:Mn:h" opt; do
   esac
 done
 
-if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ] || [ -z "${REPO_ID:-}" ] || [ -z "${PR_NUMBER:-}" ]; then
+if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ] || [ -z "${REPO_ID:-}" ] || [ -z "${PR_NUMBER:-}" ] || [ -z "${SOURCE_BRANCH:-}" ]; then
   echo "Missing required argument." >&2
   usage
   exit 2
@@ -142,6 +147,25 @@ fi
 
 require_positive_integer "PR_NUMBER" "$PR_NUMBER"
 require_positive_integer "REPEAT" "$REPEAT"
+if [ -z "$REPO_PATH" ]; then
+  REPO_PATH="$OWNER/$REPO_ID"
+fi
+
+REPO_PATH=${REPO_PATH#/}
+REPO_PATH=${REPO_PATH%/}
+
+if [[ "$REPO_PATH" != */* ]]; then
+  echo "REPO_PATH must be an owner/repository path such as acme/propr." >&2
+  exit 2
+fi
+
+OWNER=${REPO_PATH%/*}
+REPO_NAME=${REPO_PATH##*/}
+
+if [ -z "$OWNER" ] || [ -z "$REPO_NAME" ]; then
+  echo "REPO_PATH must include both owner and repository name." >&2
+  exit 2
+fi
 
 send_action() {
   local action="$1"
@@ -154,7 +178,7 @@ send_action() {
   fi
 
   payload=$(cat <<JSON
-{"action":"$(json_escape "$action")","repository":{"id":$(printf '%s' "$REPO_ID" | grep -Eq '^[0-9]+$' && printf '%s' "$REPO_ID" || printf '"%s"' "$(json_escape "$REPO_ID")"),"full_name":"$(json_escape "$OWNER/$REPO_ID")","owner":{"login":"$(json_escape "$OWNER")"}},"pull_request":{"id":$((100000 + PR_NUMBER)),"number":$PR_NUMBER,"state":"$( [ "$action" = "closed" ] && echo closed || echo open )","merged":$merged_value,"head":{"ref":"$(json_escape "$SOURCE_BRANCH")","sha":"$(json_escape "${action}-head-sha")"},"base":{"ref":"$(json_escape "$TARGET_BRANCH")","sha":"base-sha"}},"sender":{"id":7,"login":"octocat","type":"User"}$(if [ "$action" = "review_requested" ]; then printf ',"requested_reviewer":{"id":99,"login":"%s","type":"Bot"}' "$(json_escape "$REVIEWER_LOGIN")"; fi)}
+{"action":"$(json_escape "$action")","repository":{"id":"$(json_escape "$REPO_PATH")","name":"$(json_escape "$REPO_NAME")","full_name":"$(json_escape "$REPO_PATH")","owner":{"login":"$(json_escape "$OWNER")"}},"pull_request":{"id":$((100000 + PR_NUMBER)),"number":$PR_NUMBER,"state":"$( [ "$action" = "closed" ] && echo closed || echo open )","merged":$merged_value,"head":{"ref":"$(json_escape "$SOURCE_BRANCH")","sha":"$(json_escape "${action}-head-sha")"},"base":{"ref":"$(json_escape "$TARGET_BRANCH")","sha":"base-sha"}},"sender":{"id":7,"login":"octocat","type":"User"}$(if [ "$action" = "review_requested" ]; then printf ',"requested_reviewer":{"id":99,"login":"%s","type":"Bot"}' "$(json_escape "$REVIEWER_LOGIN")"; fi)}
 JSON
 )
 

@@ -14,20 +14,22 @@ function Show-Usage {
     $scriptName = Get-ScriptName
 
     @"
-Usage: $scriptName -u URL -s SECRET -r REPO_ID -i PR_NUMBER [options]
+Usage: $scriptName -u URL -s SECRET -r REPO -i PR_NUMBER [options]
 
 Required:
   -u URL        Listener URL (e.g. http://localhost:8080/webhooks/v1/providers/github/<pathKey>)
   -s SECRET     GitHub webhook secret (must match the ProPR webhook secret)
-  -r REPO_ID    Repository id or name (string)
+  -r REPO       Repository name (for example: propr)
   -i PR_NUMBER  Pull request number (integer)
+  -S SOURCE     Source branch (required for realistic deliveries)
 
 Options:
   -O OWNER      Repository owner/namespace (default: acme)
+  -P REPO_PATH  Full repository path override (for example: acme/propr).
+                When omitted, the script derives it from -O and -r.
   -a ACTION     Pull request action; can be provided multiple times.
                 Defaults: opened, review_requested
                 Add closed explicitly when you want to test lifecycle cancellation.
-  -S SOURCE     Source branch (default: feature/test-branch)
   -T TARGET     Target branch (default: main)
   -R REVIEWER   Requested reviewer login for review_requested events (default: meister-review-bot)
   -M            Mark closed events as merged (default: false)
@@ -36,7 +38,7 @@ Options:
 
 Example:
     pwsh scripts/send-github-webhook.ps1 -u http://localhost:8080/webhooks/v1/providers/github/ddfccfe1645e40c4a8e61c4516a11a74 `
-    -s 95F0E081F5524B81E287179AFDF31E0F6B03408EED1601A3643209A0AAD3E1BD -r 101 -O acme -i 24
+    -s 95F0E081F5524B81E287179AFDF31E0F6B03408EED1601A3643209A0AAD3E1BD -r propr -O acme -i 24 -S feature/providers
 "@
 }
 
@@ -116,9 +118,11 @@ function Escape-JsonValue {
 }
 
 $repoId = $null
+$repoPath = $null
 $owner = 'acme'
+$repoName = $null
 $prNumber = $null
-$sourceBranch = 'feature/test-branch'
+$sourceBranch = $null
 $targetBranch = 'main'
 $reviewerLogin = 'meister-review-bot'
 $markMerged = $false
@@ -147,6 +151,10 @@ for ($index = 0; $index -lt $args.Count; $index++) {
         '-i' {
             if ($index + 1 -ge $args.Count) { Write-UsageError 'Missing argument for -i' }
             $prNumber = $args[++$index]
+        }
+        '-P' {
+            if ($index + 1 -ge $args.Count) { Write-UsageError 'Missing argument for -P' }
+            $repoPath = $args[++$index]
         }
         '-O' {
             if ($index + 1 -ge $args.Count) { Write-UsageError 'Missing argument for -O' }
@@ -192,6 +200,7 @@ for ($index = 0; $index -lt $args.Count; $index++) {
 if ([string]::IsNullOrWhiteSpace($url) -or
     [string]::IsNullOrWhiteSpace($secret) -or
     [string]::IsNullOrWhiteSpace($repoId) -or
+    [string]::IsNullOrWhiteSpace($sourceBranch) -or
     [string]::IsNullOrWhiteSpace($prNumber)) {
     [Console]::Error.WriteLine('Missing required argument.')
     Show-Usage
@@ -209,6 +218,24 @@ if ($actions.Count -eq 0) {
 $prNumberValue = Convert-ToPositiveInteger -Label 'PR_NUMBER' -Value $prNumber
 $repeatCount = Convert-ToPositiveInteger -Label 'REPEAT' -Value $repeat
 
+$repoId = $repoId.Trim()
+if ([string]::IsNullOrWhiteSpace($repoPath)) {
+    $repoPath = "$owner/$repoId"
+}
+
+$repoPath = $repoPath.Trim('/').Trim()
+if (-not $repoPath.Contains('/')) {
+    Write-UsageError 'REPO_PATH must be an owner/repository path such as acme/propr.'
+}
+
+$pathParts = $repoPath.Split('/', 2, [System.StringSplitOptions]::RemoveEmptyEntries)
+if ($pathParts.Length -ne 2 -or [string]::IsNullOrWhiteSpace($pathParts[0]) -or [string]::IsNullOrWhiteSpace($pathParts[1])) {
+    Write-UsageError 'REPO_PATH must include both owner and repository name.'
+}
+
+$owner = $pathParts[0]
+$repoName = $pathParts[1]
+
 function Build-Payload {
     param(
         [Parameter(Mandatory = $true)]
@@ -225,7 +252,7 @@ function Build-Payload {
     $state = if ($ActionName -eq 'closed') { 'closed' } else { 'open' }
 
     return @"
-{"action":"$(Escape-JsonValue $ActionName)","repository":{"id":$(if ($repoId -match '^[0-9]+$') { $repoId } else { '"' + (Escape-JsonValue $repoId) + '"' }),"full_name":"$(Escape-JsonValue "$owner/$repoId")","owner":{"login":"$(Escape-JsonValue $owner)"}},"pull_request":{"id":$((100000 + $prNumberValue)),"number":$prNumberValue,"state":"$state","merged":$mergedValue,"head":{"ref":"$(Escape-JsonValue $sourceBranch)","sha":"$(Escape-JsonValue "$ActionName-head-sha")"},"base":{"ref":"$(Escape-JsonValue $targetBranch)","sha":"base-sha"}}$requestedReviewer,"sender":{"id":7,"login":"octocat","type":"User"}}
+{"action":"$(Escape-JsonValue $ActionName)","repository":{"id":"$(Escape-JsonValue $repoPath)","name":"$(Escape-JsonValue $repoName)","full_name":"$(Escape-JsonValue $repoPath)","owner":{"login":"$(Escape-JsonValue $owner)"}},"pull_request":{"id":$((100000 + $prNumberValue)),"number":$prNumberValue,"state":"$state","merged":$mergedValue,"head":{"ref":"$(Escape-JsonValue $sourceBranch)","sha":"$(Escape-JsonValue "$ActionName-head-sha")"},"base":{"ref":"$(Escape-JsonValue $targetBranch)","sha":"base-sha"}}$requestedReviewer,"sender":{"id":7,"login":"octocat","type":"User"}}
 "@
 }
 
