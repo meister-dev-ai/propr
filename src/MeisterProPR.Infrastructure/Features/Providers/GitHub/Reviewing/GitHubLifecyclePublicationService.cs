@@ -47,7 +47,11 @@ internal sealed class GitHubLifecyclePublicationService(
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"GitHub review publication failed with status {(int)response.StatusCode}.");
+            var responseBody = await ReadDiagnosticBodyAsync(response, ct);
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(responseBody)
+                    ? $"GitHub review publication failed with status {(int)response.StatusCode}."
+                    : $"GitHub review publication failed with status {(int)response.StatusCode}: {responseBody}");
         }
 
         return ReviewCommentPostingDiagnosticsDto.Empty(
@@ -93,7 +97,7 @@ internal sealed class GitHubLifecyclePublicationService(
             revision.HeadSha,
             summaryBuilder.ToString().Trim(),
             "COMMENT",
-            inlineComments.Count == 0 ? null : inlineComments);
+            inlineComments);
     }
 
     private static string BuildRepositoryPath(RepositoryRef repository)
@@ -123,13 +127,25 @@ internal sealed class GitHubLifecyclePublicationService(
         };
     }
 
+    private static async Task<string?> ReadDiagnosticBodyAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        var normalized = body.Trim();
+        return normalized.Length <= 1000 ? normalized : normalized[..1000].TrimEnd() + "...";
+    }
+
     internal sealed record GitHubReviewRequest(
         [property: JsonPropertyName("commit_id")]
         string CommitId,
         [property: JsonPropertyName("body")] string Body,
         [property: JsonPropertyName("event")] string Event,
         [property: JsonPropertyName("comments")]
-        IReadOnlyList<GitHubInlineReviewComment>? Comments);
+        IReadOnlyList<GitHubInlineReviewComment> Comments);
 
     internal sealed record GitHubInlineReviewComment(
         [property: JsonPropertyName("path")] string Path,

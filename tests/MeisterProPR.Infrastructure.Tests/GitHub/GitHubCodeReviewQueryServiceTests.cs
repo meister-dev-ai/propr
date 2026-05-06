@@ -191,6 +191,64 @@ public sealed class GitHubCodeReviewQueryServiceTests
     }
 
     [Fact]
+    public async Task PullRequestFetcher_AcceptsOwnerRepoRepositoryIdWithoutNumericLookup()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repos/meister-dev-ai/propr/pulls/8" => CreateJsonResponse(
+                new
+                {
+                    title = "GitHub webhook repro",
+                    body = "Exercises repository path fallback.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/meister-dev-ai/propr/pulls/8/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = Array.Empty<object>(),
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "meister-dev-ai",
+            "meister-dev-ai/propr",
+            8,
+            1,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal("GitHub webhook repro", result.Title);
+        Assert.Equal("propr", result.RepositoryName);
+        Assert.Empty(result.ChangedFiles);
+    }
+
+    [Fact]
     public async Task ReviewContextTools_ReturnChangedFilesTreeContentAndProCursorContext()
     {
         var clientId = Guid.NewGuid();

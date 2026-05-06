@@ -138,6 +138,11 @@ internal partial class GitHubRepositoryExclusionFetcher(
         string secret,
         CancellationToken cancellationToken)
     {
+        if (LooksLikeRepositoryPath(repositoryId))
+        {
+            return NormalizeRepositoryPath(repositoryId);
+        }
+
         using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
             GitHubConnectionVerifier.BuildApiUri(host, $"/repositories/{Uri.EscapeDataString(repositoryId)}"),
             secret);
@@ -156,6 +161,20 @@ internal partial class GitHubRepositoryExclusionFetcher(
         }
 
         return repository.FullName.Trim();
+    }
+
+    private static bool LooksLikeRepositoryPath(string repositoryId)
+    {
+        return !string.IsNullOrWhiteSpace(repositoryId)
+               && repositoryId.Contains('/', StringComparison.Ordinal)
+               && repositoryId.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 2;
+    }
+
+    private static string NormalizeRepositoryPath(string repositoryId)
+    {
+        return string.Join(
+            '/',
+            repositoryId.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private static IReadOnlyList<string> ParsePatterns(string content)
