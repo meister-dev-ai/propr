@@ -46,25 +46,25 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         string? postedBody = null;
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == "https://api.github.com/user")
+                {
+                    return CreateJsonResponse(new { login = "meister-dev" });
+                }
+
+                if (request.RequestUri.AbsoluteUri ==
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews")
+                {
+                    postedBody = await request.Content!.ReadAsStringAsync();
+                    return CreateJsonResponse(new { id = 1 });
+                }
+
+                return CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound);
+            }));
         httpClientFactory.CreateClient("GitHubProvider")
-            .Returns(
-                new HttpClient(
-                    new StubHttpMessageHandler(async request =>
-                    {
-                        if (request.RequestUri!.AbsoluteUri == "https://api.github.com/user")
-                        {
-                            return CreateJsonResponse(new { login = "meister-dev" });
-                        }
-
-                        if (request.RequestUri.AbsoluteUri ==
-                            "https://api.github.com/repos/acme/propr/pulls/42/reviews")
-                        {
-                            postedBody = await request.Content!.ReadAsStringAsync();
-                            return CreateJsonResponse(new { id = 1 });
-                        }
-
-                        return new HttpResponseMessage(HttpStatusCode.NotFound);
-                    })));
+            .Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
@@ -108,25 +108,25 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         string? postedBody = null;
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == "https://api.github.com/user")
+                {
+                    return CreateJsonResponse(new { login = "meister-dev" });
+                }
+
+                if (request.RequestUri.AbsoluteUri ==
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews")
+                {
+                    postedBody = await request.Content!.ReadAsStringAsync();
+                    return CreateJsonResponse(new { id = 1 });
+                }
+
+                return CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound);
+            }));
         httpClientFactory.CreateClient("GitHubProvider")
-            .Returns(
-                new HttpClient(
-                    new StubHttpMessageHandler(async request =>
-                    {
-                        if (request.RequestUri!.AbsoluteUri == "https://api.github.com/user")
-                        {
-                            return CreateJsonResponse(new { login = "meister-dev" });
-                        }
-
-                        if (request.RequestUri.AbsoluteUri ==
-                            "https://api.github.com/repos/acme/propr/pulls/42/reviews")
-                        {
-                            postedBody = await request.Content!.ReadAsStringAsync();
-                            return CreateJsonResponse(new { id = 1 });
-                        }
-
-                        return new HttpResponseMessage(HttpStatusCode.NotFound);
-                    })));
+            .Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
@@ -166,18 +166,17 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                     true));
 
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+            {
+                "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
+                    new { message = "Review comments is invalid and Review threads is invalid" },
+                    (HttpStatusCode)422),
+                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+            })));
         httpClientFactory.CreateClient("GitHubProvider")
-            .Returns(
-                new HttpClient(
-                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-                    {
-                        "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-                        "https://api.github.com/repos/acme/propr/pulls/42/reviews" => new HttpResponseMessage((HttpStatusCode)422)
-                        {
-                            Content = new StringContent("{\"message\":\"Review comments is invalid and Review threads is invalid\"}"),
-                        },
-                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
-                    }))));
+            .Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
@@ -190,9 +189,9 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.Contains("Review comments is invalid", exception.Message, StringComparison.Ordinal);
     }
 
-    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
-        return new HttpResponseMessage(HttpStatusCode.OK)
+        return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(JsonSerializer.Serialize(payload)),
         };
@@ -201,11 +200,49 @@ public sealed class GitHubCodeReviewPublicationServiceTests
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
         : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            return responder(request);
+            var response = await responder(request);
+            return new DelegatingDisposableHttpResponseMessage(response);
+        }
+
+        private sealed class DelegatingDisposableHttpResponseMessage : HttpResponseMessage
+        {
+            private readonly HttpResponseMessage _inner;
+
+            public DelegatingDisposableHttpResponseMessage(HttpResponseMessage inner)
+                : base(inner.StatusCode)
+            {
+                this._inner = inner;
+                this.ReasonPhrase = inner.ReasonPhrase;
+                this.Version = inner.Version;
+                this.RequestMessage = inner.RequestMessage;
+                this.Content = inner.Content;
+
+                foreach (var header in inner.Headers)
+                {
+                    this.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    if (ReferenceEquals(this.Content, this._inner.Content))
+                    {
+                        this.Content = null;
+                    }
+
+                    base.Dispose(true);
+                    this._inner.Dispose();
+                    return;
+                }
+
+                base.Dispose(false);
+            }
         }
     }
 }
