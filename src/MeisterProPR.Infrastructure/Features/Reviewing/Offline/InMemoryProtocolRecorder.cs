@@ -176,7 +176,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? error,
         CancellationToken ct = default)
     {
-        return this.RecordOperationalEventAsync(protocolId, eventName, details, null, error);
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.MemoryOperation, eventName, details, null, error);
     }
 
     public Task RecordDedupEventAsync(
@@ -186,7 +186,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? error,
         CancellationToken ct = default)
     {
-        return this.RecordOperationalEventAsync(protocolId, eventName, details, null, error);
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, null, error);
     }
 
     public Task RecordCommentRelevanceEventAsync(
@@ -197,7 +197,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? error,
         CancellationToken ct = default)
     {
-        return this.RecordOperationalEventAsync(protocolId, eventName, details, output, error);
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
     }
 
     public Task RecordReviewFindingGateEventAsync(
@@ -208,7 +208,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? error,
         CancellationToken ct = default)
     {
-        return this.RecordOperationalEventAsync(protocolId, eventName, details, output, error);
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
     }
 
     public Task RecordVerificationEventAsync(
@@ -219,10 +219,16 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? error,
         CancellationToken ct = default)
     {
-        return this.RecordOperationalEventAsync(protocolId, eventName, details, output, error);
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
     }
 
-    private Task RecordOperationalEventAsync(Guid protocolId, string eventName, string? details, string? output, string? error)
+    private Task RecordEventAsync(
+        Guid protocolId,
+        ProtocolEventKind kind,
+        string eventName,
+        string? details,
+        string? output,
+        string? error)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -234,7 +240,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         {
             Id = Guid.NewGuid(),
             ProtocolId = protocolId,
-            Kind = ProtocolEventKind.Operational,
+            Kind = kind,
             Name = eventName,
             OccurredAt = DateTimeOffset.UtcNow,
             InputTextSample = Sanitize(details),

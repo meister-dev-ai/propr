@@ -48,6 +48,7 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("synthetic", fixture.Provenance.SourceKind);
         Assert.Single(fixture.RepositorySnapshot.Files);
         Assert.Single(fixture.PullRequestSnapshot.ChangedFiles);
+        Assert.NotNull(fixture.Threads);
         Assert.Single(fixture.Threads);
     }
 

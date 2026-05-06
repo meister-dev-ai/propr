@@ -39,6 +39,8 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
                 protocol.FinalConfidence,
                 protocol.AiConnectionCategory,
                 protocol.ModelId,
+                ResolveFinalSummary(job, protocol),
+                ResolveFinalComments(job, protocol),
                 protocol.Events
                     .Select(e => new ProtocolEventDto(
                         e.Id,
@@ -57,5 +59,50 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
             .AsReadOnly();
 
         return new GetReviewJobProtocolResult(job.ClientId, protocols);
+    }
+
+    private static string? ResolveFinalSummary(Domain.Entities.ReviewJob job, Domain.Entities.ReviewJobProtocol protocol)
+    {
+        if (protocol.FileResultId.HasValue)
+        {
+            return job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value)?.PerFileSummary;
+        }
+
+        if (string.Equals(protocol.Label, "synthesis", StringComparison.OrdinalIgnoreCase))
+        {
+            return job.Result?.Summary;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<ProtocolReviewCommentDto>? ResolveFinalComments(
+        Domain.Entities.ReviewJob job,
+        Domain.Entities.ReviewJobProtocol protocol)
+    {
+        if (protocol.FileResultId.HasValue)
+        {
+            return job.FileReviewResults
+                .FirstOrDefault(result => result.Id == protocol.FileResultId.Value)?
+                .Comments?
+                .Select(ToProtocolReviewCommentDto)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        if (string.Equals(protocol.Label, "synthesis", StringComparison.OrdinalIgnoreCase))
+        {
+            return job.Result?.Comments
+                .Select(ToProtocolReviewCommentDto)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        return null;
+    }
+
+    private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(Domain.ValueObjects.ReviewComment comment)
+    {
+        return new ProtocolReviewCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message);
     }
 }

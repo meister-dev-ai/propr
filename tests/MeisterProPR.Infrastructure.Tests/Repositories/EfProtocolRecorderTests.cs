@@ -96,7 +96,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             .FirstOrDefaultAsync();
 
         Assert.NotNull(stored);
-        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
+        Assert.Equal(ProtocolEventKind.MemoryOperation, stored.Kind);
         Assert.Equal(eventName, stored.Name);
         Assert.Contains("key", stored.InputTextSample ?? "");
     }

@@ -35,6 +35,9 @@ public interface ICrawlConfigurationRepository
     /// <summary>Returns all active crawl configurations across all clients.</summary>
     Task<IReadOnlyList<CrawlConfigurationDto>> GetAllActiveAsync(CancellationToken ct = default);
 
+    /// <summary>Returns all crawl configurations across all clients, including paused ones.</summary>
+    Task<IReadOnlyList<CrawlConfigurationDto>> GetAllAsync(CancellationToken ct = default);
+
     /// <summary>Returns all crawl configurations for a specific client.</summary>
     Task<IReadOnlyList<CrawlConfigurationDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default);
 

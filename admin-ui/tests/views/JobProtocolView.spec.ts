@@ -62,6 +62,8 @@ const sampleProtocols = [
     completedAt: '2024-01-01T00:01:00Z',
     totalInputTokens: 100,
     totalOutputTokens: 50,
+    finalSummary: null,
+    finalComments: null,
     events: [],
   },
 ]
@@ -662,5 +664,121 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(blocks[1].text()).toContain('END-OUTPUT')
     expect(blocks[1].text()).not.toContain('[TRUNCATED]')
     expect(blocks[1].text()).toBe(fullOutput)
+  })
+
+  it('does not show executing for completed posting diagnostics that have no output payload', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            label: 'posting',
+            events: [makeProtocolEvent({
+              kind: 'operational',
+              name: 'dedup_summary',
+              inputTextSample: JSON.stringify({ candidateCount: 2, postedCount: 1, suppressedCount: 1 }),
+              outputSummary: null,
+              error: null,
+            })],
+            finalSummary: null,
+            finalComments: null,
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('dedup_summary')
+    expect(wrapper.text()).not.toContain('Executing...')
+  })
+
+  it('does not show executing for completed evaluator AI calls that only recorded token usage', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            events: [makeProtocolEvent({
+              kind: 'aiCall',
+              name: 'ai_call_comment_relevance_evaluator',
+              inputTokens: 202,
+              outputTokens: 31,
+              inputTextSample: JSON.stringify({
+                filePath: 'src/foo.ts',
+                implementationId: 'hybrid-v1',
+              }),
+              outputSummary: null,
+              error: null,
+            })],
+            finalSummary: null,
+            finalComments: null,
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('ai_call_comment_relevance_evaluator')
+    expect(wrapper.text()).not.toContain('Executing...')
+
+    const eventRow = wrapper.find('tr.row-clickable')
+    expect(eventRow.exists()).toBe(true)
+    await eventRow.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No output captured for this completed step.')
+    expect(wrapper.text()).not.toContain('Currently Executing...')
+  })
+
+  it('shows final file summary and final comments in the selected file view', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            finalSummary: 'Final file summary from completed review.',
+            finalComments: [
+              makeComment('warning', 'Final file-level finding', 'src/foo.ts', 41),
+            ],
+            events: [makeProtocolEvent({
+              kind: 'toolCall',
+              name: 'read_file',
+              inputTextSample: 'args={"path":"src/foo.ts"}',
+              outputSummary: '{"ok":true}',
+            })],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Final File Result')
+    expect(wrapper.text()).toContain('Final file summary from completed review.')
+    expect(wrapper.text()).toContain('Final file-level finding')
   })
 })

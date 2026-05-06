@@ -10,6 +10,7 @@ using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
@@ -293,6 +294,52 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         Assert.Equal(outputText, ev.GetProperty("outputSummary").GetString());
         Assert.EndsWith("-input-tail", ev.GetProperty("inputTextSample").GetString());
         Assert.EndsWith("-output-tail", ev.GetProperty("outputSummary").GetString());
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_FileProtocol_IncludesFinalSummaryAndComments()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 7, 1);
+
+        var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
+        fileResult.MarkCompleted(
+            "Final file summary",
+            [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Final comment from file pass")]);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            FileResultId = fileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        job.FileReviewResults.Add(fileResult);
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+
+        Assert.Equal("Final file summary", protocolJson.GetProperty("finalSummary").GetString());
+        var finalComment = protocolJson.GetProperty("finalComments").EnumerateArray().Single();
+        Assert.Equal("Final comment from file pass", finalComment.GetProperty("message").GetString());
+        Assert.Equal("src/Foo.cs", finalComment.GetProperty("filePath").GetString());
     }
 
     public sealed class ProtocolApiFactory : WebApplicationFactory<Program>
