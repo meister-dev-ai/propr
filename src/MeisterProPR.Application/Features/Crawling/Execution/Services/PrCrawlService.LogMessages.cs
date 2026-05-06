@@ -101,7 +101,7 @@ public sealed partial class PrCrawlService
     private static partial void LogStateMachineNoOp(
         ILogger logger,
         int prId,
-        int threadId,
+        long threadId,
         string? previousStatus,
         string currentStatus);
 

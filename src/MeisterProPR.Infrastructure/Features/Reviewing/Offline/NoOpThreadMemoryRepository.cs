@@ -17,7 +17,7 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
 
     public Task BulkUpsertAsync(IEnumerable<ThreadMemoryRecord> records, CancellationToken ct = default) => Task.CompletedTask;
 
-    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, int threadId, CancellationToken ct = default)
+    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, long threadId, CancellationToken ct = default)
         => Task.FromResult(false);
 
     public Task<bool> RemoveByIdAsync(Guid id, Guid clientId, CancellationToken ct = default)

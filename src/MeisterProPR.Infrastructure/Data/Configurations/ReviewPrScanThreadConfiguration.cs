@@ -20,7 +20,8 @@ internal sealed class ReviewPrScanThreadConfiguration : IEntityTypeConfiguration
             .IsRequired();
 
         builder.Property(t => t.ThreadId)
-            .HasColumnName("thread_id");
+            .HasColumnName("thread_id")
+            .HasColumnType("bigint");
 
         builder.Property(t => t.LastSeenReplyCount)
             .HasColumnName("last_seen_reply_count")

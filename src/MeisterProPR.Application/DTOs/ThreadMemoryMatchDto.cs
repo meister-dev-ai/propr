@@ -17,7 +17,7 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="Source">How the memory was created — resolved thread or admin dismissal.</param>
 public sealed record ThreadMemoryMatchDto(
     Guid MemoryRecordId,
-    int ThreadId,
+    long ThreadId,
     string? FilePath,
     string ResolutionSummary,
     float SimilarityScore,

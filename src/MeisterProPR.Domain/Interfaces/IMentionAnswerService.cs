@@ -24,6 +24,6 @@ public interface IMentionAnswerService
         PullRequest pullRequest,
         Guid clientId,
         string question,
-        int threadId,
+        long threadId,
         CancellationToken cancellationToken = default);
 }

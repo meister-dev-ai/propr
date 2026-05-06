@@ -249,6 +249,166 @@ public sealed class GitHubCodeReviewQueryServiceTests
     }
 
     [Fact]
+    public async Task PullRequestFetcher_AllowsNullGraphQlCommentDatabaseIds()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repositories/101" => CreateJsonResponse(new { full_name = "acme/propr" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = "Fetch GitHub pull requests without Azure-only code.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = false,
+                                            path = "src/Fetcher.cs",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = (int?)null,
+                                                        body = "Please handle null.",
+                                                        createdAt = "2026-04-17T10:00:00Z",
+                                                        author = new { login = "meister-review-bot[bot]", databaseId = 99 },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        var thread = Assert.Single(result.ExistingThreads!);
+        Assert.Equal(0, thread.ThreadId);
+        Assert.Equal(0, Assert.Single(thread.Comments).CommentId);
+    }
+
+    [Fact]
+    public async Task PullRequestFetcher_AllowsLargeGraphQlCommentDatabaseIds()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repositories/101" => CreateJsonResponse(new { full_name = "acme/propr" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = "Fetch GitHub pull requests without Azure-only code.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = false,
+                                            path = "src/Fetcher.cs",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = 3197004556L,
+                                                        body = "Please handle null.",
+                                                        createdAt = "2026-04-17T10:00:00Z",
+                                                        author = new { login = "meister-review-bot[bot]", databaseId = 223894421L },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        var thread = Assert.Single(result.ExistingThreads!);
+        Assert.Equal(3197004556L, thread.ThreadId);
+        Assert.Equal(3197004556L, Assert.Single(thread.Comments).CommentId);
+    }
+
+    [Fact]
     public async Task ReviewContextTools_ReturnChangedFilesTreeContentAndProCursorContext()
     {
         var clientId = Guid.NewGuid();

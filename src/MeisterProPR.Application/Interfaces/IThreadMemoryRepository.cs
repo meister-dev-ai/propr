@@ -30,7 +30,7 @@ public interface IThreadMemoryRepository
     ///     Removes the record for the given thread.
     /// </summary>
     /// <returns><see langword="true" /> if a record was deleted; <see langword="false" /> (no-op) if none existed.</returns>
-    Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, int threadId, CancellationToken ct = default);
+    Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, long threadId, CancellationToken ct = default);
 
     /// <summary>
     ///     Removes the record with the given <paramref name="id" />, scoped to the owning client.

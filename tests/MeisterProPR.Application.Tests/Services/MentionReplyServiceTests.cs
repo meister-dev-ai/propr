@@ -111,7 +111,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
-                Arg.Any<int>(),
+                Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
 
@@ -167,7 +167,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
-                Arg.Any<int>(),
+                Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs<InvalidOperationException>();
 
@@ -207,7 +207,7 @@ public sealed class MentionReplyServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
-                Arg.Any<int>(),
+                Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(answer);
         this._threadReplier.ReplyAsync(

@@ -37,8 +37,8 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
-        int commentId,
+        long threadId,
+        long commentId,
         CancellationToken ct = default)
     {
         return await dbContext.MentionReplyJobs

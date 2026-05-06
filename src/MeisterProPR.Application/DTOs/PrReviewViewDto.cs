@@ -37,7 +37,7 @@ public sealed record PrJobSummaryDto(
 /// <summary>Summary of a thread memory record that originated from this pull request.</summary>
 public sealed record ThreadMemorySummaryDto(
     Guid MemoryRecordId,
-    int ThreadId,
+    long ThreadId,
     string? FilePath,
     string ResolutionSummaryExcerpt,
     MemorySource Source,

@@ -603,7 +603,7 @@ public sealed class AdoCommentPoster(
         return tokens;
     }
 
-    internal sealed record DuplicateSuppressionMatch(string ReasonCode, int ThreadId);
+    internal sealed record DuplicateSuppressionMatch(string ReasonCode, long ThreadId);
 
     private sealed class PostingDiagnosticsBuilder
     {

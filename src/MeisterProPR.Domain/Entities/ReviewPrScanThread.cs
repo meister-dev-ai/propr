@@ -15,7 +15,7 @@ public sealed class ReviewPrScanThread
     public Guid ReviewPrScanId { get; set; }
 
     /// <summary>ADO thread identifier within the pull request.</summary>
-    public int ThreadId { get; set; }
+    public long ThreadId { get; set; }
 
     /// <summary>
     ///     The number of comments observed in this thread when it was last processed.

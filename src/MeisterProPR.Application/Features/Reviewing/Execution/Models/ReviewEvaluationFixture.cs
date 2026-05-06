@@ -106,7 +106,7 @@ public sealed record FixtureChangedFile(
 ///     Prior discussion thread supplied with the offline fixture.
 /// </summary>
 public sealed record FixtureThread(
-    int ThreadId,
+    long ThreadId,
     string? FilePath,
     int? LineNumber,
     string? Status,
@@ -119,5 +119,5 @@ public sealed record FixtureThreadComment(
     string AuthorName,
     string Content,
     Guid? AuthorId = null,
-    int CommentId = 0,
+    long CommentId = 0,
     DateTimeOffset? PublishedAt = null);

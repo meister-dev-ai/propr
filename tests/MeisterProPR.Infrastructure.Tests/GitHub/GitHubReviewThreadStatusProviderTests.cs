@@ -253,6 +253,146 @@ public sealed class GitHubReviewThreadStatusProviderTests
         Assert.Equal(501, entry.ThreadId);
     }
 
+    [Fact]
+    public async Task GetReviewerThreadStatusesAsync_AllowsNullGraphQlCommentDatabaseIds()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = false,
+                                            path = "src/feature.ts",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = (int?)null,
+                                                        body = "Please handle null.",
+                                                        createdAt = "2026-04-14T08:00:00Z",
+                                                        author = new { login = "meister-review-bot" },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var sut = new GitHubReviewThreadStatusProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            clientRegistry,
+            httpClientFactory);
+
+        var result = await sut.GetReviewerThreadStatusesAsync(
+            "https://github.com",
+            "meister-dev-ai",
+            "meister-dev-ai/propr",
+            8,
+            Guid.Empty,
+            clientId,
+            CancellationToken.None);
+
+        var entry = Assert.Single(result);
+        Assert.Equal(0, entry.ThreadId);
+    }
+
+    [Fact]
+    public async Task GetReviewerThreadStatusesAsync_AllowsLargeGraphQlCommentDatabaseIds()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = false,
+                                            path = "src/feature.ts",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = 3197004556L,
+                                                        body = "Please handle null.",
+                                                        createdAt = "2026-04-14T08:00:00Z",
+                                                        author = new { login = "meister-review-bot" },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var sut = new GitHubReviewThreadStatusProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            clientRegistry,
+            httpClientFactory);
+
+        var result = await sut.GetReviewerThreadStatusesAsync(
+            "https://github.com",
+            "meister-dev-ai",
+            "meister-dev-ai/propr",
+            8,
+            Guid.Empty,
+            clientId,
+            CancellationToken.None);
+
+        var entry = Assert.Single(result);
+        Assert.Equal(3197004556L, entry.ThreadId);
+    }
+
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)
     {
         var repository = Substitute.For<IClientScmConnectionRepository>();

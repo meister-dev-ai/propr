@@ -266,8 +266,8 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
 

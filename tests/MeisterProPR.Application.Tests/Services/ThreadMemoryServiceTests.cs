@@ -137,8 +137,8 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_RepositoryThrows_DoesNotThrow()
     {
         var (_, repo, _, _, service) = CreateService();
-        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new Exception("db error"));
+        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        .ThrowsAsync(new Exception("db error"));
 
         var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
         var ex = await Record.ExceptionAsync(() => service.HandleThreadReopenedAsync(evt));

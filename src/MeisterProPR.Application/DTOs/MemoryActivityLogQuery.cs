@@ -7,7 +7,7 @@ namespace MeisterProPR.Application.DTOs;
 
 /// <summary>Query parameters for <see cref="MeisterProPR.Application.Interfaces.IMemoryActivityLog.QueryAsync" />.</summary>
 public sealed record MemoryActivityLogQuery(
-    int? ThreadId = null,
+    long? ThreadId = null,
     int? PullRequestId = null,
     string? RepositoryId = null,
     MemoryActivityAction? Action = null,

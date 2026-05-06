@@ -22,7 +22,7 @@ public sealed class NoOpThreadMemoryService : IThreadMemoryService
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        int threadId,
+        long threadId,
         string? previousStatus,
         string currentStatus,
         string reason,

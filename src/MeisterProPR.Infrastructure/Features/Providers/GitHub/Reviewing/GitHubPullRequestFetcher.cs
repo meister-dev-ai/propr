@@ -308,7 +308,7 @@ internal sealed class GitHubPullRequestFetcher(
         return threads
             .Where(thread => thread.Comments.Nodes.Count > 0)
             .Select(thread => new PrCommentThread(
-                thread.Comments.Nodes[0].DatabaseId,
+                thread.Comments.Nodes[0].DatabaseId ?? 0,
                 NormalizePath(thread.Path),
                 thread.Line,
                 thread.Comments.Nodes.Select(ToThreadComment).ToList().AsReadOnly(),
@@ -328,7 +328,7 @@ internal sealed class GitHubPullRequestFetcher(
             comment.Author?.Login ?? "Unknown",
             comment.Body ?? string.Empty,
             stableAuthorId,
-            comment.DatabaseId,
+            comment.DatabaseId ?? 0,
             comment.CreatedAt);
     }
 
@@ -419,7 +419,7 @@ internal sealed class GitHubPullRequestFetcher(
 
     private sealed record GitHubReviewCommentNode(
         [property: JsonPropertyName("databaseId")]
-        int DatabaseId,
+        long? DatabaseId,
         [property: JsonPropertyName("body")] string? Body,
         [property: JsonPropertyName("createdAt")]
         DateTimeOffset CreatedAt,
@@ -428,5 +428,5 @@ internal sealed class GitHubPullRequestFetcher(
     private sealed record GitHubActorNode(
         [property: JsonPropertyName("login")] string? Login,
         [property: JsonPropertyName("databaseId")]
-        int? DatabaseId);
+        long? DatabaseId);
 }

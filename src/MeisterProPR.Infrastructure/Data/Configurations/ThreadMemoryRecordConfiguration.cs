@@ -24,6 +24,7 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
 
         builder.Property(r => r.ThreadId)
             .HasColumnName("thread_id")
+            .HasColumnType("bigint")
             .IsRequired();
 
         builder.Property(r => r.RepositoryId)
