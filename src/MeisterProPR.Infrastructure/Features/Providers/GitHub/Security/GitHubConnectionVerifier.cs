@@ -55,13 +55,14 @@ internal sealed class GitHubConnectionVerifier(
             BuildApiUri(host, "/user"),
             await this._authenticationService.GetAccessTokenAsync(host, connection, ct));
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+        var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             this._logger.LogWarning(
                 "GitHub PAT verification failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode);
             throw new InvalidOperationException("GitHub connection authentication failed.");
         }
@@ -71,7 +72,7 @@ internal sealed class GitHubConnectionVerifier(
             this._logger.LogWarning(
                 "GitHub PAT verification failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode);
             throw new InvalidOperationException($"GitHub connection verification failed with status {(int)response.StatusCode}.");
         }
@@ -85,8 +86,8 @@ internal sealed class GitHubConnectionVerifier(
         this._logger.LogDebug(
             "GitHub PAT verification succeeded for connection {ConnectionId} on host {HostBaseUrl} as {AuthenticatedLogin}.",
             connection.Id,
-            host.HostBaseUrl,
-            user.Login.Trim());
+            safeHostBaseUrl,
+            user.Login.Trim().Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"));
         return new GitHubConnectionContext(
             connection,
             user.Login.Trim(),
@@ -102,11 +103,12 @@ internal sealed class GitHubConnectionVerifier(
     {
         var installation = await this._authenticationService.GetInstallationMetadataAsync(host, connection, ct);
         _ = await this._authenticationService.GetAccessTokenAsync(host, connection, ct);
+        var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "GitHub App verification succeeded for connection {ConnectionId} on host {HostBaseUrl} as installation account {AuthenticatedLogin}.",
             connection.Id,
-            host.HostBaseUrl,
-            installation.AccountLogin);
+            safeHostBaseUrl,
+            installation.AccountLogin.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"));
         var authenticatedActorLogin = string.IsNullOrWhiteSpace(installation.AppSlug)
             ? installation.AccountLogin
             : installation.AppSlug.Trim() + "[bot]";

@@ -118,24 +118,15 @@ public sealed class TenantAuthController(
             return this.NotFound();
         }
 
-        if (!Uri.TryCreate(challenge.RedirectUrl, UriKind.Absolute, out var challengeRedirectUri))
+        var challengeRedirectUri = TryResolveAllowedAbsoluteRedirectUri(
+            challenge.RedirectUrl,
+            challenge.AllowedRedirectOrigin);
+        if (challengeRedirectUri is null)
         {
             return this.NotFound();
         }
 
-        if (!string.Equals(challengeRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(challengeRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return this.NotFound();
-        }
-
-        var challengeRedirectOrigin = challengeRedirectUri.GetLeftPart(UriPartial.Authority);
-        if (!string.Equals(challengeRedirectOrigin, challenge.AllowedRedirectOrigin, StringComparison.OrdinalIgnoreCase))
-        {
-            return this.NotFound();
-        }
-
-        return this.Redirect(challengeRedirectUri.ToString());
+        return this.RedirectToValidatedAbsoluteUri(challengeRedirectUri);
     }
 
     /// <summary>Completes tenant-scoped external sign-in and returns the shared application session payload.</summary>
@@ -175,26 +166,16 @@ public sealed class TenantAuthController(
 
             var failureCode = completion.FailureCode ?? "external_identity_rejected";
             var failureMessage = completion.FailureMessage ?? "External identity rejected by tenant policy.";
-            var failedRedirectUrl = this.TryBuildFrontendCallbackRedirectUrl(
+            var failedRedirectUri = this.TryBuildFrontendCallbackRedirectUri(
                 completion.FrontendReturnUrl,
                 new Dictionary<string, string?>
                 {
                     ["error"] = failureCode,
                     ["message"] = failureMessage,
                 });
-            if (failedRedirectUrl is not null
-                && Uri.TryCreate(failedRedirectUrl, UriKind.Absolute, out var failedRedirectUri)
-                && (string.Equals(failedRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(failedRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            if (failedRedirectUri is not null)
             {
-                var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(configuration);
-                var failedRedirectOrigin = failedRedirectUri.GetLeftPart(UriPartial.Authority);
-                if (allowedOrigins.Contains(failedRedirectOrigin, StringComparer.OrdinalIgnoreCase)
-                    || failedRedirectUri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase)
-                    || failedRedirectUri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))
-                {
-                    return this.Redirect(failedRedirectUri.ToString());
-                }
+                return this.RedirectToValidatedAbsoluteUri(failedRedirectUri);
             }
 
             return this.Unauthorized(new { error = failureCode, message = failureMessage });
@@ -202,7 +183,7 @@ public sealed class TenantAuthController(
 
         var session = await sessionFactory.CreateAsync(completion.User, ct);
         var sessionDto = AuthHelpers.ToTenantAuthSessionDto(session);
-        var successfulRedirectUrl = this.TryBuildFrontendCallbackRedirectUrl(
+        var successfulRedirectUri = this.TryBuildFrontendCallbackRedirectUri(
             completion.FrontendReturnUrl,
             new Dictionary<string, string?>
             {
@@ -211,19 +192,9 @@ public sealed class TenantAuthController(
                 ["expiresIn"] = sessionDto.ExpiresIn.ToString(CultureInfo.InvariantCulture),
                 ["tokenType"] = sessionDto.TokenType,
             });
-        if (successfulRedirectUrl is not null
-            && Uri.TryCreate(successfulRedirectUrl, UriKind.Absolute, out var successfulRedirectUri)
-            && (string.Equals(successfulRedirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(successfulRedirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        if (successfulRedirectUri is not null)
         {
-            var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(configuration);
-            var successfulRedirectOrigin = successfulRedirectUri.GetLeftPart(UriPartial.Authority);
-            if (allowedOrigins.Contains(successfulRedirectOrigin, StringComparer.OrdinalIgnoreCase)
-                || successfulRedirectUri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase)
-                || successfulRedirectUri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase))
-            {
-                return this.Redirect(successfulRedirectUri.ToString());
-            }
+            return this.RedirectToValidatedAbsoluteUri(successfulRedirectUri);
         }
 
         return this.Ok(sessionDto);
@@ -234,6 +205,31 @@ public sealed class TenantAuthController(
         return PublicApplicationUrlResolver.GetApplicationBaseUri(this.Request, configuration);
     }
 
+    private IActionResult RedirectToValidatedAbsoluteUri(Uri redirectUri)
+    {
+        this.Response.StatusCode = StatusCodes.Status302Found;
+        this.Response.Headers.Location = redirectUri.AbsoluteUri;
+        return new EmptyResult();
+    }
+
+    private static Uri? TryResolveAllowedAbsoluteRedirectUri(string? redirectUrl, string allowedOrigin)
+    {
+        if (!Uri.TryCreate(redirectUrl, UriKind.Absolute, out var redirectUri))
+        {
+            return null;
+        }
+
+        if (!IsSupportedRedirectScheme(redirectUri))
+        {
+            return null;
+        }
+
+        var redirectOrigin = redirectUri.GetLeftPart(UriPartial.Authority);
+        return string.Equals(redirectOrigin, allowedOrigin, StringComparison.OrdinalIgnoreCase)
+            ? redirectUri
+            : null;
+    }
+
     private Uri? TryResolveFrontendReturnUrl(string? returnUrl)
     {
         if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var returnUri))
@@ -241,19 +237,12 @@ public sealed class TenantAuthController(
             return null;
         }
 
-        if (!string.Equals(returnUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(returnUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var origin = returnUri.GetLeftPart(UriPartial.Authority);
-        return BrowserOriginPolicy.IsAllowedOrigin(origin, configuration)
+        return this.IsAllowedBrowserRedirectUri(returnUri)
             ? returnUri
             : null;
     }
 
-    private string? TryBuildFrontendCallbackRedirectUrl(
+    private Uri? TryBuildFrontendCallbackRedirectUri(
         string? frontendReturnUrl,
         IReadOnlyDictionary<string, string?> fragmentValues)
     {
@@ -262,14 +251,7 @@ public sealed class TenantAuthController(
             return null;
         }
 
-        if (!string.Equals(returnUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(returnUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var origin = returnUri.GetLeftPart(UriPartial.Authority);
-        if (!BrowserOriginPolicy.IsAllowedOrigin(origin, configuration))
+        if (!this.IsAllowedBrowserRedirectUri(returnUri))
         {
             return null;
         }
@@ -285,7 +267,24 @@ public sealed class TenantAuthController(
             Fragment = fragment,
         };
 
-        return builder.Uri.ToString();
+        return builder.Uri;
+    }
+
+    private bool IsAllowedBrowserRedirectUri(Uri redirectUri)
+    {
+        if (!IsSupportedRedirectScheme(redirectUri))
+        {
+            return false;
+        }
+
+        var origin = redirectUri.GetLeftPart(UriPartial.Authority);
+        return BrowserOriginPolicy.IsAllowedOrigin(origin, configuration);
+    }
+
+    private static bool IsSupportedRedirectScheme(Uri redirectUri)
+    {
+        return string.Equals(redirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(redirectUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 }
 

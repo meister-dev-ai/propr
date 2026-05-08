@@ -259,6 +259,72 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
     }
 
     [Fact]
+    public async Task ExternalCallback_WithAllowedFrontendReturnUrl_RedirectsToFrontendWithSessionFragment()
+    {
+        factory.ResetLicensing();
+        factory.ResetExternalAuthResponses();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var emailLocalPart = $"return.user.{Guid.NewGuid():N}";
+        var email = $"{emailLocalPart}@acme.test";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        const string clientId = "entra-client-id";
+        var providerId = await factory.SeedSsoProviderAsync(
+            tenantId,
+            "Acme Entra",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            clientId: clientId,
+            scopes: ["openid", "profile", "email"]);
+
+        using var client = CreateNonRedirectingClient(factory);
+        const string returnUrl = "http://localhost:5173/auth/callback";
+        var challengeResponse = await client.GetAsync(
+            $"/auth/external/challenge/{tenantSlug}/{providerId}?returnUrl={Uri.EscapeDataString(returnUrl)}");
+
+        Assert.Equal(HttpStatusCode.Found, challengeResponse.StatusCode);
+        var challengeLocation = challengeResponse.Headers.Location;
+        Assert.NotNull(challengeLocation);
+        var challengeQuery = QueryHelpers.ParseQuery(challengeLocation.Query);
+        var state = GetSingleQueryValue(challengeQuery, "state");
+        var expectedCallbackUri = BuildExpectedCallbackUri(client.BaseAddress!, tenantSlug);
+
+        factory.QueueExternalAuthResponse(request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://login.microsoftonline.com/common/oauth2/v2.0/token", request.RequestUri?.ToString());
+            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
+            Assert.Contains($"code={Uri.EscapeDataString("entra-code-return-url")}", body, StringComparison.Ordinal);
+            Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
+
+            return CreateJsonResponse(
+                new
+                {
+                    id_token = CreateOidcIdToken(
+                        "https://login.microsoftonline.com/common/v2.0",
+                        clientId,
+                        "entra-user-return-url",
+                        email,
+                        true,
+                        "Return User"),
+                });
+        });
+
+        var callbackResponse = await client.GetAsync(
+            $"/auth/external/callback/{tenantSlug}?code=entra-code-return-url&state={Uri.EscapeDataString(state)}");
+
+        Assert.Equal(HttpStatusCode.Found, callbackResponse.StatusCode);
+        var location = callbackResponse.Headers.Location;
+        Assert.NotNull(location);
+        Assert.Equal("http://localhost:5173", location.GetLeftPart(UriPartial.Authority));
+        Assert.Equal("/auth/callback", location.AbsolutePath);
+
+        var fragment = QueryHelpers.ParseQuery("?" + location.Fragment.TrimStart('#'));
+        Assert.False(string.IsNullOrWhiteSpace(GetSingleQueryValue(fragment, "accessToken")));
+        Assert.False(string.IsNullOrWhiteSpace(GetSingleQueryValue(fragment, "refreshToken")));
+        Assert.Equal("Bearer", GetSingleQueryValue(fragment, "tokenType"));
+    }
+
+    [Fact]
     public async Task ExternalCallback_WithVerifiedAllowedEmail_AutoCreatesUserMembershipAndIdentity()
     {
         factory.ResetLicensing();

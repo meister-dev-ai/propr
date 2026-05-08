@@ -58,11 +58,12 @@ internal sealed class GitHubAuthenticationService
         ValidateAppInstallationConnection(connection);
 
         var installationId = connection.GitHubAppInstallationId!.Value.ToString(CultureInfo.InvariantCulture);
+        var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "Looking up GitHub App installation {InstallationId} for connection {ConnectionId} on host {HostBaseUrl}.",
             installationId,
             connection.Id,
-            host.HostBaseUrl);
+            safeHostBaseUrl);
         var appJwt = CreateAppJwt(connection);
         using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
             GitHubConnectionVerifier.BuildApiUri(host, $"/app/installations/{installationId}"),
@@ -72,12 +73,13 @@ internal sealed class GitHubAuthenticationService
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             var detail = await ReadResponseMessageAsync(response, ct);
+            var safeDetail = (detail ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 "GitHub App installation lookup failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}. Detail: {Detail}",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode,
-                detail);
+                safeDetail);
             throw new InvalidOperationException(
                 BuildMessage(
                     "GitHub App authentication failed.",
@@ -90,7 +92,7 @@ internal sealed class GitHubAuthenticationService
                 "GitHub App installation {InstallationId} was not found for connection {ConnectionId} on host {HostBaseUrl}.",
                 installationId,
                 connection.Id,
-                host.HostBaseUrl);
+                safeHostBaseUrl);
             throw new InvalidOperationException("GitHub App installation was not found or is not accessible.");
         }
 
@@ -99,7 +101,7 @@ internal sealed class GitHubAuthenticationService
             this._logger.LogWarning(
                 "GitHub App installation lookup failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode);
             throw new InvalidOperationException(
                 await BuildStatusMessageAsync("GitHub App installation lookup failed", response, ct));
@@ -119,7 +121,7 @@ internal sealed class GitHubAuthenticationService
             "GitHub App installation {InstallationId} resolved for connection {ConnectionId} as account {AccountLogin}.",
             installationId,
             connection.Id,
-            payload.Account.Login.Trim());
+            payload.Account.Login.Trim().Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"));
 
         return new GitHubInstallationMetadata(
             payload.Account.Login.Trim(),
@@ -171,6 +173,7 @@ internal sealed class GitHubAuthenticationService
         }
 
         var installationId = connection.GitHubAppInstallationId!.Value.ToString(CultureInfo.InvariantCulture);
+        var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
         this._logger.LogDebug(
             "Minting GitHub App installation token for installation {InstallationId} on connection {ConnectionId}.",
             installationId,
@@ -185,12 +188,13 @@ internal sealed class GitHubAuthenticationService
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             var detail = await ReadResponseMessageAsync(response, ct);
+            var safeDetail = (detail ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 "GitHub App installation token request failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}. Detail: {Detail}",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode,
-                detail);
+                safeDetail);
             throw new InvalidOperationException(
                 BuildMessage(
                     "GitHub App installation token request failed.",
@@ -211,7 +215,7 @@ internal sealed class GitHubAuthenticationService
             this._logger.LogWarning(
                 "GitHub App installation token request failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
                 connection.Id,
-                host.HostBaseUrl,
+                safeHostBaseUrl,
                 (int)response.StatusCode);
             throw new InvalidOperationException(
                 await BuildStatusMessageAsync("GitHub App installation token request failed", response, ct));

@@ -1,22 +1,21 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
 using System.Text;
 
 namespace MeisterProPR.Infrastructure.Utilities;
 
 /// <summary>
-///     Sanitizes text content to prevent HTML injection in Azure DevOps comments.
-///     Escapes dangerous HTML characters while preserving markdown formatting.
+///     Sanitizes text content to prevent HTML injection in rendered review comments.
+///     Uses the built-in HTML encoder so unsafe HTML characters are escaped consistently.
 /// </summary>
 internal static class HtmlSanitizer
 {
     /// <summary>
-    ///     Sanitizes the given text by escaping HTML metacharacters that could be interpreted
-    ///     as HTML tags. This prevents tags like &lt;style&gt;, &lt;script&gt;, and other
-    ///     HTML elements from being rendered in Azure DevOps comments.
-    ///     Markdown formatting (bold, italic, code fences, etc.) is preserved since
-    ///     they do not use angle brackets. Content inside markdown code blocks is also protected.
+    ///     Sanitizes the given text with the framework HTML encoder before it is rendered.
+    ///     This prevents tags like &lt;style&gt;, &lt;script&gt;, and other HTML fragments from
+    ///     being interpreted by downstream renderers.
     /// </summary>
     /// <param name="input">The text to sanitize. Can be null or empty.</param>
     /// <returns>The sanitized text with HTML metacharacters escaped.</returns>
@@ -27,14 +26,7 @@ internal static class HtmlSanitizer
             return input ?? string.Empty;
         }
 
-        // Escape < and > to prevent HTML injection.
-        // This is safe because:
-        // 1. Markdown formatting doesn't require angle brackets (**, *, `, [text](url), etc.)
-        // 2. Code blocks use backticks (```), not angle brackets
-        // 3. Azure DevOps will ignore escaped angle brackets in markdown
-        return input
-            .Replace("<", "&lt;", StringComparison.Ordinal)
-            .Replace(">", "&gt;", StringComparison.Ordinal);
+        return WebUtility.HtmlEncode(input);
     }
 
     /// <summary>
@@ -49,9 +41,7 @@ internal static class HtmlSanitizer
             throw new ArgumentNullException(nameof(builder));
         }
 
-        // Replace in reverse order to avoid offset issues.
-        // First replace > (no offset change), then < (no offset change).
-        builder.Replace(">", "&gt;");
-        builder.Replace("<", "&lt;");
+        var encoded = WebUtility.HtmlEncode(builder.ToString());
+        builder.Clear().Append(encoded);
     }
 }

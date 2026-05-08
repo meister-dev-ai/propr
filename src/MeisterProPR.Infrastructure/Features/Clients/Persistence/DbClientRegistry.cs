@@ -82,11 +82,12 @@ public sealed class DbClientRegistry(
         }
         catch (Exception ex)
         {
+            var safeHostBaseUrl = host.HostBaseUrl.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 ex,
                 "Failed to derive GitHub App reviewer identity for client {ClientId} on host {HostBaseUrl}; continuing without fallback reviewer identity.",
                 clientId,
-                host.HostBaseUrl);
+                safeHostBaseUrl);
             return null;
         }
     }
