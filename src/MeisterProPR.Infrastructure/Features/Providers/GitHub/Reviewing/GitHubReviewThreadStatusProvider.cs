@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -17,7 +16,6 @@ namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
 internal sealed class GitHubReviewThreadStatusProvider(
     GitHubConnectionVerifier connectionVerifier,
-    IClientRegistry clientRegistry,
     IHttpClientFactory httpClientFactory) : IProviderReviewerThreadStatusFetcher
 {
     private const string GitHubReviewThreadsQuery =
@@ -35,21 +33,16 @@ internal sealed class GitHubReviewThreadStatusProvider(
         CancellationToken ct = default)
     {
         var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
-        var reviewer = await clientRegistry.GetReviewerIdentityAsync(clientId, host, ct);
-        if (reviewer is null)
-        {
-            return [];
-        }
-
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
         var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, ct);
         var threads = await this.GetReviewThreadsAsync(context, host, repositoryPath, pullRequestId, ct);
+        var authoredLogin = context.AuthenticatedActorLogin;
 
         return threads
             .Where(thread => thread.Comments.Nodes.Count > 0)
             .Where(thread => string.Equals(
                 thread.Comments.Nodes[0].Author?.Login,
-                reviewer.Login,
+                authoredLogin,
                 StringComparison.OrdinalIgnoreCase))
             .Select(thread => new PrThreadStatusEntry(
                 thread.Comments.Nodes[0].DatabaseId ?? 0,
@@ -58,7 +51,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
                 BuildCommentHistory(thread.Comments.Nodes),
                 thread.Comments.Nodes.Count(comment => !string.Equals(
                     comment.Author?.Login,
-                    reviewer.Login,
+                    authoredLogin,
                     StringComparison.OrdinalIgnoreCase))))
             .ToList()
             .AsReadOnly();
@@ -75,9 +68,9 @@ internal sealed class GitHubReviewThreadStatusProvider(
             return NormalizeRepositoryPath(repositoryId);
         }
 
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(host, $"/repositories/{Uri.EscapeDataString(repositoryId)}"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -140,7 +133,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
                     },
                 }),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.Connection.Secret);
+        await context.AuthorizeRequestAsync(request, ct);
 
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)

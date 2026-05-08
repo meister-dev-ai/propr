@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Globalization;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -17,6 +18,8 @@ internal sealed class AdoCodeReviewPublicationService(
     VssConnectionFactory connectionFactory,
     IAdoCommentPoster commentPoster) : ICodeReviewPublicationService
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     internal Func<string, CancellationToken, Task<GitHttpClient>>? GitClientResolver { get; set; }
 
     public ScmProvider Provider => ScmProvider.AzureDevOps;
@@ -30,6 +33,12 @@ internal sealed class AdoCodeReviewPublicationService(
         CancellationToken ct = default)
     {
         EnsureAzureDevOps(review.Repository.Host);
+
+        using var activity = ActivitySource.StartActivity("AdoCodeReviewPublicationService.PublishReview");
+        activity?.SetTag("scm.provider", ScmProvider.AzureDevOps.ToString());
+        activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
+        activity?.SetTag("review.number", review.Number);
+        activity?.SetTag("publication.author.login", reviewer.Login);
 
         var projectId = ResolveProjectId(review.Repository);
         Exception? lastException = null;

@@ -6,16 +6,16 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
 
-/// <summary>Persists the configured reviewer identity for one client provider connection.</summary>
+/// <summary>Persists the configured reviewer-trigger identity for one client provider connection.</summary>
 public interface IClientReviewerIdentityRepository
 {
-    /// <summary>Returns the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Returns the configured reviewer-trigger identity for one client provider connection.</summary>
     Task<ClientReviewerIdentityDto?> GetByConnectionIdAsync(
         Guid clientId,
         Guid connectionId,
         CancellationToken ct = default);
 
-    /// <summary>Creates or replaces the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Creates or replaces the configured reviewer-trigger identity for one client provider connection.</summary>
     Task<ClientReviewerIdentityDto?> UpsertAsync(
         Guid clientId,
         Guid connectionId,
@@ -26,6 +26,6 @@ public interface IClientReviewerIdentityRepository
         bool isBot,
         CancellationToken ct = default);
 
-    /// <summary>Clears the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Clears the configured reviewer-trigger identity for one client provider connection.</summary>
     Task<bool> DeleteAsync(Guid clientId, Guid connectionId, CancellationToken ct = default);
 }

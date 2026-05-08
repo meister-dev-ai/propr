@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.Interfaces;
@@ -37,12 +36,16 @@ internal sealed class GitHubReviewAssignmentProvider(
         ArgumentNullException.ThrowIfNull(reviewer);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
+        if (context.Connection.AuthenticationKind == ScmAuthenticationKind.AppInstallation)
+        {
+            return;
+        }
+
         var requestUri = GitHubConnectionVerifier.BuildApiUri(
             review.Repository.Host,
             $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/requested_reviewers");
 
-        using var getRequest =
-            GitHubConnectionVerifier.CreateAuthenticatedRequest(requestUri, context.Connection.Secret);
+        using var getRequest = await context.CreateAuthenticatedRequestAsync(requestUri, ct: ct);
         using var getResponse = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(getRequest, ct);
         if (!getResponse.IsSuccessStatusCode)
         {
@@ -63,7 +66,7 @@ internal sealed class GitHubReviewAssignmentProvider(
         {
             Content = JsonContent.Create(new GitHubRequestedReviewersRequest([reviewer.Login])),
         };
-        postRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.Connection.Secret);
+        await context.AuthorizeRequestAsync(postRequest, ct);
 
         using var postResponse = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(postRequest, ct);
         if (postResponse.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)

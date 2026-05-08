@@ -8,15 +8,18 @@
       <span v-if="reviewerIdentity" class="chip chip-success chip-sm">Configured</span>
       <span v-else class="chip chip-muted chip-sm">Not configured</span>
     </div>
+    <p class="reviewer-help-text">
+      This optional identity is only used as an automatic review trigger/filter. Comments still post through the authenticated connection.
+    </p>
     <div v-if="reviewerIdentity" class="provider-reviewer-current">
       <strong>{{ reviewerIdentity.displayName }}</strong>
       <p>{{ reviewerIdentity.login }}</p>
     </div>
-    <p v-else class="filters-empty-hint">No reviewer identity saved for this connection.</p>
+    <p v-else class="filters-empty-hint">No reviewer trigger saved for this connection. Matching crawl and webhook rules still process PRs by default.</p>
     <div class="provider-form-grid provider-form-grid-tight">
       <div class="form-field provider-form-grid-full">
-        <label>Search</label>
-        <input v-model="reviewerSearchModel" type="text" placeholder="Search login or bot account" />
+        <label>Search Reviewer Trigger</label>
+        <input v-model="reviewerSearchModel" type="text" placeholder="Search reviewer login or bot account" />
       </div>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
@@ -25,7 +28,7 @@
         {{ busy ? 'Resolving…' : 'Resolve Candidates' }}
       </button>
       <button v-if="reviewerIdentity" class="btn-danger btn-sm" :disabled="busy" @click="emit('clear')">
-        Clear Identity
+        Clear Trigger
       </button>
     </div>
     <div style="margin-top: 1.5rem;">
@@ -47,7 +50,7 @@
     </div>
     <div v-if="selectedReviewerCandidate" class="form-actions">
       <button class="btn-primary btn-sm provider-reviewer-save" :disabled="busy" @click="emit('save')">
-        Save Reviewer Identity
+        Save Reviewer Trigger
       </button>
     </div>
   </div>
@@ -131,6 +134,12 @@ const selectedReviewerCandidate = computed(() =>
 
 .provider-form-grid-tight {
   margin-top: 0.75rem;
+}
+
+.reviewer-help-text {
+  margin: 0.6rem 0 0.9rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
 }
 
 .provider-candidate-list {

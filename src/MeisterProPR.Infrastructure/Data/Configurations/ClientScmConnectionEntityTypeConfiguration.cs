@@ -43,6 +43,14 @@ internal sealed class ClientScmConnectionEntityTypeConfiguration : IEntityTypeCo
             .HasMaxLength(256)
             .IsRequired(false);
 
+        builder.Property(connection => connection.GitHubAppId)
+            .HasColumnName("github_app_id")
+            .IsRequired(false);
+
+        builder.Property(connection => connection.GitHubAppInstallationId)
+            .HasColumnName("github_app_installation_id")
+            .IsRequired(false);
+
         builder.Property(connection => connection.DisplayName)
             .HasColumnName("display_name")
             .HasMaxLength(200)

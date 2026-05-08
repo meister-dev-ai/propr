@@ -25,12 +25,12 @@ internal sealed class GitHubReviewDiscoveryProvider(
         CancellationToken ct = default)
     {
         var context = await connectionVerifier.VerifyAsync(clientId, repository.Host, ct);
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 repository.Host,
                 $"/repos/{BuildRepositoryPath(repository)}/pulls",
                 "state=open&per_page=100"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
         if (!response.IsSuccessStatusCode)

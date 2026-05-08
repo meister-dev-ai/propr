@@ -20,6 +20,14 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult<ReviewerIdentity?>(null);
     }
 
+    public Task<ReviewerIdentity?> GetEffectiveReviewerIdentityAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<ReviewerIdentity?>(null);
+    }
+
     public Task<CommentResolutionBehavior> GetCommentResolutionBehaviorAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(CommentResolutionBehavior.Silent);

@@ -189,6 +189,94 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.Contains("Review comments is invalid", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PublishReviewAsync_AppInstallation_UsesInstallationAccessToken()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult("Looks solid overall.", []);
+
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        string? reviewAuthorization = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+            {
+                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                    new { account = new { login = "acme-platform" } }),
+                "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                    new
+                    {
+                        token = "installation-token",
+                        expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                    }),
+                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CaptureAndReturnReviewResponse(request),
+                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+            })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.Equal("installation-token", reviewAuthorization);
+        return;
+
+        HttpResponseMessage CaptureAndReturnReviewResponse(HttpRequestMessage request)
+        {
+            reviewAuthorization = request.Headers.Authorization?.Parameter;
+            return CreateJsonResponse(new { id = 1 });
+        }
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_AppInstallationPermissionLoss_ThrowsActionableInvalidOperationException()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult("Looks solid overall.", []);
+
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+            {
+                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                    new { account = new { login = "acme-platform" } }),
+                "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                    new
+                    {
+                        token = "installation-token",
+                        expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                    }),
+                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
+                    new { message = "Resource not accessible by integration" },
+                    HttpStatusCode.Forbidden),
+                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+            })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
+
+        Assert.Contains("no longer has permission", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Resource not accessible by integration", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static HttpResponseMessage CreateJsonResponse<T>(T payload, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         return new HttpResponseMessage(statusCode)

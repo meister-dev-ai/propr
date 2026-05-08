@@ -60,32 +60,21 @@ public sealed partial class ClientProviderConnectionsController(
         ScmProvider providerFamily,
         ScmAuthenticationKind authenticationKind,
         string? oAuthTenantId,
-        string? oAuthClientId)
+        string? oAuthClientId,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
+        bool hasCompatibleSecretMaterial = true)
     {
-        if (!CreateClientProviderConnectionRequestValidator.IsSupportedAuthenticationKind(
-                providerFamily,
-                authenticationKind))
+        foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(
+                     providerFamily,
+                     authenticationKind,
+                     oAuthTenantId,
+                     oAuthClientId,
+                     gitHubAppId,
+                     gitHubAppInstallationId,
+                     hasCompatibleSecretMaterial))
         {
-            this.ModelState.AddModelError(
-                nameof(CreateClientProviderConnectionRequest.AuthenticationKind),
-                CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(providerFamily));
-        }
-
-        if (CreateClientProviderConnectionRequestValidator.RequiresOAuthMetadata(providerFamily, authenticationKind))
-        {
-            if (string.IsNullOrWhiteSpace(oAuthTenantId))
-            {
-                this.ModelState.AddModelError(
-                    nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
-                    "OAuthTenantId is required for Azure DevOps OAuth client-credentials connections.");
-            }
-
-            if (string.IsNullOrWhiteSpace(oAuthClientId))
-            {
-                this.ModelState.AddModelError(
-                    nameof(CreateClientProviderConnectionRequest.OAuthClientId),
-                    "OAuthClientId is required for Azure DevOps OAuth client-credentials connections.");
-            }
+            this.ModelState.AddModelError(propertyName, message);
         }
 
         return this.ModelState.ErrorCount == 0 ? null : this.ValidationProblem();
@@ -95,27 +84,134 @@ public sealed partial class ClientProviderConnectionsController(
         ScmProvider providerFamily,
         ScmAuthenticationKind authenticationKind,
         string? oAuthTenantId,
-        string? oAuthClientId)
+        string? oAuthClientId,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
+        bool hasCompatibleSecretMaterial = true)
     {
+        var errors = GetAuthenticationConfigurationErrors(
+                providerFamily,
+                authenticationKind,
+                oAuthTenantId,
+                oAuthClientId,
+                gitHubAppId,
+                gitHubAppInstallationId,
+                hasCompatibleSecretMaterial)
+            .Select(error => error.Message)
+            .ToArray();
+
+        if (errors.Length > 0)
+        {
+            throw new InvalidOperationException(string.Join(" ", errors));
+        }
+    }
+
+    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
+        ScmProvider providerFamily,
+        ScmAuthenticationKind authenticationKind,
+        string? oAuthTenantId,
+        string? oAuthClientId,
+        long? gitHubAppId,
+        long? gitHubAppInstallationId,
+        bool hasCompatibleSecretMaterial)
+    {
+        var errors = new List<(string PropertyName, string Message)>();
+
         if (!CreateClientProviderConnectionRequestValidator.IsSupportedAuthenticationKind(
                 providerFamily,
                 authenticationKind))
         {
-            throw new InvalidOperationException(CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(providerFamily));
+            errors.Add((
+                nameof(CreateClientProviderConnectionRequest.AuthenticationKind),
+                CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(providerFamily)));
         }
 
         if (CreateClientProviderConnectionRequestValidator.RequiresOAuthMetadata(providerFamily, authenticationKind))
         {
             if (string.IsNullOrWhiteSpace(oAuthTenantId))
             {
-                throw new InvalidOperationException("OAuthTenantId is required for Azure DevOps OAuth client-credentials connections.");
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
+                    "OAuthTenantId is required for Azure DevOps OAuth client-credentials connections."));
             }
 
             if (string.IsNullOrWhiteSpace(oAuthClientId))
             {
-                throw new InvalidOperationException("OAuthClientId is required for Azure DevOps OAuth client-credentials connections.");
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.OAuthClientId),
+                    "OAuthClientId is required for Azure DevOps OAuth client-credentials connections."));
             }
         }
+
+        if (providerFamily != ScmProvider.GitHub)
+        {
+            if (gitHubAppId.HasValue)
+            {
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                    "GitHubAppId is only valid for GitHub provider connections."));
+            }
+
+            if (gitHubAppInstallationId.HasValue)
+            {
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                    "GitHubAppInstallationId is only valid for GitHub provider connections."));
+            }
+
+            return errors;
+        }
+
+        if (authenticationKind == ScmAuthenticationKind.AppInstallation)
+        {
+            if (!gitHubAppId.HasValue)
+            {
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                    "GitHubAppId is required for GitHub App connections."));
+            }
+
+            if (!gitHubAppInstallationId.HasValue)
+            {
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                    "GitHubAppInstallationId is required for GitHub App connections."));
+            }
+
+            if (!hasCompatibleSecretMaterial)
+            {
+                errors.Add((
+                    nameof(CreateClientProviderConnectionRequest.Secret),
+                    "A GitHub App private key is required when switching to GitHub App authentication."));
+            }
+
+            return errors;
+        }
+
+        if (gitHubAppId.HasValue)
+        {
+            errors.Add((
+                nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                "GitHubAppId is only valid when AuthenticationKind is appInstallation."));
+        }
+
+        if (gitHubAppInstallationId.HasValue)
+        {
+            errors.Add((
+                nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                "GitHubAppInstallationId is only valid when AuthenticationKind is appInstallation."));
+        }
+
+        if (providerFamily == ScmProvider.GitHub
+            && authenticationKind == ScmAuthenticationKind.PersonalAccessToken
+            && !hasCompatibleSecretMaterial)
+        {
+            errors.Add((
+                nameof(CreateClientProviderConnectionRequest.Secret),
+                "A personal access token is required when switching away from GitHub App authentication."));
+        }
+
+        return errors;
     }
 
     private IActionResult ProviderConnectionConflict(
@@ -365,7 +461,10 @@ public sealed partial class ClientProviderConnectionsController(
             request.ProviderFamily,
             request.AuthenticationKind,
             request.OAuthTenantId,
-            request.OAuthClientId);
+            request.OAuthClientId,
+            request.GitHubAppId,
+            request.GitHubAppInstallationId,
+            hasCompatibleSecretMaterial: true);
         if (supportedAuthenticationValidation is not null)
         {
             return supportedAuthenticationValidation;
@@ -383,6 +482,8 @@ public sealed partial class ClientProviderConnectionsController(
                 request.DisplayName,
                 request.Secret,
                 request.IsActive,
+                request.GitHubAppId,
+                request.GitHubAppInstallationId,
                 ct);
 
             if (created is null)
@@ -467,12 +568,29 @@ public sealed partial class ClientProviderConnectionsController(
         var effectiveAuthenticationKind = request.AuthenticationKind ?? existing.AuthenticationKind;
         var effectiveOAuthTenantId = request.OAuthTenantId ?? existing.OAuthTenantId;
         var effectiveOAuthClientId = request.OAuthClientId ?? existing.OAuthClientId;
+        var hasCompatibleSecretMaterial = !string.IsNullOrWhiteSpace(request.Secret)
+                                          || existing.AuthenticationKind == effectiveAuthenticationKind;
+        var effectiveGitHubAppId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
+            ? request.GitHubAppId ?? existing.GitHubAppId
+            : request.GitHubAppId;
+        var effectiveGitHubAppInstallationId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
+            ? request.GitHubAppInstallationId ?? existing.GitHubAppInstallationId
+            : request.GitHubAppInstallationId;
+        var persistedGitHubAppId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
+            ? request.GitHubAppId ?? existing.GitHubAppId
+            : null;
+        var persistedGitHubAppInstallationId = effectiveAuthenticationKind == ScmAuthenticationKind.AppInstallation
+            ? request.GitHubAppInstallationId ?? existing.GitHubAppInstallationId
+            : null;
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
             existing.ProviderFamily,
             effectiveAuthenticationKind,
             effectiveOAuthTenantId,
-            effectiveOAuthClientId);
+            effectiveOAuthClientId,
+            effectiveGitHubAppId,
+            effectiveGitHubAppInstallationId,
+            hasCompatibleSecretMaterial);
         if (supportedAuthenticationValidation is not null)
         {
             return supportedAuthenticationValidation;
@@ -490,6 +608,8 @@ public sealed partial class ClientProviderConnectionsController(
                 request.DisplayName ?? existing.DisplayName,
                 request.Secret,
                 request.IsActive ?? existing.IsActive,
+                persistedGitHubAppId,
+                persistedGitHubAppInstallationId,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
@@ -572,7 +692,10 @@ public sealed partial class ClientProviderConnectionsController(
                 connection.ProviderFamily,
                 connection.AuthenticationKind,
                 connection.OAuthTenantId,
-                connection.OAuthClientId);
+                connection.OAuthClientId,
+                connection.GitHubAppId,
+                connection.GitHubAppInstallationId,
+                hasCompatibleSecretMaterial: true);
 
             if (connection.ProviderFamily == ScmProvider.AzureDevOps)
             {
@@ -629,7 +752,9 @@ public sealed record CreateClientProviderConnectionRequest(
     string? OAuthClientId,
     string DisplayName,
     string Secret,
-    bool IsActive = true);
+    bool IsActive = true,
+    long? GitHubAppId = null,
+    long? GitHubAppInstallationId = null);
 
 /// <summary>Request body for patching a client-scoped provider connection.</summary>
 public sealed record PatchClientProviderConnectionRequest(
@@ -639,4 +764,6 @@ public sealed record PatchClientProviderConnectionRequest(
     string? OAuthClientId = null,
     string? DisplayName = null,
     string? Secret = null,
-    bool? IsActive = null);
+    bool? IsActive = null,
+    long? GitHubAppId = null,
+    long? GitHubAppInstallationId = null);

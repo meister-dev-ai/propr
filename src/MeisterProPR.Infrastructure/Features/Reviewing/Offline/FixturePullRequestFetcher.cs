@@ -21,7 +21,8 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
         var snapshot = fixture.PullRequestSnapshot;

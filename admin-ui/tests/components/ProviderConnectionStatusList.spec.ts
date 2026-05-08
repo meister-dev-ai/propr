@@ -81,6 +81,7 @@ describe('ProviderConnectionStatusList', () => {
 
     expect(listProviderOperationalStatusMock).toHaveBeenCalledWith('client-1')
     expect(wrapper.text()).toContain('Connection Status')
+    expect(wrapper.text()).toContain('Reviewer identity remains an optional trigger/filter')
     expect(wrapper.text()).toContain('Acme GitHub')
     expect(wrapper.text()).toContain('GitHub')
     expect(wrapper.text()).toContain('Healthy')

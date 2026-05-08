@@ -61,7 +61,7 @@ public sealed class MentionScanServiceTests
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
-        this._clientRegistry.GetReviewerIdentityAsync(
+        this._clientRegistry.GetEffectiveReviewerIdentityAsync(
                 DefaultConfig.ClientId,
                 Arg.Any<ProviderHostRef>(),
                 Arg.Any<CancellationToken>())

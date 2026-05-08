@@ -76,6 +76,55 @@ public sealed class GitHubReviewDiscoveryProviderTests
         Assert.Equal("meister-review-bot", item.RequestedReviewerIdentity!.Login);
     }
 
+    [Fact]
+    public async Task ListOpenReviewsAsync_AppInstallation_UsesInstalledRepositoryAccess()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        string? pullsAuthorization = null;
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                new { account = new { login = "acme-platform" } }),
+            "https://api.github.com/app/installations/789012/access_tokens" => CreateAccessTokenResponse(),
+            "https://api.github.com/repos/acme/propr/pulls?state=open&per_page=100" => CapturePulls(request),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var sut = new GitHubReviewDiscoveryProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.ListOpenReviewsAsync(clientId, repository, reviewer: null);
+
+        var item = Assert.Single(result);
+        Assert.Equal(42, item.CodeReview.Number);
+        Assert.Equal("installation-token", pullsAuthorization);
+        return;
+
+        HttpResponseMessage CapturePulls(HttpRequestMessage request)
+        {
+            pullsAuthorization = request.Headers.Authorization?.Parameter;
+            return CreateJsonResponse(
+                new object[]
+                {
+                    new
+                    {
+                        id = 4201,
+                        number = 42,
+                        title = "Provider neutral adapters",
+                        html_url = "https://github.com/acme/propr/pull/42",
+                        state = "open",
+                        merged_at = (string?)null,
+                        head = new { @ref = "feature/providers", sha = "head-sha" },
+                        @base = new { @ref = "main", sha = "base-sha" },
+                        requested_reviewers = Array.Empty<object>(),
+                    },
+                });
+        }
+    }
+
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)
     {
         var repository = Substitute.For<IClientScmConnectionRepository>();
@@ -106,6 +155,16 @@ public sealed class GitHubReviewDiscoveryProviderTests
         {
             Content = new StringContent(JsonSerializer.Serialize(payload)),
         };
+    }
+
+    private static HttpResponseMessage CreateAccessTokenResponse()
+    {
+        return CreateJsonResponse(
+            new
+            {
+                token = "installation-token",
+                expires_at = DateTimeOffset.UtcNow.AddHours(1),
+            });
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)

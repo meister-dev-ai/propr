@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Text;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -16,6 +17,8 @@ public sealed class AdoCommentPoster(
     IClientScmConnectionRepository connectionRepository,
     IThreadMemoryService? threadMemoryService = null) : IAdoCommentPoster
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
     internal const int MaxCommentLength = 30_000;
 
@@ -32,6 +35,12 @@ public sealed class AdoCommentPoster(
         IReadOnlyList<PrCommentThread>? existingThreads = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = ActivitySource.StartActivity("AdoCommentPoster.Post");
+        activity?.SetTag("scm.provider", ScmProvider.AzureDevOps.ToString());
+        activity?.SetTag("ado.organization_url", organizationUrl);
+        activity?.SetTag("ado.repository_id", repositoryId);
+        activity?.SetTag("ado.pull_request_id", pullRequestId);
+
         var diagnostics = new PostingDiagnosticsBuilder(
             result.Comments.Count + result.CarriedForwardCandidatesSkipped,
             result.CarriedForwardCandidatesSkipped,
@@ -46,6 +55,11 @@ public sealed class AdoCommentPoster(
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
         var botId = connection.AuthorizedIdentity?.Id;
+        if (botId.HasValue)
+        {
+            activity?.SetTag("publication.author.id", botId.Value.ToString("D"));
+        }
+
         diagnostics.SetThreadCoverage(
             ConsideredOpenThreads(existingThreads, botId),
             ConsideredResolvedThreads(existingThreads, botId));

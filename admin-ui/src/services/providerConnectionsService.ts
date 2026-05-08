@@ -15,6 +15,8 @@ export interface ClientScmConnectionDto {
   authenticationKind: ScmAuthenticationKind
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
+  gitHubAppId?: number | null
+  gitHubAppInstallationId?: number | null
   displayName: string
   isActive: boolean
   verificationStatus: string
@@ -50,6 +52,8 @@ export interface CreateClientProviderConnectionRequest {
   authenticationKind: ScmAuthenticationKind
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
+  gitHubAppId?: number | null
+  gitHubAppInstallationId?: number | null
   displayName: string
   secret: string
   isActive: boolean
@@ -60,6 +64,8 @@ export interface PatchClientProviderConnectionRequest {
   authenticationKind?: ScmAuthenticationKind
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
+  gitHubAppId?: number | null
+  gitHubAppInstallationId?: number | null
   displayName?: string
   secret?: string
   isActive?: boolean

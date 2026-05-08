@@ -1063,6 +1063,8 @@ let providerConnectionsByClient: Record<string, any[]> = {
       providerFamily: 'azureDevOps',
       hostBaseUrl: 'https://dev.azure.com',
       authenticationKind: 'oauthClientCredentials',
+      gitHubAppId: null,
+      gitHubAppInstallationId: null,
       displayName: 'Meister Azure DevOps',
       isActive: true,
       verificationStatus: 'verified',
@@ -1078,6 +1080,8 @@ let providerConnectionsByClient: Record<string, any[]> = {
       providerFamily: 'github',
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'personalAccessToken',
+      gitHubAppId: null,
+      gitHubAppInstallationId: null,
       displayName: 'Acme GitHub',
       isActive: true,
       verificationStatus: 'verified',
@@ -1095,6 +1099,8 @@ let providerConnectionsByClient: Record<string, any[]> = {
       providerFamily: 'gitLab',
       hostBaseUrl: 'https://gitlab.example.com',
       authenticationKind: 'personalAccessToken',
+      gitHubAppId: null,
+      gitHubAppInstallationId: null,
       displayName: 'Platform GitLab',
       isActive: false,
       verificationStatus: 'stale',
@@ -2019,6 +2025,8 @@ export const handlers = [
       providerFamily: body.providerFamily ?? 'github',
       hostBaseUrl: body.hostBaseUrl ?? 'https://github.com',
       authenticationKind: body.authenticationKind ?? 'personalAccessToken',
+      gitHubAppId: body.authenticationKind === 'appInstallation' ? body.gitHubAppId ?? null : null,
+      gitHubAppInstallationId: body.authenticationKind === 'appInstallation' ? body.gitHubAppInstallationId ?? null : null,
       displayName: body.displayName ?? 'New provider connection',
       isActive: body.isActive ?? true,
       verificationStatus: 'verified',
@@ -2063,6 +2071,12 @@ export const handlers = [
       displayName: body.displayName ?? connections[index].displayName,
       hostBaseUrl: body.hostBaseUrl ?? connections[index].hostBaseUrl,
       authenticationKind: body.authenticationKind ?? connections[index].authenticationKind,
+      gitHubAppId: Object.prototype.hasOwnProperty.call(body, 'gitHubAppId')
+        ? body.gitHubAppId
+        : connections[index].gitHubAppId,
+      gitHubAppInstallationId: Object.prototype.hasOwnProperty.call(body, 'gitHubAppInstallationId')
+        ? body.gitHubAppInstallationId
+        : connections[index].gitHubAppInstallationId,
       isActive: body.isActive ?? connections[index].isActive,
       updatedAt: new Date().toISOString(),
     }

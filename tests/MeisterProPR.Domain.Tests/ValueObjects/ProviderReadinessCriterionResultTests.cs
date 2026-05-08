@@ -14,7 +14,7 @@ public sealed class ProviderReadinessCriterionResultTests
             "connection.reviewerIdentity",
             "connection",
             "unsatisfied",
-            "Configured reviewer identity is required for workflow-complete readiness.");
+            "Reviewer-trigger identity is optional; leaving it empty keeps baseline automatic PR processing enabled.");
 
         Assert.Equal("connection.reviewerIdentity", result.CriterionKey);
         Assert.Equal("connection", result.Scope);

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -17,6 +18,8 @@ internal sealed class ForgejoCodeReviewPublicationService(
     ForgejoConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory) : ICodeReviewPublicationService
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     public ScmProvider Provider => ScmProvider.Forgejo;
 
     public async Task<ReviewCommentPostingDiagnosticsDto> PublishReviewAsync(
@@ -24,14 +27,20 @@ internal sealed class ForgejoCodeReviewPublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity reviewer,
+        ReviewerIdentity author,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(result);
 
+        using var activity = ActivitySource.StartActivity("ForgejoCodeReviewPublicationService.PublishReview");
+        activity?.SetTag("scm.provider", ScmProvider.Forgejo.ToString());
+        activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
+        activity?.SetTag("review.number", review.Number);
+        activity?.SetTag("publication.author.login", author.Login);
+
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        await this.DeletePendingReviewsAsync(review, reviewer, context.Connection.Secret, ct);
-        var payload = BuildPayload(revision, result, reviewer);
+        await this.DeletePendingReviewsAsync(review, author, context.Connection.Secret, ct);
+        var payload = BuildPayload(revision, result, author);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
@@ -65,7 +74,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
 
     private async Task DeletePendingReviewsAsync(
         CodeReviewRef review,
-        ReviewerIdentity reviewer,
+        ReviewerIdentity author,
         string secret,
         CancellationToken ct)
     {
@@ -89,7 +98,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
         var reviews = await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullReviewSummary>>(ct)
                       ?? [];
         foreach (var pendingReview in reviews.Where(candidate =>
-                     IsPendingReview(candidate) && IsOwnedByReviewer(candidate, reviewer)))
+                     IsPendingReview(candidate) && IsOwnedByReviewer(candidate, author)))
         {
             using var deleteRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
                 ForgejoConnectionVerifier.BuildApiUri(
@@ -115,26 +124,26 @@ internal sealed class ForgejoCodeReviewPublicationService(
         return string.Equals(review.State, "PENDING", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsOwnedByReviewer(ForgejoPullReviewSummary review, ReviewerIdentity reviewer)
+    private static bool IsOwnedByReviewer(ForgejoPullReviewSummary review, ReviewerIdentity author)
     {
         return review.User is not null
                && ((review.User.Id.HasValue && string.Equals(
-                       review.User.Id.Value.ToString(),
-                       reviewer.ExternalUserId,
-                       StringComparison.OrdinalIgnoreCase))
-                   || (!string.IsNullOrWhiteSpace(review.User.Login) && string.Equals(
-                       review.User.Login,
-                       reviewer.Login,
-                       StringComparison.OrdinalIgnoreCase)));
+                        review.User.Id.Value.ToString(),
+                        author.ExternalUserId,
+                        StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrWhiteSpace(review.User.Login) && string.Equals(
+                        review.User.Login,
+                        author.Login,
+                        StringComparison.OrdinalIgnoreCase)));
     }
 
     private static ForgejoCreatePullReviewRequest BuildPayload(
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity reviewer)
+        ReviewerIdentity author)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {reviewer.DisplayName} Review");
+        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
         summaryBuilder.AppendLine();
         summaryBuilder.AppendLine(result.Summary);
 

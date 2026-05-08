@@ -58,9 +58,26 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    [Fact]
+    public void CreateProviderConnection_GitHubAppRequest_Passes()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.GitHub,
+                "https://github.com",
+                ScmAuthenticationKind.AppInstallation,
+                null,
+                null,
+                "GitHub App",
+                "private-key",
+                GitHubAppId: 123456,
+                GitHubAppInstallationId: 789012));
+
+        Assert.True(result.IsValid);
+    }
+
     [Theory]
     [InlineData(ScmProvider.AzureDevOps, ScmAuthenticationKind.AppInstallation)]
-    [InlineData(ScmProvider.GitHub, ScmAuthenticationKind.AppInstallation)]
     [InlineData(ScmProvider.GitHub, ScmAuthenticationKind.OAuthClientCredentials)]
     public void CreateProviderConnection_UnsupportedAuthenticationKind_Fails(
         ScmProvider providerFamily,

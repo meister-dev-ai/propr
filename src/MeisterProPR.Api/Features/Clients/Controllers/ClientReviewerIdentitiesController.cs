@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Features.Clients.Controllers;
 
-/// <summary>Manages configured provider reviewer identities for one client provider connection.</summary>
+/// <summary>Manages configured provider reviewer-trigger identities for one client provider connection.</summary>
 [ApiController]
 public sealed partial class ClientReviewerIdentitiesController(
     IClientScmConnectionRepository connectionRepository,
@@ -53,12 +53,12 @@ public sealed partial class ClientReviewerIdentitiesController(
         return this.Conflict(new { error = ReviewerIdentityResolutionUnavailableMessage });
     }
 
-    /// <summary>Resolves candidate reviewer identities for one client provider connection.</summary>
+    /// <summary>Resolves candidate reviewer-trigger identities for one client provider connection.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
-    /// <param name="search">Search text used to find reviewer identities.</param>
+    /// <param name="search">Search text used to find reviewer-trigger candidates.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Reviewer identity candidates found.</response>
+    /// <response code="200">Reviewer-trigger identity candidates found.</response>
     /// <response code="400">Search text is missing.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
@@ -123,14 +123,14 @@ public sealed partial class ClientReviewerIdentitiesController(
         }
     }
 
-    /// <summary>Gets the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Gets the configured reviewer-trigger identity for one client provider connection.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Configured reviewer identity found.</response>
+    /// <response code="200">Configured reviewer-trigger identity found.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
-    /// <response code="404">Client provider connection or reviewer identity not found.</response>
+    /// <response code="404">Client provider connection or reviewer-trigger identity not found.</response>
     [HttpGet("clients/{clientId:guid}/provider-connections/{connectionId:guid}/reviewer-identity")]
     [ProducesResponseType(typeof(ClientReviewerIdentityDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -157,13 +157,13 @@ public sealed partial class ClientReviewerIdentitiesController(
         return reviewerIdentity is null ? this.NotFound() : this.Ok(reviewerIdentity);
     }
 
-    /// <summary>Creates or replaces the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Creates or replaces the configured reviewer-trigger identity for one client provider connection.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
-    /// <param name="request">Reviewer identity details.</param>
+    /// <param name="request">Reviewer-trigger identity details.</param>
     /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Reviewer identity stored.</response>
+    /// <response code="200">Reviewer-trigger identity stored.</response>
     /// <response code="400">Validation failure.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
@@ -212,11 +212,11 @@ public sealed partial class ClientReviewerIdentitiesController(
         return reviewerIdentity is null ? this.NotFound() : this.Ok(reviewerIdentity);
     }
 
-    /// <summary>Clears the configured reviewer identity for one client provider connection.</summary>
+    /// <summary>Clears the configured reviewer-trigger identity for one client provider connection.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="204">Reviewer identity cleared.</response>
+    /// <response code="204">Reviewer-trigger identity cleared.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
@@ -247,14 +247,14 @@ public sealed partial class ClientReviewerIdentitiesController(
     }
 }
 
-/// <summary>Request body for setting a client-scoped provider reviewer identity.</summary>
+/// <summary>Request body for setting a client-scoped provider reviewer-trigger identity.</summary>
 public sealed record SetClientReviewerIdentityRequest(
     string ExternalUserId,
     string Login,
     string DisplayName,
     bool IsBot);
 
-/// <summary>Resolved reviewer identity candidate returned by provider onboarding APIs.</summary>
+/// <summary>Resolved reviewer-trigger identity candidate returned by provider onboarding APIs.</summary>
 public sealed record ResolvedReviewerIdentityResponse(
     Guid ClientId,
     Guid ConnectionId,

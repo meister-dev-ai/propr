@@ -7,12 +7,15 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
+using MeisterProPR.Infrastructure.Tests.GitHub;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
@@ -25,6 +28,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
 {
     private ClientScmConnectionRepository _connectionRepository = null!;
     private MeisterProPRDbContext _dbContext = null!;
+    private IHttpClientFactory _httpClientFactory = null!;
     private DbClientRegistry _registry = null!;
     private ClientReviewerIdentityRepository _reviewerIdentityRepository = null!;
     private readonly List<Guid> _seededClientIds = [];
@@ -40,10 +44,29 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         var codec = CreateCodec();
         this._connectionRepository = new ClientScmConnectionRepository(this._dbContext, codec);
         this._reviewerIdentityRepository = new ClientReviewerIdentityRepository(this._dbContext);
+        this._httpClientFactory = Substitute.For<IHttpClientFactory>();
+        this._httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+                    {
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                            new { account = new { login = "meister-dev-ai" }, app_slug = "propr-review" }),
+                        "https://api.github.com/app" => CreateJsonResponse(
+                            new { slug = "propr-review", name = "ProPR Review" }),
+                        _ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
+                    }))));
         this._registry = new DbClientRegistry(
             this._dbContext,
             this._connectionRepository,
-            this._reviewerIdentityRepository);
+            this._reviewerIdentityRepository,
+            async (host, connection, ct) =>
+            {
+                var authenticationService = new GitHubAuthenticationService(this._httpClientFactory);
+                var app = await authenticationService.GetAppMetadataAsync(host, connection, ct);
+                var login = app.Slug + "[bot]";
+                return new ReviewerIdentity(host, login, login, app.DisplayName, true);
+            });
     }
 
     public async Task DisposeAsync()
@@ -158,6 +181,135 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task GetEffectiveReviewerIdentityAsync_GitHubAppConnectionWithoutConfiguredIdentity_ReturnsDerivedAppIdentity()
+    {
+        var client = await this.SeedClientAsync();
+        await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.AppInstallation,
+            null,
+            null,
+            "GitHub App",
+            GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true),
+            true,
+            gitHubAppId: 123456,
+            gitHubAppInstallationId: 789012,
+            CancellationToken.None);
+
+        var result = await this._registry.GetEffectiveReviewerIdentityAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("propr-review[bot]", result!.Login);
+        Assert.Equal("ProPR Review", result.DisplayName);
+        Assert.True(result.IsBot);
+    }
+
+    [Fact]
+    public async Task UpsertReviewerIdentity_DoesNotMutateConnectionCredentials()
+    {
+        var client = await this.SeedClientAsync();
+        var connection = await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_secret_before",
+            true,
+            CancellationToken.None);
+
+        Assert.NotNull(connection);
+
+        var credentialBefore = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        await this._reviewerIdentityRepository.UpsertAsync(
+            client.Id,
+            connection!.Id,
+            ScmProvider.GitHub,
+            "12345",
+            "meister-review-bot[bot]",
+            "Meister Review Bot",
+            true,
+            CancellationToken.None);
+
+        var credentialAfter = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.NotNull(credentialBefore);
+        Assert.NotNull(credentialAfter);
+        Assert.Equal(connection.Id, credentialAfter!.Id);
+        Assert.Equal(credentialBefore!.Secret, credentialAfter.Secret);
+        Assert.Equal(credentialBefore.AuthenticationKind, credentialAfter.AuthenticationKind);
+        Assert.Equal(credentialBefore.OAuthClientId, credentialAfter.OAuthClientId);
+        Assert.Equal(credentialBefore.OAuthTenantId, credentialAfter.OAuthTenantId);
+        Assert.Equal(credentialBefore.GitHubAppId, credentialAfter.GitHubAppId);
+        Assert.Equal(credentialBefore.GitHubAppInstallationId, credentialAfter.GitHubAppInstallationId);
+    }
+
+    [Fact]
+    public async Task DeleteReviewerIdentity_DoesNotMutateConnectionCredentials()
+    {
+        var client = await this.SeedClientAsync();
+        var connection = await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_secret_before",
+            true,
+            CancellationToken.None);
+
+        Assert.NotNull(connection);
+
+        await this._reviewerIdentityRepository.UpsertAsync(
+            client.Id,
+            connection!.Id,
+            ScmProvider.GitHub,
+            "12345",
+            "meister-review-bot[bot]",
+            "Meister Review Bot",
+            true,
+            CancellationToken.None);
+
+        var credentialBeforeDelete = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        var deleted = await this._reviewerIdentityRepository.DeleteAsync(
+            client.Id,
+            connection.Id,
+            CancellationToken.None);
+
+        var credentialAfterDelete = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.True(deleted);
+        Assert.NotNull(credentialBeforeDelete);
+        Assert.NotNull(credentialAfterDelete);
+        Assert.Equal(connection.Id, credentialAfterDelete!.Id);
+        Assert.Equal(credentialBeforeDelete!.Secret, credentialAfterDelete.Secret);
+        Assert.Equal(credentialBeforeDelete.AuthenticationKind, credentialAfterDelete.AuthenticationKind);
+        Assert.Equal(credentialBeforeDelete.OAuthClientId, credentialAfterDelete.OAuthClientId);
+        Assert.Equal(credentialBeforeDelete.OAuthTenantId, credentialAfterDelete.OAuthTenantId);
+        Assert.Equal(credentialBeforeDelete.GitHubAppId, credentialAfterDelete.GitHubAppId);
+        Assert.Equal(credentialBeforeDelete.GitHubAppInstallationId, credentialAfterDelete.GitHubAppInstallationId);
+    }
+
+    [Fact]
     public async Task GetScmCommentPostingEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
     {
         var client = await this.SeedClientAsync();
@@ -191,5 +343,24 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         await this._dbContext.SaveChangesAsync();
         this._seededClientIds.Add(record.Id);
         return record;
+    }
+
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    {
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload)),
+        };
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            return responder(request);
+        }
     }
 }

@@ -274,7 +274,7 @@ public sealed partial class MentionScanService(
         CancellationToken ct)
     {
         var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-        return await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
+        return await clientRegistry.GetEffectiveReviewerIdentityAsync(config.ClientId, host, ct);
     }
 
     private static string ResolveRepositoryProjectPath(

@@ -76,4 +76,68 @@ public sealed class ProviderReviewJobIntakeIntegrationTests(ReviewJobIntakeInteg
         Assert.Equal("11", persisted.ProviderRevisionId);
         Assert.Equal("patch-1", persisted.ReviewPatchIdentity);
     }
+
+    [Fact]
+    public async Task SubmitReview_GitHubRequest_RequestedReviewerIdentity_RemainsTransientTriggerContext()
+    {
+        await factory.ClearJobsAsync();
+        var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/clients/{factory.ClientId}/reviewing/jobs");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(factory.ClientAdministratorUserId));
+        request.Content = JsonContent.Create(
+            new
+            {
+                provider = "github",
+                hostBaseUrl = "https://github.com",
+                repository = new
+                {
+                    externalRepositoryId = "repo-gh-1",
+                    ownerOrNamespace = "acme",
+                    projectPath = "acme/propr",
+                },
+                codeReview = new
+                {
+                    platform = "pullRequest",
+                    externalReviewId = "42",
+                    number = 42,
+                },
+                reviewRevision = new
+                {
+                    headSha = "head-sha",
+                    baseSha = "base-sha",
+                    startSha = "start-sha",
+                    providerRevisionId = "11",
+                    patchIdentity = "patch-1",
+                },
+                requestedReviewerIdentity = new
+                {
+                    externalUserId = "user-1",
+                    login = "configured-reviewer",
+                    displayName = "Configured Reviewer",
+                    isBot = false,
+                },
+            });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var jobId = body.GetProperty("jobId").GetGuid();
+
+        var persisted = await factory.GetJobAsync(jobId);
+        Assert.NotNull(persisted);
+        Assert.Equal(ScmProvider.GitHub, persisted!.Provider);
+        Assert.Equal("https://github.com", persisted.HostBaseUrl);
+        Assert.Equal("acme", persisted.RepositoryOwnerOrNamespace);
+        Assert.Equal("acme/propr", persisted.RepositoryProjectPath);
+        Assert.Equal("42", persisted.ExternalCodeReviewId);
+        Assert.Equal("Add feature X", persisted.PrTitle);
+        Assert.Equal("my-repo", persisted.PrRepositoryName);
+        Assert.Equal("feature/add-x", persisted.PrSourceBranch);
+        Assert.Equal("main", persisted.PrTargetBranch);
+        Assert.False(body.TryGetProperty("requestedReviewerIdentity", out _));
+    }
 }

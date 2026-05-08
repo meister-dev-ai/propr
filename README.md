@@ -25,6 +25,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Automatic crawling** — background worker polls for PRs assigned to a configured reviewer
 - **Beautiful UI** - The UI is tailored towards efficient triage of review comments, with a summary dashboard, file tree sidebar, and token consumption aggregates
 - **Mixed-provider operations** — provider connections expose authoritative readiness separate from onboarding verification, plus connection-scoped status, verification history, webhook delivery logs, and categorized failures in the admin UI
+- **GitHub App installation support** - GitHub provider connections can authenticate with either PATs or installed GitHub Apps, with private keys protected at rest and installation tokens minted on demand
 
 ### BYOAI
 
@@ -50,7 +51,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 
 ### Data sovereignty
 
-- **Per-client provider credentials** — each client can isolate Azure DevOps service principals and protected GitHub, GitLab, or Forgejo-family connection secrets at the connection level
+- **Per-client provider credentials** — each client can isolate Azure DevOps service principals plus protected GitHub, GitLab, or Forgejo-family connection secrets at the connection level; GitHub App private keys stay encrypted at rest and installation tokens are not persisted
 - **Job persistence + recovery mechanism** — review jobs survive restarts; stuck processing jobs auto-recovered
 
 ### Traceability
@@ -111,7 +112,8 @@ client ADO secrets and AI connection API keys remain decryptable.
 If you are upgrading from the retired client System Azure DevOps setup, recreate each Azure DevOps
 integration through the Providers tab before re-enabling crawl or webhook automation: add the
 provider connection, add the organization scope, and confirm the reviewer identity on that
-connection.
+connection. The reviewer identity is only an optional trigger/filter for automatic PR processing.
+Posting still uses the authenticated provider connection identity.
 
 Alternatively you can use the script `./scripts/run_local.ps1`, which boosts faster but does not spin up a DB or grafana on its own.
 
@@ -207,8 +209,15 @@ See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup v
 dotnet test
 ```
 
-Integration tests that require PostgreSQL are in the `PostgresApiIntegration` collection
-and are skipped automatically when `DB_CONNECTION_STRING` is not set.
+Infrastructure integration tests that require PostgreSQL are in the `PostgresIntegration` collection.
+They can run against either:
+
+- `DB_CONNECTION_STRING` pointing at a PostgreSQL 17 instance with `pgvector` available
+- a local Docker-compatible runtime that Testcontainers can reach
+
+On Linux, the infrastructure test fixture now auto-detects the common rootless Podman socket
+at `/run/user/1000/podman/podman.sock` when `DOCKER_HOST` is unset. If your local container
+runtime uses a different socket, set `DOCKER_HOST` explicitly before running `dotnet test`.
 
 ---
 

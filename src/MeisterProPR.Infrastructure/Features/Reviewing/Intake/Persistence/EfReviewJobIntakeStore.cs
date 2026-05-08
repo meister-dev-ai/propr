@@ -5,6 +5,7 @@ using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,41 +29,33 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
         if (request.CodeReview is not null)
         {
             var review = request.CodeReview;
-            var reviewJobs = activeJobs.Where(job =>
-                job.Provider == review.Repository.Host.Provider
-                && job.HostBaseUrl == review.Repository.Host.HostBaseUrl
-                && job.RepositoryId == review.Repository.ExternalRepositoryId
-                && job.RepositoryOwnerOrNamespace == review.Repository.OwnerOrNamespace
-                && job.RepositoryProjectPath == review.Repository.ProjectPath
-                && job.CodeReviewPlatformKind == review.Platform
-                && job.ExternalCodeReviewId == review.ExternalReviewId
-                && job.PullRequestId == review.Number);
+            var reviewJobs = activeJobs
+                .AsEnumerable()
+                .Where(job => MatchesReviewIdentity(job, review, request.ProviderProjectKey));
 
             if (request.ReviewRevision is not null)
             {
                 var revision = request.ReviewRevision;
-                return reviewJobs.FirstOrDefaultAsync(
+                return Task.FromResult(reviewJobs.FirstOrDefault(
                     job => job.RevisionHeadSha == revision.HeadSha
                            && job.RevisionBaseSha == revision.BaseSha
                            && job.RevisionStartSha == revision.StartSha
                            && job.ProviderRevisionId == revision.ProviderRevisionId
-                           && job.ReviewPatchIdentity == revision.PatchIdentity,
-                    cancellationToken);
+                           && job.ReviewPatchIdentity == revision.PatchIdentity));
             }
 
             var compatibilityIterationId = ResolveCompatibilityIterationId(request);
-            return reviewJobs.FirstOrDefaultAsync(
-                job => job.IterationId == compatibilityIterationId,
-                cancellationToken);
+            return Task.FromResult(reviewJobs.FirstOrDefault(
+                job => job.IterationId == compatibilityIterationId));
         }
 
-        return activeJobs.FirstOrDefaultAsync(
-            job => job.OrganizationUrl == request.ProviderScopePath
-                   && job.ProjectId == request.ProviderProjectKey
-                   && job.RepositoryId == request.RepositoryId
-                   && job.PullRequestId == request.PullRequestId
-                   && job.IterationId == request.IterationId,
-            cancellationToken);
+        return Task.FromResult(activeJobs
+            .AsEnumerable()
+            .FirstOrDefault(job => job.OrganizationUrl == request.ProviderScopePath
+                                   && job.ProjectId == request.ProviderProjectKey
+                                   && RepositoryMatches(job, request.RepositoryId, request.ProviderProjectKey)
+                                   && job.PullRequestId == request.PullRequestId
+                                   && job.IterationId == request.IterationId));
     }
 
     /// <inheritdoc />
@@ -170,6 +163,55 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
         return request.Repository?.ExternalRepositoryId
                ?? request.CodeReview?.Repository.ExternalRepositoryId
                ?? throw new InvalidOperationException("Review intake request must include a repository identifier.");
+    }
+
+    private static bool MatchesReviewIdentity(ReviewJob job, CodeReviewRef review, string projectId)
+    {
+        return job.Provider == review.Repository.Host.Provider
+               && job.HostBaseUrl == review.Repository.Host.HostBaseUrl
+               && RepositoryMatches(job, review.Repository.ExternalRepositoryId, projectId)
+               && string.Equals(job.RepositoryOwnerOrNamespace, review.Repository.OwnerOrNamespace, StringComparison.Ordinal)
+               && string.Equals(job.RepositoryProjectPath, review.Repository.ProjectPath, StringComparison.Ordinal)
+               && job.CodeReviewPlatformKind == review.Platform
+               && string.Equals(job.ExternalCodeReviewId, review.ExternalReviewId, StringComparison.Ordinal)
+               && job.PullRequestId == review.Number;
+    }
+
+    private static bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
+    {
+        return string.Equals(
+            GetRepositoryIdentityKey(job, job.RepositoryId, projectId),
+            GetRepositoryIdentityKey(job, repositoryId, projectId),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId)
+    {
+        if (job.Provider == ScmProvider.AzureDevOps)
+        {
+            return repositoryId;
+        }
+
+        var projectPath = string.IsNullOrWhiteSpace(job.RepositoryProjectPath)
+            ? repositoryId
+            : job.RepositoryProjectPath;
+        if (LooksLikeRepositoryPath(repositoryId) || LooksLikeRepositoryPath(projectPath))
+        {
+            return projectPath;
+        }
+
+        var ownerOrNamespace = string.IsNullOrWhiteSpace(job.RepositoryOwnerOrNamespace)
+            ? projectId
+            : job.RepositoryOwnerOrNamespace;
+        return string.Equals(repositoryId, job.RepositoryId, StringComparison.OrdinalIgnoreCase)
+            ? $"{ownerOrNamespace}/{repositoryId}"
+            : repositoryId;
+    }
+
+    private static bool LooksLikeRepositoryPath(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.Contains('/', StringComparison.Ordinal);
     }
 
     private static int ResolveCompatibilityPullRequestId(SubmitReviewJobRequestDto request)

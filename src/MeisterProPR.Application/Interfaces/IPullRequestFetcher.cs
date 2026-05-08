@@ -26,6 +26,10 @@ public interface IPullRequestFetcher
     /// </param>
     /// <param name="clientId">Optional client ID for credential retrieval.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <param name="compareToReviewRevision">
+    ///     Optional provider-neutral review revision used by non-Azure DevOps adapters to compute delta files.
+    ///     Pass <c>null</c> to fetch the full current pull request scope.
+    /// </param>
     /// <returns>A task that represents the asynchronous operation, containing the fetched pull request.</returns>
     Task<PullRequest> FetchAsync(
         string organizationUrl,
@@ -35,5 +39,6 @@ public interface IPullRequestFetcher
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null);
 }

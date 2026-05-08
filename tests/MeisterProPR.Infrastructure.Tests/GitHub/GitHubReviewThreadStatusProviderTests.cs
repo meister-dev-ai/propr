@@ -21,9 +21,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var connectionRepository = CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = CreateHttpClientFactory(async request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
@@ -54,7 +51,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                                     {
                                                         databaseId = 501, body = "Please handle null.",
                                                         createdAt = "2026-04-14T08:00:00Z",
-                                                        author = new { login = "meister-review-bot" },
+                                                        author = new { login = "meister-dev" },
                                                     },
                                                     new
                                                     {
@@ -93,7 +90,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         });
         var sut = new GitHubReviewThreadStatusProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -110,7 +106,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
         Assert.Equal("Active", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
-        Assert.Contains("meister-review-bot: Please handle null.", entry.CommentHistory);
+        Assert.Contains("meister-dev: Please handle null.", entry.CommentHistory);
         Assert.Contains("octocat: Done.", entry.CommentHistory);
     }
 
@@ -120,9 +116,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var connectionRepository = CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
@@ -153,7 +146,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                                     {
                                                         databaseId = 501, body = "Please handle null.",
                                                         createdAt = "2026-04-14T08:00:00Z",
-                                                        author = new { login = "meister-review-bot" },
+                                                        author = new { login = "meister-dev" },
                                                     },
                                                 },
                                             },
@@ -168,7 +161,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         });
         var sut = new GitHubReviewThreadStatusProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -190,9 +182,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var connectionRepository = CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
@@ -222,7 +211,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                                     {
                                                         databaseId = 501, body = "Please handle null.",
                                                         createdAt = "2026-04-14T08:00:00Z",
-                                                        author = new { login = "meister-review-bot" },
+                                                        author = new { login = "meister-dev" },
                                                     },
                                                 },
                                             },
@@ -237,7 +226,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         });
         var sut = new GitHubReviewThreadStatusProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -259,9 +247,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var connectionRepository = CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
@@ -292,7 +277,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                                         databaseId = (int?)null,
                                                         body = "Please handle null.",
                                                         createdAt = "2026-04-14T08:00:00Z",
-                                                        author = new { login = "meister-review-bot" },
+                                                        author = new { login = "meister-dev" },
                                                     },
                                                 },
                                             },
@@ -307,7 +292,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         });
         var sut = new GitHubReviewThreadStatusProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -329,9 +313,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var connectionRepository = CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
             "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
@@ -362,7 +343,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                                         databaseId = 3197004556L,
                                                         body = "Please handle null.",
                                                         createdAt = "2026-04-14T08:00:00Z",
-                                                        author = new { login = "meister-review-bot" },
+                                                        author = new { login = "meister-dev" },
                                                     },
                                                 },
                                             },
@@ -377,7 +358,6 @@ public sealed class GitHubReviewThreadStatusProviderTests
         });
         var sut = new GitHubReviewThreadStatusProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -391,6 +371,87 @@ public sealed class GitHubReviewThreadStatusProviderTests
 
         var entry = Assert.Single(result);
         Assert.Equal(3197004556L, entry.ThreadId);
+    }
+
+    [Fact]
+    public async Task GetReviewerThreadStatusesAsync_AppInstallation_UsesInstallationTokenForGraphQlLookup()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        string? graphQlAuthorization = null;
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                new { account = new { login = "acme-platform" }, app_slug = "propr-review" }),
+            "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                new
+                {
+                    token = "installation-token",
+                    expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                }),
+            "https://api.github.com/graphql" => CaptureGraphQl(request),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var sut = new GitHubReviewThreadStatusProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.GetReviewerThreadStatusesAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            42,
+            Guid.Empty,
+            clientId,
+            CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.Equal("installation-token", graphQlAuthorization);
+        return;
+
+        HttpResponseMessage CaptureGraphQl(HttpRequestMessage request)
+        {
+            graphQlAuthorization = request.Headers.Authorization?.Parameter;
+            return CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = false,
+                                            path = "src/feature.ts",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = 501,
+                                                        body = "Please handle null.",
+                                                        createdAt = "2026-04-14T08:00:00Z",
+                                                        author = new { login = "propr-review[bot]" },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+        }
     }
 
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)

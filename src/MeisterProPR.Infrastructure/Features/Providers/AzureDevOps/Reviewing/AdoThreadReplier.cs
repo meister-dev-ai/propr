@@ -72,6 +72,11 @@ internal sealed partial class AdoThreadReplier(
 
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
+        if (connection.AuthorizedIdentity?.Id is { } authorizedIdentityId)
+        {
+            activity?.SetTag("publication.author.id", authorizedIdentityId.ToString("D"));
+        }
+
         var gitClient = connection.GetClient<GitHttpClient>();
 
         var comment = new Comment

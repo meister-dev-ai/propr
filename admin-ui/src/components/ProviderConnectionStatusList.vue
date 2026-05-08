@@ -6,7 +6,7 @@
     <div class="section-card-header">
       <div>
         <h3>Connection Status</h3>
-        <p class="section-subtitle">Mixed-provider health, verification state, and failure isolation per connection.</p>
+        <p class="section-subtitle">Mixed-provider health, verification state, and failure isolation per connection. Reviewer identity remains an optional trigger/filter and never changes posting credentials.</p>
       </div>
       <span v-if="!loading" class="chip chip-muted chip-sm">{{ items.length }} connection{{ items.length === 1 ? '' : 's' }}</span>
     </div>

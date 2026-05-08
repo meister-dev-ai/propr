@@ -50,12 +50,12 @@ internal sealed class GitHubReviewContextTools(
     protected override async Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct)
     {
         var context = await this.VerifyAsync(ct);
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 this._host,
                 $"/repos/{this._repositoryPath}/pulls/{this._pullRequestNumber}/files",
                 "per_page=100"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
@@ -76,11 +76,11 @@ internal sealed class GitHubReviewContextTools(
         CancellationToken ct)
     {
         var context = await this.VerifyAsync(ct);
-        using var branchRequest = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var branchRequest = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 this._host,
                 $"/repos/{this._repositoryPath}/branches/{Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
+            ct: ct);
         using var branchResponse =
             await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(branchRequest, ct);
         if (!branchResponse.IsSuccessStatusCode)
@@ -96,12 +96,12 @@ internal sealed class GitHubReviewContextTools(
             return [];
         }
 
-        using var treeRequest = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var treeRequest = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 this._host,
                 $"/repos/{this._repositoryPath}/git/trees/{commitSha}",
                 "recursive=1"),
-            context.Connection.Secret);
+            ct: ct);
         using var treeResponse =
             await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(treeRequest, ct);
         if (!treeResponse.IsSuccessStatusCode)
@@ -126,12 +126,12 @@ internal sealed class GitHubReviewContextTools(
         CancellationToken ct)
     {
         var context = await this.VerifyAsync(ct);
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 this._host,
                 $"/repos/{this._repositoryPath}/contents/{Uri.EscapeDataString(normalizedPath)}",
                 $"ref={Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {

@@ -45,7 +45,17 @@ vi.mock('@/services/providerActivationService', () => ({
         return 'https://github.com'
     }
   },
-  getSupportedAuthenticationKind: (providerFamily: string) => providerFamily === 'azureDevOps' ? 'oauthClientCredentials' : 'personalAccessToken',
+  getSupportedAuthenticationKinds: (providerFamily: string) => {
+    if (providerFamily === 'azureDevOps') {
+      return ['oauthClientCredentials']
+    }
+
+    if (providerFamily === 'github') {
+      return ['personalAccessToken', 'appInstallation']
+    }
+
+    return ['personalAccessToken']
+  },
   listProviderActivationStatuses: listProviderActivationStatusesMock,
 }))
 
@@ -116,6 +126,8 @@ describe('ClientProviderConnectionsTab', () => {
         providerFamily: 'github',
         hostBaseUrl: 'https://github.com',
         authenticationKind: 'personalAccessToken',
+        gitHubAppId: null,
+        gitHubAppInstallationId: null,
         displayName: 'GitHub Cloud',
         isActive: true,
         verificationStatus: 'verified',
@@ -166,14 +178,14 @@ describe('ClientProviderConnectionsTab', () => {
     await flushPromises()
 
     expect(listProviderConnectionsMock).toHaveBeenCalledWith('client-1')
-    
+
     await wrapper.findAll('.provider-connection-item')[0].trigger('click')
     await flushPromises()
 
     expect(listProviderScopesMock).toHaveBeenCalledWith('client-1', 'provider-conn-1')
     expect(getReviewerIdentityMock).toHaveBeenCalledWith('client-1', 'provider-conn-1')
     expect(document.getElementById('provider-sidebar-target')?.textContent).toContain('GitHub Cloud')
-    
+
     // The scopes and reviewers should be in the DOM because of v-show
     expect(wrapper.text()).toContain('Acme')
     expect(wrapper.text()).toContain('Meister Review Bot')
@@ -237,6 +249,193 @@ describe('ClientProviderConnectionsTab', () => {
     expect(document.getElementById('provider-sidebar-target')?.textContent).toContain('GitLab Self-Hosted')
   })
 
+  it('serializes GitHub App IDs as numbers when creating a GitHub App connection', async () => {
+    createProviderConnectionMock.mockResolvedValue({
+      id: 'provider-conn-2',
+      clientId: 'client-1',
+      providerFamily: 'github',
+      hostBaseUrl: 'https://github.example.com',
+      authenticationKind: 'appInstallation',
+      gitHubAppId: 123456,
+      gitHubAppInstallationId: 789012,
+      displayName: 'GitHub App Connection',
+      isActive: true,
+      verificationStatus: 'unknown',
+      readinessLevel: 'configured',
+      readinessReason: 'Connection has not completed onboarding verification yet.',
+      hostVariant: 'selfHosted',
+      missingReadinessCriteria: ['Connection has not been verified yet.'],
+      lastVerifiedAt: null,
+      lastVerificationError: null,
+      createdAt: '2026-04-13T21:10:00Z',
+      updatedAt: '2026-04-13T21:10:00Z',
+    })
+    listProviderScopesMock.mockResolvedValue([])
+    getReviewerIdentityMock.mockResolvedValue(null)
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.get('.provider-create-toggle').trigger('click')
+
+    const authenticationSelect = wrapper.findAll('select')[1]
+    await authenticationSelect.setValue('appInstallation')
+
+    await wrapper.find('input[placeholder="e.g. GitHub Enterprise"]').setValue('GitHub App Connection')
+    await wrapper.find('input[placeholder="https://github.com"]').setValue('https://github.example.com')
+    await wrapper.find('input[placeholder="123456"]').setValue('123456')
+    await wrapper.find('input[placeholder="987654321"]').setValue('789012')
+    await wrapper.find('input[placeholder="Paste the GitHub App private key (PEM)"]').setValue('-----BEGIN PRIVATE KEY-----')
+    await wrapper.get('.provider-create-submit').trigger('click')
+    await flushPromises()
+
+    expect(createProviderConnectionMock).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      providerFamily: 'github',
+      authenticationKind: 'appInstallation',
+      gitHubAppId: 123456,
+      gitHubAppInstallationId: 789012,
+      secret: '-----BEGIN PRIVATE KEY-----',
+    }))
+  })
+
+  it('clears GitHub App IDs when switching an existing connection back to PAT', async () => {
+    listProviderConnectionsMock.mockResolvedValue([
+      {
+        id: 'provider-conn-1',
+        clientId: 'client-1',
+        providerFamily: 'github',
+        hostBaseUrl: 'https://github.example.com',
+        authenticationKind: 'appInstallation',
+        gitHubAppId: 123456,
+        gitHubAppInstallationId: 789012,
+        displayName: 'GitHub App Connection',
+        isActive: true,
+        verificationStatus: 'verified',
+        readinessLevel: 'workflowComplete',
+        readinessReason: 'Connection meets onboarding and workflow-complete readiness criteria.',
+        hostVariant: 'selfHosted',
+        missingReadinessCriteria: [],
+        lastVerifiedAt: '2026-04-13T21:00:00Z',
+        lastVerificationError: null,
+        createdAt: '2026-04-13T20:00:00Z',
+        updatedAt: '2026-04-13T21:00:00Z',
+      },
+    ])
+    updateProviderConnectionMock.mockResolvedValue({
+      id: 'provider-conn-1',
+      clientId: 'client-1',
+      providerFamily: 'github',
+      hostBaseUrl: 'https://github.example.com',
+      authenticationKind: 'personalAccessToken',
+      gitHubAppId: null,
+      gitHubAppInstallationId: null,
+      displayName: 'GitHub App Connection',
+      isActive: true,
+      verificationStatus: 'verified',
+      readinessLevel: 'workflowComplete',
+      readinessReason: 'Connection meets onboarding and workflow-complete readiness criteria.',
+      hostVariant: 'selfHosted',
+      missingReadinessCriteria: [],
+      lastVerifiedAt: '2026-04-13T21:10:00Z',
+      lastVerificationError: null,
+      createdAt: '2026-04-13T20:00:00Z',
+      updatedAt: '2026-04-13T21:10:00Z',
+    })
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
+    const authenticationSelect = wrapper.findAll('select').find((select) =>
+      select.findAll('option').some((option) => option.element.getAttribute('value') === 'appInstallation'),
+    )
+
+    expect(authenticationSelect).toBeTruthy()
+    await authenticationSelect!.setValue('personalAccessToken')
+    await wrapper.find('input[placeholder="Paste the provider secret"]').setValue('ghp_new_token')
+    await wrapper.get('.btn-primary.btn-sm').trigger('click')
+    await flushPromises()
+
+    expect(updateProviderConnectionMock).toHaveBeenCalledWith('client-1', 'provider-conn-1', expect.objectContaining({
+      authenticationKind: 'personalAccessToken',
+      gitHubAppId: null,
+      gitHubAppInstallationId: null,
+      secret: 'ghp_new_token',
+    }))
+  })
+
+  it('serializes GitHub App IDs as numbers when switching an existing PAT connection to GitHub App auth', async () => {
+    updateProviderConnectionMock.mockResolvedValue({
+      id: 'provider-conn-1',
+      clientId: 'client-1',
+      providerFamily: 'github',
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'appInstallation',
+      gitHubAppId: 123456,
+      gitHubAppInstallationId: 789012,
+      displayName: 'GitHub Cloud',
+      isActive: true,
+      verificationStatus: 'unknown',
+      readinessLevel: 'configured',
+      readinessReason: 'Connection has not completed onboarding verification yet.',
+      hostVariant: 'hosted',
+      missingReadinessCriteria: ['Connection has not been verified yet.'],
+      lastVerifiedAt: null,
+      lastVerificationError: null,
+      createdAt: '2026-04-13T20:00:00Z',
+      updatedAt: '2026-04-13T21:10:00Z',
+    })
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
+    const authenticationSelect = wrapper.findAll('select').find((select) =>
+      select.findAll('option').some((option) => option.element.getAttribute('value') === 'appInstallation'),
+    )
+
+    expect(authenticationSelect).toBeTruthy()
+    await authenticationSelect!.setValue('appInstallation')
+    await wrapper.find('input[placeholder="123456"]').setValue('123456')
+    await wrapper.find('input[placeholder="987654321"]').setValue('789012')
+    await wrapper.find('input[placeholder="Paste the GitHub App private key (PEM)"]').setValue('-----BEGIN PRIVATE KEY-----')
+    await wrapper.get('.btn-primary.btn-sm').trigger('click')
+    await flushPromises()
+
+    expect(updateProviderConnectionMock).toHaveBeenCalledWith('client-1', 'provider-conn-1', expect.objectContaining({
+      authenticationKind: 'appInstallation',
+      gitHubAppId: 123456,
+      gitHubAppInstallationId: 789012,
+      secret: '-----BEGIN PRIVATE KEY-----',
+    }))
+  })
+
+  it('shows a private-key-specific error when switching an existing PAT connection to GitHub App without a secret', async () => {
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
+    const authenticationSelect = wrapper.findAll('select').find((select) =>
+      select.findAll('option').some((option) => option.element.getAttribute('value') === 'appInstallation'),
+    )
+
+    expect(authenticationSelect).toBeTruthy()
+    await authenticationSelect!.setValue('appInstallation')
+    await wrapper.find('input[placeholder="123456"]').setValue('123456')
+    await wrapper.find('input[placeholder="987654321"]').setValue('789012')
+    await wrapper.get('.btn-primary.btn-sm').trigger('click')
+    await flushPromises()
+
+    expect(updateProviderConnectionMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('A GitHub App private key is required when switching to GitHub App authentication.')
+  })
+
   it('resolves reviewer candidates and saves the selected reviewer identity', async () => {
     resolveReviewerIdentityCandidatesMock.mockResolvedValue([
       {
@@ -270,7 +469,10 @@ describe('ClientProviderConnectionsTab', () => {
     const identityTab = wrapper.findAll('li').find(el => el.text() === 'Reviewer Identity')
     if (identityTab) await identityTab.trigger('click')
 
-    await wrapper.find('input[placeholder="Search login or bot account"]').setValue('meister')
+    expect(wrapper.text()).toContain('optional reviewer trigger')
+    expect(wrapper.text()).toContain('does not change the connection identity used for posting')
+
+    await wrapper.find('input[placeholder="Search reviewer login or bot account"]').setValue('meister')
     await wrapper.get('.provider-reviewer-resolve').trigger('click')
     await flushPromises()
 
@@ -286,7 +488,7 @@ describe('ClientProviderConnectionsTab', () => {
       displayName: 'Meister Review Bot',
       isBot: true,
     })
-    expect(notifyMock).toHaveBeenCalledWith('Reviewer identity saved.')
+    expect(notifyMock).toHaveBeenCalledWith('Reviewer trigger saved.')
   })
 
   it('ignores stale scope and reviewer responses after switching the selected connection', async () => {
@@ -326,7 +528,7 @@ describe('ClientProviderConnectionsTab', () => {
         readinessLevel: 'onboardingReady',
         readinessReason: 'Connection is verified for onboarding, but workflow-complete readiness criteria are still missing.',
         hostVariant: 'selfHosted',
-        missingReadinessCriteria: ['Configured reviewer identity is required for workflow-complete readiness.'],
+        missingReadinessCriteria: ['Automatic workflow proof is still missing for this provider variant.'],
         lastVerifiedAt: '2026-04-13T21:00:00Z',
         lastVerificationError: null,
         createdAt: '2026-04-13T20:00:00Z',

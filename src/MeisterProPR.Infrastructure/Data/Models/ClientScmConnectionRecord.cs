@@ -15,6 +15,8 @@ public sealed class ClientScmConnectionRecord
     public ScmAuthenticationKind AuthenticationKind { get; set; }
     public string? OAuthTenantId { get; set; }
     public string? OAuthClientId { get; set; }
+    public long? GitHubAppId { get; set; }
+    public long? GitHubAppInstallationId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string EncryptedSecretMaterial { get; set; } = string.Empty;
     public string VerificationStatus { get; set; } = "unknown";

@@ -129,4 +129,35 @@ public sealed class ProviderSupportIntegrationTests(ClientProviderConnectionsCon
         Assert.Equal(1, githubSummary.GetProperty("workflowCompleteCount").GetInt32());
         Assert.Equal(1, githubSummary.GetProperty("onboardingReadyCount").GetInt32());
     }
+
+    [Fact]
+    public async Task GetProviderConnections_GitHubAppConnection_ReturnsGitHubAppMetadataWithoutSecret()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.GitHub,
+            "https://github.enterprise.example.com/acme/platform",
+            ScmAuthenticationKind.AppInstallation,
+            displayName: "GitHub App",
+            secret: "-----BEGIN PRIVATE KEY-----",
+            gitHubAppId: 123456,
+            gitHubAppInstallationId: 789012);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/clients/{factory.ClientId}/provider-connections");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientUserToken());
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var connection = Assert.Single(body.EnumerateArray());
+        Assert.Equal(created.Id, connection.GetProperty("id").GetGuid());
+        Assert.Equal("appInstallation", connection.GetProperty("authenticationKind").GetString());
+        Assert.Equal(123456L, connection.GetProperty("gitHubAppId").GetInt64());
+        Assert.Equal(789012L, connection.GetProperty("gitHubAppInstallationId").GetInt64());
+        Assert.False(connection.TryGetProperty("secret", out _));
+    }
 }

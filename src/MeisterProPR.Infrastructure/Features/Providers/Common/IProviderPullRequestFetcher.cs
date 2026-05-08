@@ -18,5 +18,6 @@ internal interface IProviderPullRequestFetcher
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null);
 }

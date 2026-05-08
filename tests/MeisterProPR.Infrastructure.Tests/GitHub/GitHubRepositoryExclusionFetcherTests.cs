@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -66,6 +68,62 @@ public sealed class GitHubRepositoryExclusionFetcherTests
         Assert.False(result.HasPatterns);
     }
 
+    [Fact]
+    public async Task FetchAsync_AppInstallation_UsesInstallationTokenToLoadExcludeFile()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+
+        string? excludeFileAuthorization = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+                    {
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                            new
+                            {
+                                token = "installation-token",
+                                expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                            }),
+                        "https://api.github.com/repos/acme/propr/contents/.meister-propr%2Fexclude?ref=main" =>
+                            CaptureExcludeFile(request),
+                        _ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
+                    }))));
+
+        var sut = new GitHubRepositoryExclusionFetcher(
+            connectionRepository,
+            httpClientFactory,
+            Substitute.For<ILogger<GitHubRepositoryExclusionFetcher>>());
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            "main",
+            clientId,
+            CancellationToken.None);
+
+        Assert.Equal("installation-token", excludeFileAuthorization);
+        Assert.Contains("openapi.json", result.Patterns);
+        return;
+
+        HttpResponseMessage CaptureExcludeFile(HttpRequestMessage request)
+        {
+            excludeFileAuthorization = request.Headers.Authorization?.Parameter;
+            return CreateJsonResponse(
+                new
+                {
+                    content = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("openapi.json\n")),
+                    encoding = "base64",
+                });
+        }
+    }
+
     private sealed class TestableGitHubRepositoryExclusionFetcher : GitHubRepositoryExclusionFetcher
     {
         private string? _content;
@@ -103,6 +161,25 @@ public sealed class GitHubRepositoryExclusionFetcherTests
             }
 
             return Task.FromResult<string?>(this._content);
+        }
+    }
+
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    {
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload)),
+        };
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            return responder(request);
         }
     }
 }

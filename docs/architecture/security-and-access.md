@@ -81,6 +81,9 @@ Provider connection secrets, webhook secrets, and per-client Azure DevOps creden
 through the shared `ISecretProtectionCodec` path backed by ASP.NET Core Data Protection. Provider
 operational audit records and webhook delivery history store normalized status, failure category,
 summary data, and readiness explanations without persisting raw secrets or authorization headers.
+Reviewer-trigger identity remains configuration-only state stored separately from connection secrets;
+creating, updating, or clearing it does not rotate connection credentials or change the authenticated
+identity used for provider publication.
 
 ## Request Auth Evaluation Order
 
@@ -134,4 +137,7 @@ flowchart TD
 Per-client ADO credentials are stored in PostgreSQL and protected at rest. If a client has no
 dedicated credential, the backend uses the deployment-wide Azure identity configured for the host.
 GitHub, GitLab, and Forgejo-family calls use the connection-scoped secret stored on the provider
-connection record instead of Azure identity resolution.
+connection record instead of Azure identity resolution. For GitHub App-backed connections, the
+stored secret is the private key PEM; installation access tokens are minted just in time, reused
+only through a bounded in-memory cache, and never persisted back to the database. Reviewer-trigger
+identity never substitutes for these authenticated connection paths.

@@ -48,9 +48,10 @@ comment threads back to the originating provider.
 
 Provider operational readiness is evaluated separately from onboarding verification. A provider
 connection can be verified and ready for onboarding while lacking workflow-complete proof, such as
-a configured reviewer identity, enabled scope, or full host-variant support evidence. The admin
-provider-operations view and the health surface consume these readiness states rather than relying
-on `verificationStatus == verified` alone.
+enabled scope or full host-variant support evidence. Reviewer-trigger identity is surfaced as an
+optional narrowing filter, not as an authentication requirement. The admin provider-operations view
+and the health surface consume these readiness states rather than relying on
+`verificationStatus == verified` alone.
 
 ## Per-File Comment Relevance Filter
 
@@ -163,17 +164,20 @@ flowchart TD
    results from synthesis summaries, cross-file deduplication, and quality-filter input, while
    preserving `CarriedForwardFilePaths` and a carried-forward skip count on the final `ReviewResult`.
 3. `ReviewOrchestrationService.PublishReviewResultAsync(...)` opens a dedicated
-    `ReviewJobProtocol` pass labeled `posting`, reads the client-level
-    `ScmCommentPostingEnabled` policy, conditionally calls the provider-specific
-    `ICodeReviewPublicationService`, persists the final `ReviewResult`, and records aggregate
-    duplicate-suppression diagnostics even when outbound SCM publication is skipped.
-4. The publication service evaluates each candidate finding against existing bot-authored PR
-    threads
-   using normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text
-   matching, pull-request-scoped thread memory similarity, and a deterministic text-similarity
-   fallback when historical signals are degraded.
-5. The posting protocol emits `dedup_summary` on every posting pass and `dedup_degraded_mode`
-   only when historical duplicate protection had to fall back to reduced checks.
+     `ReviewJobProtocol` pass labeled `posting`, reads the client-level
+     `ScmCommentPostingEnabled` policy, conditionally calls the provider-specific
+     `ICodeReviewPublicationService`, persists the final `ReviewResult`, and records aggregate
+     duplicate-suppression diagnostics even when outbound SCM publication is skipped.
+4. Publication identity is derived from authenticated provider connection metadata fetched with the
+    PR, not from the configured reviewer-trigger identity. Optional reviewer assignment still uses
+    the configured trigger identity when present.
+5. The publication service evaluates each candidate finding against existing bot-authored PR
+     threads
+    using normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text
+    matching, pull-request-scoped thread memory similarity, and a deterministic text-similarity
+    fallback when historical signals are degraded.
+6. The posting protocol emits `dedup_summary` on every posting pass and `dedup_degraded_mode`
+    only when historical duplicate protection had to fall back to reduced checks.
 
 This keeps incremental reviews additive: carried-forward findings remain visible in stored review
 history, but only genuinely fresh findings are allowed to create new provider-native threads, and

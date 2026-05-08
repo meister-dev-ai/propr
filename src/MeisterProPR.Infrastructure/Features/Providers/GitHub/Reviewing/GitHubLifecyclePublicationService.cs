@@ -1,8 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -10,25 +10,37 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
 internal sealed class GitHubLifecyclePublicationService(
     GitHubConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory)
+    IHttpClientFactory httpClientFactory,
+    ILogger<GitHubLifecyclePublicationService>? logger = null)
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+    private readonly ILogger<GitHubLifecyclePublicationService> _logger = logger ?? NullLogger<GitHubLifecyclePublicationService>.Instance;
+
     public async Task<ReviewCommentPostingDiagnosticsDto> PublishReviewAsync(
         Guid clientId,
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity reviewer,
+        ReviewerIdentity author,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(result);
 
+        using var activity = ActivitySource.StartActivity("GitHubLifecyclePublicationService.PublishReview");
+        activity?.SetTag("scm.provider", ScmProvider.GitHub.ToString());
+        activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
+        activity?.SetTag("review.number", review.Number);
+        activity?.SetTag("publication.author.login", author.Login);
+
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        var payload = BuildPayload(review, revision, result, reviewer);
+        var payload = BuildPayload(review, revision, result, author);
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             GitHubConnectionVerifier.BuildApiUri(
@@ -37,12 +49,22 @@ internal sealed class GitHubLifecyclePublicationService(
         {
             Content = JsonContent.Create(payload),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.Connection.Secret);
+        await context.AuthorizeRequestAsync(request, ct);
 
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
-            throw new InvalidOperationException("GitHub review publication authentication failed.");
+            var responseBody = await ReadDiagnosticBodyAsync(response, ct);
+            this._logger.LogWarning(
+                "GitHub review publication permission failure for repository {RepositoryPath} review {ReviewNumber} with status {StatusCode}. Detail: {Detail}",
+                BuildRepositoryPath(review.Repository),
+                review.Number,
+                (int)response.StatusCode,
+                responseBody);
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(responseBody)
+                    ? "GitHub review publication failed because the configured credential no longer has permission to publish review comments."
+                    : $"GitHub review publication failed because the configured credential no longer has permission to publish review comments. {responseBody}");
         }
 
         if (!response.IsSuccessStatusCode)
@@ -66,10 +88,10 @@ internal sealed class GitHubLifecyclePublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity reviewer)
+        ReviewerIdentity author)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {reviewer.DisplayName} Review");
+        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
         summaryBuilder.AppendLine();
         summaryBuilder.AppendLine(result.Summary);
 

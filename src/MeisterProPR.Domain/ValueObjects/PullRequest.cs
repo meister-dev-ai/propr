@@ -40,6 +40,11 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     review correspondence. When populated, reviewer-owned thread detection treats this
 ///     identity as equivalent to the configured reviewer identity.
 /// </param>
+/// <param name="AuthorizedIdentityName">
+///     Provider-native login or display name of the authenticated connection identity used to
+///     fetch and post review correspondence. When populated, reviewer-owned thread detection
+///     also treats this identity as equivalent to the configured reviewer identity.
+/// </param>
 public sealed record PullRequest(
     string OrganizationUrl,
     string ProjectId,
@@ -55,7 +60,8 @@ public sealed record PullRequest(
     PrStatus Status = PrStatus.Active,
     IReadOnlyList<PrCommentThread>? ExistingThreads = null,
     IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
-    Guid? AuthorizedIdentityId = null)
+    Guid? AuthorizedIdentityId = null,
+    string? AuthorizedIdentityName = null)
 {
     /// <summary>
     ///     Full manifest of all files changed in the PR since the target branch (path + change type only).

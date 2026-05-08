@@ -16,7 +16,6 @@ namespace MeisterProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 
 internal sealed class ForgejoReviewThreadStatusProvider(
     ForgejoConnectionVerifier connectionVerifier,
-    IClientRegistry clientRegistry,
     IHttpClientFactory httpClientFactory) : IProviderReviewerThreadStatusFetcher
 {
     public ScmProvider Provider => ScmProvider.Forgejo;
@@ -31,15 +30,10 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         CancellationToken ct = default)
     {
         var host = new ProviderHostRef(ScmProvider.Forgejo, organizationUrl);
-        var reviewer = await clientRegistry.GetReviewerIdentityAsync(clientId, host, ct);
-        if (reviewer is null)
-        {
-            return [];
-        }
-
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
         var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, ct);
         var reviews = await this.GetReviewsAsync(context, host, repositoryPath, pullRequestId, ct);
+        var authoredUsername = context.AuthenticatedUsername;
 
         var flattenedComments = new List<ForgejoReviewCommentEnvelope>();
         foreach (var review in reviews)
@@ -59,13 +53,13 @@ internal sealed class ForgejoReviewThreadStatusProvider(
             .Select(group => group.OrderBy(comment => comment.Comment.CreatedAt)
                 .ThenBy(comment => comment.Comment.Id)
                 .ToList())
-            .Where(group => group.Count > 0 && AuthorMatches(group[0].Comment.User, reviewer))
+            .Where(group => group.Count > 0 && AuthorMatches(group[0].Comment.User, authoredUsername))
             .Select(group => new PrThreadStatusEntry(
                 group[0].Comment.Id,
-                DetermineStatus(group, reviewer),
+                DetermineStatus(group, authoredUsername),
                 group[0].Comment.Path,
                 BuildCommentHistory(group),
-                group.Count(comment => !AuthorMatches(comment.Comment.User, reviewer))))
+                group.Count(comment => !AuthorMatches(comment.Comment.User, authoredUsername))))
             .ToList()
             .AsReadOnly();
     }
@@ -179,21 +173,18 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         return $"comment:{comment.Id}";
     }
 
-    private static bool AuthorMatches(ForgejoUserResponse? user, ReviewerIdentity reviewer)
+    private static bool AuthorMatches(ForgejoUserResponse? user, string authoredUsername)
     {
         return user is not null
-               && ((!string.IsNullOrWhiteSpace(user.Login) && string.Equals(
-                       user.Login,
-                       reviewer.Login,
-                       StringComparison.OrdinalIgnoreCase))
-                   || user.Id.ToString() == reviewer.ExternalUserId);
+               && !string.IsNullOrWhiteSpace(user.Login)
+               && string.Equals(user.Login, authoredUsername, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DetermineStatus(
         IReadOnlyList<ForgejoReviewCommentEnvelope> comments,
-        ReviewerIdentity reviewer)
+        string authoredUsername)
     {
-        return comments.Any(comment => !AuthorMatches(comment.Comment.User, reviewer) && string.Equals(
+        return comments.Any(comment => !AuthorMatches(comment.Comment.User, authoredUsername) && string.Equals(
             comment.ReviewState,
             "APPROVED",
             StringComparison.OrdinalIgnoreCase))

@@ -119,6 +119,109 @@ public sealed class ForgejoWebhookIngressTests
         Assert.Equal("pull_request.merged", envelope.DeliveryKind);
     }
 
+    [Fact]
+    public async Task ParseAsync_ReviewRequestedWithoutConfiguredReviewer_ReturnsBaselinePullRequestUpdatedKind()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host, "webhook-secret");
+        var sut = new ForgejoWebhookIngressService(
+            connectionRepository,
+            new ForgejoWebhookSignatureVerifier(),
+            new ForgejoWebhookPayloadParser(new ForgejoWebhookEventClassifier()),
+            Substitute.For<IClientRegistry>());
+        var payload = "{" +
+                      "\"action\":\"review_requested\"," +
+                      "\"repository\":{\"id\":101,\"full_name\":\"acme/propr\",\"owner\":{\"login\":\"acme\"}}," +
+                      "\"pull_request\":{\"id\":4201,\"number\":42,\"state\":\"open\",\"merged\":false,\"head\":{\"ref\":\"feature/providers\",\"sha\":\"head-sha\"},\"base\":{\"ref\":\"main\",\"sha\":\"base-sha\"}}," +
+                      "\"requested_reviewer\":{\"id\":99,\"login\":\"meister-review-bot\"}," +
+                      "\"sender\":{\"id\":7,\"login\":\"octocat\"}" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Gitea-Signature"] = ComputeSignature("webhook-secret", payload),
+            ["X-Gitea-Event"] = "pull_request",
+            ["X-Gitea-Delivery"] = "delivery-3",
+        };
+
+        var envelope = await sut.ParseAsync(clientId, host, headers, payload);
+
+        Assert.Equal("pull_request.updated", envelope.DeliveryKind);
+    }
+
+    [Fact]
+    public async Task ParseAsync_PullRequestConversationComment_ReturnsCommentedEnvelopeWithoutInlineRevision()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host, "webhook-secret");
+        var sut = new ForgejoWebhookIngressService(
+            connectionRepository,
+            new ForgejoWebhookSignatureVerifier(),
+            new ForgejoWebhookPayloadParser(new ForgejoWebhookEventClassifier()),
+            Substitute.For<IClientRegistry>());
+        var payload = "{" +
+                      "\"action\":\"created\"," +
+                      "\"repository\":{\"id\":101,\"full_name\":\"acme/propr\",\"owner\":{\"login\":\"acme\"}}," +
+                      "\"issue\":{\"id\":4201,\"number\":42,\"title\":\"PR title\",\"pull_request\":{\"merged\":false,\"html_url\":\"https://codeberg.example.com/acme/propr/pulls/42\"}}," +
+                      "\"pull_request\":{\"id\":4201,\"number\":42,\"head\":{\"ref\":\"feature/providers\"},\"base\":{\"ref\":\"main\"}}," +
+                      "\"comment\":{\"id\":9001,\"body\":\"Looks good\"}," +
+                      "\"sender\":{\"id\":7,\"login\":\"octocat\"}," +
+                      "\"is_pull\":true" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Gitea-Signature"] = ComputeSignature("webhook-secret", payload),
+            ["X-Gitea-Event"] = "issue_comment",
+            ["X-Gitea-Event-Type"] = "pull_request_comment",
+            ["X-Gitea-Delivery"] = "delivery-4",
+        };
+
+        var envelope = await sut.ParseAsync(clientId, host, headers, payload);
+
+        Assert.Equal("pull_request.commented", envelope.DeliveryKind);
+        Assert.Equal("pull_request_comment", envelope.EventName);
+        Assert.Equal("4201", envelope.Review!.ExternalReviewId);
+        Assert.Equal(42, envelope.Review.Number);
+        Assert.Null(envelope.Revision);
+        Assert.Equal("feature/providers", envelope.SourceBranch);
+        Assert.Equal("main", envelope.TargetBranch);
+    }
+
+    [Fact]
+    public async Task ParseAsync_PullRequestReviewComment_ReturnsCommentedEnvelope()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host, "webhook-secret");
+        var sut = new ForgejoWebhookIngressService(
+            connectionRepository,
+            new ForgejoWebhookSignatureVerifier(),
+            new ForgejoWebhookPayloadParser(new ForgejoWebhookEventClassifier()),
+            Substitute.For<IClientRegistry>());
+        var payload = "{" +
+                      "\"action\":\"commented\"," +
+                      "\"repository\":{\"id\":101,\"full_name\":\"acme/propr\",\"owner\":{\"login\":\"acme\"}}," +
+                      "\"pull_request\":{\"id\":4201,\"number\":42,\"state\":\"open\",\"merged\":false,\"head\":{\"ref\":\"feature/providers\",\"sha\":\"head-sha\"},\"base\":{\"ref\":\"main\",\"sha\":\"base-sha\"}}," +
+                      "\"review\":{\"type\":\"pull_request_review_comment\",\"content\":\"Inline note\"}," +
+                      "\"sender\":{\"id\":7,\"login\":\"octocat\"}" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Gitea-Signature"] = ComputeSignature("webhook-secret", payload),
+            ["X-Gitea-Event"] = "pull_request_comment",
+            ["X-Gitea-Event-Type"] = "pull_request_review_comment",
+            ["X-Gitea-Delivery"] = "delivery-5",
+        };
+
+        var envelope = await sut.ParseAsync(clientId, host, headers, payload);
+
+        Assert.Equal("pull_request.commented", envelope.DeliveryKind);
+        Assert.Equal("pull_request_review_comment", envelope.EventName);
+        Assert.Equal("head-sha", envelope.Revision!.HeadSha);
+        Assert.Equal("base-sha", envelope.Revision.BaseSha);
+    }
+
     private static string ComputeSignature(string secret, string payload)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));

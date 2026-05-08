@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Models;
@@ -16,6 +17,8 @@ internal sealed class AdoWebhookIngressService(
     IAdoWebhookPayloadParser payloadParser,
     IClientRegistry clientRegistry) : IWebhookIngressService
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
     public Task<bool> VerifyAsync(
@@ -48,16 +51,28 @@ internal sealed class AdoWebhookIngressService(
     {
         EnsureAzureDevOps(host);
 
+        using var activity = ActivitySource.StartActivity("AdoWebhookIngressService.Parse");
+        activity?.SetTag("scm.provider", ScmProvider.AzureDevOps.ToString());
+        activity?.SetTag("provider.host", host.HostBaseUrl);
+
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
         var delivery = payloadParser.Parse("providers/ado", root);
         var configuredReviewerId = await this.ResolveConfiguredReviewerIdAsync(clientId, host, ct);
+        activity?.SetTag("reviewer.trigger.configured", configuredReviewerId.HasValue);
+        if (configuredReviewerId.HasValue)
+        {
+            activity?.SetTag("reviewer.trigger.external_user_id", configuredReviewerId.Value.ToString("D"));
+        }
+
         var repository = ReadRepository(host, root, delivery);
+        var deliveryKind = ClassifyDeliveryKind(delivery, configuredReviewerId);
+        activity?.SetTag("webhook.delivery_kind", deliveryKind);
 
         return new WebhookDeliveryEnvelope(
             host,
             BuildDeliveryId(root, delivery),
-            ClassifyDeliveryKind(delivery, configuredReviewerId),
+            deliveryKind,
             delivery.EventType,
             repository,
             new CodeReviewRef(

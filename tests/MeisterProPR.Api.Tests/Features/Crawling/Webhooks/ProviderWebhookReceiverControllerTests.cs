@@ -39,7 +39,7 @@ public sealed class ProviderWebhookReceiverControllerTests
         configRepo.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>()).Returns(configuration);
         providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
         secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
-        clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
+        clientRegistry.GetEffectiveReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
         ingressService.VerifyAsync(
                 Arg.Any<Guid>(),

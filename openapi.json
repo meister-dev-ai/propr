@@ -12983,7 +12983,7 @@
             "description": "Optional: filter by thread ID.",
             "schema": {
               "type": "integer",
-              "format": "int32"
+              "format": "int64"
             }
           },
           {
@@ -13116,7 +13116,7 @@
             "description": "Optional: filter by thread ID.",
             "schema": {
               "type": "integer",
-              "format": "int32"
+              "format": "int64"
             }
           },
           {
@@ -14297,6 +14297,16 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "gitHubAppId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "gitHubAppInstallationId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -14791,6 +14801,16 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "gitHubAppId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "gitHubAppInstallationId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -15291,7 +15311,7 @@
           "threadId": {
             "type": "integer",
             "description": "ADO thread identifier.",
-            "format": "int32"
+            "format": "int64"
           },
           "repositoryId": {
             "type": "string",
@@ -15498,6 +15518,16 @@
           },
           "isActive": {
             "type": "boolean",
+            "nullable": true
+          },
+          "gitHubAppId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "gitHubAppInstallationId": {
+            "type": "integer",
+            "format": "int64",
             "nullable": true
           }
         },
@@ -17482,7 +17512,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for setting a client-scoped provider reviewer identity."
+        "description": "Request body for setting a client-scoped provider reviewer-trigger identity."
       },
       "SubmitReviewRequest": {
         "type": "object",
@@ -17759,7 +17789,7 @@
           "threadId": {
             "type": "integer",
             "description": "ADO thread ID.",
-            "format": "int32"
+            "format": "int64"
           },
           "repositoryId": {
             "type": "string",
@@ -17830,7 +17860,7 @@
           },
           "threadId": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "filePath": {
             "type": "string",

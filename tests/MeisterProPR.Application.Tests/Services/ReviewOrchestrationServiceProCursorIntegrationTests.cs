@@ -188,8 +188,16 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         var clientRegistry = Substitute.For<IClientRegistry>();
         var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
         clientRegistry.GetCommentResolutionBehaviorAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(CommentResolutionBehavior.Silent);
         clientRegistry.GetCustomSystemMessageAsync(job.ClientId, Arg.Any<CancellationToken>())
@@ -334,8 +342,16 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(Task.CompletedTask);
         var clientRegistry = Substitute.For<IClientRegistry>();
         var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
         clientRegistry.GetCommentResolutionBehaviorAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(CommentResolutionBehavior.Silent);
         clientRegistry.GetCustomSystemMessageAsync(job.ClientId, Arg.Any<CancellationToken>())

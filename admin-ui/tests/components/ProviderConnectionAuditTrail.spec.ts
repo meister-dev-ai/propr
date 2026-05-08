@@ -59,6 +59,7 @@ describe('ProviderConnectionAuditTrail', () => {
 
     expect(listProviderAuditTrailMock).toHaveBeenCalledWith('client-1', 20)
     expect(wrapper.text()).toContain('Operational Audit Trail')
+    expect(wrapper.text()).toContain('reviewer-trigger')
     expect(wrapper.text()).toContain('Platform GitLab')
     expect(wrapper.text()).toContain('Verification failed for Platform GitLab.')
     expect(wrapper.text()).toContain('authentication')

@@ -91,6 +91,39 @@ public sealed class GitHubWebhookIngressTests
         Assert.Equal("octocat", envelope.Actor!.Login);
     }
 
+    [Fact]
+    public async Task ParseAsync_ReviewRequestedWithoutConfiguredReviewer_ReturnsUpdatedDeliveryKind()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host, "webhook-secret");
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns((ReviewerIdentity?)null);
+        var sut = new GitHubWebhookIngressService(
+            connectionRepository,
+            new GitHubWebhookSignatureVerifier(),
+            new GitHubWebhookPayloadParser(new GitHubWebhookEventClassifier()),
+            clientRegistry);
+        var payload = "{" +
+                      "\"action\":\"review_requested\"," +
+                      "\"repository\":{\"id\":101,\"full_name\":\"acme/propr\",\"owner\":{\"login\":\"acme\"}}," +
+                      "\"pull_request\":{\"id\":4201,\"number\":42,\"state\":\"open\",\"head\":{\"ref\":\"feature/providers\",\"sha\":\"head-sha\"},\"base\":{\"ref\":\"main\",\"sha\":\"base-sha\"}}," +
+                      "\"requested_reviewer\":{\"id\":99,\"login\":\"meister-review-bot\",\"type\":\"Bot\"}," +
+                      "\"sender\":{\"id\":7,\"login\":\"octocat\",\"type\":\"User\"}" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Hub-Signature-256"] = ComputeSignature("webhook-secret", payload),
+            ["X-GitHub-Event"] = "pull_request",
+            ["X-GitHub-Delivery"] = "delivery-2",
+        };
+
+        var envelope = await sut.ParseAsync(clientId, host, headers, payload);
+
+        Assert.Equal("pull_request.updated", envelope.DeliveryKind);
+    }
+
     private static IClientScmConnectionRepository CreateConnectionRepository(
         Guid clientId,
         ProviderHostRef host,

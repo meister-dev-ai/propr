@@ -311,6 +311,55 @@ public sealed class AdoCompatibilityAdapterTests
     }
 
     [Fact]
+    public async Task PublishReviewAsync_IgnoresConfiguredTriggerReviewerIdentityForAzureDevOpsPublication()
+    {
+        var clientId = Guid.NewGuid();
+        var repositoryId = Guid.NewGuid().ToString("D");
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org-one");
+        var repository = new RepositoryRef(host, repositoryId, "project-1", "project-1");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "base-sha", "7", "base-sha...head-sha");
+        var configuredTriggerReviewer = new ReviewerIdentity(host, "reviewer-guid", "configured-reviewer", "Configured Reviewer", false);
+        var result = new ReviewResult("Looks solid.", []);
+        var (connectionRepository, scopeRepository) = CreateProviderRepositories(
+            clientId,
+            CreateScope(clientId, "https://dev.azure.com/org-one"));
+        var commentPoster = Substitute.For<IAdoCommentPoster>();
+
+        commentPoster.PostAsync(
+                "https://dev.azure.com/org-one",
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
+
+        var sut = new AdoCodeReviewPublicationService(
+            connectionRepository,
+            scopeRepository,
+            CreateConnectionFactory(),
+            commentPoster);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, configuredTriggerReviewer, CancellationToken.None);
+
+        await commentPoster.Received(1)
+            .PostAsync(
+                "https://dev.azure.com/org-one",
+                "project-1",
+                repositoryId,
+                review.Number,
+                7,
+                result,
+                clientId,
+                Arg.Is<IReadOnlyList<PrCommentThread>?>(threads => threads == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ListOpenReviewsAsync_FiltersToMatchingRepositoryAndReviewer()
     {
         var clientId = Guid.NewGuid();

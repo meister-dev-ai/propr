@@ -86,6 +86,97 @@ public sealed class GitHubCodeReviewQueryServiceTests
     }
 
     [Fact]
+    public async Task GetReviewAsync_AppInstallation_UsesInstallationTokenForPullRequestLookup()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        var seenAuthorizationHeaders = new List<string?>();
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request =>
+                    {
+                        seenAuthorizationHeaders.Add(request.Headers.Authorization?.Parameter);
+                        return request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                                new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                                new
+                                {
+                                    token = "installation-token",
+                                    expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                                }),
+                            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                                new
+                                {
+                                    title = "Add provider-neutral adapters",
+                                    html_url = "https://github.com/acme/propr/pull/42",
+                                    state = "open",
+                                    merged_at = (string?)null,
+                                    head = new { @ref = "feature/providers", sha = "head-sha" },
+                                    @base = new { @ref = "main", sha = "base-sha" },
+                                    requested_reviewers = Array.Empty<object>(),
+                                }),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        };
+                    })));
+
+        var sut = new GitHubCodeReviewQueryService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.GetReviewAsync(clientId, review);
+
+        Assert.NotNull(result);
+        Assert.Contains("installation-token", seenAuthorizationHeaders);
+    }
+
+    [Fact]
+    public async Task GetReviewAsync_AppInstallationPermissionLoss_ThrowsActionableInvalidOperationException()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request => request.RequestUri!.AbsoluteUri switch
+                    {
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                            new
+                            {
+                                token = "installation-token",
+                                expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                            }),
+                        "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                            new { message = "Resource not accessible by integration" },
+                            HttpStatusCode.Forbidden),
+                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                    })));
+
+        var sut = new GitHubCodeReviewQueryService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetReviewAsync(clientId, review));
+
+        Assert.Contains("no longer has permission", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Resource not accessible by integration", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PullRequestFetcher_ReturnsChangedFilesAndThreads()
     {
         var clientId = Guid.NewGuid();
@@ -188,6 +279,204 @@ public sealed class GitHubCodeReviewQueryServiceTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal(501, thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+    }
+
+    [Fact]
+    public async Task PullRequestFetcher_DeltaReview_ReturnsOnlyComparedFilesAndPreservesFullManifest()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repositories/101" => CreateJsonResponse(new { full_name = "acme/propr" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Add provider-neutral fetchers",
+                    body = "Fetch GitHub pull requests without Azure-only code.",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/providers", sha = "new-head" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(
+                new object[]
+                {
+                    new
+                    {
+                        filename = "src/NewProvider.cs", status = "renamed",
+                        previous_filename = "src/LegacyProvider.cs", patch = "rename diff",
+                    },
+                    new
+                    {
+                        filename = "src/Fetcher.cs", status = "added", previous_filename = (string?)null,
+                        patch = "+class Fetcher",
+                    },
+                    new
+                    {
+                        filename = "src/Stable.cs", status = "modified", previous_filename = (string?)null,
+                        patch = "stable diff",
+                    },
+                }),
+            "https://api.github.com/repos/acme/propr/compare/old-head...new-head?per_page=100" => CreateJsonResponse(
+                new
+                {
+                    files = new object[]
+                    {
+                        new
+                        {
+                            filename = "src/NewProvider.cs", status = "renamed",
+                            previous_filename = "src/LegacyProvider.cs", patch = "rename diff",
+                        },
+                        new
+                        {
+                            filename = "src/Fetcher.cs", status = "added", previous_filename = (string?)null,
+                            patch = "+class Fetcher",
+                        },
+                    },
+                }),
+            "https://api.github.com/repos/acme/propr/contents/src%2FNewProvider.cs?ref=new-head" =>
+                CreateContentResponse("public class NewProvider {}"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FLegacyProvider.cs?ref=base-sha" =>
+                CreateContentResponse("public class LegacyProvider {}"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FFetcher.cs?ref=new-head" =>
+                CreateContentResponse("public class Fetcher {}"),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = Array.Empty<object>(),
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+                Assert.Equal("src/LegacyProvider.cs", item.OriginalPath);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            });
+        Assert.Collection(
+            result.AllPrFileSummaries,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+            });
+    }
+
+    [Fact]
+    public async Task PullRequestFetcher_AppInstallation_UsesInstallationTokenAcrossRuntimeCalls()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+        var seenAuthorizationHeaders = new List<string?>();
+        var httpClientFactory = CreateHttpClientFactory(request =>
+        {
+            seenAuthorizationHeaders.Add(request.Headers.Authorization?.Parameter);
+            return request.RequestUri!.AbsoluteUri switch
+            {
+                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                    new { account = new { login = "acme-platform" } }),
+                "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                    new
+                    {
+                        token = "installation-token",
+                        expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                    }),
+                "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                    new
+                    {
+                        title = "Add provider-neutral fetchers",
+                        body = "Fetch GitHub pull requests without Azure-only code.",
+                        state = "open",
+                        merged_at = (string?)null,
+                        head = new { @ref = "feature/providers", sha = "head-sha" },
+                        @base = new { @ref = "main", sha = "base-sha" },
+                    }),
+                "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(Array.Empty<object>()),
+                "https://api.github.com/graphql" => CreateJsonResponse(
+                    new
+                    {
+                        data = new
+                        {
+                            repository = new
+                            {
+                                pullRequest = new
+                                {
+                                    reviewThreads = new
+                                    {
+                                        nodes = Array.Empty<object>(),
+                                    },
+                                },
+                            },
+                        },
+                    }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            };
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal("Add provider-neutral fetchers", result.Title);
+        Assert.Contains("installation-token", seenAuthorizationHeaders);
     }
 
     [Fact]
@@ -517,9 +806,9 @@ public sealed class GitHubCodeReviewQueryServiceTests
             });
     }
 
-    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
-        return new HttpResponseMessage(HttpStatusCode.OK)
+        return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(JsonSerializer.Serialize(payload)),
         };

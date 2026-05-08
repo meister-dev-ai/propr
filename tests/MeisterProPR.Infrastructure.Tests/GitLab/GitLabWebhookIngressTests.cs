@@ -119,4 +119,36 @@ public sealed class GitLabWebhookIngressTests
 
         Assert.Equal("pull_request.merged", envelope.DeliveryKind);
     }
+
+    [Fact]
+    public async Task ParseAsync_UpdateWithoutConfiguredReviewer_ReturnsBaselinePullRequestUpdatedKind()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host, "webhook-secret");
+        var sut = new GitLabWebhookIngressService(
+            connectionRepository,
+            new GitLabWebhookTokenVerifier(),
+            new GitLabWebhookPayloadParser(new GitLabWebhookEventClassifier()),
+            Substitute.For<IClientRegistry>());
+        var payload = "{" +
+                      "\"object_kind\":\"merge_request\"," +
+                      "\"event_type\":\"merge_request\"," +
+                      "\"user\":{\"id\":7,\"name\":\"Octocat\",\"username\":\"octocat\"}," +
+                      "\"project\":{\"id\":101,\"path_with_namespace\":\"acme/platform/propr\",\"namespace\":\"Acme Platform\"}," +
+                      "\"object_attributes\":{\"id\":4201,\"iid\":42,\"action\":\"update\",\"oldrev\":\"base-sha\",\"source_branch\":\"feature/providers\",\"target_branch\":\"main\",\"last_commit\":{\"id\":\"head-sha\"}}," +
+                      "\"changes\":{\"reviewers\":[[{\"id\":99,\"username\":\"meister-review-bot\",\"re_requested\":false}],[{\"id\":99,\"username\":\"meister-review-bot\",\"re_requested\":true}]]}," +
+                      "\"reviewers\":[{\"id\":99,\"username\":\"meister-review-bot\",\"state\":\"unreviewed\",\"re_requested\":true}]" +
+                      "}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Gitlab-Token"] = "webhook-secret",
+            ["X-Gitlab-Event"] = "Merge Request Hook",
+            ["X-Gitlab-Event-UUID"] = "delivery-3",
+        };
+
+        var envelope = await sut.ParseAsync(clientId, host, headers, payload);
+
+        Assert.Equal("pull_request.updated", envelope.DeliveryKind);
+    }
 }

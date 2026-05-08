@@ -41,6 +41,8 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         string displayName,
         string secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default)
     {
         throw new InvalidOperationException("Client SCM connections are unavailable in offline review-evaluation mode.");
@@ -56,6 +58,8 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         string displayName,
         string? secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default)
     {
         throw new InvalidOperationException("Client SCM connections are unavailable in offline review-evaluation mode.");

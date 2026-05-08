@@ -183,8 +183,16 @@ public class ReviewOrchestrationServicePromptOverrideTests
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
         var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
         clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -381,5 +389,87 @@ public class ReviewOrchestrationServicePromptOverrideTests
         // Assert — review still runs but with empty overrides
         Assert.NotNull(capturedContext);
         Assert.Empty(capturedContext!.PromptOverrides);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PassesConfiguredTriggerReviewerToAssignmentButPublishesWithAuthorizedIdentity()
+    {
+        var (job, prFetcher, clientRegistry, prScanRepository) = BuildDefaults();
+
+        var configuredReviewer = new ReviewerIdentity(
+            job.ProviderHost,
+            Guid.NewGuid().ToString("D"),
+            "configured-reviewer",
+            "Configured Reviewer",
+            false);
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(configuredReviewer);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(configuredReviewer);
+        clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var authorizedPr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "Test PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile>().AsReadOnly(),
+            AuthorizedIdentityName: "ado-app-bot");
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(authorizedPr);
+
+        var publicationService = CreatePublicationService();
+        var promptOverrideService = Substitute.For<IPromptOverrideService>();
+        promptOverrideService
+            .GetOverrideAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>(null));
+
+        var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        orchestrator
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
+
+        var service = CreateService(
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            publicationService,
+            clientRegistry,
+            prScanRepository,
+            promptOverrideService);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await publicationService.Received(1)
+            .PublishReviewAsync(
+                job.ClientId,
+                job.CodeReviewReference,
+                Arg.Any<ReviewRevision>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Is<ReviewerIdentity>(identity =>
+                    identity.Login == "ado-app-bot" &&
+                    identity.DisplayName == "ado-app-bot" &&
+                    identity.ExternalUserId == "ado-app-bot"),
+                Arg.Any<CancellationToken>());
     }
 }

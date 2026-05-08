@@ -19,7 +19,7 @@ public sealed record ReviewRevisionRefDto(
     string? ProviderRevisionId,
     string? PatchIdentity);
 
-/// <summary>Provider-neutral reviewer identity supplied by review intake clients.</summary>
+/// <summary>Provider-neutral reviewer identity supplied by review intake clients as trigger context.</summary>
 public sealed record ReviewReviewerIdentityDto(string ExternalUserId, string Login, string DisplayName, bool IsBot);
 
 /// <summary>Request payload for provider-neutral review intake.</summary>
@@ -30,7 +30,7 @@ public sealed record SubmitReviewRequest(
     ReviewCodeReviewRefDto? CodeReview,
     ReviewRevisionRefDto? ReviewRevision)
 {
-    /// <summary>Optional normalized reviewer identity preferred for publication and automation.</summary>
+    /// <summary>Optional normalized reviewer-trigger identity used only for automation trigger context.</summary>
     public ReviewReviewerIdentityDto? RequestedReviewerIdentity { get; init; }
 }
 

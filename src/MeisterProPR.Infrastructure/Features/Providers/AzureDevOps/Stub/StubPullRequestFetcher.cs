@@ -28,7 +28,8 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         LogStubFetch(logger, pullRequestId);
 

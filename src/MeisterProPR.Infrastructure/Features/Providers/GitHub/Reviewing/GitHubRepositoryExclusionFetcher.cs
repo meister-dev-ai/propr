@@ -19,7 +19,8 @@ namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 internal partial class GitHubRepositoryExclusionFetcher(
     IClientScmConnectionRepository connectionRepository,
     IHttpClientFactory httpClientFactory,
-    ILogger<GitHubRepositoryExclusionFetcher> logger) : IProviderRepositoryExclusionFetcher
+    ILogger<GitHubRepositoryExclusionFetcher> logger,
+    GitHubConnectionVerifier? connectionVerifier = null) : IProviderRepositoryExclusionFetcher
 {
     private const string ExcludeFilePath = ".meister-propr/exclude";
 
@@ -76,11 +77,17 @@ internal partial class GitHubRepositoryExclusionFetcher(
         CancellationToken cancellationToken)
     {
         var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
-        var connection = await this.GetConnectionAsync(host, clientId, cancellationToken);
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitHub repository exclusion fetches require a client identifier.");
+        }
+
+        var verifier = connectionVerifier ?? new GitHubConnectionVerifier(connectionRepository, httpClientFactory);
+        var context = await verifier.VerifyAsync(clientId.Value, host, cancellationToken);
         var repositoryPath = await this.ResolveRepositoryPathAsync(
+            context,
             host,
             repositoryId,
-            connection.Secret,
             cancellationToken);
         var normalizedBranch = NormalizeBranchName(targetBranch);
         var fileUri = GitHubConnectionVerifier.BuildApiUri(
@@ -88,7 +95,7 @@ internal partial class GitHubRepositoryExclusionFetcher(
             $"/repos/{repositoryPath}/contents/{Uri.EscapeDataString(ExcludeFilePath)}",
             $"ref={Uri.EscapeDataString(normalizedBranch)}");
 
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(fileUri, connection.Secret);
+        using var request = await context.CreateAuthenticatedRequestAsync(fileUri, ct: cancellationToken);
         using var response =
             await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -110,32 +117,10 @@ internal partial class GitHubRepositoryExclusionFetcher(
         return payload.Content;
     }
 
-    private async Task<ClientScmConnectionCredentialDto> GetConnectionAsync(
-        ProviderHostRef host,
-        Guid? clientId,
-        CancellationToken cancellationToken)
-    {
-        if (!clientId.HasValue)
-        {
-            throw new InvalidOperationException("GitHub repository exclusion fetches require a client identifier.");
-        }
-
-        var connection =
-            await connectionRepository.GetOperationalConnectionAsync(clientId.Value, host, cancellationToken)
-            ?? throw new InvalidOperationException("No active GitHub connection is configured for the supplied host.");
-
-        if (connection.AuthenticationKind != ScmAuthenticationKind.PersonalAccessToken)
-        {
-            throw new InvalidOperationException("GitHub repository exclusions require personal access token authentication.");
-        }
-
-        return connection;
-    }
-
     private async Task<string> ResolveRepositoryPathAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
         ProviderHostRef host,
         string repositoryId,
-        string secret,
         CancellationToken cancellationToken)
     {
         if (LooksLikeRepositoryPath(repositoryId))
@@ -143,9 +128,9 @@ internal partial class GitHubRepositoryExclusionFetcher(
             return NormalizeRepositoryPath(repositoryId);
         }
 
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(host, $"/repositories/{Uri.EscapeDataString(repositoryId)}"),
-            secret);
+            ct: cancellationToken);
         using var response =
             await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)

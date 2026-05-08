@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
@@ -25,6 +26,8 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
         var reviewer = new ReviewerIdentity(host, "reviewer-guid", "meister-bot", "Meister Bot", true);
         var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
         var providerRegistry = Substitute.For<IScmProviderRegistry>();
@@ -35,6 +38,8 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
             .Returns(configuration);
         providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.AzureDevOps).Returns(reviewDiscoveryProvider);
         secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
         clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
@@ -64,6 +69,40 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     "refs/heads/feature/test",
                     "refs/heads/main",
                     null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"));
+        reviewDiscoveryProvider.ListOpenReviewsAsync(
+                configuration.ClientId,
+                repository,
+                reviewer,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                [
+                    new ReviewDiscoveryItemDto(
+                        ScmProvider.AzureDevOps,
+                        repository,
+                        review,
+                        CodeReviewState.Open,
+                        null,
+                        reviewer,
+                        "PR 42",
+                        null,
+                        "feature/test",
+                        "main"),
+                ]);
+        queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(new ReviewRevision("head-sha", "base-sha", null, "7", "base-sha...head-sha"));
         synchronizationService.SynchronizeAsync(
                 Arg.Any<PullRequestSynchronizationRequest>(),
                 Arg.Any<CancellationToken>())
@@ -193,7 +232,10 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var host = new ProviderHostRef(ScmProvider.AzureDevOps, configuration.OrganizationUrl);
         var sparseRepository = new RepositoryRef(host, "meister-propr", "meister-propr", "meister-propr");
         var sparseReview = new CodeReviewRef(sparseRepository, CodeReviewPlatformKind.PullRequest, "26", 26);
+        var canonicalRepository = new RepositoryRef(host, "repo-guid", "project-guid", "project-guid");
+        var canonicalReview = new CodeReviewRef(canonicalRepository, CodeReviewPlatformKind.PullRequest, "26", 26);
         var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
         var providerRegistry = Substitute.For<IScmProviderRegistry>();
@@ -231,6 +273,9 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     "refs/heads/feature/test",
                     "refs/heads/main",
                     null));
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(queryService);
+        queryService.GetLatestRevisionAsync(configuration.ClientId, canonicalReview, Arg.Any<CancellationToken>())
+            .Returns(new ReviewRevision("head-sha", "base-sha", null, "26", "base-sha...head-sha"));
         synchronizationService.SynchronizeAsync(
                 Arg.Any<PullRequestSynchronizationRequest>(),
                 Arg.Any<CancellationToken>())
@@ -278,9 +323,11 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     && request.Repository.OwnerOrNamespace == "project-guid"
                     && request.Repository.ProjectPath == "project-guid"
                     && request.CodeReview != null
-                    && request.CodeReview.Repository.ExternalRepositoryId == "repo-guid"
-                    && request.CodeReview.Repository.ProjectPath == "project-guid"),
+                        && request.CodeReview.Repository.ExternalRepositoryId == "repo-guid"
+                        && request.CodeReview.Repository.ProjectPath == "project-guid"),
                 Arg.Any<CancellationToken>());
+        await queryService.Received(1)
+            .GetLatestRevisionAsync(configuration.ClientId, canonicalReview, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -501,6 +548,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
         var ingressService = Substitute.For<IWebhookIngressService>();
         var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
         var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
         var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
         var providerRegistry = Substitute.For<IScmProviderRegistry>();
@@ -512,6 +560,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             .Returns(configuration);
         providerRegistry.GetWebhookIngressService(ScmProvider.Forgejo).Returns(ingressService);
         providerRegistry.GetCodeReviewQueryService(ScmProvider.Forgejo).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.Forgejo).Returns(reviewDiscoveryProvider);
         secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
         clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
@@ -541,6 +590,38 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     "feature/test-branch",
                     "main",
                     null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.Forgejo,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    refreshedRevision,
+                    reviewer,
+                    "PR 1",
+                    null,
+                    "feature/test-branch",
+                    "main"));
+        reviewDiscoveryProvider.ListOpenReviewsAsync(
+                configuration.ClientId,
+                repository,
+                reviewer,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                [
+                    new ReviewDiscoveryItemDto(
+                        ScmProvider.Forgejo,
+                        repository,
+                        review,
+                        CodeReviewState.Open,
+                        refreshedRevision,
+                        reviewer,
+                        "PR 1",
+                        null,
+                        "feature/test-branch",
+                        "main"),
+                ]);
         queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
             .Returns(refreshedRevision);
         synchronizationService.SynchronizeAsync(
@@ -587,6 +668,374 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 Arg.Is<PullRequestSynchronizationRequest>(request =>
                     request.Provider == ScmProvider.Forgejo
                     && request.CodeReview == review
+                    && request.ReviewRevision == refreshedRevision),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_GitHubConfiguredReviewerNotAssigned_SkipsReviewSynchronization()
+    {
+        var configuration = new WebhookConfigurationDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            WebhookProviderType.GitHub,
+            "path-key",
+            "https://github.com",
+            "acme",
+            true,
+            DateTimeOffset.UtcNow,
+            [WebhookEventType.PullRequestUpdated],
+            [new WebhookRepoFilterDto(Guid.NewGuid(), "acme/propr", ["main"], null, "acme/propr")],
+            SecretCiphertext: "ciphertext");
+        var host = new ProviderHostRef(ScmProvider.GitHub, configuration.OrganizationUrl);
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var configuredReviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var otherReviewer = new ReviewerIdentity(host, "123", "someone-else", "Someone Else", false);
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.GitHub).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.GitHub).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.GitHub).Returns(reviewDiscoveryProvider);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(configuredReviewer));
+        ingressService.VerifyAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                "webhook-secret",
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new WebhookDeliveryEnvelope(
+                    host,
+                    "delivery-1",
+                    "pull_request.updated",
+                    "pull_request",
+                    repository,
+                    review,
+                    new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"),
+                    "feature/test",
+                    "main",
+                    null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.GitHub,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"),
+                    otherReviewer,
+                    "Different pull request",
+                    "https://github.com/acme/propr/pull/42",
+                    "feature/test",
+                    "main"));
+        reviewDiscoveryProvider.ListOpenReviewsAsync(
+                configuration.ClientId,
+                repository,
+                configuredReviewer,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                [
+                    new ReviewDiscoveryItemDto(
+                        ScmProvider.GitHub,
+                        repository,
+                        new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4300", 43),
+                        CodeReviewState.Open,
+                        new ReviewRevision("other-head", "other-base", null, "other-head", "other-base...other-head"),
+                        otherReviewer,
+                        "Different pull request",
+                        "https://github.com/acme/propr/pull/43",
+                        "feature/other",
+                        "main"),
+                ]);
+        deliveryLogRepository.AddAsync(
+                default,
+                default,
+                default!,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default!,
+                default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Accepted, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            clientRegistry,
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService);
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(ScmProvider.GitHub, "path-key", CreateHeaders(), "{}"),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
+        Assert.Equal(200, result.HttpStatusCode);
+        Assert.Contains(
+            result.ActionSummaries,
+            summary => summary.Contains("not currently assigned", StringComparison.OrdinalIgnoreCase));
+
+        await reviewDiscoveryProvider.Received(1)
+            .ListOpenReviewsAsync(configuration.ClientId, repository, configuredReviewer, Arg.Any<CancellationToken>());
+        await synchronizationService.DidNotReceiveWithAnyArgs().SynchronizeAsync(default!);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ForgejoConfiguredReviewerMatchedByExactReviewQuery_SynchronizesReview()
+    {
+        var configuration = new WebhookConfigurationDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            WebhookProviderType.Forgejo,
+            "path-key",
+            "https://codeberg.example.com",
+            "local_admin",
+            true,
+            DateTimeOffset.UtcNow,
+            [WebhookEventType.PullRequestUpdated],
+            [new WebhookRepoFilterDto(Guid.NewGuid(), "local_admin/propr", ["main"], null, "propr")],
+            SecretCiphertext: "ciphertext");
+        var host = new ProviderHostRef(ScmProvider.Forgejo, configuration.OrganizationUrl);
+        var repository = new RepositoryRef(host, "local_admin/propr", "local_admin", "local_admin/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "9009", 9);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "17", "local_admin", "Local Admin", false);
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.Forgejo).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.Forgejo).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.Forgejo).Returns(reviewDiscoveryProvider);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
+        ingressService.VerifyAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                "webhook-secret",
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new WebhookDeliveryEnvelope(
+                    host,
+                    "delivery-1",
+                    "pull_request.updated",
+                    "pull_request",
+                    repository,
+                    review,
+                    revision,
+                    "feature/test",
+                    "main",
+                    null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.Forgejo,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    revision,
+                    reviewer,
+                    "Forgejo PR 9",
+                    "https://codeberg.example.com/local_admin/propr/pulls/9",
+                    "feature/test",
+                    "main"));
+        synchronizationService.SynchronizeAsync(
+                Arg.Any<PullRequestSynchronizationRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.Submitted,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    ["Submitted review intake job."]));
+        deliveryLogRepository.AddAsync(
+                default,
+                default,
+                default!,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default!,
+                default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Accepted, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            clientRegistry,
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService);
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}"),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
+        Assert.Contains("Submitted review intake job.", result.ActionSummaries);
+
+        await queryService.Received(1).GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>());
+        await reviewDiscoveryProvider.DidNotReceiveWithAnyArgs()
+            .ListOpenReviewsAsync(default, default!, default, default);
+        await synchronizationService.Received(1)
+            .SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request =>
+                    request.Provider == ScmProvider.Forgejo && request.CodeReview == review),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ForgejoPullRequestCommentDelivery_RefreshesLatestRevisionAndSynchronizesReview()
+    {
+        var configuration = new WebhookConfigurationDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            WebhookProviderType.Forgejo,
+            "path-key",
+            "https://codeberg.example.com",
+            "local_admin",
+            true,
+            DateTimeOffset.UtcNow,
+            [WebhookEventType.PullRequestCommented],
+            [new WebhookRepoFilterDto(Guid.NewGuid(), "local_admin/propr", ["main"], null, "propr")],
+            SecretCiphertext: "ciphertext");
+        var host = new ProviderHostRef(ScmProvider.Forgejo, configuration.OrganizationUrl);
+        var repository = new RepositoryRef(host, "local_admin/propr", "local_admin", "local_admin/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "9009", 9);
+        var refreshedRevision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.Forgejo).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.Forgejo).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.Forgejo).Returns(reviewDiscoveryProvider);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        ingressService.VerifyAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                "webhook-secret",
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new WebhookDeliveryEnvelope(
+                    host,
+                    "delivery-9",
+                    "pull_request.commented",
+                    "pull_request_comment",
+                    repository,
+                    review,
+                    null,
+                    "feature/test",
+                    "main",
+                    null));
+        queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(refreshedRevision);
+        synchronizationService.SynchronizeAsync(
+                Arg.Any<PullRequestSynchronizationRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.Submitted,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    ["Submitted review intake job."]));
+        deliveryLogRepository.AddAsync(
+                default,
+                default,
+                default!,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default!,
+                default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Accepted, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            clientRegistry,
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService);
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}"),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
+        await queryService.Received(1).GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>());
+        await synchronizationService.Received(1)
+            .SynchronizeAsync(
+                Arg.Is<PullRequestSynchronizationRequest>(request =>
+                    request.Provider == ScmProvider.Forgejo
+                    && request.SummaryLabel == "pull request commented"
                     && request.ReviewRevision == refreshedRevision),
                 Arg.Any<CancellationToken>());
     }

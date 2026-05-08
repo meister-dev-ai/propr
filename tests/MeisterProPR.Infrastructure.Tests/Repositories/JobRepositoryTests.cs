@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -176,6 +177,51 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task GetCompletedJobWithFileResultsByStoredRevisionAsync_ReturnsMatchingCompletedJob()
+    {
+        var job = MakeJob(prId: 700, iterationId: 5);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"));
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        var storedRevisionKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
+
+        var found = await this._repo.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            storedRevisionKey);
+
+        Assert.NotNull(found);
+        Assert.Equal(job.Id, found!.Id);
+    }
+
+    [Fact]
+    public async Task GetCompletedJobWithFileResultsByStoredRevisionAsync_IgnoresFailedAndCancelledJobs()
+    {
+        var failedJob = MakeJob(prId: 701, iterationId: 5);
+        failedJob.SetReviewRevision(new ReviewRevision("failed-head", "base-sha", null, "failed-head", "base-sha...failed-head"));
+        await this._repo.AddAsync(failedJob);
+        await this._repo.SetFailedAsync(failedJob.Id, "boom");
+
+        var cancelledJob = MakeJob(failedJob.ClientId, failedJob.OrganizationUrl, failedJob.ProjectId, failedJob.RepositoryId, failedJob.PullRequestId, 6);
+        cancelledJob.SetReviewRevision(new ReviewRevision("cancelled-head", "base-sha", null, "cancelled-head", "base-sha...cancelled-head"));
+        await this._repo.AddAsync(cancelledJob);
+        await this._repo.SetCancelledAsync(cancelledJob.Id);
+
+        var found = await this._repo.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            failedJob.OrganizationUrl,
+            failedJob.ProjectId,
+            failedJob.RepositoryId,
+            failedJob.PullRequestId,
+            "base-sha...cancelled-head");
+
+        Assert.Null(found);
+    }
+
+    [Fact]
     public async Task FindActiveJob_ReturnsNullForFailedJob()
     {
         // T039 / T009: Failed job should return null to allow retry
@@ -208,6 +254,86 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             job.IterationId);
         Assert.NotNull(found);
         Assert.Equal(job.Id, found.Id);
+    }
+
+    [Fact]
+    public async Task TryAddIfNoActiveDuplicateAsync_WithMatchingRevision_ReturnsExistingDuplicate()
+    {
+        var job = MakeJob(prId: 42, iterationId: 11);
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(new ProviderHostRef(ScmProvider.GitHub, "https://github.com"), "repo", "acme", "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                42));
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
+        await this._repo.AddAsync(job);
+
+        var duplicate = MakeJob(job.ClientId, job.OrganizationUrl, job.ProjectId, job.RepositoryId, job.PullRequestId, 99);
+        duplicate.SetProviderReviewContext(job.CodeReviewReference);
+        duplicate.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
+
+        var result = await this._repo.TryAddIfNoActiveDuplicateAsync(duplicate);
+
+        Assert.False(result.WasAdded);
+        Assert.NotNull(result.DuplicateJob);
+        Assert.Equal(job.Id, result.DuplicateJob!.Id);
+        Assert.Equal(0, result.CancelledSupersededJobCount);
+        Assert.Equal(1, await this._dbContext.ReviewJobs.CountAsync());
+    }
+
+    [Fact]
+    public async Task TryAddIfNoActiveDuplicateAsync_WithMatchingRevisionAndAlternateRepositoryIdShape_ReturnsExistingDuplicate()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var storedRepository = new RepositoryRef(host, "101", "acme", "acme/repo");
+        var incomingRepository = new RepositoryRef(host, "acme/repo", "acme", "acme/repo");
+
+        var job = MakeJob(prId: 42, iterationId: 11, repoId: storedRepository.ExternalRepositoryId, projectId: "acme");
+        job.SetProviderReviewContext(new CodeReviewRef(storedRepository, CodeReviewPlatformKind.PullRequest, "42", 42));
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
+        await this._repo.AddAsync(job);
+
+        var duplicate = MakeJob(job.ClientId, job.OrganizationUrl, job.ProjectId, incomingRepository.ExternalRepositoryId, job.PullRequestId, 99);
+        duplicate.SetProviderReviewContext(new CodeReviewRef(incomingRepository, CodeReviewPlatformKind.PullRequest, "42", 42));
+        duplicate.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
+
+        var result = await this._repo.TryAddIfNoActiveDuplicateAsync(duplicate);
+
+        Assert.False(result.WasAdded);
+        Assert.NotNull(result.DuplicateJob);
+        Assert.Equal(job.Id, result.DuplicateJob!.Id);
+        Assert.Equal(1, await this._dbContext.ReviewJobs.CountAsync());
+    }
+
+    [Fact]
+    public async Task TryAddIfNoActiveDuplicateAsync_WithSupersededRevision_CancelsOlderActiveJobAndAddsNewJob()
+    {
+        var older = MakeJob(prId: 42, iterationId: 10);
+        older.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(new ProviderHostRef(ScmProvider.GitHub, "https://github.com"), "repo", "acme", "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                42));
+        older.SetReviewRevision(new ReviewRevision("old-head", "base-sha", "start-sha", "revision-0", "patch-0"));
+        older.Status = JobStatus.Processing;
+        await this._repo.AddAsync(older);
+
+        var newer = MakeJob(older.ClientId, older.OrganizationUrl, older.ProjectId, older.RepositoryId, older.PullRequestId, 11);
+        newer.SetProviderReviewContext(older.CodeReviewReference);
+        newer.SetReviewRevision(new ReviewRevision("new-head", "base-sha", "start-sha", "revision-1", "patch-1"));
+
+        var result = await this._repo.TryAddIfNoActiveDuplicateAsync(newer);
+
+        Assert.True(result.WasAdded);
+        Assert.Null(result.DuplicateJob);
+        Assert.Equal(1, result.CancelledSupersededJobCount);
+
+        var persistedOlder = await this._dbContext.ReviewJobs.FirstAsync(candidate => candidate.Id == older.Id);
+        var persistedNewer = await this._dbContext.ReviewJobs.FirstAsync(candidate => candidate.Id == newer.Id);
+        Assert.Equal(JobStatus.Cancelled, persistedOlder.Status);
+        Assert.Equal(JobStatus.Pending, persistedNewer.Status);
     }
 
 

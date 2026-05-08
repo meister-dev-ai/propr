@@ -2140,6 +2140,14 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("encrypted_secret_material");
 
+                    b.Property<long?>("GitHubAppId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("github_app_id");
+
+                    b.Property<long?>("GitHubAppInstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("github_app_installation_id");
+
                     b.Property<string>("HostBaseUrl")
                         .IsRequired()
                         .HasMaxLength(512)

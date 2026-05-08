@@ -25,7 +25,9 @@ public sealed record ClientScmConnectionDto(
     ProviderConnectionReadinessLevel ReadinessLevel = ProviderConnectionReadinessLevel.Unknown,
     string? ReadinessReason = null,
     string HostVariant = "unknown",
-    IReadOnlyList<string>? MissingReadinessCriteria = null)
+    IReadOnlyList<string>? MissingReadinessCriteria = null,
+    long? GitHubAppId = null,
+    long? GitHubAppInstallationId = null)
 {
     /// <summary>Initializes a new instance of the <see cref="ClientScmConnectionDto" /> record with required parameters only.</summary>
     public ClientScmConnectionDto(
@@ -57,7 +59,9 @@ public sealed record ClientScmConnectionDto(
             lastVerificationError,
             lastVerificationFailureCategory,
             createdAt,
-            updatedAt)
+            updatedAt,
+            GitHubAppId: null,
+            GitHubAppInstallationId: null)
     {
     }
 }

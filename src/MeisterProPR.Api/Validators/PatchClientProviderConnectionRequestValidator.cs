@@ -19,6 +19,8 @@ public sealed class
                 || request.AuthenticationKind.HasValue
                 || request.OAuthTenantId is not null
                 || request.OAuthClientId is not null
+                || request.GitHubAppId.HasValue
+                || request.GitHubAppInstallationId.HasValue
                 || request.DisplayName is not null
                 || request.Secret is not null
                 || request.IsActive.HasValue)
@@ -56,5 +58,15 @@ public sealed class
             .MaximumLength(256)
             .WithMessage("OAuthClientId must not exceed 256 characters.")
             .When(request => request.OAuthClientId is not null);
+
+        this.RuleFor(request => request.GitHubAppId)
+            .GreaterThan(0)
+            .WithMessage("GitHubAppId must be a positive numeric identifier.")
+            .When(request => request.GitHubAppId.HasValue);
+
+        this.RuleFor(request => request.GitHubAppInstallationId)
+            .GreaterThan(0)
+            .WithMessage("GitHubAppInstallationId must be a positive numeric identifier.")
+            .When(request => request.GitHubAppInstallationId.HasValue);
     }
 }

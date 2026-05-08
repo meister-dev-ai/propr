@@ -16,7 +16,9 @@ public sealed record ClientScmConnectionCredentialDto(
     string? OAuthClientId,
     string DisplayName,
     string Secret,
-    bool IsActive)
+    bool IsActive,
+    long? GitHubAppId = null,
+    long? GitHubAppInstallationId = null)
 {
     /// <summary>
     ///     Convenience constructor for non-OAuth credentials where tenant and client ID are not applicable.
@@ -30,7 +32,19 @@ public sealed record ClientScmConnectionCredentialDto(
         string displayName,
         string secret,
         bool isActive)
-        : this(id, clientId, providerFamily, hostBaseUrl, authenticationKind, null, null, displayName, secret, isActive)
+        : this(
+            id,
+            clientId,
+            providerFamily,
+            hostBaseUrl,
+            authenticationKind,
+            null,
+            null,
+            displayName,
+            secret,
+            isActive,
+            GitHubAppId: null,
+            GitHubAppInstallationId: null)
     {
     }
 }

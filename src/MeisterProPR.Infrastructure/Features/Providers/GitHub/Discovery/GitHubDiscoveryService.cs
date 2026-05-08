@@ -25,9 +25,32 @@ internal sealed class GitHubDiscoveryService(
     {
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
 
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        if (context.Connection.AuthenticationKind == ScmAuthenticationKind.AppInstallation)
+        {
+            var installationRepositories = await this.ListInstallationRepositoriesAsync(context, host, ct);
+            var installationScopePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var repository in installationRepositories)
+            {
+                if (!string.IsNullOrWhiteSpace(repository.Owner?.Login))
+                {
+                    installationScopePaths.Add(repository.Owner.Login.Trim());
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.AuthenticatedLogin))
+            {
+                installationScopePaths.Add(context.AuthenticatedLogin);
+            }
+
+            return installationScopePaths.OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(host, "/user/orgs", "per_page=100"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -65,6 +88,25 @@ internal sealed class GitHubDiscoveryService(
         var normalizedScopePath = scopePath.Trim();
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
 
+        if (context.Connection.AuthenticationKind == ScmAuthenticationKind.AppInstallation)
+        {
+            var installationRepositories = await this.ListInstallationRepositoriesAsync(context, host, ct);
+            return installationRepositories
+                .Where(repository => !string.IsNullOrWhiteSpace(repository.FullName)
+                                     && !string.IsNullOrWhiteSpace(repository.Owner?.Login)
+                                     && string.Equals(
+                                         repository.Owner.Login,
+                                         normalizedScopePath,
+                                         StringComparison.OrdinalIgnoreCase))
+                .Select(repository => new RepositoryRef(
+                    host,
+                    repository.Id.ToString(CultureInfo.InvariantCulture),
+                    repository.Owner!.Login!.Trim(),
+                    repository.FullName!.Trim()))
+                .ToList()
+                .AsReadOnly();
+        }
+
         var path = string.Equals(normalizedScopePath, context.AuthenticatedLogin, StringComparison.OrdinalIgnoreCase)
             ? "/user/repos"
             : $"/orgs/{Uri.EscapeDataString(normalizedScopePath)}/repos";
@@ -72,9 +114,9 @@ internal sealed class GitHubDiscoveryService(
             ? "per_page=100&affiliation=owner,collaborator,organization_member"
             : "per_page=100&type=all";
 
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(host, path, query),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -87,10 +129,10 @@ internal sealed class GitHubDiscoveryService(
             throw new InvalidOperationException($"GitHub repository discovery failed with status {(int)response.StatusCode}.");
         }
 
-        var repositories = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubRepositoryResponse>>(ct)
-                           ?? [];
+        var discoveredRepositories = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubRepositoryResponse>>(ct)
+                                   ?? [];
 
-        return repositories
+        return discoveredRepositories
             .Where(repository => !string.IsNullOrWhiteSpace(repository.FullName) &&
                                  !string.IsNullOrWhiteSpace(repository.Owner?.Login))
             .Select(repository => new RepositoryRef(
@@ -101,6 +143,52 @@ internal sealed class GitHubDiscoveryService(
             .ToList()
             .AsReadOnly();
     }
+
+    private async Task<IReadOnlyList<GitHubRepositoryResponse>> ListInstallationRepositoriesAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        CancellationToken ct)
+    {
+        var repositories = new List<GitHubRepositoryResponse>();
+
+        for (var page = 1; page <= 10; page++)
+        {
+            using var request = await context.CreateAuthenticatedRequestAsync(
+                GitHubConnectionVerifier.BuildApiUri(
+                    host,
+                    "/installation/repositories",
+                    $"per_page=100&page={page.ToString(CultureInfo.InvariantCulture)}"),
+                ct: ct);
+            using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"GitHub installation repository discovery failed with status {(int)response.StatusCode}.");
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<GitHubInstallationRepositoriesResponse>(ct)
+                          ?? throw new InvalidOperationException(
+                              "GitHub installation repository discovery returned an empty payload.");
+
+            if (payload.Repositories.Count == 0)
+            {
+                break;
+            }
+
+            repositories.AddRange(payload.Repositories);
+            if (payload.Repositories.Count < 100)
+            {
+                break;
+            }
+        }
+
+        return repositories.AsReadOnly();
+    }
+
+    private sealed record GitHubInstallationRepositoriesResponse(
+        [property: JsonPropertyName("repositories")]
+        IReadOnlyList<GitHubRepositoryResponse> Repositories);
 
     private sealed record GitHubOrganizationResponse([property: JsonPropertyName("login")] string? Login);
 

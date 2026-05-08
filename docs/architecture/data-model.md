@@ -120,6 +120,11 @@ erDiagram
 The core review and access slice centers on clients, review jobs, review protocols, identity, and
 client-owned configuration such as AI connections, prompt overrides, and finding dismissals.
 
+Reviewer-trigger identity is persisted separately from provider connection credentials. Review jobs do
+not persist requested reviewer-trigger identity as a posting identity; they snapshot normalized review
+target and revision context, while authenticated publication identity is resolved at execution time
+from provider fetch/verification paths.
+
 Verification metadata is stored in review-domain records and protocol payloads:
 
 - `CandidateReviewFinding` stores structured claim metadata, provenance, evidence references, and

@@ -71,6 +71,9 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
     {
         public Task AddAsync(ReviewJob job, CancellationToken ct = default) => Task.CompletedTask;
 
+        public Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default)
+            => Task.FromResult(new TryAddReviewJobResult(true, null, 0));
+
         public ReviewJob? FindActiveJob(
             string organizationUrl,
             string projectId,
@@ -151,6 +154,15 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             string repositoryId,
             int pullRequestId,
             int iterationId,
+            CancellationToken ct = default)
+            => Task.FromResult<ReviewJob?>(null);
+
+        public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            string storedRevisionKey,
             CancellationToken ct = default)
             => Task.FromResult<ReviewJob?>(null);
 

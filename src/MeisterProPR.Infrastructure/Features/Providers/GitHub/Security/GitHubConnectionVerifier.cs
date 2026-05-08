@@ -9,13 +9,22 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
 
 internal sealed class GitHubConnectionVerifier(
     IClientScmConnectionRepository connectionRepository,
-    IHttpClientFactory httpClientFactory)
+    IHttpClientFactory httpClientFactory,
+    GitHubAuthenticationService? authenticationService = null,
+    ILogger<GitHubConnectionVerifier>? logger = null)
 {
+    private readonly GitHubAuthenticationService _authenticationService = authenticationService
+                                                                           ?? new GitHubAuthenticationService(
+                                                                               httpClientFactory);
+    private readonly ILogger<GitHubConnectionVerifier> _logger = logger ?? NullLogger<GitHubConnectionVerifier>.Instance;
+
     public async Task<GitHubConnectionContext> VerifyAsync(
         Guid clientId,
         ProviderHostRef host,
@@ -29,21 +38,41 @@ internal sealed class GitHubConnectionVerifier(
             throw new InvalidOperationException("No active GitHub connection is configured for the supplied host.");
         }
 
-        if (connection.AuthenticationKind != ScmAuthenticationKind.PersonalAccessToken)
+        return connection.AuthenticationKind switch
         {
-            throw new InvalidOperationException("GitHub onboarding currently requires personal access token authentication.");
-        }
+            ScmAuthenticationKind.PersonalAccessToken => await this.VerifyPersonalAccessTokenAsync(connection, host, ct),
+            ScmAuthenticationKind.AppInstallation => await this.VerifyAppInstallationAsync(connection, host, ct),
+            _ => throw new InvalidOperationException("GitHub connection authentication kind is not supported."),
+        };
+    }
 
-        using var request = CreateAuthenticatedRequest(BuildApiUri(host, "/user"), connection.Secret);
+    private async Task<GitHubConnectionContext> VerifyPersonalAccessTokenAsync(
+        ClientScmConnectionCredentialDto connection,
+        ProviderHostRef host,
+        CancellationToken ct)
+    {
+        using var request = CreateAuthenticatedRequest(
+            BuildApiUri(host, "/user"),
+            await this._authenticationService.GetAccessTokenAsync(host, connection, ct));
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
+            this._logger.LogWarning(
+                "GitHub PAT verification failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
+                connection.Id,
+                host.HostBaseUrl,
+                (int)response.StatusCode);
             throw new InvalidOperationException("GitHub connection authentication failed.");
         }
 
         if (!response.IsSuccessStatusCode)
         {
+            this._logger.LogWarning(
+                "GitHub PAT verification failed for connection {ConnectionId} on host {HostBaseUrl} with status {StatusCode}.",
+                connection.Id,
+                host.HostBaseUrl,
+                (int)response.StatusCode);
             throw new InvalidOperationException($"GitHub connection verification failed with status {(int)response.StatusCode}.");
         }
 
@@ -53,14 +82,52 @@ internal sealed class GitHubConnectionVerifier(
             throw new InvalidOperationException("GitHub connection verification did not return an authenticated user login.");
         }
 
-        return new GitHubConnectionContext(connection, user.Login.Trim());
+        this._logger.LogDebug(
+            "GitHub PAT verification succeeded for connection {ConnectionId} on host {HostBaseUrl} as {AuthenticatedLogin}.",
+            connection.Id,
+            host.HostBaseUrl,
+            user.Login.Trim());
+        return new GitHubConnectionContext(
+            connection,
+            user.Login.Trim(),
+            user.Login.Trim(),
+            host,
+            this._authenticationService);
     }
 
-    internal static HttpRequestMessage CreateAuthenticatedRequest(Uri uri, string token)
+    private async Task<GitHubConnectionContext> VerifyAppInstallationAsync(
+        ClientScmConnectionCredentialDto connection,
+        ProviderHostRef host,
+        CancellationToken ct)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var installation = await this._authenticationService.GetInstallationMetadataAsync(host, connection, ct);
+        _ = await this._authenticationService.GetAccessTokenAsync(host, connection, ct);
+        this._logger.LogDebug(
+            "GitHub App verification succeeded for connection {ConnectionId} on host {HostBaseUrl} as installation account {AuthenticatedLogin}.",
+            connection.Id,
+            host.HostBaseUrl,
+            installation.AccountLogin);
+        var authenticatedActorLogin = string.IsNullOrWhiteSpace(installation.AppSlug)
+            ? installation.AccountLogin
+            : installation.AppSlug.Trim() + "[bot]";
+        return new GitHubConnectionContext(
+            connection,
+            installation.AccountLogin,
+            authenticatedActorLogin,
+            host,
+            this._authenticationService);
+    }
+
+    internal static HttpRequestMessage CreateAuthenticatedRequest(Uri uri, string token, HttpMethod? method = null)
+    {
+        var request = new HttpRequestMessage(method ?? HttpMethod.Get, uri);
+        AuthorizeRequest(request, token);
         return request;
+    }
+
+    internal static void AuthorizeRequest(HttpRequestMessage request, string token)
+    {
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
     internal static Uri BuildApiUri(ProviderHostRef host, string relativePath, string? query = null)
@@ -107,9 +174,51 @@ internal sealed class GitHubConnectionVerifier(
         }
     }
 
-    internal sealed record GitHubConnectionContext(
-        ClientScmConnectionCredentialDto Connection,
-        string AuthenticatedLogin);
+    internal sealed class GitHubConnectionContext
+    {
+        private readonly GitHubAuthenticationService _authenticationService;
+        private readonly ProviderHostRef _host;
+
+        internal GitHubConnectionContext(
+            ClientScmConnectionCredentialDto connection,
+            string authenticatedLogin,
+            string authenticatedActorLogin,
+            ProviderHostRef host,
+            GitHubAuthenticationService authenticationService)
+        {
+            this.Connection = connection;
+            this.AuthenticatedLogin = authenticatedLogin;
+            this.AuthenticatedActorLogin = authenticatedActorLogin;
+            this._host = host;
+            this._authenticationService = authenticationService;
+        }
+
+        public ClientScmConnectionCredentialDto Connection { get; }
+
+        public string AuthenticatedLogin { get; }
+
+        public string AuthenticatedActorLogin { get; }
+
+        public async Task<string> GetAccessTokenAsync(CancellationToken ct = default)
+        {
+            return await this._authenticationService.GetAccessTokenAsync(this._host, this.Connection, ct);
+        }
+
+        public async Task<HttpRequestMessage> CreateAuthenticatedRequestAsync(
+            Uri uri,
+            HttpMethod? method = null,
+            CancellationToken ct = default)
+        {
+            var request = new HttpRequestMessage(method ?? HttpMethod.Get, uri);
+            await this.AuthorizeRequestAsync(request, ct);
+            return request;
+        }
+
+        public async Task AuthorizeRequestAsync(HttpRequestMessage request, CancellationToken ct = default)
+        {
+            AuthorizeRequest(request, await this.GetAccessTokenAsync(ct));
+        }
+    }
 
     private sealed record GitHubUserResponse([property: JsonPropertyName("login")] string? Login);
 }

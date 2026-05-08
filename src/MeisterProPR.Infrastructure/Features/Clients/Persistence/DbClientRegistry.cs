@@ -1,11 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
@@ -13,8 +16,15 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class DbClientRegistry(
     MeisterProPRDbContext dbContext,
     IClientScmConnectionRepository connectionRepository,
-    IClientReviewerIdentityRepository reviewerIdentityRepository) : IClientRegistry
+    IClientReviewerIdentityRepository reviewerIdentityRepository,
+    Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
+        deriveReviewerIdentityAsync = null,
+    ILogger<DbClientRegistry>? logger = null) : IClientRegistry
 {
+    private readonly Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
+        _deriveReviewerIdentityAsync = deriveReviewerIdentityAsync;
+    private readonly ILogger<DbClientRegistry> _logger = logger ?? NullLogger<DbClientRegistry>.Instance;
+
     /// <inheritdoc />
     public async Task<ReviewerIdentity?> GetReviewerIdentityAsync(
         Guid clientId,
@@ -41,6 +51,44 @@ public sealed class DbClientRegistry(
             identity.Login,
             identity.DisplayName,
             identity.IsBot);
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewerIdentity?> GetEffectiveReviewerIdentityAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default)
+    {
+        var configuredIdentity = await this.GetReviewerIdentityAsync(clientId, host, ct);
+        if (configuredIdentity is not null)
+        {
+            return configuredIdentity;
+        }
+
+        if (host.Provider != ScmProvider.GitHub || this._deriveReviewerIdentityAsync is null)
+        {
+            return null;
+        }
+
+        var connection = await connectionRepository.GetOperationalConnectionAsync(clientId, host, ct);
+        if (connection is null || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await this._deriveReviewerIdentityAsync(host, connection, ct);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning(
+                ex,
+                "Failed to derive GitHub App reviewer identity for client {ClientId} on host {HostBaseUrl}; continuing without fallback reviewer identity.",
+                clientId,
+                host.HostBaseUrl);
+            return null;
+        }
     }
 
     /// <inheritdoc />

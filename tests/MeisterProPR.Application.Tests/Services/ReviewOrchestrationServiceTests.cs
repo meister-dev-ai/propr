@@ -198,7 +198,8 @@ public class ReviewOrchestrationServiceTests
 
     private static PullRequest CreatePullRequest(
         IReadOnlyList<PrCommentThread>? threads = null,
-        Guid? authorizedIdentityId = null)
+        Guid? authorizedIdentityId = null,
+        string? authorizedIdentityName = null)
     {
         return new PullRequest(
             "https://dev.azure.com/org",
@@ -214,7 +215,8 @@ public class ReviewOrchestrationServiceTests
             new List<ChangedFile>().AsReadOnly(),
             PrStatus.Active,
             threads,
-            AuthorizedIdentityId: authorizedIdentityId);
+            AuthorizedIdentityId: authorizedIdentityId,
+            AuthorizedIdentityName: authorizedIdentityName);
     }
 
     private static ReviewResult CreateReviewResult()
@@ -376,15 +378,17 @@ public class ReviewOrchestrationServiceTests
     /// <summary>Set up the clientRegistry to return a configured provider reviewer identity for the given job.</summary>
     private static void SetupReviewerIdReturns(IClientRegistry clientRegistry, ReviewJob job, Guid reviewerId)
     {
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
+
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult<ReviewerIdentity?>(
-                    new ReviewerIdentity(
-                        job.ProviderHost,
-                        reviewerId.ToString("D"),
-                        reviewerId.ToString("D"),
-                        reviewerId.ToString("D"),
-                        false)));
+            .Returns(Task.FromResult<ReviewerIdentity?>(reviewerIdentity));
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(reviewerIdentity));
     }
 
     private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
@@ -1096,10 +1100,10 @@ public class ReviewOrchestrationServiceTests
         await jobs.DidNotReceive().SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>());
     }
 
-    // T032 — missing configured reviewer identity → SetFailed "not configured", no reviewer call, no PostAsync
+    // T032 — missing configured reviewer identity still allows review using authenticated connection identity
 
     [Fact]
-    public async Task ProcessAsync_NullReviewerId_CallsSetFailedWithNotConfiguredMessage()
+    public async Task ProcessAsync_NullReviewerId_SkipsAssignmentAndPublishesUsingAuthorizedIdentity()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
                 instructionFetcher, instructionEvaluator, logger) =
@@ -1107,9 +1111,28 @@ public class ReviewOrchestrationServiceTests
 
         var clientId = Guid.NewGuid();
         var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        var reviewResult = CreateReviewResult();
+        var pr = CreatePullRequest(authorizedIdentityName: "propr-review[bot]");
 
-        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(null));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(reviewResult);
 
         var service = CreateService(
             jobs,
@@ -1123,9 +1146,19 @@ public class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Is<string>(s => s.Contains("not configured")));
         await AssertReviewerNotAssignedAsync(reviewerManager);
-        await AssertReviewNotPublishedAsync(commentPoster);
+        await jobs.Received(1).SetResultAsync(job.Id, reviewResult, Arg.Any<CancellationToken>());
+        await commentPoster.Received(1)
+            .PublishReviewAsync(
+                job.ClientId,
+                job.CodeReviewReference,
+                Arg.Any<ReviewRevision>(),
+                reviewResult,
+                Arg.Is<ReviewerIdentity>(identity =>
+                    identity.ExternalUserId == "propr-review[bot]" &&
+                    identity.Login == "propr-review[bot]" &&
+                    identity.DisplayName == "propr-review[bot]"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -2997,6 +3030,106 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_NonAdoStoredRevision_UsesStoredRevisionBaselineLookup()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
+                logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "GitHub PR",
+            null,
+            "feature/x",
+            "main",
+            [new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff")]);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(
+                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+
+        var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
+        priorJob.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
+
+        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "base-sha...old-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                "base-sha...old-head",
+                Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive()
+            .GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_NoPriorCompletedJob_ReviewsAllFilesNormally()
     {
         // T022 (b): no prior job → no carry-forward, all files reviewed in full
@@ -3080,6 +3213,190 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NonAdoMissingBaseline_FallsBackToFullReviewWithoutCompareRevision()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "GitHub PR",
+            null,
+            "feature/x",
+            "main",
+            [new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff")]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(
+                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "base-sha...old-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(null));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await prFetcher.Received(1)
+            .FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>(),
+                null);
+        await jobs.DidNotReceive()
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NonAdoCancelledBaseline_FallsBackToFullReviewWithoutCarryForward()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "Forgejo PR",
+            null,
+            "feature/x",
+            "main",
+            [new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff")]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(
+                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "base-sha...old-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(null));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await prFetcher.Received(1)
+            .FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>(),
+                null);
+        await jobs.DidNotReceive()
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -3468,18 +3785,36 @@ public class ReviewOrchestrationServiceTests
 
     /// <summary>
     ///     T068 (d): When reviewer identity is not configured for the client,
-    ///     ProcessAsync immediately sets the job to Failed without fetching the PR.
+    ///     ProcessAsync still fetches the PR and completes review without optional reviewer assignment.
     /// </summary>
     [Fact]
-    public async Task T068_CharacterizationD_NoReviewerIdentity_JobSetFailedNoPrFetch()
+    public async Task T068_CharacterizationD_NoReviewerIdentity_FetchesPrAndCompletesReview()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
             logger) = CreateDeps();
         var job = CreateJob();
+        var activePr = CreatePullRequest();
+        var reviewResult = CreateReviewResult();
 
-        // Reviewer identity NOT configured
-        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewerIdentity?>(null));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(activePr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(reviewResult);
 
         var sut = CreateService(
             jobs,
@@ -3493,8 +3828,7 @@ public class ReviewOrchestrationServiceTests
 
         await sut.ProcessAsync(job, CancellationToken.None);
 
-        await jobs.Received(1).SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await prFetcher.DidNotReceive()
+        await prFetcher.Received(1)
             .FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3504,13 +3838,15 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>());
-        await orchestrator.DidNotReceive()
+        await orchestrator.Received(1)
             .ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
+        await jobs.Received(1).SetResultAsync(job.Id, reviewResult, Arg.Any<CancellationToken>());
+        await AssertReviewerNotAssignedAsync(reviewerManager);
     }
 
     [Fact]

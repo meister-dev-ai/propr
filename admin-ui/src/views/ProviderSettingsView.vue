@@ -62,7 +62,7 @@
 
           <p class="provider-settings-note">
             {{ status.isEnabled
-              ? 'Available in client connection, reviewer identity, and webhook configuration flows.'
+              ? 'Available in client connection, reviewer-trigger, and webhook configuration flows.'
               : 'Hidden from client-facing provider configuration flows. Existing records stay stored and reappear if this provider is enabled again.' }}
           </p>
 

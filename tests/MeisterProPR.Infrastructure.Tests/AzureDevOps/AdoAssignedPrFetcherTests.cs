@@ -157,10 +157,10 @@ public sealed class AdoAssignedPrFetcherTests
         Assert.Equal(22, result[0].CodeReview.Number);
     }
 
-    // T035 — missing configured reviewer identity is skipped and returns empty list
+    // T035 — missing configured reviewer identity falls back to baseline open-PR discovery
 
     [Fact]
-    public async Task GetAssignedOpenPullRequestsAsync_MissingConfiguredReviewerIdentity_ReturnsEmptyListWithoutCallingAdo()
+    public async Task GetAssignedOpenPullRequestsAsync_MissingConfiguredReviewerIdentity_ReturnsOpenPrs()
     {
         var configWithoutConfiguredReviewer = new CrawlConfigurationDto(
             Guid.NewGuid(),
@@ -182,16 +182,47 @@ public sealed class AdoAssignedPrFetcherTests
         var gitClient = Substitute.For<GitHttpClient>(
             new Uri("https://dev.azure.com/testorg"),
             new VssCredentials());
+        GitPullRequestSearchCriteria? capturedCriteria = null;
+        var repoId = Guid.NewGuid();
+        gitClient.GetPullRequestsByProjectAsync(
+                Arg.Any<string>(),
+                Arg.Any<GitPullRequestSearchCriteria>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedCriteria = callInfo.ArgAt<GitPullRequestSearchCriteria>(1);
+                return Task.FromResult(new List<GitPullRequest> { MakePr(42, repoId) });
+            });
+        gitClient.GetPullRequestIterationsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<GitPullRequestIteration> { new() { Id = 3 } }));
 
         var sut = BuildSut(gitClient, clientRegistry);
         var result = await sut.ListAssignedOpenReviewsAsync(configWithoutConfiguredReviewer);
 
-        Assert.Empty(result);
-        // ADO was never called since we short-circuit on a missing provider reviewer identity.
-        await gitClient.DidNotReceiveWithAnyArgs()
+        Assert.Single(result);
+        Assert.Equal(42, result[0].CodeReview.Number);
+        Assert.NotNull(capturedCriteria);
+        Assert.Null(capturedCriteria!.ReviewerId);
+        Assert.Equal(PullRequestStatus.Active, capturedCriteria.Status);
+        await gitClient.Received(1)
             .GetPullRequestsByProjectAsync(
-                null!,
-                null!);
+                Arg.Any<string>(),
+                Arg.Any<GitPullRequestSearchCriteria>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]

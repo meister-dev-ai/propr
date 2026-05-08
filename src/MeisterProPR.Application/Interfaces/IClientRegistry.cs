@@ -13,13 +13,25 @@ namespace MeisterProPR.Application.Interfaces;
 public interface IClientRegistry
 {
     /// <summary>
-    ///     Returns the configured provider reviewer identity for the given client and provider host,
+    ///     Returns the configured provider reviewer-trigger identity for the given client and provider host,
     ///     or <see langword="null" /> when no active connection or reviewer identity is configured.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="host">Normalized provider host for the active connection lookup.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ReviewerIdentity?> GetReviewerIdentityAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the configured provider reviewer-trigger identity when present, or a provider-derived fallback identity
+    ///     used only for automated trigger evaluation when the provider supports one.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="host">Normalized provider host for the active connection lookup.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ReviewerIdentity?> GetEffectiveReviewerIdentityAsync(
         Guid clientId,
         ProviderHostRef host,
         CancellationToken ct = default);

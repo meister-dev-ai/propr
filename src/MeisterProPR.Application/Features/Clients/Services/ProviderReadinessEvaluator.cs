@@ -33,7 +33,7 @@ public sealed class ProviderReadinessEvaluator(
         var reviewerIdentity = await reviewerIdentityRepository.GetByConnectionIdAsync(clientId, connection.Id, ct);
 
         var hasEnabledScope = scopes.Any(scope => scope.IsEnabled);
-        var hasReviewerIdentity = reviewerIdentity is not null;
+        var hasReviewerIdentity = reviewerIdentity is not null || AllowsAutomaticReviewerIdentity(connection);
         var adapterSetRegistered = providerRegistry.IsRegistered(connection.ProviderFamily);
         var verificationStatus = NormalizeVerificationStatus(connection.VerificationStatus);
         var criteriaResults = BuildCriteriaResults(
@@ -71,7 +71,7 @@ public sealed class ProviderReadinessEvaluator(
                     ? ProviderConnectionReadinessLevel.Configured
                     : ProviderConnectionReadinessLevel.Degraded,
                 profile.HostVariant,
-                connection.LastVerificationError ?? "Connection verification no longer satisfies onboarding readiness.",
+                BuildVerificationReadinessReason(connection, verificationStatus),
                 criteriaResults);
         }
 
@@ -84,7 +84,7 @@ public sealed class ProviderReadinessEvaluator(
                 criteriaResults);
         }
 
-        var workflowCriteriaSatisfied = hasEnabledScope && hasReviewerIdentity && profile.IsWorkflowComplete;
+        var workflowCriteriaSatisfied = hasEnabledScope && profile.IsWorkflowComplete;
         if (workflowCriteriaSatisfied)
         {
             return BuildResult(
@@ -141,13 +141,7 @@ public sealed class ProviderReadinessEvaluator(
                 "connection.verification",
                 "connection",
                 verificationStatus == VerificationState.Verified,
-                verificationStatus switch
-                {
-                    VerificationState.Failed => connection.LastVerificationError ?? "Connection verification failed.",
-                    VerificationState.Stale => "Connection needs re-verification before it can be treated as ready.",
-                    VerificationState.Unknown => "Connection has not been verified yet.",
-                    _ => "Connection passed onboarding verification.",
-                }),
+                BuildVerificationCriterionSummary(connection, verificationStatus)),
             Criterion(
                 "provider.baselineAdapterSet",
                 "providerFamily",
@@ -161,8 +155,8 @@ public sealed class ProviderReadinessEvaluator(
             Criterion(
                 "connection.reviewerIdentity",
                 "connection",
-                hasReviewerIdentity,
-                "Configured reviewer identity is required for workflow-complete readiness."),
+                true,
+                BuildReviewerIdentityCriterionSummary(hasReviewerIdentity)),
             Criterion(
                 "profile.manualReview",
                 "hostVariant",
@@ -194,6 +188,79 @@ public sealed class ProviderReadinessEvaluator(
     private static ProviderReadinessCriterionResult Criterion(string key, string scope, bool satisfied, string summary)
     {
         return new ProviderReadinessCriterionResult(key, scope, satisfied ? "satisfied" : "unsatisfied", summary);
+    }
+
+    private static string BuildVerificationCriterionSummary(
+        ClientScmConnectionDto connection,
+        VerificationState verificationStatus)
+    {
+        return verificationStatus switch
+        {
+            VerificationState.Failed => BuildVerificationReadinessReason(connection, verificationStatus),
+            VerificationState.Stale => BuildVerificationReadinessReason(connection, verificationStatus),
+            VerificationState.Unknown when IsGitHubAppConnection(connection) =>
+                "GitHub App connection has not completed onboarding verification yet.",
+            VerificationState.Unknown => "Connection has not been verified yet.",
+            _ => "Connection passed onboarding verification.",
+        };
+    }
+
+    private static string BuildVerificationReadinessReason(
+        ClientScmConnectionDto connection,
+        VerificationState verificationStatus)
+    {
+        if (IsGitHubAppConnection(connection) && !string.IsNullOrWhiteSpace(connection.LastVerificationFailureCategory))
+        {
+            return connection.LastVerificationFailureCategory switch
+            {
+                "authentication" =>
+                    "GitHub App verification failed. Check the saved App ID, installation ID, private key, and granted permissions.",
+                "discovery" =>
+                    "GitHub App installation could not be found or no longer exposes the configured scope.",
+                "configuration" =>
+                    "GitHub App configuration needs review before verification can succeed.",
+                _ when verificationStatus == VerificationState.Stale =>
+                    "GitHub App connection needs re-verification before it can be treated as ready.",
+                _ => "GitHub App verification no longer satisfies onboarding readiness.",
+            };
+        }
+
+        var explicitError = connection.LastVerificationError?.Trim();
+        if (!string.IsNullOrWhiteSpace(explicitError))
+        {
+            return explicitError;
+        }
+
+        if (!IsGitHubAppConnection(connection))
+        {
+            return verificationStatus switch
+            {
+                VerificationState.Stale => "Connection needs re-verification before it can be treated as ready.",
+                _ => "Connection verification no longer satisfies onboarding readiness.",
+            };
+        }
+
+        return verificationStatus == VerificationState.Stale
+            ? "GitHub App connection needs re-verification before it can be treated as ready."
+            : "GitHub App verification no longer satisfies onboarding readiness.";
+    }
+
+    private static string BuildReviewerIdentityCriterionSummary(bool hasReviewerIdentity)
+    {
+        return hasReviewerIdentity
+            ? "Reviewer-trigger identity is configured and will further narrow automatic PR processing when the provider supports assignment filtering."
+            : "Reviewer-trigger identity is optional; leaving it empty keeps baseline automatic PR processing enabled.";
+    }
+
+    private static bool IsGitHubAppConnection(ClientScmConnectionDto connection)
+    {
+        return connection.ProviderFamily == ScmProvider.GitHub
+               && connection.AuthenticationKind == ScmAuthenticationKind.AppInstallation;
+    }
+
+    private static bool AllowsAutomaticReviewerIdentity(ClientScmConnectionDto connection)
+    {
+        return IsGitHubAppConnection(connection);
     }
 
     private static VerificationState NormalizeVerificationStatus(string status)

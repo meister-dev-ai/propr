@@ -23,8 +23,9 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
         var eventName = ReadRequiredHeader(headers, "X-Gitea-Event", "X-GitHub-Event");
+        var eventType = TryReadHeader(headers, "X-Gitea-Event-Type", "X-GitHub-Event-Type");
         var deliveryId = ReadRequiredHeader(headers, "X-Gitea-Delivery", "X-GitHub-Delivery");
-        var classification = eventClassifier.Classify(eventName, root, configuredReviewer);
+        var classification = eventClassifier.Classify(eventName, eventType, root, configuredReviewer);
         var repository = ReadRepository(host, root);
         var review = ReadReview(repository, root);
         var revision = ReadRevision(root);
@@ -33,12 +34,12 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
             host,
             deliveryId,
             classification.DeliveryKind,
-            eventName,
+            eventType?.Trim() ?? eventName,
             repository,
             review,
             revision,
-            ReadOptionalString(root, "pull_request", "head", "ref"),
-            ReadOptionalString(root, "pull_request", "base", "ref"),
+            ReadSourceBranch(root),
+            ReadTargetBranch(root),
             ReadActor(host, root));
     }
 
@@ -69,12 +70,14 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
 
     private static CodeReviewRef ReadReview(RepositoryRef repository, JsonElement root)
     {
-        if (!root.TryGetProperty("pull_request", out var pullRequest))
+        if (!TryReadPullRequestElement(root, out var pullRequest))
         {
             throw new InvalidOperationException("Forgejo webhook payload is missing the pull_request object.");
         }
 
-        var number = ReadOptionalInt32(root, "number") ?? ReadRequiredInt32(pullRequest, "number");
+        var number = ReadOptionalInt32(root, "number")
+                     ?? ReadOptionalInt32(root, "issue", "number")
+                     ?? ReadRequiredInt32(pullRequest, "number");
         return new CodeReviewRef(
             repository,
             CodeReviewPlatformKind.PullRequest,
@@ -82,16 +85,50 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
             number);
     }
 
-    private static ReviewRevision ReadRevision(JsonElement root)
+    private static ReviewRevision? ReadRevision(JsonElement root)
     {
         var headSha = ReadOptionalString(root, "pull_request", "head", "sha");
         var baseSha = ReadOptionalString(root, "pull_request", "base", "sha");
         if (string.IsNullOrWhiteSpace(headSha) || string.IsNullOrWhiteSpace(baseSha))
         {
-            throw new InvalidOperationException("Forgejo webhook payload is missing the required base or head SHA.");
+            return null;
         }
 
         return new ReviewRevision(headSha, baseSha, baseSha, headSha, $"{baseSha}...{headSha}");
+    }
+
+    private static string? ReadSourceBranch(JsonElement root)
+    {
+        return ReadOptionalString(root, "pull_request", "head", "ref")
+               ?? ReadOptionalString(root, "pull_request", "head", "label")
+               ?? ReadOptionalString(root, "issue", "pull_request", "head", "ref")
+               ?? ReadOptionalString(root, "issue", "pull_request", "head", "label");
+    }
+
+    private static string? ReadTargetBranch(JsonElement root)
+    {
+        return ReadOptionalString(root, "pull_request", "base", "ref")
+               ?? ReadOptionalString(root, "pull_request", "base", "label")
+               ?? ReadOptionalString(root, "issue", "pull_request", "base", "ref")
+               ?? ReadOptionalString(root, "issue", "pull_request", "base", "label");
+    }
+
+    private static bool TryReadPullRequestElement(JsonElement root, out JsonElement pullRequest)
+    {
+        if (root.TryGetProperty("pull_request", out pullRequest))
+        {
+            return true;
+        }
+
+        if (root.TryGetProperty("issue", out var issue)
+            && issue.ValueKind == JsonValueKind.Object
+            && issue.TryGetProperty("pull_request", out pullRequest))
+        {
+            return true;
+        }
+
+        pullRequest = default;
+        return false;
     }
 
     private static ReviewerIdentity? ReadActor(ProviderHostRef host, JsonElement root)
@@ -146,6 +183,20 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
         return null;
     }
 
+    private static string? TryReadHeader(IReadOnlyDictionary<string, string> headers, params string[] headerNames)
+    {
+        foreach (var headerName in headerNames)
+        {
+            var value = TryReadHeader(headers, headerName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
     private static string ReadRequiredString(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out var property))
@@ -176,6 +227,20 @@ internal sealed class ForgejoWebhookPayloadParser(ForgejoWebhookEventClassifier 
         return element.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value)
             ? value
             : null;
+    }
+
+    private static int? ReadOptionalInt32(JsonElement element, params string[] path)
+    {
+        var current = element;
+        foreach (var segment in path)
+        {
+            if (!current.TryGetProperty(segment, out current))
+            {
+                return null;
+            }
+        }
+
+        return current.TryGetInt32(out var value) ? value : null;
     }
 
     private static string? ReadOptionalString(JsonElement element, params string[] path)

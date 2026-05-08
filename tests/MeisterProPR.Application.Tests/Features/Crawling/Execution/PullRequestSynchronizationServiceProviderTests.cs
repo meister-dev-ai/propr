@@ -5,6 +5,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Services;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Events;
@@ -29,6 +30,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             .Returns((ReviewJob?)null);
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var sut = new PullRequestSynchronizationService(
             jobs,
@@ -47,7 +50,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             summary => summary.Contains("Submitted review intake job", StringComparison.OrdinalIgnoreCase));
 
         await jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.Provider == ScmProvider.GitHub &&
                     job.HostBaseUrl == "https://github.com" &&
@@ -79,6 +82,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             .Returns((ReviewJob?)null);
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "11");
         scan.Threads.Add(
@@ -141,7 +146,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                     updated.Threads.Any(thread => thread.ThreadId == 17 && thread.LastSeenStatus == "Fixed")),
                 Arg.Any<CancellationToken>());
         await jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.Provider == ScmProvider.GitHub &&
                     job.RevisionHeadSha == "head-sha" &&
@@ -197,6 +202,84 @@ public sealed class PullRequestSynchronizationServiceProviderTests
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.NoReviewChanges, outcome.ReviewDecision);
         await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WithoutTriggerReviewer_UsesEffectiveReviewerIdentityForProviderThreadChecks()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
+        var threadMemoryService = Substitute.For<IThreadMemoryService>();
+        var scanRepository = Substitute.For<IReviewPrScanRepository>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var effectiveReviewer = new ReviewerIdentity(host, "propr-review[bot]", "propr-review[bot]", "ProPR Review", true);
+        var effectiveReviewerId = StableGuidGenerator.Create(effectiveReviewer.ExternalUserId);
+
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([]);
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "11");
+        scan.Threads.Add(
+            new ReviewPrScanThread
+            {
+                ReviewPrScanId = scan.Id,
+                ThreadId = 17,
+                LastSeenReplyCount = 0,
+                LastSeenStatus = "Active",
+            });
+
+        clientRegistry.GetEffectiveReviewerIdentityAsync(ClientId, host, Arg.Any<CancellationToken>())
+            .Returns(effectiveReviewer);
+        scanRepository.GetAsync(ClientId, "repo-gh-1", 42, Arg.Any<CancellationToken>())
+            .Returns(scan);
+        threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                "https://dev.azure.com/org",
+                "project",
+                "repo-gh-1",
+                42,
+                effectiveReviewerId,
+                ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new PrThreadStatusEntry(17, "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
+            ]);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            threadStatusFetcher: threadStatusFetcher,
+            threadMemoryService: threadMemoryService,
+            prScanRepository: scanRepository,
+            clientRegistry: clientRegistry);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateGitHubRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                CandidateIterationId = 11,
+                RequestedReviewerIdentity = null,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await clientRegistry.Received(1)
+            .GetEffectiveReviewerIdentityAsync(ClientId, host, Arg.Any<CancellationToken>());
+        await threadStatusFetcher.Received(1)
+            .GetReviewerThreadStatusesAsync(
+                "https://dev.azure.com/org",
+                "project",
+                "repo-gh-1",
+                42,
+                effectiveReviewerId,
+                ClientId,
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -229,6 +312,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             .Returns((ReviewJob?)null);
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-gh-1", 42, 11)
             .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var sut = new PullRequestSynchronizationService(
             jobs,
@@ -245,11 +330,58 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 StringComparison.OrdinalIgnoreCase));
         await jobs.Received(1).SetCancelledAsync(existingJob.Id, Arg.Any<CancellationToken>());
         await jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.Provider == ScmProvider.GitHub &&
                     job.ProviderRevisionId == "revision-1"),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WithAlternateRepositoryIdShapeOnExistingJob_TreatsItAsDuplicate()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var existingJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            "https://dev.azure.com/org",
+            "project",
+            "101",
+            42,
+            11)
+        {
+            Status = JobStatus.Processing,
+        };
+        existingJob.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(new ProviderHostRef(ScmProvider.GitHub, "https://github.com"), "101", "acme", "acme/propr"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                42));
+        existingJob.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"));
+
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([existingJob]);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateGitHubRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                RepositoryId = "acme/propr",
+                Repository = new RepositoryRef(new ProviderHostRef(ScmProvider.GitHub, "https://github.com"), "acme/propr", "acme", "acme/propr"),
+                CodeReview = new CodeReviewRef(
+                    new RepositoryRef(new ProviderHostRef(ScmProvider.GitHub, "https://github.com"), "acme/propr", "acme", "acme/propr"),
+                    CodeReviewPlatformKind.PullRequest,
+                    "42",
+                    42),
+                CandidateIterationId = 11,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.DuplicateActiveJob, outcome.ReviewDecision);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     private static PullRequestSynchronizationRequest CreateGitHubRequest(

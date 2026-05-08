@@ -13,6 +13,12 @@ public interface IJobRepository
     /// <summary>Persists a new review job.</summary>
     Task AddAsync(ReviewJob job, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Atomically adds a review job when no matching active duplicate exists for the same PR identity.
+    ///     For provider-neutral revisions, active jobs for the same PR but older revisions are cancelled before insert.
+    /// </summary>
+    Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default);
+
     /// <summary>Returns the first Pending or Processing job for the given PR iteration, or null.</summary>
     /// <param name="organizationUrl">Base URL of the Azure DevOps organization.</param>
     /// <param name="projectId">ID of the Azure DevOps project.</param>
@@ -139,6 +145,19 @@ public interface IJobRepository
         string repositoryId,
         int pullRequestId,
         int iterationId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the most-recent Completed job for the given pull request whose persisted revision key matches
+    ///     the supplied stored revision key, with <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or
+    ///     <see langword="null" />.
+    /// </summary>
+    Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
         CancellationToken ct = default);
 
     /// <summary>Persists the AI connection snapshot captured at job-start time.</summary>

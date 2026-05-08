@@ -11,9 +11,24 @@ internal sealed class ForgejoWebhookEventClassifier
 {
     public ForgejoWebhookEventClassification Classify(
         string eventName,
+        string? eventType,
         JsonElement payload,
         ReviewerIdentity? configuredReviewer = null)
     {
+        if (string.Equals(eventType, "pull_request_comment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventName, "pull_request_comment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "pull_request_review_comment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventName, "pull_request_review_comment", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(eventName, "issue_comment", StringComparison.OrdinalIgnoreCase)
+                && IsPullRequestIssueComment(payload)))
+        {
+            return new ForgejoWebhookEventClassification(
+                WebhookEventType.PullRequestCommented,
+                "pull_request.commented",
+                "pull request commented",
+                false);
+        }
+
         if (!string.Equals(eventName, "pull_request", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Unsupported Forgejo webhook event type.");
@@ -54,6 +69,29 @@ internal sealed class ForgejoWebhookEventClassifier
             "pull_request.updated",
             "pull request updated",
             false);
+    }
+
+    private static bool IsPullRequestIssueComment(JsonElement payload)
+    {
+        return ReadOptionalBoolean(payload, "is_pull") == true
+               || ReadOptionalBoolean(payload, "issue", "pull_request", "merged") is not null
+               || ReadOptionalString(payload, "pull_request", "html_url") is not null;
+    }
+
+    private static string? ReadOptionalString(JsonElement payload, params string[] path)
+    {
+        var current = payload;
+        foreach (var segment in path)
+        {
+            if (!current.TryGetProperty(segment, out current))
+            {
+                return null;
+            }
+        }
+
+        return current.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(current.GetString())
+            ? current.GetString()!.Trim()
+            : null;
     }
 
     private static bool IsRequestedReviewerMatch(JsonElement payload, ReviewerIdentity? configuredReviewer)

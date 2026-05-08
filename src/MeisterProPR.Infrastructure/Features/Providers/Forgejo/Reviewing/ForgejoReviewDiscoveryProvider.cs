@@ -52,12 +52,7 @@ internal sealed class ForgejoReviewDiscoveryProvider(
         ForgejoCodeReviewQueryService.ForgejoPullRequestResponse payload,
         ReviewerIdentity reviewer)
     {
-        return payload.RequestedReviewers?.Any(candidate =>
-            (!string.IsNullOrWhiteSpace(candidate.Login) && string.Equals(
-                candidate.Login,
-                reviewer.Login,
-                StringComparison.OrdinalIgnoreCase))
-            || candidate.Id.ToString(CultureInfo.InvariantCulture) == reviewer.ExternalUserId) == true;
+        return ForgejoCodeReviewQueryService.ContainsAssignedReviewer(payload, reviewer);
     }
 
     private static ReviewDiscoveryItemDto ToDiscoveryItem(
@@ -70,18 +65,7 @@ internal sealed class ForgejoReviewDiscoveryProvider(
             CodeReviewPlatformKind.PullRequest,
             payload.Id.ToString(CultureInfo.InvariantCulture),
             payload.Number);
-        var requestedReviewer = payload.RequestedReviewers?
-                                    .FirstOrDefault(candidate =>
-                                        !string.IsNullOrWhiteSpace(candidate.Login)
-                                        && (requestedReviewerFilter is null
-                                            || string.Equals(
-                                                candidate.Login,
-                                                requestedReviewerFilter.Login,
-                                                StringComparison.OrdinalIgnoreCase)
-                                            || candidate.Id.ToString(CultureInfo.InvariantCulture) ==
-                                            requestedReviewerFilter.ExternalUserId))
-                                ?? payload.RequestedReviewers?.FirstOrDefault(candidate =>
-                                    !string.IsNullOrWhiteSpace(candidate.Login));
+        var requestedReviewer = ForgejoCodeReviewQueryService.SelectAssignedReviewer(payload, requestedReviewerFilter);
 
         return new ReviewDiscoveryItemDto(
             ScmProvider.Forgejo,

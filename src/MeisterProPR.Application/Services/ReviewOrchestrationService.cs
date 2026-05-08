@@ -59,10 +59,6 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         var reviewerContext = await this.ResolveReviewerAsync(job, ct);
-        if (reviewerContext is null)
-        {
-            return;
-        }
 
         var overrideChatClient = await this.ResolveAiConnectionAsync(job, ct);
         if (overrideChatClient is null)
@@ -76,8 +72,8 @@ public sealed partial class ReviewOrchestrationService(
         {
             pr = await this.RunReviewPipelineAsync(
                 job,
-                reviewerContext.Value.reviewerId,
-                reviewerContext.Value.reviewer,
+                reviewerContext.EffectiveReviewerId,
+                reviewerContext.ConfiguredTriggerReviewer,
                 overrideChatClient,
                 ct);
         }
@@ -97,8 +93,9 @@ public sealed partial class ReviewOrchestrationService(
         {
             await this.SaveScanAsync(
                 job,
-                GetReviewerThreads(pr, reviewerContext.Value.reviewerId),
-                reviewerContext.Value.reviewerId,
+                GetReviewerThreads(pr, reviewerContext.EffectiveReviewerId),
+                reviewerContext.EffectiveReviewerId,
+                pr.AuthorizedIdentityName,
                 pr.AuthorizedIdentityId,
                 ct);
         }
@@ -106,16 +103,16 @@ public sealed partial class ReviewOrchestrationService(
 
     private async Task<PullRequest?> RunReviewPipelineAsync(
         ReviewJob job,
-        Guid reviewerId,
-        ReviewerIdentity reviewer,
+        Guid? reviewerId,
+        ReviewerIdentity? reviewer,
         IChatClient overrideChatClient,
         CancellationToken ct)
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
 
-        var (scan, isNewIteration, compareToIterationId) = await this.LoadScanStateAsync(job, ct);
+        var (scan, isNewIteration, baselineJob, compareToIterationId, compareToReviewRevision) = await this.LoadScanStateAsync(job, ct);
 
-        var pr = await this.FetchPullRequestAsync(job, compareToIterationId, ct);
+        var pr = await this.FetchPullRequestAsync(job, compareToIterationId, compareToReviewRevision, ct);
         if (pr is null)
         {
             return null;
@@ -124,14 +121,14 @@ public sealed partial class ReviewOrchestrationService(
         var reviewerThreads = GetReviewerThreads(pr, reviewerId);
         var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
 
-        if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId))
+        if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
         {
             LogSkippedNoChange(logger, job.Id, job.PullRequestId);
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
             return null;
         }
 
-        if (providerCapabilities.Any(capability => string.Equals(
+        if (reviewer is not null && providerCapabilities.Any(capability => string.Equals(
                 capability,
                 "reviewAssignment",
                 StringComparison.Ordinal)))
@@ -161,7 +158,7 @@ public sealed partial class ReviewOrchestrationService(
         var (systemContext, carriedForwardPaths) = await this.BuildReviewContextAsync(
             job,
             pr,
-            compareToIterationId,
+            baselineJob,
             overrideChatClient,
             ct);
 
@@ -198,13 +195,19 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        await this.PublishReviewResultAsync(job, pr, result, reviewer, ct);
+        await this.PublishReviewResultAsync(job, pr, result, ct);
         return pr;
     }
 
-    private async Task SaveScanAndDeleteJobAsync(ReviewJob job, PullRequest pr, Guid reviewerId, CancellationToken ct)
+    private async Task SaveScanAndDeleteJobAsync(ReviewJob job, PullRequest pr, Guid? reviewerId, CancellationToken ct)
     {
-        await this.SaveScanAsync(job, GetReviewerThreads(pr, reviewerId), reviewerId, pr.AuthorizedIdentityId, ct);
+        await this.SaveScanAsync(
+            job,
+            GetReviewerThreads(pr, reviewerId),
+            reviewerId,
+            pr.AuthorizedIdentityName,
+            pr.AuthorizedIdentityId,
+            ct);
         await jobs.DeleteAsync(job.Id, ct);
     }
 
@@ -212,7 +215,6 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob job,
         PullRequest pr,
         ReviewResult result,
-        ReviewerIdentity reviewer,
         CancellationToken ct)
     {
         Guid? protocolId = null;
@@ -242,7 +244,7 @@ public sealed partial class ReviewOrchestrationService(
                         job.CodeReviewReference,
                         publicationRevision,
                         publicationResult,
-                        reviewer,
+                        ResolvePublicationIdentity(job, pr),
                         ct);
             }
 
@@ -284,23 +286,23 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    // Resolve the normalized reviewer identity plus the current internal GUID needed by the scan model.
-    private async Task<(ReviewerIdentity reviewer, Guid reviewerId)?> ResolveReviewerAsync(
+    // Resolve the optional configured trigger reviewer plus any effective reviewer-owned identity key.
+    private async Task<ResolvedReviewerContext> ResolveReviewerAsync(
         ReviewJob job,
         CancellationToken ct)
     {
-        var normalizedReviewer = await clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct);
-        if (normalizedReviewer is not null)
+        var configuredTriggerReviewer = await clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct);
+        var effectiveReviewer = configuredTriggerReviewer
+                                ?? await clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct);
+        Guid? effectiveReviewerId = null;
+        if (effectiveReviewer is not null)
         {
-            var normalizedReviewerId = Guid.TryParse(normalizedReviewer.ExternalUserId, out var parsedReviewerId)
+            effectiveReviewerId = Guid.TryParse(effectiveReviewer.ExternalUserId, out var parsedReviewerId)
                 ? parsedReviewerId
-                : StableGuidGenerator.Create(normalizedReviewer.ExternalUserId);
-            return (normalizedReviewer, normalizedReviewerId);
+                : StableGuidGenerator.Create(effectiveReviewer.ExternalUserId);
         }
 
-        LogReviewerIdentityMissing(logger, job.ClientId, job.Id);
-        await jobs.SetFailedAsync(job.Id, $"Reviewer identity not configured for client {job.ClientId}", ct);
-        return null;
+        return new ResolvedReviewerContext(configuredTriggerReviewer, effectiveReviewerId);
     }
 
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
@@ -351,8 +353,13 @@ public sealed partial class ReviewOrchestrationService(
         return client;
     }
 
-    // T071: Load scan state — returns (existingScan, isNewIteration, compareToIterationId).
-    private async Task<(ReviewPrScan? scan, bool isNewIteration, int? compareToIterationId)> LoadScanStateAsync(
+    // T071: Load scan state — returns the scan, whether a new revision exists, and any reusable baseline.
+    private async Task<(
+        ReviewPrScan? scan,
+        bool isNewIteration,
+        ReviewJob? baselineJob,
+        int? compareToIterationId,
+        ReviewRevision? compareToReviewRevision)> LoadScanStateAsync(
         ReviewJob job,
         CancellationToken ct)
     {
@@ -360,19 +367,46 @@ public sealed partial class ReviewOrchestrationService(
         var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 
+        ReviewJob? baselineJob = null;
         int? compareToIterationId = null;
-        if (isNewIteration && scan is not null)
+        ReviewRevision? compareToReviewRevision = null;
+        if (isNewIteration && scan is not null && !string.IsNullOrWhiteSpace(scan.LastProcessedCommitId))
         {
-            compareToIterationId = ReviewRevisionKeys.TryParseIterationId(scan.LastProcessedCommitId);
+            if (job.Provider == ScmProvider.AzureDevOps)
+            {
+                compareToIterationId = ReviewRevisionKeys.TryParseIterationId(scan.LastProcessedCommitId);
+                if (compareToIterationId.HasValue)
+                {
+                    baselineJob = await jobs.GetCompletedJobWithFileResultsAsync(
+                        job.OrganizationUrl,
+                        job.ProjectId,
+                        job.RepositoryId,
+                        job.PullRequestId,
+                        compareToIterationId.Value,
+                        ct);
+                }
+            }
+            else
+            {
+                baselineJob = await jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                    job.OrganizationUrl,
+                    job.ProjectId,
+                    job.RepositoryId,
+                    job.PullRequestId,
+                    scan.LastProcessedCommitId,
+                    ct);
+                compareToReviewRevision = baselineJob?.ReviewRevisionReference;
+            }
         }
 
-        return (scan, isNewIteration, compareToIterationId);
+        return (scan, isNewIteration, baselineJob, compareToIterationId, compareToReviewRevision);
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
     private async Task<PullRequest?> FetchPullRequestAsync(
         ReviewJob job,
         int? compareToIterationId,
+        ReviewRevision? compareToReviewRevision,
         CancellationToken ct)
     {
         var pr = await prFetcher.FetchAsync(
@@ -383,7 +417,8 @@ public sealed partial class ReviewOrchestrationService(
             job.IterationId,
             compareToIterationId,
             job.ClientId,
-            ct);
+            ct,
+            compareToReviewRevision);
 
         if (pr.Status == PrStatus.Active)
         {
@@ -411,7 +446,7 @@ public sealed partial class ReviewOrchestrationService(
         IReadOnlyList<PrCommentThread> reviewerThreads,
         ReviewPrScan? scan,
         bool isNewIteration,
-        Guid reviewerId,
+        Guid? reviewerId,
         IReadOnlyList<string> providerCapabilities,
         IChatClient chatClient,
         CancellationToken ct)
@@ -453,41 +488,30 @@ public sealed partial class ReviewOrchestrationService(
     private async Task<(ReviewSystemContext? systemContext, List<string> carriedForwardPaths)> BuildReviewContextAsync(
         ReviewJob job,
         PullRequest pr,
-        int? compareToIterationId,
+        ReviewJob? baselineJob,
         IChatClient chatClient,
         CancellationToken ct)
     {
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
         var carriedForwardPaths = new List<string>();
 
-        if (compareToIterationId.HasValue)
+        if (baselineJob is not null)
         {
-            var priorJob = await jobs.GetCompletedJobWithFileResultsAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                compareToIterationId.Value,
-                ct);
-
-            if (priorJob is not null)
+            var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
+            foreach (var priorResult in baselineJob.FileReviewResults
+                         .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
             {
-                var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
-                foreach (var priorResult in priorJob.FileReviewResults
-                             .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
+                if (!changedPathsSet.Contains(priorResult.FilePath))
                 {
-                    if (!changedPathsSet.Contains(priorResult.FilePath))
-                    {
-                        var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
-                        await jobs.AddFileResultAsync(carried, ct);
-                        carriedForwardPaths.Add(priorResult.FilePath);
-                    }
+                    var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
+                    await jobs.AddFileResultAsync(carried, ct);
+                    carriedForwardPaths.Add(priorResult.FilePath);
                 }
+            }
 
-                if (changedFilePaths.Count == 0 && carriedForwardPaths.Count > 0)
-                {
-                    return (null, carriedForwardPaths);
-                }
+            if (changedFilePaths.Count == 0 && carriedForwardPaths.Count > 0)
+            {
+                return (null, carriedForwardPaths);
             }
         }
 
@@ -578,11 +602,6 @@ public sealed partial class ReviewOrchestrationService(
                 (!string.IsNullOrWhiteSpace(partial.Summary) || partial.Comments.Count > 0))
             {
                 var reviewerContext = await this.ResolveReviewerAsync(job, ct);
-                if (reviewerContext is null)
-                {
-                    return;
-                }
-
                 try
                 {
                     await this.PublishReviewResultAsync(
@@ -601,7 +620,6 @@ public sealed partial class ReviewOrchestrationService(
                             [],
                             ExistingThreads: pr?.ExistingThreads),
                         partial,
-                        reviewerContext.Value.reviewer,
                         ct);
                     return;
                 }
@@ -836,7 +854,7 @@ public sealed partial class ReviewOrchestrationService(
         return path.TrimStart('/');
     }
 
-    private static IReadOnlyList<PrCommentThread> GetReviewerThreads(PullRequest pr, Guid reviewerId)
+    private static IReadOnlyList<PrCommentThread> GetReviewerThreads(PullRequest pr, Guid? reviewerId)
     {
         if (pr.ExistingThreads is null)
         {
@@ -846,8 +864,10 @@ public sealed partial class ReviewOrchestrationService(
         return pr.ExistingThreads
             .Where(t => IsReviewerOwnedAuthor(
                 t.Comments.FirstOrDefault()?.AuthorId,
+                t.Comments.FirstOrDefault()?.AuthorName,
                 reviewerId,
-                pr.AuthorizedIdentityId))
+                pr.AuthorizedIdentityId,
+                pr.AuthorizedIdentityName))
             .ToList()
             .AsReadOnly();
     }
@@ -855,14 +875,19 @@ public sealed partial class ReviewOrchestrationService(
     private static bool HasNewThreadReplies(
         IReadOnlyList<PrCommentThread> reviewerThreads,
         ReviewPrScan scan,
-        Guid reviewerId,
-        Guid? authorizedIdentityId)
+        Guid? reviewerId,
+        Guid? authorizedIdentityId,
+        string? authorizedIdentityName)
     {
         foreach (var thread in reviewerThreads)
         {
             var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
             var storedCount = stored?.LastSeenReplyCount ?? 0;
-            var userReplyCount = CountNonReviewerComments(thread.Comments, reviewerId, authorizedIdentityId);
+            var userReplyCount = CountNonReviewerComments(
+                thread.Comments,
+                reviewerId,
+                authorizedIdentityId,
+                authorizedIdentityName);
             if (userReplyCount > storedCount)
             {
                 return true;
@@ -918,7 +943,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewPrScan? scan,
         bool isNewIteration,
         CommentResolutionBehavior behavior,
-        Guid reviewerId,
+        Guid? reviewerId,
         bool canReply,
         IChatClient chatClient,
         CancellationToken ct)
@@ -946,7 +971,11 @@ public sealed partial class ReviewOrchestrationService(
                 ThreadResolutionResult resolution;
 
                 var storedCount = stored?.LastSeenReplyCount ?? 0;
-                var userReplyCount = CountNonReviewerComments(thread.Comments, reviewerId, pr.AuthorizedIdentityId);
+                var userReplyCount = CountNonReviewerComments(
+                    thread.Comments,
+                    reviewerId,
+                    pr.AuthorizedIdentityId,
+                    pr.AuthorizedIdentityName);
                 var hasNewReplies = userReplyCount > storedCount;
 
                 var evaluationKind = isNewIteration ? "code-change" : "conversational";
@@ -1043,7 +1072,8 @@ public sealed partial class ReviewOrchestrationService(
     private async Task SaveScanAsync(
         ReviewJob job,
         IReadOnlyList<PrCommentThread> reviewerThreads,
-        Guid reviewerId,
+        Guid? reviewerId,
+        string? authorizedIdentityName,
         Guid? authorizedIdentityId,
         CancellationToken ct)
     {
@@ -1062,7 +1092,11 @@ public sealed partial class ReviewOrchestrationService(
                         ReviewPrScanId = scanId,
                         ThreadId = thread.ThreadId,
                         LastSeenReplyCount =
-                            CountNonReviewerComments(thread.Comments, reviewerId, authorizedIdentityId),
+                            CountNonReviewerComments(
+                                thread.Comments,
+                                reviewerId,
+                                authorizedIdentityId,
+                                authorizedIdentityName),
                         LastSeenStatus = thread.Status,
                     });
             }
@@ -1083,19 +1117,49 @@ public sealed partial class ReviewOrchestrationService(
                string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsReviewerOwnedAuthor(Guid? authorId, Guid reviewerId, Guid? authorizedIdentityId)
+    private static ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
     {
-        return authorId.HasValue &&
-               (authorId.Value == reviewerId ||
-                (authorizedIdentityId.HasValue && authorId.Value == authorizedIdentityId.Value));
+        var externalUserId = pr.AuthorizedIdentityName
+                             ?? pr.AuthorizedIdentityId?.ToString("D")
+                             ?? $"connection:{job.ClientId:D}:{job.Provider}:{job.RepositoryId}:{job.PullRequestId}";
+        var login = pr.AuthorizedIdentityName ?? externalUserId;
+        var displayName = pr.AuthorizedIdentityName ?? login;
+        var isBot = job.Provider is ScmProvider.GitHub && login.EndsWith("[bot]", StringComparison.OrdinalIgnoreCase);
+
+        return new ReviewerIdentity(job.ProviderHost, externalUserId, login, displayName, isBot);
+    }
+
+    private static bool IsReviewerOwnedAuthor(Guid? authorId, string authorName, Guid? reviewerId, Guid? authorizedIdentityId, string? authorizedIdentityName)
+    {
+        if (authorId.HasValue)
+        {
+            if (reviewerId.HasValue && authorId.Value == reviewerId.Value)
+            {
+                return true;
+            }
+
+            if (authorizedIdentityId.HasValue && authorId.Value == authorizedIdentityId.Value)
+            {
+                return true;
+            }
+        }
+
+        return !string.IsNullOrWhiteSpace(authorizedIdentityName)
+               && string.Equals(authorName, authorizedIdentityName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int CountNonReviewerComments(
         IReadOnlyList<PrThreadComment> comments,
-        Guid reviewerId,
-        Guid? authorizedIdentityId)
+        Guid? reviewerId,
+        Guid? authorizedIdentityId,
+        string? authorizedIdentityName)
     {
-        return comments.Count(comment => !IsReviewerOwnedAuthor(comment.AuthorId, reviewerId, authorizedIdentityId));
+        return comments.Count(comment => !IsReviewerOwnedAuthor(
+            comment.AuthorId,
+            comment.AuthorName,
+            reviewerId,
+            authorizedIdentityId,
+            authorizedIdentityName));
     }
 
     private static string BuildCommentHistory(PrCommentThread thread)
@@ -1196,4 +1260,6 @@ public sealed partial class ReviewOrchestrationService(
 
         throw new InvalidOperationException($"Review job {job.Id} is missing normalized review revision data for provider {job.Provider}.");
     }
+
+    private sealed record ResolvedReviewerContext(ReviewerIdentity? ConfiguredTriggerReviewer, Guid? EffectiveReviewerId);
 }

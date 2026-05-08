@@ -119,6 +119,7 @@
               <ProviderConnectionForm
                 mode="edit"
                 :form="editForm"
+                :secret-required="editSecretRequired"
                 :busy="busyConnectionId === selectedConnectionId"
                 :error="editError"
                 submit-label="Save Changes"
@@ -172,7 +173,7 @@
             <div class="section-card-header">
               <div>
                 <h3>Reviewer Identity</h3>
-                <p class="section-subtitle">Assign a reviewer identity for {{ selectedConnection?.hostBaseUrl }}.</p>
+                <p class="section-subtitle">Set an optional reviewer trigger for {{ selectedConnection?.hostBaseUrl }}. It narrows automatic PR processing and does not change the connection identity used for posting.</p>
               </div>
             </div>
             <div class="section-card-body">
@@ -206,13 +207,15 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useNotification } from '@/composables/useNotification'
 import { useSession } from '@/composables/useSession'
+import ProviderConnectionAuditTrail from '@/components/ProviderConnectionAuditTrail.vue'
 import ProviderConnectionForm from '@/components/ProviderConnectionForm.vue'
+import ProviderConnectionStatusList from '@/components/ProviderConnectionStatusList.vue'
 import ProviderScopePicker from '@/components/ProviderScopePicker.vue'
 import ReviewerIdentityPicker from '@/components/ReviewerIdentityPicker.vue'
 import {
   getEnabledProviderOptions,
   getProviderDefaultHostBaseUrl,
-  getSupportedAuthenticationKind,
+  getSupportedAuthenticationKinds,
   listProviderActivationStatuses,
   type ProviderActivationStatusDto,
 } from '@/services/providerActivationService'
@@ -233,6 +236,7 @@ import {
   type ClientReviewerIdentityDto,
   type ClientScmConnectionDto,
   type ClientScmScopeDto,
+  type ScmAuthenticationKind,
   type ProviderConnectionReadinessLevel,
   type ResolvedReviewerIdentityResponse,
   type ScmProviderFamily,
@@ -295,9 +299,11 @@ let reviewerIdentityLoadRequestVersion = 0
 const createForm = reactive({
   providerFamily: 'github' as ScmProviderFamily,
   hostBaseUrl: 'https://github.com',
-  authenticationKind: 'personalAccessToken' as ReturnType<typeof getSupportedAuthenticationKind>,
+  authenticationKind: 'personalAccessToken' as ScmAuthenticationKind,
   oAuthTenantId: '',
   oAuthClientId: '',
+  gitHubAppId: '',
+  gitHubAppInstallationId: '',
   displayName: '',
   secret: '',
   isActive: true,
@@ -307,9 +313,11 @@ const editForm = reactive({
   providerFamily: 'github' as ScmProviderFamily,
   displayName: '',
   hostBaseUrl: '',
-  authenticationKind: 'personalAccessToken' as ReturnType<typeof getSupportedAuthenticationKind>,
+  authenticationKind: 'personalAccessToken' as ScmAuthenticationKind,
   oAuthTenantId: '',
   oAuthClientId: '',
+  gitHubAppId: '',
+  gitHubAppInstallationId: '',
   secret: '',
   isActive: true,
 })
@@ -325,6 +333,13 @@ const scopeForm = reactive({
 const selectedConnection = computed(() =>
   connections.value.find((connection) => connection.id === selectedConnectionId.value) ?? null,
 )
+const editSecretRequired = computed(() => {
+  if (!selectedConnection.value) {
+    return false
+  }
+
+  return selectedConnection.value.authenticationKind !== editForm.authenticationKind
+})
 const providerOptions = computed(() => getEnabledProviderOptions(providerStatuses.value))
 const hasEnabledProviderOptions = computed(() => providerOptions.value.length > 0)
 const multipleProvidersCapability = computed(() =>
@@ -347,11 +362,16 @@ const selectedReviewerCandidate = computed(() =>
 function applyCreateProviderDefaults(providerFamily: ScmProviderFamily) {
   createForm.providerFamily = providerFamily
   createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
-  createForm.authenticationKind = getSupportedAuthenticationKind(providerFamily)
+  createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
 
   if (providerFamily !== 'azureDevOps') {
     createForm.oAuthTenantId = ''
     createForm.oAuthClientId = ''
+  }
+
+  if (providerFamily !== 'github') {
+    createForm.gitHubAppId = ''
+    createForm.gitHubAppInstallationId = ''
   }
 }
 
@@ -368,10 +388,34 @@ function syncCreateProviderSelection() {
 
 function normalizeAuthenticationKind(
   providerFamily: ScmProviderFamily,
-  authenticationKind: ReturnType<typeof getSupportedAuthenticationKind>,
-): ReturnType<typeof getSupportedAuthenticationKind> {
-  const supported = getSupportedAuthenticationKind(providerFamily)
-  return authenticationKind === supported ? authenticationKind : supported
+  authenticationKind: ScmAuthenticationKind,
+): ScmAuthenticationKind {
+  const supportedKinds = getSupportedAuthenticationKinds(providerFamily)
+  return supportedKinds.includes(authenticationKind) ? authenticationKind : supportedKinds[0]
+}
+
+function getPreferredAuthenticationKind(providerFamily: ScmProviderFamily): ScmAuthenticationKind {
+  return getSupportedAuthenticationKinds(providerFamily)[0]
+}
+
+function clearOAuthFields(form: typeof createForm | typeof editForm) {
+  form.oAuthTenantId = ''
+  form.oAuthClientId = ''
+}
+
+function clearGitHubAppFields(form: typeof createForm | typeof editForm) {
+  form.gitHubAppId = ''
+  form.gitHubAppInstallationId = ''
+}
+
+function parseOptionalPositiveNumber(value: string | number): number | null {
+  const trimmed = String(value).trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
 watch(() => createForm.providerFamily, (providerFamily) => {
@@ -382,28 +426,37 @@ watch(() => createForm.providerFamily, (providerFamily) => {
 
   if (providerFamily === 'azureDevOps') {
     createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
-    createForm.authenticationKind = getSupportedAuthenticationKind(providerFamily)
+    createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
     scopeForm.scopeType = 'organization'
     return
   }
 
-  createForm.authenticationKind = getSupportedAuthenticationKind(providerFamily)
-  createForm.oAuthTenantId = ''
-  createForm.oAuthClientId = ''
+  createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
+  clearOAuthFields(createForm)
   createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
+
+  if (providerFamily !== 'github') {
+    clearGitHubAppFields(createForm)
+  }
 })
 
 watch(() => createForm.authenticationKind, (authenticationKind) => {
   if (authenticationKind !== 'oauthClientCredentials') {
-    createForm.oAuthTenantId = ''
-    createForm.oAuthClientId = ''
+    clearOAuthFields(createForm)
+  }
+
+  if (authenticationKind !== 'appInstallation') {
+    clearGitHubAppFields(createForm)
   }
 })
 
 watch(() => editForm.authenticationKind, (authenticationKind) => {
   if (authenticationKind !== 'oauthClientCredentials') {
-    editForm.oAuthTenantId = ''
-    editForm.oAuthClientId = ''
+    clearOAuthFields(editForm)
+  }
+
+  if (authenticationKind !== 'appInstallation') {
+    clearGitHubAppFields(editForm)
   }
 })
 
@@ -515,6 +568,13 @@ async function handleCreateConnection() {
     return
   }
 
+  if (createForm.authenticationKind === 'appInstallation') {
+    if (!parseOptionalPositiveNumber(createForm.gitHubAppId) || !parseOptionalPositiveNumber(createForm.gitHubAppInstallationId)) {
+      createError.value = 'GitHub App ID and Installation ID are required for GitHub App connections.'
+      return
+    }
+  }
+
   createError.value = ''
   saving.value = true
   try {
@@ -524,6 +584,12 @@ async function handleCreateConnection() {
       authenticationKind: createForm.authenticationKind,
       oAuthTenantId: createForm.oAuthTenantId.trim() || null,
       oAuthClientId: createForm.oAuthClientId.trim() || null,
+      gitHubAppId: createForm.authenticationKind === 'appInstallation'
+        ? parseOptionalPositiveNumber(createForm.gitHubAppId)
+        : null,
+      gitHubAppInstallationId: createForm.authenticationKind === 'appInstallation'
+        ? parseOptionalPositiveNumber(createForm.gitHubAppInstallationId)
+        : null,
       displayName: createForm.displayName.trim(),
       secret: createForm.secret,
       isActive: createForm.isActive,
@@ -547,8 +613,8 @@ function resetCreateForm() {
       ? 'github'
       : providerOptions.value[0]?.value ?? 'github',
   )
-  createForm.oAuthTenantId = ''
-  createForm.oAuthClientId = ''
+  clearOAuthFields(createForm)
+  clearGitHubAppFields(createForm)
   createForm.displayName = ''
   createForm.secret = ''
   createForm.isActive = true
@@ -563,6 +629,8 @@ function startEdit(connection: ClientScmConnectionDto) {
   editForm.authenticationKind = normalizeAuthenticationKind(connection.providerFamily, connection.authenticationKind)
   editForm.oAuthTenantId = connection.oAuthTenantId ?? ''
   editForm.oAuthClientId = connection.oAuthClientId ?? ''
+  editForm.gitHubAppId = connection.gitHubAppId?.toString() ?? ''
+  editForm.gitHubAppInstallationId = connection.gitHubAppInstallationId?.toString() ?? ''
   editForm.secret = ''
   editForm.isActive = connection.isActive
   editError.value = ''
@@ -573,15 +641,29 @@ function cancelEdit() {
   editForm.providerFamily = 'github'
   editForm.displayName = ''
   editForm.hostBaseUrl = ''
-  editForm.authenticationKind = getSupportedAuthenticationKind('github')
-  editForm.oAuthTenantId = ''
-  editForm.oAuthClientId = ''
+  editForm.authenticationKind = getPreferredAuthenticationKind('github')
+  clearOAuthFields(editForm)
+  clearGitHubAppFields(editForm)
   editForm.secret = ''
   editForm.isActive = true
   editError.value = ''
 }
 
 async function handleSaveConnectionEdit(connectionId: string) {
+  if (editSecretRequired.value && !editForm.secret.trim()) {
+    editError.value = editForm.authenticationKind === 'appInstallation'
+      ? 'A GitHub App private key is required when switching to GitHub App authentication.'
+      : 'A personal access token is required when switching away from GitHub App authentication.'
+    return
+  }
+
+  if (editForm.authenticationKind === 'appInstallation') {
+    if (!parseOptionalPositiveNumber(editForm.gitHubAppId) || !parseOptionalPositiveNumber(editForm.gitHubAppInstallationId)) {
+      editError.value = 'GitHub App ID and Installation ID are required for GitHub App connections.'
+      return
+    }
+  }
+
   busyConnectionId.value = connectionId
   editError.value = ''
   try {
@@ -591,6 +673,12 @@ async function handleSaveConnectionEdit(connectionId: string) {
       authenticationKind: editForm.authenticationKind,
       oAuthTenantId: editForm.oAuthTenantId.trim() || null,
       oAuthClientId: editForm.oAuthClientId.trim() || null,
+      gitHubAppId: editForm.authenticationKind === 'appInstallation'
+        ? parseOptionalPositiveNumber(editForm.gitHubAppId)
+        : null,
+      gitHubAppInstallationId: editForm.authenticationKind === 'appInstallation'
+        ? parseOptionalPositiveNumber(editForm.gitHubAppInstallationId)
+        : null,
       secret: editForm.secret.trim() || undefined,
       isActive: editForm.isActive,
     })
@@ -746,7 +834,7 @@ async function handleSaveReviewerIdentity() {
     reviewerCandidates.value = []
     selectedReviewerExternalUserId.value = null
     reviewerSearch.value = ''
-    notify('Reviewer identity saved.')
+    notify('Reviewer trigger saved.')
   } catch (saveError) {
     reviewerError.value = saveError instanceof Error ? saveError.message : 'Failed to save reviewer identity.'
   } finally {
@@ -764,7 +852,7 @@ async function handleClearReviewerIdentity() {
   try {
     await deleteReviewerIdentity(props.clientId, selectedConnection.value.id)
     reviewerIdentity.value = null
-    notify('Reviewer identity cleared.')
+    notify('Reviewer trigger cleared.')
   } catch (deleteError) {
     reviewerError.value = deleteError instanceof Error ? deleteError.message : 'Failed to clear reviewer identity.'
   } finally {

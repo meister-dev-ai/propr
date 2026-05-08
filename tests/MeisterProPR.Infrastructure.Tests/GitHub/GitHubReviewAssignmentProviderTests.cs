@@ -124,6 +124,102 @@ public sealed class GitHubReviewAssignmentProviderTests
         Assert.False(postInvoked);
     }
 
+    [Fact]
+    public async Task RequestReviewerAsync_AppInstallation_SkipsReviewerLookupAndPost()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+
+        var requestUris = new List<string>();
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(async request =>
+                    {
+                        requestUris.Add(request.RequestUri!.AbsoluteUri);
+
+                        return request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                                new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                                new
+                                {
+                                    token = "installation-token",
+                                    expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                                }),
+                            "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Get =>
+                                CreateJsonResponse(new { users = Array.Empty<object>() }),
+                            "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Post =>
+                                CreateJsonResponse(new { body = await request.Content!.ReadAsStringAsync() }),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        };
+                    })));
+
+        var sut = new GitHubReviewAssignmentProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.RequestReviewerAsync(clientId, review, reviewer);
+
+        Assert.Contains("https://api.github.com/app/installations/789012", requestUris);
+        Assert.Contains("https://api.github.com/app/installations/789012/access_tokens", requestUris);
+        Assert.DoesNotContain("https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers", requestUris);
+    }
+
+    [Fact]
+    public async Task RequestReviewerAsync_AppInstallation_DoesNotPostRequestedReviewer()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
+
+        var postInvoked = false;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+                    {
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                            new
+                            {
+                                token = "installation-token",
+                                expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                            }),
+                        "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Get =>
+                            CreateJsonResponse(new { users = Array.Empty<object>() }),
+                        "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Post =>
+                            CapturePost(),
+                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                    }))));
+
+        var sut = new GitHubReviewAssignmentProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.RequestReviewerAsync(clientId, review, reviewer);
+
+        Assert.False(postInvoked);
+        return;
+
+        HttpResponseMessage CapturePost()
+        {
+            postInvoked = true;
+            return CreateJsonResponse(new { ok = true });
+        }
+    }
+
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)
     {
         var repository = Substitute.For<IClientScmConnectionRepository>();

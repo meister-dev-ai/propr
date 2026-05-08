@@ -26,7 +26,8 @@ public sealed class PullRequestSynchronizationService(
     IPullRequestIterationResolver? iterationResolver = null,
     IReviewerThreadStatusFetcher? threadStatusFetcher = null,
     IThreadMemoryService? threadMemoryService = null,
-    IReviewPrScanRepository? prScanRepository = null) : IPullRequestSynchronizationService
+    IReviewPrScanRepository? prScanRepository = null,
+    IClientRegistry? clientRegistry = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -78,7 +79,7 @@ public sealed class PullRequestSynchronizationService(
                 return CompleteOutcome(activity, startedAt, request, outcome);
             }
 
-            var reviewerId = ResolveReviewerId(request.RequestedReviewerIdentity);
+            var reviewerId = await this.ResolveReviewerIdAsync(request, ct);
             await this.RunThreadMemoryStateMachineAsync(request, reviewerId, ct);
 
             var iterationId = request.CandidateIterationId;
@@ -160,7 +161,38 @@ public sealed class PullRequestSynchronizationService(
                     MergeOutcome(activeJobReconciliation, scopeOutcome));
             }
 
-            await jobs.AddAsync(job, ct);
+            var addResult = await jobs.TryAddIfNoActiveDuplicateAsync(job, ct);
+            if (!addResult.WasAdded)
+            {
+                var duplicateRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+                var duplicateActionSummary = !string.IsNullOrWhiteSpace(duplicateRevisionKey)
+                    ? $"Skipped duplicate active job for PR #{request.PullRequestId} at revision {duplicateRevisionKey} via {request.SummaryLabel}."
+                    : $"Skipped duplicate active job for PR #{request.PullRequestId} at iteration {iterationId.Value} via {request.SummaryLabel}.";
+
+                outcome = new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.DuplicateActiveJob,
+                    activeJobReconciliation.LifecycleDecision,
+                    [
+                        ..activeJobReconciliation.ActionSummaries,
+                        duplicateActionSummary,
+                    ]);
+                return CompleteOutcome(activity, startedAt, request, outcome);
+            }
+
+            if (addResult.CancelledSupersededJobCount > 0
+                && !activeJobReconciliation.ActionSummaries.Any(summary => summary.Contains(
+                    "Cancelled ",
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                activeJobReconciliation = new ActiveJobReconciliationResult(
+                    activeJobReconciliation.DuplicateOutcome,
+                    PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs,
+                    [
+                        ..activeJobReconciliation.ActionSummaries,
+                        $"Cancelled {addResult.CancelledSupersededJobCount} superseded active review job(s) for PR #{request.PullRequestId} before evaluating revision {currentRevisionKey} via {request.SummaryLabel}.",
+                    ]);
+            }
+
             activity?.SetTag("pull_request.job_id", job.Id);
 
             if (request.PrTitle is not null || request.RepositoryName is not null || request.SourceBranch is not null ||
@@ -234,7 +266,7 @@ public sealed class PullRequestSynchronizationService(
             request.ProviderProjectKey,
             ct);
         var matchingJobs = activeJobs
-            .Where(job => string.Equals(job.RepositoryId, request.RepositoryId, StringComparison.OrdinalIgnoreCase)
+            .Where(job => IsSamePullRequestTarget(job, request)
                           && job.PullRequestId == request.PullRequestId)
             .ToList();
 
@@ -292,7 +324,7 @@ public sealed class PullRequestSynchronizationService(
             request.PullRequestId,
             iterationId) is not null;
 
-        if (prScanRepository is null || threadStatusFetcher is null || !reviewerId.HasValue)
+        if (prScanRepository is null || threadStatusFetcher is null)
         {
             return completedSameIterationAlreadyReviewed
                 ? CreateNoReviewChangesOutcome(request, iterationId)
@@ -326,7 +358,7 @@ public sealed class PullRequestSynchronizationService(
                 request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
-                reviewerId.Value,
+                reviewerId ?? Guid.Empty,
                 request.ClientId,
                 ct);
 
@@ -360,7 +392,7 @@ public sealed class PullRequestSynchronizationService(
             request.ProviderProjectKey,
             ct);
         var matchingJobs = activeJobs
-            .Where(job => string.Equals(job.RepositoryId, request.RepositoryId, StringComparison.OrdinalIgnoreCase)
+            .Where(job => IsSamePullRequestTarget(job, request)
                           && job.PullRequestId == request.PullRequestId)
             .ToList();
         if (matchingJobs.Count == 0)
@@ -427,6 +459,22 @@ public sealed class PullRequestSynchronizationService(
         return ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
     }
 
+    private static bool IsSamePullRequestTarget(ReviewJob job, PullRequestSynchronizationRequest request)
+    {
+        if (request.CodeReview is not null)
+        {
+            return job.Provider == request.CodeReview.Repository.Host.Provider
+                   && string.Equals(job.HostBaseUrl, request.CodeReview.Repository.Host.HostBaseUrl, StringComparison.Ordinal)
+                   && string.Equals(job.RepositoryOwnerOrNamespace, request.CodeReview.Repository.OwnerOrNamespace, StringComparison.Ordinal)
+                   && string.Equals(job.RepositoryProjectPath, request.CodeReview.Repository.ProjectPath, StringComparison.Ordinal)
+                   && job.CodeReviewPlatformKind == request.CodeReview.Platform
+                   && string.Equals(job.ExternalCodeReviewId, request.CodeReview.ExternalReviewId, StringComparison.Ordinal)
+                   && job.PullRequestId == request.CodeReview.Number;
+        }
+
+        return string.Equals(job.RepositoryId, request.RepositoryId, StringComparison.OrdinalIgnoreCase);
+    }
+
     private PullRequestSynchronizationOutcome? TryApplyProCursorSourceScope(
         PullRequestSynchronizationRequest request,
         ReviewJob job)
@@ -489,6 +537,18 @@ public sealed class PullRequestSynchronizationService(
         return null;
     }
 
+    private async Task<Guid?> ResolveReviewerIdAsync(PullRequestSynchronizationRequest request, CancellationToken ct)
+    {
+        var reviewerIdentity = request.RequestedReviewerIdentity;
+        if (reviewerIdentity is null && clientRegistry is not null)
+        {
+            var host = request.Host ?? new ProviderHostRef(request.Provider, request.ProviderScopePath);
+            reviewerIdentity = await clientRegistry.GetEffectiveReviewerIdentityAsync(request.ClientId, host, ct);
+        }
+
+        return ResolveReviewerId(reviewerIdentity);
+    }
+
     private static int? TryCreateSyntheticIterationId(ReviewRevision? revision)
     {
         if (revision is null)
@@ -515,8 +575,7 @@ public sealed class PullRequestSynchronizationService(
         Guid? reviewerId,
         CancellationToken ct)
     {
-        if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null ||
-            !reviewerId.HasValue)
+        if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null)
         {
             return;
         }
@@ -538,7 +597,7 @@ public sealed class PullRequestSynchronizationService(
                 request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
-                reviewerId.Value,
+                reviewerId ?? Guid.Empty,
                 request.ClientId,
                 ct);
             if (currentThreads.Count == 0)

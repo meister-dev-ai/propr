@@ -30,9 +30,10 @@ Those records store the display name, protected client secret, allowed email dom
 |---|---|---|---|---|---|
 | Azure DevOps | `https://dev.azure.com` | `oauthClientCredentials` | `oAuthTenantId`, `oAuthClientId` | Azure app registration client secret value | Supported |
 | GitHub | `https://github.com` or your GitHub Enterprise base URL | `personalAccessToken` | none | GitHub PAT | Supported |
+| GitHub | `https://github.com` or your GitHub Enterprise base URL | `appInstallation` | `gitHubAppId`, `gitHubAppInstallationId` | GitHub App private key PEM | Supported |
 | GitLab | `https://gitlab.com` or your self-managed base URL | `personalAccessToken` | none | GitLab PAT | Supported |
 | Forgejo | your Forgejo base URL, for example `https://codeberg.org` | `personalAccessToken` | none | Forgejo access token | Supported |
-| Any provider | n/a | `appInstallation` | n/a | n/a | Not implemented; rejected by the server |
+| Any provider except GitHub | n/a | `appInstallation` | n/a | n/a | Not implemented; rejected by the server |
 
 ## Common Provider Connection Fields
 
@@ -45,6 +46,8 @@ Every provider connection stores the same normalized shape.
 | `authenticationKind` | Credential model | Must match the support matrix above |
 | `oAuthTenantId` | Tenant or directory identifier | Only used for Azure DevOps `oauthClientCredentials` |
 | `oAuthClientId` | OAuth or app client identifier | Only used for Azure DevOps `oauthClientCredentials` |
+| `gitHubAppId` | GitHub App numeric identifier | Only used for GitHub `appInstallation` |
+| `gitHubAppInstallationId` | GitHub App installation numeric identifier | Only used for GitHub `appInstallation` |
 | `displayName` | Friendly label in the Admin UI | Any descriptive name |
 | `secret` | Protected credential material | Stored encrypted; never returned in API responses |
 | `isActive` | Whether this connection is operational | Review, discovery, and webhook flows use active connections only |
@@ -143,20 +146,48 @@ If you use an env file for container startup, do not put spaces around the equal
 
 ## GitHub
 
-GitHub supports only `personalAccessToken`.
+GitHub supports both `personalAccessToken` and `appInstallation`.
+
+### GitHub Personal Access Token
 
 ### What Goes Into Each Field
 
 | ProPR field | Expected value | Where to get it |
 |---|---|---|
 | `hostBaseUrl` | `https://github.com` or your GitHub Enterprise base URL | GitHub Cloud uses `https://github.com`; GitHub Enterprise uses the root host URL |
-| `authenticationKind` | `personalAccessToken` | Fixed supported mode for GitHub |
+| `authenticationKind` | `personalAccessToken` | Select PAT mode for GitHub |
 | `secret` | GitHub personal access token | GitHub -> Settings -> Developer settings -> Personal access tokens |
 | `oAuthTenantId` | leave empty | Not used |
 | `oAuthClientId` | leave empty | Not used |
+| `gitHubAppId` | leave empty | Not used |
+| `gitHubAppInstallationId` | leave empty | Not used |
 
 The token must be able to authenticate the `/user` endpoint and access the repositories and pull
 request data ProPR needs for review and publication.
+
+### GitHub App Installation
+
+Use `appInstallation` when you want ProPR to operate through an installed GitHub App instead of a
+user PAT.
+
+| ProPR field | Expected value | Where to get it |
+|---|---|---|
+| `hostBaseUrl` | `https://github.com` or your GitHub Enterprise base URL | GitHub Cloud uses `https://github.com`; GitHub Enterprise uses the root host URL |
+| `authenticationKind` | `appInstallation` | Select GitHub App mode |
+| `gitHubAppId` | Numeric GitHub App ID | GitHub -> Settings -> Developer settings -> GitHub Apps -> your app -> App ID |
+| `gitHubAppInstallationId` | Numeric installation ID | GitHub App installation URL, GitHub App settings, or installation API metadata |
+| `secret` | GitHub App private key PEM | GitHub -> Settings -> Developer settings -> GitHub Apps -> your app -> Generate private key |
+| `oAuthTenantId` | leave empty | Not used |
+| `oAuthClientId` | leave empty | Not used |
+
+Important GitHub App notes:
+
+1. ProPR stores the private key encrypted at rest but never returns it from the API.
+2. ProPR does not persist installation access tokens; it mints them on demand and reuses them only
+   in a bounded in-memory cache until shortly before expiry.
+3. Discovery, reviewer lookup, review fetch, and review publication run through the repositories and
+   collaborators visible to the configured installation.
+4. PAT-backed and GitHub App-backed connections can coexist as separate GitHub host connections.
 
 ## GitLab
 
@@ -196,8 +227,8 @@ pull requests ProPR needs.
 
 ## Unsupported Authentication Modes
 
-`appInstallation` exists in the shared schema as a reserved authentication mode. The server rejects
-this value for the supported providers instead of silently accepting unusable configuration.
+`appInstallation` remains unsupported for Azure DevOps, GitLab, and Forgejo. The shared schema keeps
+the enum value so provider-specific validation can reject unsupported combinations explicitly.
 
 ## Troubleshooting
 
@@ -211,6 +242,15 @@ Check these first:
 4. `hostBaseUrl` must stay `https://dev.azure.com`; the organization belongs in the scope.
 5. If you rebuilt the code locally but not the containers, restart the stack so the Admin UI and API
    use the updated code.
+
+### HTTP 400 when switching GitHub authentication modes
+
+Check these first:
+
+1. `appInstallation` requires both `gitHubAppId` and `gitHubAppInstallationId`.
+2. Switching from PAT to GitHub App requires a GitHub App private key in `secret`.
+3. Switching from GitHub App back to `personalAccessToken` requires a PAT in `secret`.
+4. GitHub App mode is valid only for GitHub provider connections.
 
 ### Which Azure ID is the tenant ID?
 
@@ -258,6 +298,21 @@ Check these in order:
   "authenticationKind": "personalAccessToken",
   "displayName": "GitHub Cloud",
   "secret": "<github-pat>",
+  "isActive": true
+}
+```
+
+### GitHub App provider connection
+
+```json
+{
+  "providerFamily": "github",
+  "hostBaseUrl": "https://github.com",
+  "authenticationKind": "appInstallation",
+  "gitHubAppId": 123456,
+  "gitHubAppInstallationId": 789012,
+  "displayName": "GitHub App",
+  "secret": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
   "isActive": true
 }
 ```

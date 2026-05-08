@@ -32,7 +32,7 @@ describe('providerOperationsService', () => {
             verificationStatus: 'verified',
             readinessLevel: 'onboardingReady',
             readinessReason: 'Connection is verified for onboarding, but workflow-complete readiness criteria are still missing.',
-            missingReadinessCriteria: ['Configured reviewer identity is required for workflow-complete readiness.'],
+            missingReadinessCriteria: ['Automatic workflow proof is still missing for this provider variant.'],
             health: 'degraded',
             lastCheckedAt: '2026-04-17T10:00:00Z',
             failureCategory: null,
@@ -53,7 +53,7 @@ describe('providerOperationsService', () => {
     })
     expect(result[0].readinessLevel).toBe('onboardingReady')
     expect(result[0].missingReadinessCriteria).toEqual([
-      'Configured reviewer identity is required for workflow-complete readiness.',
+      'Automatic workflow proof is still missing for this provider variant.',
     ])
   })
 })

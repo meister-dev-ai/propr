@@ -196,6 +196,52 @@ public sealed class ForgejoCodeReviewQueryServiceTests
         Assert.Equal("base-sha", result.ReviewRevision.BaseSha);
         Assert.Equal("meister-review-bot", result.RequestedReviewerIdentity!.Login);
     }
+
+    [Fact]
+    public async Task GetReviewAsync_PathBasedRepositoryIdentifier_FallsBackToAssigneeWhenReviewerMissing()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "local_admin/propr", "local_admin", "local_admin/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "9009", 9);
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/local_admin/propr/pulls/9" =>
+                    ForgejoTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            id = 9009,
+                            number = 9,
+                            title = "Honor assigned local_admin reviewer",
+                            html_url = "https://codeberg.example.com/local_admin/propr/pulls/9",
+                            state = "open",
+                            draft = false,
+                            merged = false,
+                            head = new { @ref = "feature/providers", sha = "head-sha" },
+                            @base = new { @ref = "main", sha = "base-sha" },
+                            requested_reviewers = Array.Empty<object>(),
+                            assignees = new object[]
+                            {
+                                new { id = 17, login = "local_admin", full_name = "Local Admin" },
+                            },
+                        }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new ForgejoCodeReviewQueryService(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.GetReviewAsync(clientId, review);
+
+        Assert.NotNull(result);
+        Assert.Equal(CodeReviewState.Open, result!.ReviewState);
+        Assert.Equal("local_admin", result.RequestedReviewerIdentity!.Login);
+        Assert.Equal("17", result.RequestedReviewerIdentity.ExternalUserId);
+    }
 }
 
 public sealed class ForgejoPullRequestFetcherTests
@@ -300,6 +346,139 @@ public sealed class ForgejoPullRequestFetcherTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal(501, thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+    }
+
+    [Fact]
+    public async Task FetchAsync_DeltaReview_ReturnsOnlyComparedFilesAndPreservesFullManifest()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", "base-sha", "old-head", "base-sha...old-head");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repositories/101" => ForgejoTestHelpers.CreateJsonResponse(new { full_name = "acme/propr" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42" =>
+                    ForgejoTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            title = "Add provider-neutral fetchers",
+                            body = "Fetch Forgejo pull requests without Azure-only code.",
+                            state = "open",
+                            merged = false,
+                            head = new { @ref = "feature/providers", sha = "new-head" },
+                            @base = new { @ref = "main", sha = "base-sha" },
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" => ForgejoTestHelpers
+                    .CreateJsonResponse(
+                        new object[]
+                        {
+                            new
+                            {
+                                filename = "src/NewProvider.cs", status = "renamed",
+                                previous_filename = "src/LegacyProvider.cs", patch = "rename diff",
+                            },
+                            new
+                            {
+                                filename = "src/Fetcher.cs", status = "added", previous_filename = (string?)null,
+                                patch = "+class Fetcher",
+                            },
+                            new
+                            {
+                                filename = "src/Stable.cs", status = "modified", previous_filename = (string?)null,
+                                patch = "stable diff",
+                            },
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/compare/old-head...new-head" => ForgejoTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            files = new object[]
+                            {
+                                new
+                                {
+                                    filename = "src/NewProvider.cs", status = "renamed",
+                                    previous_filename = "src/LegacyProvider.cs", patch = "rename diff",
+                                },
+                                new
+                                {
+                                    filename = "src/Fetcher.cs", status = "added", previous_filename = (string?)null,
+                                    patch = "+class Fetcher",
+                                },
+                            },
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FNewProvider.cs?ref=new-head" =>
+                    ForgejoTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            content = Convert.ToBase64String(Encoding.UTF8.GetBytes("public class NewProvider {}")),
+                            encoding = "base64",
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FLegacyProvider.cs?ref=base-sha" =>
+                    ForgejoTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            content = Convert.ToBase64String(Encoding.UTF8.GetBytes("public class LegacyProvider {}")),
+                            encoding = "base64",
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FFetcher.cs?ref=new-head" =>
+                    ForgejoTestHelpers.CreateJsonResponse(
+                        new
+                        {
+                            content = Convert.ToBase64String(Encoding.UTF8.GetBytes("public class Fetcher {}")),
+                            encoding = "base64",
+                        }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new ForgejoPullRequestFetcher(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://codeberg.example.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+                Assert.Equal("src/LegacyProvider.cs", item.OriginalPath);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            });
+        Assert.Collection(
+            result.AllPrFileSummaries,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+            });
     }
 
     [Fact]
@@ -738,6 +917,128 @@ public sealed class ForgejoReviewDiscoveryProviderTests
         Assert.Equal("base-sha", item.ReviewRevision.BaseSha);
         Assert.Equal("meister-review-bot", item.RequestedReviewerIdentity!.Login);
     }
+
+    [Fact]
+    public async Task ListOpenReviewsAsync_WithoutRequestedReviewer_ReturnsBaselineOpenReviews()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls?state=open&limit=100" => ForgejoTestHelpers
+                    .CreateJsonResponse(
+                        new object[]
+                        {
+                            new
+                            {
+                                id = 4201,
+                                number = 42,
+                                title = "Provider neutral adapters",
+                                html_url = "https://codeberg.example.com/acme/propr/pulls/42",
+                                state = "open",
+                                merged = false,
+                                head = new { @ref = "feature/providers", sha = "head-sha" },
+                                @base = new { @ref = "main", sha = "base-sha" },
+                                requested_reviewers = new object[]
+                                {
+                                    new { id = 99, login = "meister-review-bot", full_name = "Meister Review Bot" },
+                                },
+                            },
+                            new
+                            {
+                                id = 4301,
+                                number = 43,
+                                title = "Unassigned review",
+                                html_url = "https://codeberg.example.com/acme/propr/pulls/43",
+                                state = "open",
+                                merged = false,
+                                head = new { @ref = "feature/other", sha = "head-sha-2" },
+                                @base = new { @ref = "main", sha = "base-sha-2" },
+                                requested_reviewers = new object[]
+                                {
+                                    new { id = 12, login = "other-reviewer", full_name = "Other Reviewer" },
+                                },
+                            },
+                        }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+        var sut = new ForgejoReviewDiscoveryProvider(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.ListOpenReviewsAsync(clientId, repository, null);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, item => item.CodeReview.Number == 42);
+        Assert.Contains(result, item => item.CodeReview.Number == 43);
+    }
+
+    [Fact]
+    public async Task ListOpenReviewsAsync_FallsBackToAssigneeWhenRequestedReviewerMissing()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "local_admin/propr", "local_admin", "local_admin/propr");
+        var reviewer = new ReviewerIdentity(host, "17", "local_admin", "Local Admin", false);
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/local_admin/propr/pulls?state=open&limit=100" => ForgejoTestHelpers
+                    .CreateJsonResponse(
+                        new object[]
+                        {
+                            new
+                            {
+                                id = 9009,
+                                number = 9,
+                                title = "Honor local_admin assignee",
+                                html_url = "https://codeberg.example.com/local_admin/propr/pulls/9",
+                                state = "open",
+                                merged = false,
+                                head = new { @ref = "feature/providers", sha = "head-sha" },
+                                @base = new { @ref = "main", sha = "base-sha" },
+                                requested_reviewers = Array.Empty<object>(),
+                                assignees = new object[]
+                                {
+                                    new { id = 17, login = "local_admin", full_name = "Local Admin" },
+                                },
+                            },
+                            new
+                            {
+                                id = 9010,
+                                number = 10,
+                                title = "Assigned to someone else",
+                                html_url = "https://codeberg.example.com/local_admin/propr/pulls/10",
+                                state = "open",
+                                merged = false,
+                                head = new { @ref = "feature/other", sha = "head-sha-2" },
+                                @base = new { @ref = "main", sha = "base-sha-2" },
+                                requested_reviewers = Array.Empty<object>(),
+                                assignees = new object[]
+                                {
+                                    new { id = 21, login = "other-reviewer", full_name = "Other Reviewer" },
+                                },
+                            },
+                        }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+        var sut = new ForgejoReviewDiscoveryProvider(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.ListOpenReviewsAsync(clientId, repository, reviewer);
+
+        var item = Assert.Single(result);
+        Assert.Equal(9, item.CodeReview.Number);
+        Assert.Equal("local_admin", item.RequestedReviewerIdentity!.Login);
+        Assert.Equal("17", item.RequestedReviewerIdentity.ExternalUserId);
+    }
 }
 
 public sealed class ForgejoReviewThreadStatusProviderTests
@@ -748,9 +1049,6 @@ public sealed class ForgejoReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
         var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
             request.RequestUri!.AbsoluteUri switch
             {
@@ -763,7 +1061,7 @@ public sealed class ForgejoReviewThreadStatusProviderTests
                             new
                             {
                                 id = 7001, state = "COMMENT",
-                                user = new { id = 99, login = "meister-review-bot", full_name = "Meister Review Bot" },
+                                user = new { id = 99, login = "meister-dev", full_name = "Meister Dev" },
                             },
                             new
                             {
@@ -778,7 +1076,7 @@ public sealed class ForgejoReviewThreadStatusProviderTests
                             new
                             {
                                 id = 501, body = "Please handle null.", path = "src/feature.ts", position = 18,
-                                user = new { id = 99, login = "meister-review-bot", full_name = "Meister Review Bot" },
+                                user = new { id = 99, login = "meister-dev", full_name = "Meister Dev" },
                                 created_at = "2026-04-14T08:00:00Z",
                             },
                         }),
@@ -797,7 +1095,6 @@ public sealed class ForgejoReviewThreadStatusProviderTests
             });
         var sut = new ForgejoReviewThreadStatusProvider(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -814,7 +1111,7 @@ public sealed class ForgejoReviewThreadStatusProviderTests
         Assert.Equal("Active", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
-        Assert.Contains("meister-review-bot: Please handle null.", entry.CommentHistory);
+        Assert.Contains("meister-dev: Please handle null.", entry.CommentHistory);
         Assert.Contains("octocat: Done.", entry.CommentHistory);
     }
 
@@ -824,9 +1121,6 @@ public sealed class ForgejoReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
         var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
             request.RequestUri!.AbsoluteUri switch
             {
@@ -838,7 +1132,7 @@ public sealed class ForgejoReviewThreadStatusProviderTests
                             new
                             {
                                 id = 7001, state = "COMMENT",
-                                user = new { id = 99, login = "meister-review-bot", full_name = "Meister Review Bot" },
+                                user = new { id = 99, login = "meister-dev", full_name = "Meister Dev" },
                             },
                             new
                             {
@@ -853,7 +1147,7 @@ public sealed class ForgejoReviewThreadStatusProviderTests
                             new
                             {
                                 id = 501, body = "Please handle null.", path = "src/feature.ts", position = 18,
-                                user = new { id = 99, login = "meister-review-bot", full_name = "Meister Review Bot" },
+                                user = new { id = 99, login = "meister-dev", full_name = "Meister Dev" },
                                 created_at = "2026-04-14T08:00:00Z",
                             },
                         }),
@@ -872,7 +1166,6 @@ public sealed class ForgejoReviewThreadStatusProviderTests
             });
         var sut = new ForgejoReviewThreadStatusProvider(
             new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(

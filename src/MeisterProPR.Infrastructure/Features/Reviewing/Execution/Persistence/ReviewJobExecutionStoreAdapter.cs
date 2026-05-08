@@ -83,6 +83,23 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
             ct);
     }
 
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            storedRevisionKey,
+            ct);
+    }
+
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         return inner.SetCancelledAsync(id, ct);

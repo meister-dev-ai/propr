@@ -27,7 +27,8 @@ internal sealed class GitLabPullRequestFetcher(
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         if (!clientId.HasValue)
         {
@@ -48,12 +49,22 @@ internal sealed class GitLabPullRequestFetcher(
             repositoryId,
             pullRequestId,
             cancellationToken);
+        var isDeltaReview = compareToIterationId.HasValue || compareToReviewRevision is not null;
+        var deltaChanges = await this.TryGetDeltaChangesAsync(
+                               context,
+                               host,
+                               repositoryId,
+                               mergeRequest,
+                               changesResponse.Changes,
+                               compareToReviewRevision,
+                               cancellationToken)
+                           ?? changesResponse.Changes;
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
             repositoryId,
             mergeRequest,
-            changesResponse.Changes,
+            deltaChanges,
             cancellationToken);
         var allChangedFileSummaries = changesResponse.Changes
             .Select(MapSummary)
@@ -80,7 +91,61 @@ internal sealed class GitLabPullRequestFetcher(
             changedFiles.AsReadOnly(),
             MapStatus(mergeRequest.State),
             existingThreads,
-            compareToIterationId.HasValue ? allChangedFileSummaries : null);
+            isDeltaReview ? allChangedFileSummaries : null,
+            AuthorizedIdentityName: context.AuthenticatedUsername);
+    }
+
+    private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetDeltaChangesAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        GitLabMergeRequestResponse mergeRequest,
+        IReadOnlyList<GitLabMergeRequestChangeResponse> allChanges,
+        ReviewRevision? compareToReviewRevision,
+        CancellationToken ct)
+    {
+        if (compareToReviewRevision is null)
+        {
+            return allChanges;
+        }
+
+        var currentHeadSha = NormalizeOptional(mergeRequest.DiffRefs?.HeadSha) ?? NormalizeOptional(mergeRequest.Sha);
+        var baselineHeadSha = NormalizeOptional(compareToReviewRevision.HeadSha);
+        if (string.IsNullOrWhiteSpace(currentHeadSha) || string.IsNullOrWhiteSpace(baselineHeadSha))
+        {
+            return null;
+        }
+
+        if (string.Equals(currentHeadSha, baselineHeadSha, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var compareChanges = await this.TryGetComparedChangesAsync(
+            context,
+            host,
+            repositoryId,
+            baselineHeadSha,
+            currentHeadSha,
+            ct);
+        if (compareChanges is null)
+        {
+            return null;
+        }
+
+        if (compareChanges.Count == 0)
+        {
+            return [];
+        }
+
+        var deltaPaths = BuildDeltaPathSet(compareChanges);
+        var filteredChanges = allChanges
+            .Where(change => IsDeltaChange(change, deltaPaths))
+            .ToList();
+
+        return filteredChanges.Count == compareChanges.Count
+            ? filteredChanges.AsReadOnly()
+            : null;
     }
 
     private async Task<GitLabMergeRequestResponse> GetMergeRequestAsync(
@@ -125,6 +190,35 @@ internal sealed class GitLabPullRequestFetcher(
 
         return await response.Content.ReadFromJsonAsync<GitLabMergeRequestChangesResponse>(ct)
                ?? throw new InvalidOperationException("GitLab change lookup returned an empty payload.");
+    }
+
+    private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetComparedChangesAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        string fromRevision,
+        string toRevision,
+        CancellationToken ct)
+    {
+        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+            GitLabConnectionVerifier.BuildApiUri(
+                host,
+                $"/projects/{Uri.EscapeDataString(repositoryId)}/repository/compare",
+                $"from={Uri.EscapeDataString(fromRevision)}&to={Uri.EscapeDataString(toRevision)}"),
+            context.Connection.Secret);
+        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<GitLabCompareResponse>(ct);
+        return payload?.Diffs ?? [];
     }
 
     private async Task<List<ChangedFile>> BuildChangedFilesAsync(
@@ -255,9 +349,7 @@ internal sealed class GitLabPullRequestFetcher(
 
     private static PrThreadComment ToThreadComment(GitLabDiscussionNoteResponse note)
     {
-        var externalUserId = note.Author is null
-            ? null
-            : note.Author.Id.ToString(CultureInfo.InvariantCulture);
+        var externalUserId = note.Author?.Username;
         Guid? stableAuthorId = string.IsNullOrWhiteSpace(externalUserId)
             ? null
             : StableGuidGenerator.Create(externalUserId);
@@ -342,6 +434,31 @@ internal sealed class GitLabPullRequestFetcher(
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private static HashSet<string> BuildDeltaPathSet(IEnumerable<GitLabMergeRequestChangeResponse> changes)
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var change in changes)
+        {
+            if (NormalizePath(change.NewPath ?? change.OldPath) is { } path)
+            {
+                paths.Add(path);
+            }
+
+            if (NormalizePath(change.OldPath) is { } oldPath)
+            {
+                paths.Add(oldPath);
+            }
+        }
+
+        return paths;
+    }
+
+    private static bool IsDeltaChange(GitLabMergeRequestChangeResponse change, IReadOnlySet<string> deltaPaths)
+    {
+        return (NormalizePath(change.NewPath ?? change.OldPath) is { } path && deltaPaths.Contains(path))
+               || (NormalizePath(change.OldPath) is { } oldPath && deltaPaths.Contains(oldPath));
+    }
+
     private sealed record GitLabMergeRequestResponse(
         [property: JsonPropertyName("title")] string? Title,
         [property: JsonPropertyName("description")]
@@ -372,6 +489,10 @@ internal sealed class GitLabPullRequestFetcher(
     private sealed record GitLabMergeRequestChangesResponse(
         [property: JsonPropertyName("changes")]
         IReadOnlyList<GitLabMergeRequestChangeResponse> Changes);
+
+    private sealed record GitLabCompareResponse(
+        [property: JsonPropertyName("diffs")]
+        IReadOnlyList<GitLabMergeRequestChangeResponse>? Diffs);
 
     private sealed record GitLabMergeRequestChangeResponse(
         [property: JsonPropertyName("old_path")]

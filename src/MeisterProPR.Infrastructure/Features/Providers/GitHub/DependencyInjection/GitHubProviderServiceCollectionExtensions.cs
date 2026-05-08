@@ -27,6 +27,8 @@ internal static class GitHubProviderServiceCollectionExtensions
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("MeisterProPR");
             });
 
+        services.TryAddSingleton<GitHubInstallationTokenCache>();
+        services.TryAddScoped<GitHubAuthenticationService>();
         services.TryAddScoped<GitHubConnectionVerifier>();
         services.TryAddScoped<GitHubWebhookSignatureVerifier>();
         services.TryAddScoped<GitHubWebhookEventClassifier>();

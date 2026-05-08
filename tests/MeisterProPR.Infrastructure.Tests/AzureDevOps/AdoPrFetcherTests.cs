@@ -123,4 +123,46 @@ public class AdoPrFetcherTests
 
         Assert.Equal(3, pr.ChangedFiles.Count);
     }
+
+    [Fact]
+    public void PullRequest_WithDeltaChangedFiles_PreservesFullManifestSeparately()
+    {
+        var deltaFiles = new List<ChangedFile>
+        {
+            new("/src/Changed.cs", ChangeType.Edit, "updated content", "- old\n+ new"),
+        }.AsReadOnly();
+        var fullManifest = new List<ChangedFileSummary>
+        {
+            new("/src/Changed.cs", ChangeType.Edit),
+            new("/src/Stable.cs", ChangeType.Edit),
+        }.AsReadOnly();
+
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            2,
+            "Delta PR",
+            null,
+            "feature/x",
+            "main",
+            deltaFiles,
+            AllChangedFileSummaries: fullManifest);
+
+        Assert.Single(pr.ChangedFiles);
+        Assert.Collection(
+            pr.AllPrFileSummaries,
+            item =>
+            {
+                Assert.Equal("/src/Changed.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("/src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+            });
+    }
 }

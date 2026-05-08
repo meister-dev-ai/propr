@@ -108,6 +108,17 @@ public interface IReviewJobExecutionStore
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Gets the most-recent completed review job with file results for the supplied stored revision key.
+    /// </summary>
+    Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Marks a review job as cancelled.
     /// </summary>
     /// <param name="id">The review job identifier.</param>

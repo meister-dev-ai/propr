@@ -59,14 +59,17 @@ public sealed class PrCrawlServiceTests
 
         this._providerActivationService.IsEnabledAsync(Arg.Any<ScmProvider>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        var defaultReviewer = new ReviewerIdentity(
+            new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath),
+            DefaultReviewerId.ToString("D"),
+            "review-bot",
+            "Review Bot",
+            true);
         this._clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+            .Returns(defaultReviewer);
+        this._clientRegistry.GetEffectiveReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReviewerIdentity(
-                    new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath),
-                    DefaultReviewerId.ToString("D"),
-                    "review-bot",
-                    "Review Bot",
-                    true));
+                defaultReviewer);
     }
 
     private static AssignedCodeReviewRef MakePr(
@@ -369,6 +372,11 @@ public sealed class PrCrawlServiceTests
         var pr = MakePr(142, 3, config);
 
         this._clientRegistry.GetReviewerIdentityAsync(
+                config.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns(reviewer);
+        this._clientRegistry.GetEffectiveReviewerIdentityAsync(
                 config.ClientId,
                 Arg.Any<ProviderHostRef>(),
                 Arg.Any<CancellationToken>())
@@ -1193,11 +1201,16 @@ public sealed class PrCrawlServiceTests
             "feature/provider-reviewer",
             "main");
 
-        this._clientRegistry.GetReviewerIdentityAsync(
+        this._clientRegistry.GetEffectiveReviewerIdentityAsync(
                 config.ClientId,
                 Arg.Any<ProviderHostRef>(),
                 Arg.Any<CancellationToken>())
             .Returns(reviewer);
+        this._clientRegistry.GetReviewerIdentityAsync(
+                config.ClientId,
+                Arg.Any<ProviderHostRef>(),
+                Arg.Any<CancellationToken>())
+            .Returns((ReviewerIdentity?)null);
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([config]);
         this._prFetcher.ListAssignedOpenReviewsAsync(config, Arg.Any<CancellationToken>())
             .Returns([pr]);
@@ -1221,8 +1234,7 @@ public sealed class PrCrawlServiceTests
             .SynchronizeAsync(
                 Arg.Is<PullRequestSynchronizationRequest>(request =>
                     request.PullRequestId == pr.CodeReview.Number &&
-                    request.RequestedReviewerIdentity == reviewer &&
-                    request.RequestedReviewerIdentity.ExternalUserId == providerReviewerId.ToString("D")),
+                    request.RequestedReviewerIdentity == null),
                 Arg.Any<CancellationToken>());
     }
 

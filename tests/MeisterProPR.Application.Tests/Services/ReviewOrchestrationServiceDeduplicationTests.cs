@@ -182,11 +182,19 @@ public class ReviewOrchestrationServiceDeduplicationTests
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
         clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -271,11 +279,19 @@ public class ReviewOrchestrationServiceDeduplicationTests
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewPrScan?>(null));
         clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(job.ProviderHost, reviewerId.ToString("D"), reviewerId.ToString("D"), reviewerId.ToString("D"), false));
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
         clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
         clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -346,5 +362,74 @@ public class ReviewOrchestrationServiceDeduplicationTests
                     result.CarriedForwardFilePaths.SequenceEqual(expectedCarriedForwardPaths)),
                 Arg.Any<ReviewerIdentity>(),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SameRevisionWithoutReplies_RemainsNoOp()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var prFetcher = Substitute.For<IPullRequestFetcher>();
+        var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        var commentPoster = CreatePublicationService();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var prScanRepository = Substitute.For<IReviewPrScanRepository>();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        var reviewerId = Guid.NewGuid();
+        var reviewerIdentity = new ReviewerIdentity(
+            job.ProviderHost,
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            reviewerId.ToString("D"),
+            false);
+
+        clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
+        clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, Arg.Any<CancellationToken>())
+            .Returns(reviewerIdentity);
+        clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
+        clientRegistry.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>(null));
+        clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "Same revision PR",
+            null,
+            "feature/x",
+            "main",
+            []);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(
+                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1")));
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, clientRegistry, prScanRepository);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.DidNotReceiveWithAnyArgs()
+            .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
+        await commentPoster.DidNotReceiveWithAnyArgs()
+            .PublishReviewAsync(Guid.Empty, null!, null!, null!, null!, Arg.Any<CancellationToken>());
+        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
     }
 }

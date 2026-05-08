@@ -144,14 +144,23 @@ public sealed class ProviderOperationalStatusService(
 
     private static string ResolveStatusReason(ClientScmConnectionDto connection, string readinessReason)
     {
+        var identityClarification =
+            " Reviewer-trigger settings only narrow automatic PR processing and do not change the authenticated connection identity used for posting.";
+
         if (!connection.IsActive)
         {
-            return "Connection is disabled.";
+            return "Connection is disabled." + identityClarification;
         }
 
-        return string.IsNullOrWhiteSpace(connection.LastVerificationError)
+        var preserveDetailedVerificationError = string.IsNullOrWhiteSpace(connection.LastVerificationFailureCategory)
+                                              || connection.ProviderFamily != ScmProvider.GitHub
+                                              || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation;
+
+        var baseReason = string.IsNullOrWhiteSpace(connection.LastVerificationError) || !preserveDetailedVerificationError
             ? readinessReason
             : connection.LastVerificationError;
+
+        return baseReason + identityClarification;
     }
 
     private static string? ResolveFailureCategory(

@@ -274,7 +274,7 @@ public sealed class GitLabPullRequestFetcherTests
                                         system = false,
                                         resolved = false,
                                         created_at = "2026-04-17T10:00:00Z",
-                                        author = new { id = 99, username = "meister-review-bot" },
+                                        author = new { id = 99, username = "meister-dev" },
                                         position = new
                                         {
                                             new_path = "src/Fetcher.cs", old_path = "src/Fetcher.cs", new_line = 18,
@@ -309,6 +309,131 @@ public sealed class GitLabPullRequestFetcherTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal(501, thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
+    }
+
+    [Fact]
+    public async Task FetchAsync_DeltaReview_ReturnsOnlyComparedFilesAndPreservesFullManifest()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var baselineRevision = new ReviewRevision("old-head", "base-sha", "start-sha", "old-head", "base-sha...old-head");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            title = "Add provider fetchers",
+                            description = "Fetch PRs without Azure-specific infrastructure.",
+                            state = "opened",
+                            source_branch = "feature/providers",
+                            target_branch = "main",
+                            sha = "new-head",
+                            diff_refs = new { base_sha = "base-sha", head_sha = "new-head", start_sha = "start-sha" },
+                            references = new { full = "acme/platform/propr!42", @short = "propr!42" },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            changes = new object[]
+                            {
+                                new
+                                {
+                                    old_path = "src/LegacyProvider.cs", new_path = "src/NewProvider.cs",
+                                    diff = "rename diff", new_file = false, deleted_file = false, renamed_file = true,
+                                },
+                                new
+                                {
+                                    old_path = (string?)null, new_path = "src/Fetcher.cs", diff = "+class Fetcher",
+                                    new_file = true, deleted_file = false, renamed_file = false,
+                                },
+                                new
+                                {
+                                    old_path = "src/Stable.cs", new_path = "src/Stable.cs", diff = "stable diff",
+                                    new_file = false, deleted_file = false, renamed_file = false,
+                                },
+                            },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/repository/compare?from=old-head&to=new-head" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            diffs = new object[]
+                            {
+                                new
+                                {
+                                    old_path = "src/LegacyProvider.cs", new_path = "src/NewProvider.cs",
+                                    diff = "rename diff", new_file = false, deleted_file = false, renamed_file = true,
+                                },
+                                new
+                                {
+                                    old_path = (string?)null, new_path = "src/Fetcher.cs", diff = "+class Fetcher",
+                                    new_file = true, deleted_file = false, renamed_file = false,
+                                },
+                            },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FNewProvider.cs/raw?ref=new-head"
+                    => new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new StringContent("public class NewProvider {}") },
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FLegacyProvider.cs/raw?ref=base-sha"
+                    => new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new StringContent("public class LegacyProvider {}") },
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=new-head" =>
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new StringContent("public class Fetcher {}") },
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new GitLabPullRequestFetcher(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://gitlab.example.com",
+            "acme/platform",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None,
+            compareToReviewRevision: baselineRevision);
+
+        Assert.Collection(
+            result.ChangedFiles,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+                Assert.Equal("src/LegacyProvider.cs", item.OriginalPath);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            });
+        Assert.Collection(
+            result.AllPrFileSummaries,
+            item =>
+            {
+                Assert.Equal("src/NewProvider.cs", item.Path);
+                Assert.Equal(ChangeType.Rename, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Fetcher.cs", item.Path);
+                Assert.Equal(ChangeType.Add, item.ChangeType);
+            },
+            item =>
+            {
+                Assert.Equal("src/Stable.cs", item.Path);
+                Assert.Equal(ChangeType.Edit, item.ChangeType);
+            });
     }
 }
 
@@ -672,6 +797,69 @@ public sealed class GitLabReviewDiscoveryProviderTests
         Assert.Equal("base-sha", item.ReviewRevision.BaseSha);
         Assert.Equal("meister-review-bot", item.RequestedReviewerIdentity!.Login);
     }
+
+    [Fact]
+    public async Task ListOpenReviewsAsync_WithoutRequestedReviewer_ReturnsBaselineOpenReviews()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests?state=opened&per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(
+                        new object[]
+                        {
+                            new
+                            {
+                                id = 4201,
+                                iid = 42,
+                                title = "Provider neutral adapters",
+                                web_url = "https://gitlab.example.com/acme/platform/propr/-/merge_requests/42",
+                                state = "opened",
+                                draft = false,
+                                source_branch = "feature/providers",
+                                target_branch = "main",
+                                sha = "head-sha",
+                                diff_refs = new { base_sha = "base-sha", head_sha = "head-sha", start_sha = "start-sha" },
+                                reviewers = new object[]
+                                {
+                                    new { id = 99, username = "meister-review-bot", name = "Meister Review Bot", bot = true },
+                                },
+                            },
+                            new
+                            {
+                                id = 4301,
+                                iid = 43,
+                                title = "Unassigned review",
+                                web_url = "https://gitlab.example.com/acme/platform/propr/-/merge_requests/43",
+                                state = "opened",
+                                draft = false,
+                                source_branch = "feature/other",
+                                target_branch = "main",
+                                sha = "head-sha-2",
+                                diff_refs = new { base_sha = "base-sha-2", head_sha = "head-sha-2", start_sha = "start-sha-2" },
+                                reviewers = new object[]
+                                {
+                                    new { id = 12, username = "other-reviewer", name = "Other Reviewer", bot = false },
+                                },
+                            },
+                        }),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+        var sut = new GitLabReviewDiscoveryProvider(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.ListOpenReviewsAsync(clientId, repository, null);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, item => item.CodeReview.Number == 42);
+        Assert.Contains(result, item => item.CodeReview.Number == 43);
+    }
 }
 
 public sealed class GitLabReviewThreadStatusProviderTests
@@ -682,9 +870,6 @@ public sealed class GitLabReviewThreadStatusProviderTests
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
         var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
-        var clientRegistry = Substitute.For<IClientRegistry>();
-        clientRegistry.GetReviewerIdentityAsync(clientId, host, Arg.Any<CancellationToken>())
-            .Returns(new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true));
         var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
             request.RequestUri!.AbsoluteUri switch
             {
@@ -704,7 +889,7 @@ public sealed class GitLabReviewThreadStatusProviderTests
                                         body = "Please handle null.",
                                         system = false,
                                         resolved = false,
-                                        author = new { id = 99, username = "meister-review-bot" },
+                                        author = new { id = 99, username = "meister-dev" },
                                         position = new { new_path = "src/feature.ts", old_path = "src/feature.ts" },
                                     },
                                     new
@@ -739,7 +924,6 @@ public sealed class GitLabReviewThreadStatusProviderTests
             });
         var sut = new GitLabReviewThreadStatusProvider(
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            clientRegistry,
             httpClientFactory);
 
         var result = await sut.GetReviewerThreadStatusesAsync(
@@ -756,7 +940,7 @@ public sealed class GitLabReviewThreadStatusProviderTests
         Assert.Equal("Fixed", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
-        Assert.Contains("meister-review-bot: Please handle null.", entry.CommentHistory);
+        Assert.Contains("meister-dev: Please handle null.", entry.CommentHistory);
         Assert.Contains("octocat: Done.", entry.CommentHistory);
     }
 }

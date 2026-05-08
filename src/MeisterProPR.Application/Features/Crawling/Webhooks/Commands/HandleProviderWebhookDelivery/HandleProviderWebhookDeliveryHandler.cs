@@ -237,6 +237,37 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
                 delivery.Revision,
                 ct);
             var configuredReviewer = await clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, ct);
+
+            if (configuredReviewer is not null
+                && classification.PullRequestStatus == PrStatus.Active
+                && !classification.RequiresLifecycleSync
+                && !await this.IsReviewAssignedToConfiguredReviewerAsync(
+                    configuration.ClientId,
+                    delivery.Host.Provider,
+                    effectiveReview,
+                    configuredReviewer,
+                    ct))
+            {
+                var skipped = NormalizeDecision(
+                    new WebhookRoutingDecision(
+                        WebhookDeliveryOutcome.Accepted,
+                        OkStatusCode,
+                        "accepted",
+                        [
+                            $"Skipped review intake for PR #{delivery.Review.Number} because reviewer trigger '{configuredReviewer.Login}' is not currently assigned.",
+                        ]));
+                await this.PersistLogAsync(
+                    configuration.Id,
+                    delivery.EventName,
+                    delivery.Repository.ExternalRepositoryId,
+                    delivery.Review.Number,
+                    delivery.SourceBranch,
+                    delivery.TargetBranch,
+                    skipped,
+                    ct);
+                return CompleteDecision(activity, startedAt, providerTagValue, delivery.EventName, true, skipped);
+            }
+
             var outcome = await pullRequestSynchronizationService.SynchronizeAsync(
                 new PullRequestSynchronizationRequest
                 {
@@ -306,6 +337,36 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         }
     }
 
+    private async Task<bool> IsReviewAssignedToConfiguredReviewerAsync(
+        Guid clientId,
+        ScmProvider provider,
+        CodeReviewRef review,
+        ReviewerIdentity reviewer,
+        CancellationToken ct)
+    {
+        var reviewQuery = await providerRegistry
+            .GetCodeReviewQueryService(provider)
+            .GetReviewAsync(clientId, review, ct);
+
+        if (ReviewerMatches(reviewQuery?.RequestedReviewerIdentity, reviewer))
+        {
+            return true;
+        }
+
+        var matchingReviews = await providerRegistry
+            .GetReviewDiscoveryProvider(provider)
+            .ListOpenReviewsAsync(clientId, review.Repository, reviewer, ct);
+
+        return matchingReviews.Any(item => item.CodeReview.Number == review.Number);
+    }
+
+    private static bool ReviewerMatches(ReviewerIdentity? actual, ReviewerIdentity expected)
+    {
+        return actual is not null
+               && (string.Equals(actual.Login, expected.Login, StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(actual.ExternalUserId, expected.ExternalUserId, StringComparison.Ordinal));
+    }
+
     private async Task PersistLogAsync(
         Guid configurationId,
         string eventType,
@@ -360,7 +421,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
     {
         if (revision is null)
         {
-            return false;
+            return true;
         }
 
         return !LooksLikeCommitSha(revision.HeadSha)

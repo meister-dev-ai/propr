@@ -22,7 +22,8 @@ internal sealed class ProviderPullRequestFetcher(
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         var provider = await this.ResolveProviderAsync(organizationUrl, clientId, cancellationToken);
         if (!this._providerFetchersByProvider.TryGetValue(provider, out var fetcher))
@@ -38,7 +39,8 @@ internal sealed class ProviderPullRequestFetcher(
             iterationId,
             compareToIterationId,
             clientId,
-            cancellationToken);
+            cancellationToken,
+            compareToReviewRevision);
     }
 
     private async Task<ScmProvider> ResolveProviderAsync(string organizationUrl, Guid? clientId, CancellationToken ct)

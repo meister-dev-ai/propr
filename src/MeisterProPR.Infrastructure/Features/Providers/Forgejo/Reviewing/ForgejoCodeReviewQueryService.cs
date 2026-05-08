@@ -45,8 +45,7 @@ internal sealed class ForgejoCodeReviewQueryService(
         var payload = await response.Content.ReadFromJsonAsync<ForgejoPullRequestResponse>(ct)
                       ?? throw new InvalidOperationException("Forgejo review query returned an empty payload.");
         var latestRevision = BuildRevision(payload);
-        var requestedReviewer = payload.RequestedReviewers?
-            .FirstOrDefault(reviewer => !string.IsNullOrWhiteSpace(reviewer.Login)) is { } reviewer
+        var requestedReviewer = SelectAssignedReviewer(payload) is { } reviewer
             ? new ReviewerIdentity(
                 review.Repository.Host,
                 reviewer.Id.ToString(CultureInfo.InvariantCulture),
@@ -106,6 +105,31 @@ internal sealed class ForgejoCodeReviewQueryService(
             : CodeReviewState.Closed;
     }
 
+    internal static bool ContainsAssignedReviewer(
+        ForgejoPullRequestResponse payload,
+        ReviewerIdentity reviewer)
+    {
+        return EnumerateAssignedReviewers(payload).Any(candidate => MatchesReviewer(candidate, reviewer));
+    }
+
+    internal static ForgejoUserResponse? SelectAssignedReviewer(
+        ForgejoPullRequestResponse payload,
+        ReviewerIdentity? reviewerFilter = null)
+    {
+        var candidates = EnumerateAssignedReviewers(payload).ToArray();
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        if (reviewerFilter is null)
+        {
+            return candidates[0];
+        }
+
+        return candidates.FirstOrDefault(candidate => MatchesReviewer(candidate, reviewerFilter)) ?? candidates[0];
+    }
+
     private static bool LooksLikeBot(string? login)
     {
         return !string.IsNullOrWhiteSpace(login)
@@ -125,6 +149,36 @@ internal sealed class ForgejoCodeReviewQueryService(
         return $"{Uri.EscapeDataString(repository.OwnerOrNamespace)}/{Uri.EscapeDataString(repositoryName)}";
     }
 
+    private static IEnumerable<ForgejoUserResponse> EnumerateAssignedReviewers(ForgejoPullRequestResponse payload)
+    {
+        var requestedReviewers = payload.RequestedReviewers?
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Login))
+            .ToArray();
+        if (requestedReviewers is { Length: > 0 })
+        {
+            return requestedReviewers;
+        }
+
+        var assignees = payload.Assignees?
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Login))
+            .ToArray();
+        if (assignees is { Length: > 0 })
+        {
+            return assignees;
+        }
+
+        return payload.Assignee is { } assignee && !string.IsNullOrWhiteSpace(assignee.Login)
+            ? [assignee]
+            : [];
+    }
+
+    private static bool MatchesReviewer(ForgejoUserResponse candidate, ReviewerIdentity reviewer)
+    {
+        return (!string.IsNullOrWhiteSpace(candidate.Login)
+                && string.Equals(candidate.Login, reviewer.Login, StringComparison.OrdinalIgnoreCase))
+               || candidate.Id.ToString(CultureInfo.InvariantCulture) == reviewer.ExternalUserId;
+    }
+
     internal sealed record ForgejoPullRequestResponse(
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("number")] int Number,
@@ -138,6 +192,10 @@ internal sealed class ForgejoCodeReviewQueryService(
         DateTimeOffset? MergedAt,
         [property: JsonPropertyName("head")] ForgejoBranchResponse? Head,
         [property: JsonPropertyName("base")] ForgejoBranchResponse? Base,
+        [property: JsonPropertyName("assignee")]
+        ForgejoUserResponse? Assignee,
+        [property: JsonPropertyName("assignees")]
+        IReadOnlyList<ForgejoUserResponse>? Assignees,
         [property: JsonPropertyName("requested_reviewers")]
         IReadOnlyList<ForgejoUserResponse>? RequestedReviewers);
 

@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -22,6 +23,58 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.CompletedTask;
     }
 
+    public Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default)
+    {
+        var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+        var activeJobs = this._jobs.Values
+            .Where(candidate => string.Equals(candidate.OrganizationUrl, job.OrganizationUrl, StringComparison.Ordinal)
+                                && string.Equals(candidate.ProjectId, job.ProjectId, StringComparison.Ordinal)
+                                && RepositoryMatches(candidate, job.RepositoryId, job.ProjectId)
+                                && candidate.PullRequestId == job.PullRequestId
+                                && candidate.Status is JobStatus.Pending or JobStatus.Processing)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(currentRevisionKey))
+        {
+            var duplicateJob = activeJobs.FirstOrDefault(candidate => string.Equals(
+                ReviewRevisionKeys.GetStoredKey(candidate.ReviewRevisionReference, candidate.IterationId),
+                currentRevisionKey,
+                StringComparison.Ordinal));
+            if (duplicateJob is not null)
+            {
+                return Task.FromResult(new TryAddReviewJobResult(false, duplicateJob, 0));
+            }
+
+            var cancelledSupersededJobCount = 0;
+            foreach (var activeJob in activeJobs.Where(candidate => !string.Equals(
+                         ReviewRevisionKeys.GetStoredKey(candidate.ReviewRevisionReference, candidate.IterationId),
+                         currentRevisionKey,
+                         StringComparison.Ordinal)))
+            {
+                if (activeJob.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled)
+                {
+                    continue;
+                }
+
+                activeJob.Status = JobStatus.Cancelled;
+                activeJob.CompletedAt = DateTimeOffset.UtcNow;
+                cancelledSupersededJobCount++;
+            }
+
+            this._jobs[job.Id] = job;
+            return Task.FromResult(new TryAddReviewJobResult(true, null, cancelledSupersededJobCount));
+        }
+
+        var duplicateIterationJob = activeJobs.FirstOrDefault(candidate => candidate.IterationId == job.IterationId);
+        if (duplicateIterationJob is not null)
+        {
+            return Task.FromResult(new TryAddReviewJobResult(false, duplicateIterationJob, 0));
+        }
+
+        this._jobs[job.Id] = job;
+        return Task.FromResult(new TryAddReviewJobResult(true, null, 0));
+    }
+
     public ReviewJob? FindActiveJob(
         string organizationUrl,
         string projectId,
@@ -32,7 +85,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return this._jobs.Values.FirstOrDefault(job =>
             string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
             && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
-            && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+            && RepositoryMatches(job, repositoryId, projectId)
             && job.PullRequestId == pullRequestId
             && job.IterationId == iterationId
             && job.Status is JobStatus.Pending or JobStatus.Processing);
@@ -49,7 +102,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             .Where(job =>
                 string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                 && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
-                && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                && RepositoryMatches(job, repositoryId, projectId)
                 && job.PullRequestId == pullRequestId
                 && job.IterationId == iterationId
                 && job.Status == JobStatus.Completed)
@@ -258,6 +311,30 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult(this.FindCompletedJob(organizationUrl, projectId, repositoryId, pullRequestId, iterationId));
     }
 
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(
+            this._jobs.Values
+                .Where(job =>
+                    string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                    && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                    && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                    && job.PullRequestId == pullRequestId
+                    && job.Status == JobStatus.Completed
+                    && string.Equals(
+                        ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
+                        storedRevisionKey,
+                        StringComparison.Ordinal))
+                .OrderByDescending(job => job.CompletedAt)
+                .FirstOrDefault());
+    }
+
     public Task UpdateAiConfigAsync(
         Guid id,
         Guid? connectionId,
@@ -313,5 +390,42 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             .AsReadOnly();
 
         return Task.FromResult<IReadOnlyList<ReviewJob>>(items);
+    }
+
+    private static bool RepositoryMatches(ReviewJob job, string repositoryId, string projectId)
+    {
+        return string.Equals(
+            GetRepositoryIdentityKey(job, job.RepositoryId, projectId),
+            GetRepositoryIdentityKey(job, repositoryId, projectId),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRepositoryIdentityKey(ReviewJob job, string repositoryId, string projectId)
+    {
+        if (job.Provider == ScmProvider.AzureDevOps)
+        {
+            return repositoryId;
+        }
+
+        var projectPath = string.IsNullOrWhiteSpace(job.RepositoryProjectPath)
+            ? repositoryId
+            : job.RepositoryProjectPath;
+        if (LooksLikeRepositoryPath(repositoryId) || LooksLikeRepositoryPath(projectPath))
+        {
+            return projectPath;
+        }
+
+        var ownerOrNamespace = string.IsNullOrWhiteSpace(job.RepositoryOwnerOrNamespace)
+            ? projectId
+            : job.RepositoryOwnerOrNamespace;
+        return string.Equals(repositoryId, job.RepositoryId, StringComparison.OrdinalIgnoreCase)
+            ? $"{ownerOrNamespace}/{repositoryId}"
+            : repositoryId;
+    }
+
+    private static bool LooksLikeRepositoryPath(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.Contains('/', StringComparison.Ordinal);
     }
 }

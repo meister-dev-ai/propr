@@ -41,15 +41,23 @@
         <label>OAuth Client ID</label>
         <input v-model="form.oAuthClientId" type="text" placeholder="Azure app registration client ID" />
       </div>
+      <div v-if="showGitHubAppFields" class="form-field">
+        <label>GitHub App ID</label>
+        <input v-model="form.gitHubAppId" type="number" min="1" placeholder="123456" />
+      </div>
+      <div v-if="showGitHubAppFields" class="form-field">
+        <label>Installation ID</label>
+        <input v-model="form.gitHubAppInstallationId" type="number" min="1" placeholder="987654321" />
+      </div>
       <div class="form-field provider-form-grid-full">
         <label>
-          Secret
-          <span v-if="!isCreateMode" class="field-hint-inline">(leave blank to keep current)</span>
+          {{ secretLabel }}
+          <span v-if="!isCreateMode" class="field-hint-inline">{{ secretHintText }}</span>
         </label>
         <input
           v-model="form.secret"
           type="password"
-          :placeholder="isCreateMode ? 'Paste the provider secret' : 'Optional replacement secret'"
+          :placeholder="secretPlaceholder"
         />
       </div>
     </div>
@@ -78,6 +86,8 @@ type ProviderConnectionFormModel = {
   authenticationKind: ScmAuthenticationKind
   oAuthTenantId?: string
   oAuthClientId?: string
+  gitHubAppId?: string | number
+  gitHubAppInstallationId?: string | number
   displayName: string
   secret: string
   isActive: boolean
@@ -93,11 +103,13 @@ const props = withDefaults(defineProps<{
   busyLabel: string
   submitButtonClass?: string
   showCancel?: boolean
+  secretRequired?: boolean
 }>(), {
   busy: false,
   error: '',
   submitButtonClass: 'btn-primary btn-sm provider-form-submit',
   showCancel: false,
+  secretRequired: false,
 })
 
 const emit = defineEmits<{
@@ -118,10 +130,31 @@ const availableProviderOptions = computed(() => props.providerOptions?.length ? 
 const authenticationOptions = computed(() =>
   props.form.providerFamily === 'azureDevOps'
     ? [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
-    : [{ value: 'personalAccessToken', label: 'Personal Access Token' }],
+    : props.form.providerFamily === 'github'
+      ? [
+          { value: 'personalAccessToken', label: 'Personal Access Token' },
+          { value: 'appInstallation', label: 'GitHub App Installation' },
+        ]
+      : [{ value: 'personalAccessToken', label: 'Personal Access Token' }],
 )
 const showAzureOAuthFields = computed(() => props.form.providerFamily === 'azureDevOps')
+const showGitHubAppFields = computed(
+  () => props.form.providerFamily === 'github' && props.form.authenticationKind === 'appInstallation',
+)
 const hostPlaceholder = computed(() => props.form.providerFamily === 'azureDevOps' ? 'https://dev.azure.com' : 'https://github.com')
+const secretLabel = computed(() => showGitHubAppFields.value ? 'Private Key (PEM)' : 'Secret')
+const secretHintText = computed(() =>
+  props.secretRequired ? '(required for this authentication change)' : '(leave blank to keep current)',
+)
+const secretPlaceholder = computed(() => {
+  if (showGitHubAppFields.value) {
+    return isCreateMode.value || props.secretRequired
+      ? 'Paste the GitHub App private key (PEM)'
+      : 'Optional replacement private key (PEM)'
+  }
+
+  return isCreateMode.value || props.secretRequired ? 'Paste the provider secret' : 'Optional replacement secret'
+})
 </script>
 
 <style scoped>

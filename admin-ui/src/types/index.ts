@@ -4040,7 +4040,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Updates one or more fields of a client (display name, active status, custom system message).
+         * Updates one or more fields of a client (display name, active status, review settings, custom system message).
          *     Requires a global admin JWT or `X-User-Pat`.
          */
         patch: {
@@ -7199,92 +7199,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Creates or updates a tenant membership for one user within the tenant. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    tenantId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["UpsertTenantMembershipRequest"];
-                    "text/json": components["schemas"]["UpsertTenantMembershipRequest"];
-                    "application/*+json": components["schemas"]["UpsertTenantMembershipRequest"];
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["TenantMembershipDto"];
-                        "application/json": components["schemas"]["TenantMembershipDto"];
-                        "text/json": components["schemas"]["TenantMembershipDto"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Forbidden */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9243,7 +9158,7 @@ export interface components {
             tenantSlug?: string | null;
             tenantDisplayName?: string | null;
         };
-        /** @description Client-scoped provider reviewer identity returned by admin APIs. */
+        /** @description Client-scoped provider reviewer-trigger identity returned by admin APIs. */
         ClientReviewerIdentityDto: {
             /** Format: uuid */
             id?: string;
@@ -9290,6 +9205,10 @@ export interface components {
             readinessReason?: string | null;
             hostVariant?: string | null;
             missingReadinessCriteria?: string[] | null;
+            /** Format: int64 */
+            gitHubAppId?: number | null;
+            /** Format: int64 */
+            gitHubAppInstallationId?: number | null;
         };
         /** @description Client-scoped SCM provider scope metadata returned by admin APIs. */
         ClientScmScopeDto: {
@@ -9385,6 +9304,8 @@ export interface components {
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
             proCursorSourceIds?: string[] | null;
             invalidProCursorSourceIds?: string[] | null;
+            /** Format: float */
+            reviewTemperature?: number | null;
         };
         /** @description A single repo filter entry in a PATCH request. */
         CrawlRepoFilterRequest: {
@@ -9416,6 +9337,8 @@ export interface components {
             repoFilters?: components["schemas"]["CrawlRepoFilterRequest"][] | null;
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
             proCursorSourceIds?: string[] | null;
+            /** Format: float */
+            reviewTemperature?: number | null;
         };
         /** @description Request body for creating an admin-managed webhook configuration. */
         CreateAdminWebhookConfigRequest: {
@@ -9428,6 +9351,8 @@ export interface components {
             providerProjectKey?: string | null;
             enabledEvents?: components["schemas"]["WebhookEventType"][] | null;
             repoFilters?: components["schemas"]["WebhookRepoFilterRequest"][] | null;
+            /** Format: float */
+            reviewTemperature?: number | null;
         };
         /** @description Request body for creating a provider-neutral AI connection profile. */
         CreateAiConnectionRequest: {
@@ -9455,6 +9380,10 @@ export interface components {
             displayName?: string | null;
             secret?: string | null;
             isActive?: boolean;
+            /** Format: int64 */
+            gitHubAppId?: number | null;
+            /** Format: int64 */
+            gitHubAppInstallationId?: number | null;
         };
         /** @description Request body for creating a client-scoped provider scope selection. */
         CreateClientProviderScopeRequest: {
@@ -9651,7 +9580,7 @@ export interface components {
              */
             clientId?: string;
             /**
-             * Format: int32
+             * Format: int64
              * @description ADO thread identifier.
              */
             threadId?: number;
@@ -9697,15 +9626,27 @@ export interface components {
         MemorySource: "threadResolved" | "adminDismissed";
         /**
          * @description Request body for patching an admin-managed crawl configuration.
-         *     Omit a field to leave it unchanged.
+         *     Omit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override.
          */
         PatchAdminCrawlConfigRequest: {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Optional crawl interval override in seconds.
+             */
             crawlIntervalSeconds?: number | null;
+            /** @description Optional activation-state update. */
             isActive?: boolean | null;
+            /** @description Optional full-replacement repository filter set. */
             repoFilters?: components["schemas"]["CrawlRepoFilterRequest"][] | null;
             proCursorSourceScopeMode?: components["schemas"]["ProCursorSourceScopeMode"];
+            /** @description Optional selected ProCursor source IDs. */
             proCursorSourceIds?: string[] | null;
+            /**
+             * Format: float
+             * @description Optional review temperature override. Set this property explicitly to null to clear the
+             *     stored override and fall back to default behavior.
+             */
+            reviewTemperature?: number | null;
         };
         /** @description Patch payload for installation licensing updates. */
         PatchAdminLicensingRequest: {
@@ -9717,11 +9658,23 @@ export interface components {
             /** @description Whether the provider family should be enabled installation-wide. */
             isEnabled?: boolean;
         };
-        /** @description Request body for patching an admin-managed webhook configuration. */
+        /**
+         * @description Request body for patching an admin-managed webhook configuration.
+         *     Omit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override.
+         */
         PatchAdminWebhookConfigRequest: {
+            /** @description Optional activation-state update. */
             isActive?: boolean | null;
+            /** @description Optional full-replacement enabled-event set. */
             enabledEvents?: components["schemas"]["WebhookEventType"][] | null;
+            /** @description Optional full-replacement repository filter set. */
             repoFilters?: components["schemas"]["WebhookRepoFilterRequest"][] | null;
+            /**
+             * Format: float
+             * @description Optional review temperature override. Set this property explicitly to null to clear the
+             *     stored override and fall back to default behavior.
+             */
+            reviewTemperature?: number | null;
         };
         /** @description Request body for patching a client-scoped provider connection. */
         PatchClientProviderConnectionRequest: {
@@ -9732,6 +9685,10 @@ export interface components {
             displayName?: string | null;
             secret?: string | null;
             isActive?: boolean | null;
+            /** Format: int64 */
+            gitHubAppId?: number | null;
+            /** Format: int64 */
+            gitHubAppInstallationId?: number | null;
         };
         /** @description Request body for patching a client-scoped provider scope selection. */
         PatchClientProviderScopeRequest: {
@@ -10194,6 +10151,8 @@ export interface components {
             outputTokens?: number | null;
             /** @description First 4000 characters of input text, or null. */
             inputTextSample?: string | null;
+            /** @description First 4000 characters of the system prompt used for this AI call, or null. */
+            systemPrompt?: string | null;
             /** @description First 1000 characters of output, or null. */
             outputSummary?: string | null;
             /** @description Error message if this event failed, or null. */
@@ -10204,6 +10163,19 @@ export interface components {
          * @enum {string}
          */
         ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation" | "operational";
+        /** @description Carries one final review comment attributable to a protocol pass. */
+        ProtocolReviewCommentDto: {
+            /** @description Repository-relative file path, when available. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description One-based line number, when available.
+             */
+            lineNumber?: number | null;
+            severity?: components["schemas"]["CommentSeverity"];
+            /** @description Final comment text. */
+            message?: string | null;
+        };
         /** @description Global provider-family activation status for installation-wide administration. */
         ProviderActivationStatusDto: {
             providerFamily?: components["schemas"]["ScmProvider"];
@@ -10403,6 +10375,10 @@ export interface components {
             aiConnectionCategory?: components["schemas"]["AiConnectionModelCategory"];
             /** @description The AI model deployment name used for this protocol pass. Null for legacy records. */
             modelId?: string | null;
+            /** @description Final review summary attributable to this protocol pass, when available. */
+            finalSummary?: string | null;
+            /** @description Final review comments attributable to this protocol pass, when available. */
+            finalComments?: components["schemas"]["ProtocolReviewCommentDto"][] | null;
             /** @description Ordered list of events captured during the loop. */
             events?: components["schemas"]["ProtocolEventDto"][] | null;
         };
@@ -10453,7 +10429,7 @@ export interface components {
             summary?: string | null;
             comments?: components["schemas"]["ReviewCommentDto"][] | null;
         };
-        /** @description Provider-neutral reviewer identity supplied by review intake clients. */
+        /** @description Provider-neutral reviewer identity supplied by review intake clients as trigger context. */
         ReviewReviewerIdentityDto: {
             externalUserId?: string | null;
             login?: string | null;
@@ -10503,7 +10479,7 @@ export interface components {
          * @enum {string}
          */
         ScmProvider: "azureDevOps" | "github" | "gitLab" | "forgejo";
-        /** @description Request body for setting a client-scoped provider reviewer identity. */
+        /** @description Request body for setting a client-scoped provider reviewer-trigger identity. */
         SetClientReviewerIdentityRequest: {
             externalUserId?: string | null;
             login?: string | null;
@@ -10535,6 +10511,7 @@ export interface components {
             displayName?: string | null;
             isActive?: boolean;
             localLoginEnabled?: boolean;
+            isEditable?: boolean;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -10615,7 +10592,7 @@ export interface components {
              */
             clientId?: string;
             /**
-             * Format: int32
+             * Format: int64
              * @description ADO thread ID.
              */
             threadId?: number;
@@ -10655,7 +10632,7 @@ export interface components {
         ThreadMemorySummaryDto: {
             /** Format: uuid */
             memoryRecordId?: string;
-            /** Format: int32 */
+            /** Format: int64 */
             threadId?: number;
             filePath?: string | null;
             resolutionSummaryExcerpt?: string | null;
@@ -10726,13 +10703,6 @@ export interface components {
             isEnabled?: boolean;
             autoCreateUsers?: boolean;
         };
-        /** @description Tenant membership create-or-update request payload. */
-        UpsertTenantMembershipRequest: {
-            /** Format: uuid */
-            userId?: string | null;
-            userIdentifier?: string | null;
-            role?: string | null;
-        };
         /** @description Response payload for one webhook configuration. */
         WebhookConfigurationResponse: {
             /** Format: uuid */
@@ -10751,6 +10721,8 @@ export interface components {
             generatedSecret?: string | null;
             /** Format: date-time */
             createdAt?: string;
+            /** Format: float */
+            reviewTemperature?: number | null;
         };
         /** @description Response payload for recent delivery-history entries. */
         WebhookDeliveryHistoryResponse: {

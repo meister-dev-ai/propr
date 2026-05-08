@@ -115,4 +115,79 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
         Assert.Equal(ScmProvider.GitHub, found.Provider);
         Assert.Equal("patch-1", found.ReviewPatchIdentity);
     }
+
+    [Fact]
+    public async Task FindActiveJobAsync_ProviderNeutralReviewRevisionMatchesAlternateRepositoryIdShape()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.example.com");
+        var storedRepository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var incomingRepository = new RepositoryRef(host, "acme/propr", "acme", "acme/propr");
+        var storedRequest = new SubmitReviewJobRequestDto(
+            host.HostBaseUrl,
+            storedRepository.OwnerOrNamespace,
+            storedRepository.ExternalRepositoryId,
+            42,
+            1)
+        {
+            Provider = ScmProvider.GitHub,
+            Host = host,
+            Repository = storedRepository,
+            CodeReview = new CodeReviewRef(storedRepository, CodeReviewPlatformKind.PullRequest, "42", 42),
+            ReviewRevision = new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"),
+        };
+
+        var incomingRequest = storedRequest with
+        {
+            RepositoryId = incomingRepository.ExternalRepositoryId,
+            Repository = incomingRepository,
+            CodeReview = new CodeReviewRef(incomingRepository, CodeReviewPlatformKind.PullRequest, "42", 42),
+        };
+
+        var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), storedRequest);
+
+        var found = await this._store.FindActiveJobAsync(job.ClientId, incomingRequest);
+
+        Assert.NotNull(found);
+        Assert.Equal(job.Id, found!.Id);
+    }
+
+    [Fact]
+    public async Task CreatePendingJobAsync_RequestedReviewerIdentity_DoesNotRedefinePersistedPostingContext()
+    {
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.example.com");
+        var repository = new RepositoryRef(host, "repo-gh-1", "acme", "acme/propr");
+        var request = new SubmitReviewJobRequestDto(
+            host.HostBaseUrl,
+            repository.OwnerOrNamespace,
+            repository.ExternalRepositoryId,
+            42,
+            1)
+        {
+            Provider = ScmProvider.GitHub,
+            Host = host,
+            Repository = repository,
+            CodeReview = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42),
+            ReviewRevision = new ReviewRevision("head-sha", "base-sha", "start-sha", "revision-1", "patch-1"),
+            RequestedReviewerIdentity = new ReviewerIdentity(
+                host,
+                "user-1",
+                "configured-reviewer",
+                "Configured Reviewer",
+                false),
+        };
+
+        var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
+        var persisted = await this._dbContext.ReviewJobs.FirstOrDefaultAsync(candidate => candidate.Id == job.Id);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(ScmProvider.GitHub, persisted!.Provider);
+        Assert.Equal("https://github.example.com", persisted.HostBaseUrl);
+        Assert.Equal("acme", persisted.RepositoryOwnerOrNamespace);
+        Assert.Equal("acme/propr", persisted.RepositoryProjectPath);
+        Assert.Equal("42", persisted.ExternalCodeReviewId);
+        Assert.Null(persisted.PrTitle);
+        Assert.Null(persisted.PrRepositoryName);
+        Assert.Null(persisted.PrSourceBranch);
+        Assert.Null(persisted.PrTargetBranch);
+    }
 }

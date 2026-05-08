@@ -69,6 +69,9 @@ flowchart TD
     workflow implementations.
 - Provider-specific behavior is being moved behind adapters for connection verification, discovery,
     review query and publication, reviewer identity resolution, and webhook ingress.
+- Reviewer-trigger identity is a configuration-only filter used for automatic PR selection. The
+    authenticated provider connection identity remains the author for provider write operations and
+    reviewer-owned thread detection.
 - Azure DevOps provides guided discovery and crawl materialization. GitHub, GitLab, and
     Forgejo-family adapters use the same normalized review, webhook, and thread-memory flows.
 - Provider connections, scopes, repositories, reviews, revisions, threads, comments, and webhook

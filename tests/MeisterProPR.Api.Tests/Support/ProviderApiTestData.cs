@@ -78,7 +78,7 @@ public static class ProviderApiTestData
                     ["verificationStatus"] = "verified",
                     ["readinessLevel"] = readinessLevel,
                     ["readinessReason"] = statusReason,
-                    ["missingReadinessCriteria"] = new JsonArray("Configured reviewer identity is required for workflow-complete readiness."),
+                    ["missingReadinessCriteria"] = new JsonArray("Automatic workflow proof is still missing for this provider variant."),
                     ["health"] = "degraded",
                     ["lastCheckedAt"] = DateTimeOffset.UtcNow.ToString("O"),
                     ["failureCategory"] = null,

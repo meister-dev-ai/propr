@@ -28,7 +28,8 @@ internal sealed class ForgejoPullRequestFetcher(
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         if (!clientId.HasValue)
         {
@@ -50,12 +51,22 @@ internal sealed class ForgejoPullRequestFetcher(
             repositoryPath,
             pullRequestId,
             cancellationToken);
+        var isDeltaReview = compareToIterationId.HasValue || compareToReviewRevision is not null;
+        var deltaChangedFilesResponse = await this.TryGetDeltaFilesAsync(
+                                        context,
+                                        host,
+                                        repositoryPath,
+                                        pullRequest,
+                                        changedFilesResponse,
+                                        compareToReviewRevision,
+                                        cancellationToken)
+                                    ?? changedFilesResponse;
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
             repositoryPath,
             pullRequest,
-            changedFilesResponse,
+            deltaChangedFilesResponse,
             cancellationToken);
         var allChangedFileSummaries = changedFilesResponse
             .Select(change => new ChangedFileSummary(change.FileName, MapChangeType(change.Status)))
@@ -82,7 +93,61 @@ internal sealed class ForgejoPullRequestFetcher(
             changedFiles.AsReadOnly(),
             MapStatus(pullRequest),
             existingThreads,
-            compareToIterationId.HasValue ? allChangedFileSummaries : null);
+            isDeltaReview ? allChangedFileSummaries : null,
+            AuthorizedIdentityName: context.AuthenticatedUsername);
+    }
+
+    private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetDeltaFilesAsync(
+        ForgejoConnectionVerifier.ForgejoConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        ForgejoPullRequestResponse pullRequest,
+        IReadOnlyList<ForgejoPullRequestFileResponse> allFiles,
+        ReviewRevision? compareToReviewRevision,
+        CancellationToken ct)
+    {
+        if (compareToReviewRevision is null)
+        {
+            return allFiles;
+        }
+
+        var currentHeadSha = NormalizeRevision(pullRequest.Head?.Sha);
+        var baselineHeadSha = NormalizeRevision(compareToReviewRevision.HeadSha);
+        if (string.IsNullOrWhiteSpace(currentHeadSha) || string.IsNullOrWhiteSpace(baselineHeadSha))
+        {
+            return null;
+        }
+
+        if (string.Equals(currentHeadSha, baselineHeadSha, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var compareFiles = await this.TryGetComparedFilesAsync(
+            context,
+            host,
+            repositoryPath,
+            baselineHeadSha,
+            currentHeadSha,
+            ct);
+        if (compareFiles is null)
+        {
+            return null;
+        }
+
+        if (compareFiles.Count == 0)
+        {
+            return [];
+        }
+
+        var deltaPaths = BuildDeltaPathSet(compareFiles);
+        var filteredFiles = allFiles
+            .Where(file => IsDeltaFile(file, deltaPaths))
+            .ToList();
+
+        return filteredFiles.Count == compareFiles.Count
+            ? filteredFiles.AsReadOnly()
+            : null;
     }
 
     private async Task<string> ResolveRepositoryPathAsync(
@@ -171,6 +236,34 @@ internal sealed class ForgejoPullRequestFetcher(
 
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullRequestFileResponse>>(ct)
                ?? [];
+    }
+
+    private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetComparedFilesAsync(
+        ForgejoConnectionVerifier.ForgejoConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        string baseRevision,
+        string headRevision,
+        CancellationToken ct)
+    {
+        using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+            ForgejoConnectionVerifier.BuildApiUri(
+                host,
+                $"/repos/{repositoryPath}/compare/{Uri.EscapeDataString(baseRevision)}...{Uri.EscapeDataString(headRevision)}"),
+            context.Connection.Secret);
+        using var response = await httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<ForgejoCompareResponse>(ct);
+        return payload?.Files ?? [];
     }
 
     private async Task<List<ChangedFile>> BuildChangedFilesAsync(
@@ -349,9 +442,7 @@ internal sealed class ForgejoPullRequestFetcher(
 
     private static PrThreadComment ToThreadComment(ForgejoPullReviewCommentResponse comment)
     {
-        var externalUserId = comment.User is null
-            ? null
-            : comment.User.Id.ToString(CultureInfo.InvariantCulture);
+        var externalUserId = comment.User?.Login;
         Guid? stableAuthorId = string.IsNullOrWhiteSpace(externalUserId)
             ? null
             : StableGuidGenerator.Create(externalUserId);
@@ -413,6 +504,36 @@ internal sealed class ForgejoPullRequestFetcher(
         return string.IsNullOrWhiteSpace(path) ? null : path.Trim().TrimStart('/');
     }
 
+    private static string? NormalizeRevision(string? revision)
+    {
+        return string.IsNullOrWhiteSpace(revision) ? null : revision.Trim();
+    }
+
+    private static HashSet<string> BuildDeltaPathSet(IEnumerable<ForgejoPullRequestFileResponse> files)
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            if (NormalizePath(file.FileName) is { } filePath)
+            {
+                paths.Add(filePath);
+            }
+
+            if (NormalizePath(file.PreviousFileName) is { } previousPath)
+            {
+                paths.Add(previousPath);
+            }
+        }
+
+        return paths;
+    }
+
+    private static bool IsDeltaFile(ForgejoPullRequestFileResponse file, IReadOnlySet<string> deltaPaths)
+    {
+        return (NormalizePath(file.FileName) is { } filePath && deltaPaths.Contains(filePath))
+               || (NormalizePath(file.PreviousFileName) is { } previousPath && deltaPaths.Contains(previousPath));
+    }
+
     private sealed record ForgejoRepositoryResponse(
         [property: JsonPropertyName("full_name")]
         string? FullName);
@@ -438,6 +559,10 @@ internal sealed class ForgejoPullRequestFetcher(
         [property: JsonPropertyName("previous_filename")]
         string? PreviousFileName,
         [property: JsonPropertyName("patch")] string? Patch);
+
+    private sealed record ForgejoCompareResponse(
+        [property: JsonPropertyName("files")]
+        IReadOnlyList<ForgejoPullRequestFileResponse>? Files);
 
     private sealed record ForgejoContentResponse(
         [property: JsonPropertyName("content")]

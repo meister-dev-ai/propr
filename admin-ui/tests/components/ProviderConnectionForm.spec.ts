@@ -14,6 +14,8 @@ describe('ProviderConnectionForm', () => {
       authenticationKind: 'personalAccessToken' as const,
       oAuthTenantId: '',
       oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -47,6 +49,8 @@ describe('ProviderConnectionForm', () => {
       authenticationKind: 'personalAccessToken' as const,
       oAuthTenantId: '',
       oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
       displayName: 'GitHub Cloud',
       secret: '',
       isActive: true,
@@ -74,6 +78,34 @@ describe('ProviderConnectionForm', () => {
     expect(wrapper.emitted('cancel')).toHaveLength(1)
   })
 
+  it('shows required secret copy during an auth-mode change in edit mode', async () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'appInstallation' as const,
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      displayName: 'GitHub Cloud',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'edit',
+        form,
+        secretRequired: true,
+        submitLabel: 'Save Changes',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect(wrapper.text()).toContain('required for this authentication change')
+    expect(wrapper.find('input[placeholder="Paste the GitHub App private key (PEM)"]').exists()).toBe(true)
+  })
+
   it('includes Azure DevOps in the shared provider selector', async () => {
     const form = reactive({
       providerFamily: 'github' as const,
@@ -81,6 +113,8 @@ describe('ProviderConnectionForm', () => {
       authenticationKind: 'personalAccessToken' as const,
       oAuthTenantId: '',
       oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -117,6 +151,8 @@ describe('ProviderConnectionForm', () => {
       authenticationKind: 'oauthClientCredentials' as const,
       oAuthTenantId: '',
       oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -140,5 +176,44 @@ describe('ProviderConnectionForm', () => {
 
     expect(form.oAuthTenantId).toBe('contoso.onmicrosoft.com')
     expect(form.oAuthClientId).toBe('11111111-1111-1111-1111-111111111111')
+  })
+
+  it('shows GitHub App fields and private-key copy for GitHub App authentication', async () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'appInstallation' as const,
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect(wrapper.text()).toContain('GitHub App ID')
+    expect(wrapper.text()).toContain('Installation ID')
+    expect(wrapper.text()).toContain('Private Key (PEM)')
+    expect(wrapper.find('input[placeholder="123456"]').exists()).toBe(true)
+    expect(wrapper.find('input[placeholder="987654321"]').exists()).toBe(true)
+    expect(wrapper.find('input[placeholder="Paste the GitHub App private key (PEM)"]').exists()).toBe(true)
+
+    await wrapper.find('input[placeholder="123456"]').setValue('123456')
+    await wrapper.find('input[placeholder="987654321"]').setValue('789012')
+    await wrapper.find('input[placeholder="Paste the GitHub App private key (PEM)"]').setValue('-----BEGIN PRIVATE KEY-----')
+
+    expect(form.gitHubAppId).toBe(123456)
+    expect(form.gitHubAppInstallationId).toBe(789012)
+    expect(form.secret).toBe('-----BEGIN PRIVATE KEY-----')
   })
 })

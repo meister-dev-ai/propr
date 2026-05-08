@@ -5,7 +5,7 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.DTOs;
 
-/// <summary>Client-scoped provider reviewer identity returned by admin APIs.</summary>
+/// <summary>Client-scoped provider reviewer-trigger identity returned by admin APIs.</summary>
 public sealed record ClientReviewerIdentityDto(
     Guid Id,
     Guid ClientId,

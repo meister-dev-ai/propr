@@ -46,11 +46,11 @@ public sealed partial class PrCrawlService(
             }
 
             IReadOnlyList<AssignedCodeReviewRef> assignedPrs;
-            ConfiguredReviewer configuredReviewer;
+            ResolvedReviewer reviewerContext;
             try
             {
                 assignedPrs = await prFetcher.ListAssignedOpenReviewsAsync(config, cancellationToken);
-                configuredReviewer = await this.ResolveConfiguredReviewerAsync(config, cancellationToken);
+                reviewerContext = await this.ResolveReviewerContextAsync(config, cancellationToken);
                 LogPrsDiscovered(logger, assignedPrs.Count, config.ProviderScopePath, config.ProviderProjectKey);
             }
             catch (Exception ex)
@@ -79,7 +79,7 @@ public sealed partial class PrCrawlService(
                             Repository = pr.Repository,
                             CodeReview = pr.CodeReview,
                             ReviewRevision = pr.ReviewRevision,
-                            RequestedReviewerIdentity = configuredReviewer.Identity,
+                            RequestedReviewerIdentity = reviewerContext.ConfiguredTriggerReviewer,
                             CandidateIterationId = pr.RevisionId,
                             PrTitle = pr.ReviewTitle,
                             RepositoryName = pr.RepositoryDisplayName,
@@ -94,7 +94,11 @@ public sealed partial class PrCrawlService(
                     continue;
                 }
 
-                if (!await this.ShouldEnqueueReviewAsync(config, pr, configuredReviewer.ReviewerId, cancellationToken))
+                if (!await this.ShouldEnqueueReviewAsync(
+                        config,
+                        pr,
+                        reviewerContext.EffectiveReviewerId,
+                        cancellationToken))
                 {
                     continue;
                 }
@@ -212,15 +216,15 @@ public sealed partial class PrCrawlService(
                     threadMemoryService is null,
                     prScanRepository is null);
             }
-            else if (!configuredReviewer.ReviewerId.HasValue)
-            {
-                LogStateMachineSkippedNoReviewerId(logger, config.ProviderScopePath, config.ProviderProjectKey);
-            }
             else
             {
                 foreach (var pr in assignedPrs)
                 {
-                    await this.RunThreadMemoryStateMachineAsync(config, pr, configuredReviewer.ReviewerId.Value, cancellationToken);
+                    await this.RunThreadMemoryStateMachineAsync(
+                        config,
+                        pr,
+                        reviewerContext.EffectiveReviewerId,
+                        cancellationToken);
                 }
             }
         }
@@ -253,7 +257,7 @@ public sealed partial class PrCrawlService(
             pr.RevisionId);
         var completedSameIterationAlreadyReviewed = completedJob is not null;
 
-        if (prScanRepository is null || threadStatusFetcher is null || !reviewerId.HasValue)
+        if (prScanRepository is null || threadStatusFetcher is null)
         {
             if (completedSameIterationAlreadyReviewed)
             {
@@ -299,7 +303,7 @@ public sealed partial class PrCrawlService(
                 config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                reviewerId.Value,
+                reviewerId ?? Guid.Empty,
                 config.ClientId,
                 ct);
 
@@ -398,37 +402,44 @@ public sealed partial class PrCrawlService(
         return true;
     }
 
-    private async Task<ConfiguredReviewer> ResolveConfiguredReviewerAsync(
+    private async Task<ResolvedReviewer> ResolveReviewerContextAsync(
         CrawlConfigurationDto config,
         CancellationToken ct)
     {
-        if (clientRegistry is not null)
+        if (clientRegistry is null)
         {
-            var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-            var reviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
-            if (reviewer is not null)
-            {
-                if (Guid.TryParse(reviewer.ExternalUserId, out var reviewerId))
-                {
-                    return new ConfiguredReviewer(reviewer, reviewerId);
-                }
-
-                if (reviewer.Host.Provider != ScmProvider.AzureDevOps)
-                {
-                    return new ConfiguredReviewer(reviewer, StableGuidGenerator.Create(reviewer.ExternalUserId));
-                }
-
-                return new ConfiguredReviewer(reviewer, null);
-            }
+            return new ResolvedReviewer(null, null);
         }
 
-        return new ConfiguredReviewer(null, null);
+        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+        var configuredTriggerReviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
+        var effectiveReviewer = configuredTriggerReviewer
+                                ?? await clientRegistry.GetEffectiveReviewerIdentityAsync(config.ClientId, host, ct);
+
+        return new ResolvedReviewer(configuredTriggerReviewer, ResolveReviewerId(effectiveReviewer));
+    }
+
+    private static Guid? ResolveReviewerId(ReviewerIdentity? reviewer)
+    {
+        if (reviewer is null)
+        {
+            return null;
+        }
+
+        if (Guid.TryParse(reviewer.ExternalUserId, out var reviewerId))
+        {
+            return reviewerId;
+        }
+
+        return reviewer.Host.Provider != ScmProvider.AzureDevOps
+            ? StableGuidGenerator.Create(reviewer.ExternalUserId)
+            : null;
     }
 
     private async Task RunThreadMemoryStateMachineAsync(
         CrawlConfigurationDto config,
         AssignedCodeReviewRef pr,
-        Guid reviewerId,
+        Guid? reviewerId,
         CancellationToken ct)
     {
         try
@@ -452,7 +463,7 @@ public sealed partial class PrCrawlService(
                 config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                reviewerId,
+                reviewerId ?? Guid.Empty,
                 config.ClientId,
                 ct);
 
@@ -565,5 +576,5 @@ public sealed partial class PrCrawlService(
                string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record ConfiguredReviewer(ReviewerIdentity? Identity, Guid? ReviewerId);
+    private sealed record ResolvedReviewer(ReviewerIdentity? ConfiguredTriggerReviewer, Guid? EffectiveReviewerId);
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Runtime.InteropServices;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using MeisterProPR.Infrastructure.Data;
@@ -17,6 +18,8 @@ namespace MeisterProPR.Infrastructure.Tests.Fixtures;
 /// </summary>
 public sealed class PostgresContainerFixture : IAsyncLifetime
 {
+    private const string RootlessPodmanSocketPath = "/run/user/1000/podman/podman.sock";
+
     private string? _connectionString;
     private PostgreSqlContainer? _postgres;
     private string? _skipReason;
@@ -46,7 +49,16 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         {
             try
             {
-                this._postgres = new PostgreSqlBuilder("pgvector/pgvector:pg17")
+                var postgresBuilder = new PostgreSqlBuilder("pgvector/pgvector:pg17");
+
+                // Rootless Podman commonly exposes its API socket here instead of /var/run/docker.sock.
+                var localPodmanSocket = TryGetLocalPodmanSocket();
+                if (localPodmanSocket is not null)
+                {
+                    postgresBuilder = postgresBuilder.WithDockerEndpoint(localPodmanSocket);
+                }
+
+                this._postgres = postgresBuilder
                     .Build();
 
                 await this._postgres.StartAsync();
@@ -111,6 +123,23 @@ public sealed class PostgresContainerFixture : IAsyncLifetime
         {
             return false;
         }
+    }
+
+    private static string? TryGetLocalPodmanSocket()
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DOCKER_HOST")))
+        {
+            return null;
+        }
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return null;
+        }
+
+        return File.Exists(RootlessPodmanSocketPath)
+            ? $"unix://{RootlessPodmanSocketPath}"
+            : null;
     }
 }
 

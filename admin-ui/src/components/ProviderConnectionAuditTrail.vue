@@ -6,7 +6,7 @@
     <div class="section-card-header">
       <div>
         <h3>Operational Audit Trail</h3>
-        <p class="section-subtitle">Recent provider connection lifecycle and verification events for staged rollout operations.</p>
+        <p class="section-subtitle">Recent provider connection lifecycle, reviewer-trigger, and verification events for staged rollout operations.</p>
       </div>
       <button class="btn-secondary btn-sm" @click="loadEntries">Refresh</button>
     </div>

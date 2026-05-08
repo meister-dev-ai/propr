@@ -25,7 +25,8 @@ public sealed partial class AdoPrFetcher(
         int iterationId,
         int? compareToIterationId = null,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null)
     {
         var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
             connectionRepository,

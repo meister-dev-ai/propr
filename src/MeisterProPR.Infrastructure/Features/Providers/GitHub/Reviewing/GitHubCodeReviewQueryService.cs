@@ -4,19 +4,25 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
 internal sealed class GitHubCodeReviewQueryService(
     GitHubConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory) : ICodeReviewQueryService
+    IHttpClientFactory httpClientFactory,
+    ILogger<GitHubCodeReviewQueryService>? logger = null) : ICodeReviewQueryService
 {
+    private readonly ILogger<GitHubCodeReviewQueryService> _logger = logger ?? NullLogger<GitHubCodeReviewQueryService>.Instance;
+
     public ScmProvider Provider => ScmProvider.GitHub;
 
     public async Task<ReviewDiscoveryItemDto?> GetReviewAsync(
@@ -25,16 +31,31 @@ internal sealed class GitHubCodeReviewQueryService(
         CancellationToken ct = default)
     {
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        using var request = GitHubConnectionVerifier.CreateAuthenticatedRequest(
+        using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 review.Repository.Host,
                 $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}"),
-            context.Connection.Secret);
+            ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
+        }
+
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        {
+            var detail = await ReadDiagnosticBodyAsync(response, ct);
+            this._logger.LogWarning(
+                "GitHub review query permission failure for repository {RepositoryPath} review {ReviewNumber} with status {StatusCode}. Detail: {Detail}",
+                BuildRepositoryPath(review.Repository),
+                review.Number,
+                (int)response.StatusCode,
+                detail);
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(detail)
+                    ? "GitHub review query failed because the configured credential no longer has permission to access this pull request."
+                    : $"GitHub review query failed because the configured credential no longer has permission to access this pull request. {detail}");
         }
 
         if (!response.IsSuccessStatusCode)
@@ -122,6 +143,31 @@ internal sealed class GitHubCodeReviewQueryService(
     {
         return string.Equals(reviewer.Type, "Bot", StringComparison.OrdinalIgnoreCase)
                || (reviewer.Login?.EndsWith("[bot]", StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private static async Task<string?> ReadDiagnosticBodyAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String)
+            {
+                return message.GetString()?.Trim();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return body.Trim();
     }
 
     private sealed record GitHubPullRequestResponse(

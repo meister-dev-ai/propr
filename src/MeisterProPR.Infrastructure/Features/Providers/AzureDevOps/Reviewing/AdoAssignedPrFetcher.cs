@@ -33,12 +33,7 @@ public sealed partial class AdoAssignedPrFetcher(
         CrawlConfigurationDto config,
         CancellationToken cancellationToken = default)
     {
-        var reviewerId = await this.ResolveReviewerIdAsync(config, cancellationToken);
-        if (!reviewerId.HasValue)
-        {
-            LogSkippedNoReviewerIdentity(logger, config.Id, config.ClientId);
-            return [];
-        }
+        var configuredReviewer = await this.ResolveConfiguredReviewerAsync(config, cancellationToken);
 
         using var activity = ActivitySource.StartActivity("AdoAssignedPrFetcher.GetAssignedOpenPullRequests");
         activity?.SetTag("ado.org", config.ProviderScopePath);
@@ -49,9 +44,13 @@ public sealed partial class AdoAssignedPrFetcher(
 
         var criteria = new GitPullRequestSearchCriteria
         {
-            ReviewerId = reviewerId,
             Status = PullRequestStatus.Active,
         };
+
+        if (configuredReviewer.ReviewerId.HasValue)
+        {
+            criteria.ReviewerId = configuredReviewer.ReviewerId.Value;
+        }
 
         var prs = await gitClient.GetPullRequestsByProjectAsync(
             config.ProviderProjectKey,
@@ -61,6 +60,14 @@ public sealed partial class AdoAssignedPrFetcher(
             cancellationToken: cancellationToken);
 
         activity?.SetTag("ado.prs_found", prs.Count);
+
+        if (configuredReviewer.Identity is not null && !configuredReviewer.ReviewerId.HasValue)
+        {
+            prs = prs
+                .Where(pr => ContainsReviewer(pr, configuredReviewer.Identity))
+                .ToList();
+            activity?.SetTag("ado.prs_after_reviewer_filter", prs.Count);
+        }
 
         // Apply repo and branch filters when the config specifies any.
         if (config.RepoFilters.Count > 0)
@@ -139,23 +146,27 @@ public sealed partial class AdoAssignedPrFetcher(
         return results;
     }
 
-    private async Task<Guid?> ResolveReviewerIdAsync(CrawlConfigurationDto config, CancellationToken cancellationToken)
+    private async Task<ConfiguredReviewer> ResolveConfiguredReviewerAsync(
+        CrawlConfigurationDto config,
+        CancellationToken cancellationToken)
     {
         if (clientRegistry is null)
         {
-            return null;
+            return new ConfiguredReviewer(null, null);
         }
 
         var host = new ProviderHostRef(ScmProvider.AzureDevOps, config.ProviderScopePath);
         var reviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, cancellationToken);
         if (reviewer is null)
         {
-            return null;
+            return new ConfiguredReviewer(null, null);
         }
 
-        return Guid.TryParse(reviewer.ExternalUserId, out var reviewerId)
-            ? reviewerId
-            : null;
+        return new ConfiguredReviewer(
+            reviewer,
+            Guid.TryParse(reviewer.ExternalUserId, out var reviewerId)
+                ? reviewerId
+                : null);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to get iterations for PR #{PrId}")]
@@ -166,15 +177,6 @@ public sealed partial class AdoAssignedPrFetcher(
         Message =
             "Failed to enrich PR #{PrId} with revision details for iteration {IterationId}; continuing without ReviewRevision snapshot")]
     private static partial void LogReviewRevisionFetchWarning(ILogger logger, int prId, int iterationId, Exception ex);
-
-    [LoggerMessage(
-        EventId = 5002,
-        Level = LogLevel.Warning,
-        Message = "Skipping crawl config {ConfigId} for client {ClientId} — reviewer identity not configured")]
-    private static partial void LogSkippedNoReviewerIdentity(
-        ILogger logger,
-        Guid configId,
-        Guid clientId);
 
     private async Task<GitHttpClient> ResolveGitClientAsync(CrawlConfigurationDto config, CancellationToken ct)
     {
@@ -253,6 +255,14 @@ public sealed partial class AdoAssignedPrFetcher(
         return false;
     }
 
+    private static bool ContainsReviewer(GitPullRequest pullRequest, ReviewerIdentity reviewer)
+    {
+        return pullRequest.Reviewers?.Any(candidate =>
+            string.Equals(candidate.Id, reviewer.ExternalUserId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate.UniqueName, reviewer.Login, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate.DisplayName, reviewer.DisplayName, StringComparison.OrdinalIgnoreCase)) == true;
+    }
+
     private static string StripRefsHeads(string branch)
     {
         return branch.StartsWith("refs/heads/", StringComparison.Ordinal) ? branch[11..] : branch;
@@ -264,4 +274,6 @@ public sealed partial class AdoAssignedPrFetcher(
         matcher.AddIncludePatterns(patterns);
         return matcher.Match(branch).HasMatches;
     }
+
+    private sealed record ConfiguredReviewer(ReviewerIdentity? Identity, Guid? ReviewerId);
 }

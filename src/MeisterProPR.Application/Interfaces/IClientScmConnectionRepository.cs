@@ -33,6 +33,8 @@ public interface IClientScmConnectionRepository
         string displayName,
         string secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default);
 
     /// <summary>Updates one provider connection for the given client.</summary>
@@ -46,6 +48,8 @@ public interface IClientScmConnectionRepository
         string displayName,
         string? secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default);
 
     /// <summary>Updates verification state for one provider connection.</summary>

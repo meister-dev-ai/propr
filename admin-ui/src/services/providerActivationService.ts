@@ -104,3 +104,15 @@ export function getProviderDefaultHostBaseUrl(providerFamily: ScmProviderFamily)
 export function getSupportedAuthenticationKind(providerFamily: ScmProviderFamily): ScmAuthenticationKind {
   return providerFamily === 'azureDevOps' ? 'oauthClientCredentials' : 'personalAccessToken'
 }
+
+export function getSupportedAuthenticationKinds(providerFamily: ScmProviderFamily): ScmAuthenticationKind[] {
+  if (providerFamily === 'azureDevOps') {
+    return ['oauthClientCredentials']
+  }
+
+  if (providerFamily === 'github') {
+    return ['personalAccessToken', 'appInstallation']
+  }
+
+  return ['personalAccessToken']
+}

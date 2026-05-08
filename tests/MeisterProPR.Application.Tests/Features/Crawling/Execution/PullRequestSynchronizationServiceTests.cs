@@ -39,6 +39,10 @@ public sealed class PullRequestSynchronizationServiceTests
             .Returns((ReviewJob?)null);
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
             .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
         scan.Threads.Add(
@@ -88,7 +92,7 @@ public sealed class PullRequestSynchronizationServiceTests
             summary => summary.Contains("Submitted review intake job", StringComparison.OrdinalIgnoreCase));
 
         await jobs.Received(1)
-            .AddAsync(
+            .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>
                     job.ClientId == ClientId &&
                     job.OrganizationUrl == "https://dev.azure.com/org" &&
@@ -96,7 +100,8 @@ public sealed class PullRequestSynchronizationServiceTests
                     job.RepositoryId == "repo-1" &&
                     job.PullRequestId == 42 &&
                     job.IterationId == 7 &&
-                    job.ReviewTemperature == 0.4f));
+                    job.ReviewTemperature == 0.4f),
+                Arg.Any<CancellationToken>());
         await threadMemoryService.Received(1)
             .HandleThreadResolvedAsync(
                 Arg.Is<ThreadResolvedDomainEvent>(evt =>
@@ -171,6 +176,8 @@ public sealed class PullRequestSynchronizationServiceTests
             .Returns((ReviewJob?)null);
         jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
             .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
 
         var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
         scan.Threads.Add(
@@ -219,6 +226,7 @@ public sealed class PullRequestSynchronizationServiceTests
             summary => summary.Contains("no new changes", StringComparison.OrdinalIgnoreCase));
 
         await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
         await threadMemoryService.DidNotReceive()
             .HandleThreadResolvedAsync(Arg.Any<ThreadResolvedDomainEvent>(), Arg.Any<CancellationToken>());
         await threadMemoryService.DidNotReceive()
@@ -254,6 +262,41 @@ public sealed class PullRequestSynchronizationServiceTests
             summary => summary.Contains(
                 "selected ProCursor source scope is empty",
                 StringComparison.OrdinalIgnoreCase));
+        await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenAtomicReservationDetectsDuplicate_ReturnsDuplicateOutcome()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var duplicateJob = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+        {
+            Status = JobStatus.Pending,
+        };
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(false, duplicateJob, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                CandidateIterationId = 7,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.DuplicateActiveJob, outcome.ReviewDecision);
+        Assert.Contains(
+            outcome.ActionSummaries,
+            summary => summary.Contains("Skipped duplicate active job", StringComparison.OrdinalIgnoreCase));
         await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 

@@ -53,6 +53,37 @@ public sealed class
                     .MaximumLength(256)
                     .WithMessage("OAuthClientId must not exceed 256 characters.");
             });
+
+        this.When(
+            request => request.ProviderFamily == ScmProvider.GitHub
+                       && request.AuthenticationKind == ScmAuthenticationKind.AppInstallation,
+            () =>
+            {
+                this.RuleFor(request => request.GitHubAppId)
+                    .NotNull()
+                    .WithMessage("GitHubAppId is required for GitHub App connections.")
+                    .GreaterThan(0)
+                    .WithMessage("GitHubAppId must be a positive numeric identifier.");
+
+                this.RuleFor(request => request.GitHubAppInstallationId)
+                    .NotNull()
+                    .WithMessage("GitHubAppInstallationId is required for GitHub App connections.")
+                    .GreaterThan(0)
+                    .WithMessage("GitHubAppInstallationId must be a positive numeric identifier.");
+            });
+
+        this.When(
+            request => request.ProviderFamily != ScmProvider.GitHub,
+            () =>
+            {
+                this.RuleFor(request => request.GitHubAppId)
+                    .Null()
+                    .WithMessage("GitHubAppId is only valid for GitHub provider connections.");
+
+                this.RuleFor(request => request.GitHubAppInstallationId)
+                    .Null()
+                    .WithMessage("GitHubAppInstallationId is only valid for GitHub provider connections.");
+            });
     }
 
     internal static bool RequiresOAuthMetadata(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind)
@@ -65,9 +96,12 @@ public sealed class
         ScmProvider providerFamily,
         ScmAuthenticationKind authenticationKind)
     {
-        return providerFamily == ScmProvider.AzureDevOps
-            ? authenticationKind == ScmAuthenticationKind.OAuthClientCredentials
-            : authenticationKind == ScmAuthenticationKind.PersonalAccessToken;
+        return providerFamily switch
+        {
+            ScmProvider.AzureDevOps => authenticationKind == ScmAuthenticationKind.OAuthClientCredentials,
+            ScmProvider.GitHub => authenticationKind is ScmAuthenticationKind.PersonalAccessToken or ScmAuthenticationKind.AppInstallation,
+            _ => authenticationKind == ScmAuthenticationKind.PersonalAccessToken,
+        };
     }
 
     internal static string GetUnsupportedAuthenticationKindMessage(ScmProvider providerFamily)
@@ -76,7 +110,8 @@ public sealed class
         {
             ScmProvider.AzureDevOps =>
                 "Azure DevOps provider connections currently support only OAuth client credentials.",
-            ScmProvider.GitHub => "GitHub provider connections currently support only personal access tokens.",
+            ScmProvider.GitHub =>
+                "GitHub provider connections currently support personal access tokens and GitHub App installations.",
             ScmProvider.GitLab => "GitLab provider connections currently support only personal access tokens.",
             ScmProvider.Forgejo => "Forgejo provider connections currently support only personal access tokens.",
             _ => $"{providerFamily} provider connections currently use a restricted authentication model.",

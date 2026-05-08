@@ -30,6 +30,6 @@ public sealed record SubmitReviewJobRequestDto(
     /// <summary>Normalized review revision when the caller can supply it.</summary>
     public ReviewRevision? ReviewRevision { get; init; }
 
-    /// <summary>Normalized reviewer identity when the caller can supply it.</summary>
+    /// <summary>Normalized reviewer-trigger identity when the caller can supply trigger context.</summary>
     public ReviewerIdentity? RequestedReviewerIdentity { get; init; }
 }

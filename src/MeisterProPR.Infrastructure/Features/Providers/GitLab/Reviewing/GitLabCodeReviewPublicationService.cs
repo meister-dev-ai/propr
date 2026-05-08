@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -17,6 +18,8 @@ internal sealed class GitLabCodeReviewPublicationService(
     GitLabConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory) : ICodeReviewPublicationService
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     public ScmProvider Provider => ScmProvider.GitLab;
 
     public async Task<ReviewCommentPostingDiagnosticsDto> PublishReviewAsync(
@@ -24,10 +27,16 @@ internal sealed class GitLabCodeReviewPublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity reviewer,
+        ReviewerIdentity author,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(result);
+
+        using var activity = ActivitySource.StartActivity("GitLabCodeReviewPublicationService.PublishReview");
+        activity?.SetTag("scm.provider", ScmProvider.GitLab.ToString());
+        activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
+        activity?.SetTag("review.number", review.Number);
+        activity?.SetTag("publication.author.login", author.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         var discussionUri = GitLabConnectionVerifier.BuildApiUri(
@@ -35,7 +44,7 @@ internal sealed class GitLabCodeReviewPublicationService(
             $"/projects/{Uri.EscapeDataString(review.Repository.ExternalRepositoryId)}/merge_requests/{review.Number}/discussions");
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
-        var summaryBody = BuildSummaryBody(result, reviewer);
+        var summaryBody = BuildSummaryBody(result, author);
         var inlineComments = result.Comments.Where(IsInlineComment).ToList();
         var inlineRevision = inlineComments.Count > 0
             ? await GetLatestInlineRevisionAsync(client, context.Connection.Secret, review, ct)
@@ -132,10 +141,10 @@ internal sealed class GitLabCodeReviewPublicationService(
                 responseBody));
     }
 
-    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity reviewer)
+    private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author)
     {
         var summaryBuilder = new StringBuilder();
-        summaryBuilder.AppendLine($"## {reviewer.DisplayName} Review");
+        summaryBuilder.AppendLine($"## {author.DisplayName} Review");
         summaryBuilder.AppendLine();
         summaryBuilder.AppendLine(result.Summary);
 

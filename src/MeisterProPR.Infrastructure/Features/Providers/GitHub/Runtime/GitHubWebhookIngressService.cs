@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -15,6 +16,8 @@ internal sealed class GitHubWebhookIngressService(
     GitHubWebhookPayloadParser payloadParser,
     IClientRegistry clientRegistry) : IWebhookIngressService
 {
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
+
     public ScmProvider Provider => ScmProvider.GitHub;
 
     public async Task<bool> VerifyAsync(
@@ -50,8 +53,20 @@ internal sealed class GitHubWebhookIngressService(
     {
         EnsureGitHub(host);
 
+        using var activity = ActivitySource.StartActivity("GitHubWebhookIngressService.Parse");
+        activity?.SetTag("scm.provider", ScmProvider.GitHub.ToString());
+        activity?.SetTag("provider.host", host.HostBaseUrl);
+
         var configuredReviewer = await clientRegistry.GetReviewerIdentityAsync(clientId, host, ct);
-        return payloadParser.Parse(host, headers, payload, configuredReviewer);
+        activity?.SetTag("reviewer.trigger.configured", configuredReviewer is not null);
+        if (configuredReviewer is not null)
+        {
+            activity?.SetTag("reviewer.trigger.login", configuredReviewer.Login);
+        }
+
+        var envelope = payloadParser.Parse(host, headers, payload, configuredReviewer);
+        activity?.SetTag("webhook.delivery_kind", envelope.DeliveryKind);
+        return envelope;
     }
 
     private static void EnsureGitHub(ProviderHostRef host)

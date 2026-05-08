@@ -88,7 +88,7 @@ public sealed class MentionsModuleTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns([pr]);
-        clientRegistry.GetReviewerIdentityAsync(ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
+        clientRegistry.GetEffectiveReviewerIdentityAsync(ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
             .Returns(
                 new ReviewerIdentity(
                     new ProviderHostRef(DefaultConfig.Provider, DefaultConfig.ProviderScopePath),

@@ -15,9 +15,12 @@ operational visibility. Guided Azure DevOps discovery is available through the s
     organization scopes, and reviewer setup are resolved from the same provider connections and
     provider scopes used by the other supported SCM families.
 - Provider connections own secrets and host configuration; provider scopes define the usable
-    administrative boundary inside each connection.
+     administrative boundary inside each connection.
+- GitHub provider connections support both PAT and GitHub App installation authentication. In app
+    mode the saved private key is protected at rest, and runtime installation tokens are minted on
+    demand instead of being stored durably.
 - Repository, review, revision, thread, comment, and webhook concepts are normalized so downstream
-    deduplication, thread memory, observability, and audit paths stay shared across provider families.
+     deduplication, thread memory, observability, and audit paths stay shared across provider families.
 - Provider readiness is evaluated as a separate read model. Verification answers whether onboarding
     checks passed; readiness answers whether the connection is configured, onboarding-ready,
     degraded, or workflow-complete for the selected provider family and host variant.
@@ -36,6 +39,11 @@ Azure DevOps in this order:
 2. Add the organization scope on that connection.
 3. Confirm or update the reviewer identity for that connection.
 4. Re-save crawl, ProCursor, or webhook configuration against the recreated provider-backed scope.
+
+The reviewer identity stored on a provider connection is optional and acts only as an automatic
+review trigger/filter. If it is empty, baseline crawl and webhook processing still applies. Provider
+reads and writes continue to authenticate through the connection credentials, not through the saved
+reviewer-trigger identity.
 
 ```mermaid
 sequenceDiagram
@@ -155,8 +163,9 @@ lifecycle, thread-memory, audit, or retention behavior.
 ## PR Crawler Flow
 
 The crawler finds new pull requests automatically. It periodically scans active crawl
-configurations, resolves matching PRs for the configured reviewer, and queues review jobs only when
-no active job already exists for the same PR state.
+configurations, resolves matching PRs for the baseline trigger set, optionally narrows that set by
+configured reviewer-trigger identity, and queues review jobs only when no active job already exists
+for the same PR state.
 
 ```mermaid
 sequenceDiagram
@@ -170,7 +179,7 @@ sequenceDiagram
         CR-->>CW: List<CrawlConfiguration>
 
         loop for each CrawlConfiguration
-            CW->>PF: GetOpenPrsForReviewerAsync(org, project, reviewer)
+            CW->>PF: GetOpenPrsForReviewerAsync(org, project, optional reviewer-trigger)
             PF-->>CW: List<PullRequest>
 
             loop for each PR

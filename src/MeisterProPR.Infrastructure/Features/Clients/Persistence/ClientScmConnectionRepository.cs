@@ -99,6 +99,8 @@ public sealed class ClientScmConnectionRepository(
         string displayName,
         string secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default)
     {
         if (!await dbContext.Clients.AnyAsync(client => client.Id == clientId, ct))
@@ -117,6 +119,7 @@ public sealed class ClientScmConnectionRepository(
         }
 
         var now = DateTimeOffset.UtcNow;
+        var usesGitHubAppInstallation = UsesGitHubAppInstallation(providerFamily, authenticationKind);
         var record = new ClientScmConnectionRecord
         {
             Id = Guid.NewGuid(),
@@ -126,6 +129,12 @@ public sealed class ClientScmConnectionRepository(
             AuthenticationKind = authenticationKind,
             OAuthTenantId = NormalizeOptional(oAuthTenantId),
             OAuthClientId = NormalizeOptional(oAuthClientId),
+            GitHubAppId = usesGitHubAppInstallation
+                ? NormalizeRequiredPositiveIdentifier(gitHubAppId, nameof(gitHubAppId))
+                : null,
+            GitHubAppInstallationId = usesGitHubAppInstallation
+                ? NormalizeRequiredPositiveIdentifier(gitHubAppInstallationId, nameof(gitHubAppInstallationId))
+                : null,
             DisplayName = NormalizeRequired(displayName),
             EncryptedSecretMaterial = secretProtectionCodec.Protect(NormalizeRequired(secret), SecretPurpose),
             VerificationStatus = "unknown",
@@ -157,6 +166,8 @@ public sealed class ClientScmConnectionRepository(
         string displayName,
         string? secret,
         bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
         CancellationToken ct = default)
     {
         var record = await dbContext.ClientScmConnections
@@ -187,11 +198,21 @@ public sealed class ClientScmConnectionRepository(
                                           record.OAuthTenantId,
                                           NormalizeOptional(oAuthTenantId),
                                           StringComparison.Ordinal)
-                                      || !string.Equals(
-                                          record.OAuthClientId,
-                                          NormalizeOptional(oAuthClientId),
-                                          StringComparison.Ordinal)
-                                      || !string.IsNullOrWhiteSpace(secret);
+                                       || !string.Equals(
+                                           record.OAuthClientId,
+                                           NormalizeOptional(oAuthClientId),
+                                           StringComparison.Ordinal)
+                                       || record.GitHubAppId != NormalizeGitHubAppIdentifier(
+                                           record.Provider,
+                                           authenticationKind,
+                                           gitHubAppId,
+                                           nameof(gitHubAppId))
+                                       || record.GitHubAppInstallationId != NormalizeGitHubAppIdentifier(
+                                           record.Provider,
+                                           authenticationKind,
+                                           gitHubAppInstallationId,
+                                           nameof(gitHubAppInstallationId))
+                                       || !string.IsNullOrWhiteSpace(secret);
         var wasActive = record.IsActive;
         var secretRotated = !string.IsNullOrWhiteSpace(secret);
 
@@ -199,6 +220,16 @@ public sealed class ClientScmConnectionRepository(
         record.AuthenticationKind = authenticationKind;
         record.OAuthTenantId = NormalizeOptional(oAuthTenantId);
         record.OAuthClientId = NormalizeOptional(oAuthClientId);
+        record.GitHubAppId = NormalizeGitHubAppIdentifier(
+            record.Provider,
+            authenticationKind,
+            gitHubAppId,
+            nameof(gitHubAppId));
+        record.GitHubAppInstallationId = NormalizeGitHubAppIdentifier(
+            record.Provider,
+            authenticationKind,
+            gitHubAppInstallationId,
+            nameof(gitHubAppInstallationId));
         record.DisplayName = NormalizeRequired(displayName);
         record.IsActive = isActive;
         record.UpdatedAt = DateTimeOffset.UtcNow;
@@ -308,7 +339,9 @@ public sealed class ClientScmConnectionRepository(
             record.LastVerificationError,
             record.LastVerificationFailureCategory,
             record.CreatedAt,
-            record.UpdatedAt);
+            record.UpdatedAt,
+            GitHubAppId: record.GitHubAppId,
+            GitHubAppInstallationId: record.GitHubAppInstallationId);
     }
 
     private ClientScmConnectionCredentialDto ToCredentialDto(ClientScmConnectionRecord record)
@@ -323,7 +356,9 @@ public sealed class ClientScmConnectionRepository(
             record.OAuthClientId,
             record.DisplayName,
             secretProtectionCodec.Unprotect(record.EncryptedSecretMaterial, SecretPurpose),
-            record.IsActive);
+            record.IsActive,
+            GitHubAppId: record.GitHubAppId,
+            GitHubAppInstallationId: record.GitHubAppInstallationId);
     }
 
     public async Task<ClientScmConnectionDto?> AddAsync(
@@ -346,6 +381,8 @@ public sealed class ClientScmConnectionRepository(
             displayName,
             secret,
             isActive,
+            null,
+            null,
             ct);
     }
 
@@ -369,7 +406,36 @@ public sealed class ClientScmConnectionRepository(
             displayName,
             secret,
             isActive,
+            null,
+            null,
             ct);
+    }
+
+    private static bool UsesGitHubAppInstallation(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind)
+    {
+        return providerFamily == ScmProvider.GitHub
+               && authenticationKind == ScmAuthenticationKind.AppInstallation;
+    }
+
+    private static long? NormalizeGitHubAppIdentifier(
+        ScmProvider providerFamily,
+        ScmAuthenticationKind authenticationKind,
+        long? value,
+        string parameterName)
+    {
+        return UsesGitHubAppInstallation(providerFamily, authenticationKind)
+            ? NormalizeRequiredPositiveIdentifier(value, parameterName)
+            : null;
+    }
+
+    private static long NormalizeRequiredPositiveIdentifier(long? value, string parameterName)
+    {
+        if (!value.HasValue || value.Value <= 0)
+        {
+            throw new InvalidOperationException($"{parameterName} must be a positive numeric identifier.");
+        }
+
+        return value.Value;
     }
 
     private async Task PurgeExpiredAuditEntriesAsync(CancellationToken ct)
