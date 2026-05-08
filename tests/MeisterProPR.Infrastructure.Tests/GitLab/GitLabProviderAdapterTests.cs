@@ -666,7 +666,7 @@ public sealed class GitLabCodeReviewPublicationServiceTests
         await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
         Assert.Equal(2, postedBodies.Count);
-        Assert.Contains("&lt;script&gt;alert('xss')&lt;/script&gt;", postedBodies[0], StringComparison.Ordinal);
+        Assert.Contains("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;", postedBodies[0], StringComparison.Ordinal);
         Assert.DoesNotContain("<script>alert('xss')</script>", postedBodies[0], StringComparison.Ordinal);
         Assert.Contains("Guard &lt;b&gt;this&lt;/b&gt; null case.", postedBodies[1], StringComparison.Ordinal);
         Assert.DoesNotContain("Guard <b>this</b> null case.", postedBodies[1], StringComparison.Ordinal);
