@@ -42,10 +42,11 @@ public sealed class ProCursorMiniIndexBuilder(
         var source = await this.ResolveSourceAsync(request, ct);
         if (source is null)
         {
+            var safeRepositoryId = request.ReviewContext.RepositoryId.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             logger.LogInformation(
                 "ProCursor mini-index overlay unavailable for client {ClientId}: no matching repository source found for {RepositoryId}.",
                 request.ClientId,
-                request.ReviewContext.RepositoryId);
+                safeRepositoryId);
             return null;
         }
 

@@ -46,12 +46,14 @@ internal sealed class GitHubCodeReviewQueryService(
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
         {
             var detail = await ReadDiagnosticBodyAsync(response, ct);
+            var safeRepositoryPath = BuildRepositoryPath(review.Repository).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+            var safeDetail = (detail ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 "GitHub review query permission failure for repository {RepositoryPath} review {ReviewNumber} with status {StatusCode}. Detail: {Detail}",
-                BuildRepositoryPath(review.Repository),
+                safeRepositoryPath,
                 review.Number,
                 (int)response.StatusCode,
-                detail);
+                safeDetail);
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(detail)
                     ? "GitHub review query failed because the configured credential no longer has permission to access this pull request."

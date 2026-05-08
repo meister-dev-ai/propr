@@ -55,12 +55,14 @@ internal sealed class GitHubLifecyclePublicationService(
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             var responseBody = await ReadDiagnosticBodyAsync(response, ct);
+            var safeRepositoryPath = BuildRepositoryPath(review.Repository).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+            var safeResponseBody = (responseBody ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             this._logger.LogWarning(
                 "GitHub review publication permission failure for repository {RepositoryPath} review {ReviewNumber} with status {StatusCode}. Detail: {Detail}",
-                BuildRepositoryPath(review.Repository),
+                safeRepositoryPath,
                 review.Number,
                 (int)response.StatusCode,
-                responseBody);
+                safeResponseBody);
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(responseBody)
                     ? "GitHub review publication failed because the configured credential no longer has permission to publish review comments."

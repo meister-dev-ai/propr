@@ -11,6 +11,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Security;
+using MeisterProPR.Infrastructure.Utilities;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 
@@ -172,7 +173,7 @@ internal sealed class GitLabCodeReviewPublicationService(
     private static HttpContent BuildDiscussionContent(GitLabDiscussionRequest payload)
     {
         var content = new MultipartFormDataContent();
-        content.Add(new StringContent(payload.Body), "body");
+        content.Add(new StringContent(HtmlSanitizer.Sanitize(payload.Body)), "body");
 
         if (payload.Position is not null)
         {
