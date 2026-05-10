@@ -22,7 +22,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Check formatting
         run: dotnet format --verify-no-changes --verbosity diagnostic
@@ -41,10 +41,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release && dotnet build MeisterProPR.ProCursor.slnx --no-restore --configuration Release
 
   architecture-gates:
     name: Architecture Gates
@@ -61,7 +61,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Run architecture dependency tests
         run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "VerticalSliceDependencyTests"
@@ -84,7 +84,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Run Reviewing application slice tests
         run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleTests|SubmitReviewJobHandlerTests|GetReviewJobStatusHandlerTests"
@@ -107,7 +107,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Run domain tests
         run: dotnet test tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
