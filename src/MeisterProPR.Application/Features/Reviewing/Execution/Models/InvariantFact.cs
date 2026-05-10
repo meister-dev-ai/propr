@@ -8,11 +8,34 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 /// </summary>
 public sealed record InvariantFact
 {
+    /// <summary>
+    ///     Invariant family used for domain-level facts.
+    /// </summary>
     public const string DomainFamily = "domain";
+
+    /// <summary>
+    ///     Invariant family used for architecture-level facts.
+    /// </summary>
     public const string ArchitectureFamily = "architecture";
+
+    /// <summary>
+    ///     Invariant family used for persistence-level facts.
+    /// </summary>
     public const string PersistenceFamily = "persistence";
+
+    /// <summary>
+    ///     Invariant identifier requiring review comment messages to be present.
+    /// </summary>
     public const string ReviewCommentMessageRequiredInvariantId = "review_comment_message_required";
+
+    /// <summary>
+    ///     Invariant identifier requiring review result comments to be present.
+    /// </summary>
     public const string ReviewResultCommentsRequiredInvariantId = "review_result_comments_required";
+
+    /// <summary>
+    ///     Invariant identifier requiring unique review file-result job paths.
+    /// </summary>
     public const string ReviewFileResultsUniqueJobPathInvariantId = "review_file_results_unique_job_file_path";
 
     private static readonly IReadOnlyDictionary<string, string> BlockingInvariantIdsByClaimKind =
@@ -23,6 +46,15 @@ public sealed record InvariantFact
             [CandidateReviewFinding.ReviewFileResultsDuplicateExpectedClaimKind] = ReviewFileResultsUniqueJobPathInvariantId,
         };
 
+    /// <summary>
+    ///     Initializes a deterministic invariant fact.
+    /// </summary>
+    /// <param name="invariantId">Stable identifier for the invariant.</param>
+    /// <param name="family">Family grouping for the invariant.</param>
+    /// <param name="name">Human-readable invariant name.</param>
+    /// <param name="source">Source that supplied the invariant fact.</param>
+    /// <param name="factValue">Normalized fact value.</param>
+    /// <param name="description">Human-readable description of the invariant.</param>
     public InvariantFact(
         string invariantId,
         string family,
@@ -69,18 +101,42 @@ public sealed record InvariantFact
         this.Description = description;
     }
 
+    /// <summary>
+    ///     Gets the stable identifier for the invariant.
+    /// </summary>
     public string InvariantId { get; }
 
+    /// <summary>
+    ///     Gets the family grouping for the invariant.
+    /// </summary>
     public string Family { get; }
 
+    /// <summary>
+    ///     Gets the human-readable invariant name.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    ///     Gets the source that supplied the invariant fact.
+    /// </summary>
     public string Source { get; }
 
+    /// <summary>
+    ///     Gets the normalized fact value.
+    /// </summary>
     public string FactValue { get; }
 
+    /// <summary>
+    ///     Gets the human-readable description of the invariant.
+    /// </summary>
     public string Description { get; }
 
+    /// <summary>
+    ///     Resolves the blocking invariant associated with a claim kind when one exists.
+    /// </summary>
+    /// <param name="claimKind">Claim kind to resolve.</param>
+    /// <param name="invariantId">Resolved blocking invariant identifier.</param>
+    /// <returns><c>true</c> when a blocking invariant exists; otherwise <c>false</c>.</returns>
     public static bool TryGetBlockingInvariantId(string claimKind, out string invariantId)
     {
         if (string.IsNullOrWhiteSpace(claimKind))

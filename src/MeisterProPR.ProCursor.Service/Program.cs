@@ -210,6 +210,9 @@ finally
     Log.CloseAndFlush();
 }
 
+/// <summary>
+///     Composition root for the extracted ProCursor service host.
+/// </summary>
 public partial class Program
 {
     internal static Task ApplyOperationalMigrationsAsync(ProCursorOperationalDbContext db)

@@ -10,5 +10,10 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 /// </summary>
 public interface IReviewClaimExtractor
 {
+    /// <summary>
+    ///     Extracts structured verification claims from a candidate review finding.
+    /// </summary>
+    /// <param name="finding">Candidate finding to analyze.</param>
+    /// <returns>The extracted verification claims.</returns>
     IReadOnlyList<ClaimDescriptor> ExtractClaims(CandidateReviewFinding finding);
 }

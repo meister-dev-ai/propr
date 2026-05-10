@@ -17,15 +17,18 @@ public sealed class ManagedRemoteProCursorGateway(
     IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
     HttpProCursorGateway remoteGateway) : IProCursorGateway
 {
+    /// <inheritdoc />
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
         => remoteGateway.ListSourcesAsync(clientId, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorKnowledgeSourceDto> CreateSourceAsync(
         Guid clientId,
         ProCursorKnowledgeSourceRegistrationRequest request,
         CancellationToken ct = default)
         => this.CreateSourceAndInvalidateAsync(clientId, request, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorIndexJobDto> QueueRefreshAsync(
         Guid clientId,
         Guid sourceId,
@@ -33,12 +36,14 @@ public sealed class ManagedRemoteProCursorGateway(
         CancellationToken ct = default)
         => remoteGateway.QueueRefreshAsync(clientId, sourceId, request, ct);
 
+    /// <inheritdoc />
     public Task<IReadOnlyList<ProCursorTrackedBranchDto>> ListTrackedBranchesAsync(
         Guid clientId,
         Guid sourceId,
         CancellationToken ct = default)
         => remoteGateway.ListTrackedBranchesAsync(clientId, sourceId, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorTrackedBranchDto> AddTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
@@ -46,6 +51,7 @@ public sealed class ManagedRemoteProCursorGateway(
         CancellationToken ct = default)
         => this.AddTrackedBranchAndInvalidateAsync(clientId, sourceId, request, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
@@ -54,6 +60,7 @@ public sealed class ManagedRemoteProCursorGateway(
         CancellationToken ct = default)
         => this.UpdateTrackedBranchAndInvalidateAsync(clientId, sourceId, trackedBranchId, request, ct);
 
+    /// <inheritdoc />
     public Task<bool> RemoveTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
@@ -61,11 +68,13 @@ public sealed class ManagedRemoteProCursorGateway(
         CancellationToken ct = default)
         => this.RemoveTrackedBranchAndInvalidateAsync(clientId, sourceId, trackedBranchId, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorKnowledgeAnswerDto> AskKnowledgeAsync(
         ProCursorKnowledgeQueryRequest request,
         CancellationToken ct = default)
         => remoteGateway.AskKnowledgeAsync(request, ct);
 
+    /// <inheritdoc />
     public Task<ProCursorSymbolInsightDto> GetSymbolInsightAsync(
         ProCursorSymbolQueryRequest request,
         CancellationToken ct = default)

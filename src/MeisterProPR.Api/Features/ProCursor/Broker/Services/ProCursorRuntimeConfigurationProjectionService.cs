@@ -16,6 +16,11 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Services;
 public sealed class ProCursorRuntimeConfigurationProjectionService(
     IProCursorKnowledgeSourceRepository knowledgeSourceRepository)
 {
+    /// <summary>
+    ///     Lists enabled runtime-configuration projections for ProCursor.
+    /// </summary>
+    /// <param name="ct">Cancellation token for the operation.</param>
+    /// <returns>The enabled runtime-configuration projections.</returns>
     public async Task<IReadOnlyList<ProCursorRuntimeConfigurationProjectionDto>> ListEnabledAsync(CancellationToken ct = default)
     {
         var sources = await knowledgeSourceRepository.ListEnabledAsync(ct);
@@ -25,6 +30,13 @@ public sealed class ProCursorRuntimeConfigurationProjectionService(
             .AsReadOnly();
     }
 
+    /// <summary>
+    ///     Rebuilds the runtime-configuration projection for a specific source.
+    /// </summary>
+    /// <param name="sourceId">ProCursor source identifier.</param>
+    /// <param name="request">Refresh request payload.</param>
+    /// <param name="ct">Cancellation token for the operation.</param>
+    /// <returns>The refreshed runtime-configuration projection.</returns>
     public async Task<ProCursorRuntimeConfigurationProjectionDto> RefreshAsync(
         Guid sourceId,
         ProCursorRuntimeConfigurationRefreshRequest request,

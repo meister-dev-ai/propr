@@ -18,6 +18,16 @@ public sealed class ProCursorBrokerController(
     IProCursorScmBroker scmBroker,
     IProCursorEmbeddingBroker embeddingBroker) : ControllerBase
 {
+    /// <summary>
+    ///     Materializes repository content for a tracked ProCursor branch.
+    /// </summary>
+    /// <param name="request">SCM materialization request payload.</param>
+    /// <param name="ct">Cancellation token for the request.</param>
+    /// <returns>The materialized SCM snapshot.</returns>
+    /// <response code="200">The repository content was materialized.</response>
+    /// <response code="404">The source or branch was not found.</response>
+    /// <response code="409">The request conflicts with the current source state.</response>
+    /// <response code="503">The upstream ProCursor dependency is unavailable.</response>
     [HttpPost("/internal/propr/procursor/broker/scm/materialize")]
     public async Task<IActionResult> Materialize(
         [FromBody] ProCursorScmMaterializationRequest request,
@@ -41,6 +51,16 @@ public sealed class ProCursorBrokerController(
         }
     }
 
+    /// <summary>
+    ///     Resolves the latest commit SHA for a tracked ProCursor branch.
+    /// </summary>
+    /// <param name="request">Tracked-branch head request payload.</param>
+    /// <param name="ct">Cancellation token for the request.</param>
+    /// <returns>The latest commit SHA for the tracked branch.</returns>
+    /// <response code="200">The latest branch head was resolved.</response>
+    /// <response code="404">The source or branch was not found.</response>
+    /// <response code="409">The request conflicts with the current source state.</response>
+    /// <response code="503">The upstream ProCursor dependency is unavailable.</response>
     [HttpPost("/internal/propr/procursor/broker/scm/branch-head")]
     public async Task<IActionResult> GetBranchHead(
         [FromBody] ProCursorTrackedBranchHeadRequest request,
@@ -65,6 +85,16 @@ public sealed class ProCursorBrokerController(
         }
     }
 
+    /// <summary>
+    ///     Resolves the embedding deployment configuration for a client.
+    /// </summary>
+    /// <param name="request">Embedding deployment request payload.</param>
+    /// <param name="ct">Cancellation token for the request.</param>
+    /// <returns>The embedding deployment configuration.</returns>
+    /// <response code="200">The deployment configuration was resolved.</response>
+    /// <response code="404">The client or deployment was not found.</response>
+    /// <response code="409">The request conflicts with the current embedding configuration.</response>
+    /// <response code="503">The upstream ProCursor dependency is unavailable.</response>
     [HttpPost("/internal/propr/procursor/broker/embeddings/deployment")]
     public async Task<IActionResult> GetEmbeddingDeployment(
         [FromBody] ProCursorEmbeddingDeploymentRequest request,
@@ -88,6 +118,16 @@ public sealed class ProCursorBrokerController(
         }
     }
 
+    /// <summary>
+    ///     Generates embeddings for a batch of inputs through the ProPR broker.
+    /// </summary>
+    /// <param name="request">Embedding batch request payload.</param>
+    /// <param name="ct">Cancellation token for the request.</param>
+    /// <returns>The generated embedding batch response.</returns>
+    /// <response code="200">Embeddings were generated successfully.</response>
+    /// <response code="404">The client or deployment was not found.</response>
+    /// <response code="409">The request conflicts with the current embedding configuration.</response>
+    /// <response code="503">The upstream ProCursor dependency is unavailable.</response>
     [HttpPost("/internal/propr/procursor/broker/embeddings/generate")]
     public async Task<IActionResult> GenerateEmbeddings(
         [FromBody] ProCursorEmbeddingBatchRequest request,

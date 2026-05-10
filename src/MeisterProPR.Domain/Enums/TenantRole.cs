@@ -6,6 +6,13 @@ namespace MeisterProPR.Domain.Enums;
 /// <summary>Tenant-scoped authorization role for a tenant membership.</summary>
 public enum TenantRole
 {
+    /// <summary>
+    ///     Standard tenant-scoped user role.
+    /// </summary>
     TenantUser = 0,
+
+    /// <summary>
+    ///     Elevated tenant-scoped administrator role.
+    /// </summary>
     TenantAdministrator = 1,
 }

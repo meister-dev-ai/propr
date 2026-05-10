@@ -10,6 +10,13 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 /// </summary>
 public interface IReviewFindingVerifier
 {
+    /// <summary>
+    ///     Verifies extracted work items against bounded evidence and invariants.
+    /// </summary>
+    /// <param name="workItems">Verification work items to evaluate.</param>
+    /// <param name="invariantFacts">Invariant facts that can block publication.</param>
+    /// <param name="ct">Cancellation token for the operation.</param>
+    /// <returns>The verification outcomes for the supplied work items.</returns>
     Task<IReadOnlyList<VerificationOutcome>> VerifyAsync(
         IReadOnlyList<VerificationWorkItem> workItems,
         IReadOnlyList<InvariantFact> invariantFacts,

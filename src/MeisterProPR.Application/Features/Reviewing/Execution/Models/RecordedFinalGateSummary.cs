@@ -8,6 +8,18 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 /// <summary>
 ///     Aggregate final-gate summary payload for one review run.
 /// </summary>
+/// <param name="CandidateCount">Total number of candidate findings evaluated.</param>
+/// <param name="PublishCount">Number of findings published normally.</param>
+/// <param name="SummaryOnlyCount">Number of findings reduced to summary-only output.</param>
+/// <param name="DropCount">Number of findings dropped entirely.</param>
+/// <param name="CategoryCounts">Per-category counts for evaluated findings.</param>
+/// <param name="InvariantBlockedCount">Number of decisions blocked by invariants.</param>
+/// <param name="OriginalSummary">Original summary before reconciliation.</param>
+/// <param name="FinalSummary">Final summary after reconciliation.</param>
+/// <param name="SummaryRewritePerformed">Whether summary reconciliation rewrote the summary.</param>
+/// <param name="DroppedFindingIds">Identifiers of findings dropped from the final output.</param>
+/// <param name="SummaryOnlyFindingIds">Identifiers of findings kept only in the summary.</param>
+/// <param name="SummaryRuleSource">Rule source used by summary reconciliation.</param>
 public sealed record RecordedFinalGateSummary(
     int CandidateCount,
     int PublishCount,
@@ -22,6 +34,13 @@ public sealed record RecordedFinalGateSummary(
     IReadOnlyList<string>? SummaryOnlyFindingIds,
     string? SummaryRuleSource)
 {
+    /// <summary>
+    ///     Builds an aggregate final-gate summary from findings, decisions, and optional summary reconciliation.
+    /// </summary>
+    /// <param name="findings">Candidate findings included in the review run.</param>
+    /// <param name="decisions">Final-gate decisions produced for the findings.</param>
+    /// <param name="reconciliation">Optional summary reconciliation result.</param>
+    /// <returns>The aggregated final-gate summary payload.</returns>
     public static RecordedFinalGateSummary FromFindingsAndDecisions(
         IReadOnlyList<CandidateReviewFinding> findings,
         IReadOnlyList<FinalGateDecision> decisions,

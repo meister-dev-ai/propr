@@ -8,6 +8,12 @@ namespace MeisterProPR.Application.Interfaces;
 /// <summary>Shared issuer for the application's JWT plus refresh-token session contract.</summary>
 public interface ISessionFactory
 {
+    /// <summary>
+    ///     Creates a JWT plus refresh-token session for the supplied user.
+    /// </summary>
+    /// <param name="user">Authenticated user receiving the session.</param>
+    /// <param name="ct">Cancellation token for the operation.</param>
+    /// <returns>The issued session payload.</returns>
     Task<IssuedSession> CreateAsync(AppUser user, CancellationToken ct = default);
 }
 

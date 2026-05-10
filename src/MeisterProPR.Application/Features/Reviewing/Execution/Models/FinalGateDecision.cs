@@ -8,10 +8,31 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 /// </summary>
 public sealed record FinalGateDecision
 {
+    /// <summary>
+    ///     Disposition used when a finding should be published normally.
+    /// </summary>
     public const string PublishDisposition = "Publish";
+
+    /// <summary>
+    ///     Disposition used when a finding should only affect the summary.
+    /// </summary>
     public const string SummaryOnlyDisposition = "SummaryOnly";
+
+    /// <summary>
+    ///     Disposition used when a finding should be dropped.
+    /// </summary>
     public const string DropDisposition = "Drop";
 
+    /// <summary>
+    ///     Initializes a deterministic final-gate decision for a finding.
+    /// </summary>
+    /// <param name="findingId">Identifier of the finding being decided.</param>
+    /// <param name="disposition">Final disposition selected for the finding.</param>
+    /// <param name="reasonCodes">Reason codes that justify the decision.</param>
+    /// <param name="ruleSource">Rule set or evaluator that produced the decision.</param>
+    /// <param name="blockedInvariantIds">Blocking invariants associated with the decision.</param>
+    /// <param name="evidenceSnapshot">Evidence snapshot used while making the decision.</param>
+    /// <param name="summaryText">Optional summary text emitted for summary-only decisions.</param>
     public FinalGateDecision(
         string findingId,
         string disposition,
@@ -58,20 +79,47 @@ public sealed record FinalGateDecision
             : null;
     }
 
+    /// <summary>
+    ///     Gets the identifier of the finding being decided.
+    /// </summary>
     public string FindingId { get; }
 
+    /// <summary>
+    ///     Gets the final disposition selected for the finding.
+    /// </summary>
     public string Disposition { get; }
 
+    /// <summary>
+    ///     Gets the reason codes that justify the decision.
+    /// </summary>
     public IReadOnlyList<string> ReasonCodes { get; }
 
+    /// <summary>
+    ///     Gets the rule set or evaluator that produced the decision.
+    /// </summary>
     public string RuleSource { get; }
 
+    /// <summary>
+    ///     Gets the blocking invariants associated with the decision.
+    /// </summary>
     public IReadOnlyList<string> BlockedInvariantIds { get; }
 
+    /// <summary>
+    ///     Gets the evidence snapshot used while making the decision.
+    /// </summary>
     public EvidenceReference? EvidenceSnapshot { get; }
 
+    /// <summary>
+    ///     Gets the optional summary text emitted for summary-only decisions.
+    /// </summary>
     public string? SummaryText { get; }
 
+    /// <summary>
+    ///     Converts the decision into a persisted final-gate decision record.
+    /// </summary>
+    /// <param name="finding">Finding metadata paired with the decision.</param>
+    /// <param name="includedInFinalSummary">Whether the finding was included in the final summary.</param>
+    /// <returns>The persisted representation of the decision.</returns>
     public RecordedFinalGateDecision ToRecordedDecision(CandidateReviewFinding finding, bool includedInFinalSummary = false)
     {
         ArgumentNullException.ThrowIfNull(finding);

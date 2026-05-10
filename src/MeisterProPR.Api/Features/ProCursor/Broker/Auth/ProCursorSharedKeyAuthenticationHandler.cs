@@ -20,6 +20,7 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
     Microsoft.Extensions.Options.IOptions<ProCursorRemoteOptions> remoteOptions)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
+    /// <inheritdoc />
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var configuredKey = remoteOptions.Value.SharedKey;

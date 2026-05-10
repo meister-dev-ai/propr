@@ -8,6 +8,15 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 /// </summary>
 public sealed record SummaryReconciliationResult
 {
+    /// <summary>
+    ///     Initializes the result of reconciling the summary after verification.
+    /// </summary>
+    /// <param name="originalSummary">Summary before reconciliation.</param>
+    /// <param name="finalSummary">Summary after reconciliation.</param>
+    /// <param name="droppedFindingIds">Identifiers of findings dropped from the final output.</param>
+    /// <param name="summaryOnlyFindingIds">Identifiers of findings kept only in the summary.</param>
+    /// <param name="rewritePerformed">Whether reconciliation rewrote the summary text.</param>
+    /// <param name="ruleSource">Rule source that produced the reconciliation.</param>
     public SummaryReconciliationResult(
         string originalSummary,
         string finalSummary,
@@ -39,15 +48,33 @@ public sealed record SummaryReconciliationResult
         this.RuleSource = ruleSource;
     }
 
+    /// <summary>
+    ///     Gets the summary before reconciliation.
+    /// </summary>
     public string OriginalSummary { get; }
 
+    /// <summary>
+    ///     Gets the summary after reconciliation.
+    /// </summary>
     public string FinalSummary { get; }
 
+    /// <summary>
+    ///     Gets identifiers of findings dropped from the final output.
+    /// </summary>
     public IReadOnlyList<string> DroppedFindingIds { get; }
 
+    /// <summary>
+    ///     Gets identifiers of findings kept only in the summary.
+    /// </summary>
     public IReadOnlyList<string> SummaryOnlyFindingIds { get; }
 
+    /// <summary>
+    ///     Gets a value indicating whether reconciliation rewrote the summary text.
+    /// </summary>
     public bool RewritePerformed { get; }
 
+    /// <summary>
+    ///     Gets the rule source that produced the reconciliation.
+    /// </summary>
     public string RuleSource { get; }
 }

@@ -20,6 +20,7 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
     IOptions<ProCursorHostOptions> hostOptions)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
+    /// <inheritdoc />
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var configuredKey = hostOptions.Value.SharedKey;

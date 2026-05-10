@@ -10,6 +10,13 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 /// </summary>
 public interface ISummaryReconciliationService
 {
+    /// <summary>
+    ///     Reconciles the original summary against final-gated finding outcomes.
+    /// </summary>
+    /// <param name="originalSummary">Summary produced before final gating.</param>
+    /// <param name="findings">Candidate findings from the review run.</param>
+    /// <param name="decisions">Final-gate decisions applied to those findings.</param>
+    /// <returns>The reconciliation result.</returns>
     SummaryReconciliationResult Reconcile(
         string originalSummary,
         IReadOnlyList<CandidateReviewFinding> findings,

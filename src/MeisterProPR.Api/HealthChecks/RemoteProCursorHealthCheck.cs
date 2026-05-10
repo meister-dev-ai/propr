@@ -16,6 +16,7 @@ public sealed class RemoteProCursorHealthCheck(
     IHttpClientFactory httpClientFactory,
     IOptions<ProCursorRemoteOptions> options) : IHealthCheck
 {
+    /// <inheritdoc />
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)

@@ -22,6 +22,7 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="ProCursorSourceScopeMode">Whether the crawl uses all client sources or an explicit subset.</param>
 /// <param name="ProCursorSourceIds">Explicit ProCursor source IDs selected for this crawl when source scoping is enabled.</param>
 /// <param name="InvalidProCursorSourceIds">Selected ProCursor source IDs that are now invalid and need operator repair.</param>
+/// <param name="ReviewTemperature">Optional review-temperature override for crawl-triggered review jobs.</param>
 public sealed record CrawlConfigurationDto(
     Guid Id,
     Guid ClientId,
