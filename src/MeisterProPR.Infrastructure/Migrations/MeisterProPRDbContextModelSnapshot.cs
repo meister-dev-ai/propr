@@ -328,234 +328,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("mention_reply_jobs", (string)null);
                 });
 
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorIndexJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("AttemptCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("attempt_count");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<string>("DedupKey")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("dedup_key");
-
-                    b.Property<string>("FailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("failure_reason");
-
-                    b.Property<string>("JobKind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("job_kind");
-
-                    b.Property<Guid>("KnowledgeSourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("knowledge_source_id");
-
-                    b.Property<DateTimeOffset>("QueuedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("queued_at");
-
-                    b.Property<string>("RequestedCommitSha")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("requested_commit_sha");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<short>("Status")
-                        .HasColumnType("smallint")
-                        .HasColumnName("status");
-
-                    b.Property<Guid>("TrackedBranchId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tracked_branch_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("KnowledgeSourceId");
-
-                    b.HasIndex("Status", "QueuedAt")
-                        .HasDatabaseName("ix_procursor_index_jobs_status_queued_at");
-
-                    b.HasIndex("TrackedBranchId", "DedupKey")
-                        .HasDatabaseName("ix_procursor_index_jobs_branch_dedup");
-
-                    b.ToTable("procursor_index_jobs", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("BaseSnapshotId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("base_snapshot_id");
-
-                    b.Property<int>("ChunkCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("chunk_count");
-
-                    b.Property<string>("CommitSha")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("commit_sha");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("FailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("failure_reason");
-
-                    b.Property<int>("FileCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("file_count");
-
-                    b.Property<Guid>("KnowledgeSourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("knowledge_source_id");
-
-                    b.Property<string>("SnapshotKind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("snapshot_kind");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("status");
-
-                    b.Property<bool>("SupportsSymbolQueries")
-                        .HasColumnType("boolean")
-                        .HasColumnName("supports_symbol_queries");
-
-                    b.Property<int>("SymbolCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("symbol_count");
-
-                    b.Property<Guid>("TrackedBranchId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tracked_branch_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BaseSnapshotId");
-
-                    b.HasIndex("TrackedBranchId");
-
-                    b.HasIndex("KnowledgeSourceId", "TrackedBranchId", "CommitSha")
-                        .IsUnique()
-                        .HasDatabaseName("uq_procursor_index_snapshots_source_branch_commit");
-
-                    b.HasIndex("KnowledgeSourceId", "TrackedBranchId", "CompletedAt")
-                        .HasDatabaseName("ix_procursor_index_snapshots_source_branch_completed_at");
-
-                    b.ToTable("procursor_index_snapshots", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeChunk", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ChunkKind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("chunk_kind");
-
-                    b.Property<int>("ChunkOrdinal")
-                        .HasColumnType("integer")
-                        .HasColumnName("chunk_ordinal");
-
-                    b.Property<string>("ContentHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("content_hash");
-
-                    b.Property<string>("ContentText")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("content_text");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Vector>("EmbeddingVector")
-                        .IsRequired()
-                        .HasColumnType("vector(1536)")
-                        .HasColumnName("embedding_vector");
-
-                    b.Property<int?>("LineEnd")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_end");
-
-                    b.Property<int?>("LineStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_start");
-
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("snapshot_id");
-
-                    b.Property<string>("SourcePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("source_path");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("title");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmbeddingVector")
-                        .HasDatabaseName("ix_procursor_knowledge_chunks_embedding_hnsw");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("EmbeddingVector"), "hnsw");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("EmbeddingVector"), new[] { "vector_cosine_ops" });
-
-                    b.HasIndex("SnapshotId", "SourcePath", "ChunkOrdinal")
-                        .IsUnique()
-                        .HasDatabaseName("uq_procursor_knowledge_chunks_snapshot_path_ordinal");
-
-                    b.ToTable("procursor_knowledge_chunks", (string)null);
-                });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
                 {
@@ -657,335 +429,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("procursor_knowledge_sources", (string)null);
                 });
 
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorSymbolEdge", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("EdgeKind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("edge_kind");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("file_path");
-
-                    b.Property<string>("FromSymbolKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("from_symbol_key");
-
-                    b.Property<int?>("LineEnd")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_end");
-
-                    b.Property<int?>("LineStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_start");
-
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("snapshot_id");
-
-                    b.Property<string>("ToSymbolKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("to_symbol_key");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SnapshotId", "FromSymbolKey")
-                        .HasDatabaseName("ix_procursor_symbol_edges_snapshot_from_symbol");
-
-                    b.HasIndex("SnapshotId", "FromSymbolKey", "ToSymbolKey", "EdgeKind", "FilePath", "LineStart", "LineEnd")
-                        .HasDatabaseName("ix_procursor_symbol_edges_snapshot_relation");
-
-                    b.ToTable("procursor_symbol_edges", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorSymbolRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ContainingSymbolKey")
-                        .HasColumnType("text")
-                        .HasColumnName("containing_symbol_key");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("display_name");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("file_path");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("language");
-
-                    b.Property<int>("LineEnd")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_end");
-
-                    b.Property<int>("LineStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("line_start");
-
-                    b.Property<string>("SearchText")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("search_text");
-
-                    b.Property<string>("Signature")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("signature");
-
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("snapshot_id");
-
-                    b.Property<string>("SymbolKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("symbol_key");
-
-                    b.Property<string>("SymbolKind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("symbol_kind");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SnapshotId", "DisplayName")
-                        .HasDatabaseName("ix_procursor_symbol_records_snapshot_display_name");
-
-                    b.HasIndex("SnapshotId", "SymbolKey")
-                        .IsUnique()
-                        .HasDatabaseName("uq_procursor_symbol_records_snapshot_symbol_key");
-
-                    b.ToTable("procursor_symbol_records", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorTokenUsageEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("AiConnectionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ai_connection_id");
-
-                    b.Property<short>("CallType")
-                        .HasColumnType("smallint")
-                        .HasColumnName("call_type");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<long>("CompletionTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("completion_tokens");
-
-                    b.Property<bool>("CostEstimated")
-                        .HasColumnType("boolean")
-                        .HasColumnName("cost_estimated");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("DeploymentName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("deployment_name");
-
-                    b.Property<decimal?>("EstimatedCostUsd")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)")
-                        .HasColumnName("estimated_cost_usd");
-
-                    b.Property<Guid?>("IndexJobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("index_job_id");
-
-                    b.Property<Guid?>("KnowledgeChunkId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("knowledge_chunk_id");
-
-                    b.Property<string>("ModelName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("model_name");
-
-                    b.Property<DateTimeOffset>("OccurredAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("occurred_at_utc");
-
-                    b.Property<Guid>("ProCursorSourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("procursor_source_id");
-
-                    b.Property<long>("PromptTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("prompt_tokens");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("request_id");
-
-                    b.Property<string>("ResourceId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("SafeMetadataJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("safe_metadata_json");
-
-                    b.Property<string>("SourceDisplayNameSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("source_display_name_snapshot");
-
-                    b.Property<string>("SourcePath")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("source_path");
-
-                    b.Property<string>("TokenizerName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("tokenizer_name");
-
-                    b.Property<bool>("TokensEstimated")
-                        .HasColumnType("boolean")
-                        .HasColumnName("tokens_estimated");
-
-                    b.Property<long>("TotalTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_tokens");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IndexJobId")
-                        .HasDatabaseName("ix_procursor_token_usage_events_index_job_id");
-
-                    b.HasIndex("ClientId", "OccurredAtUtc")
-                        .HasDatabaseName("ix_procursor_token_usage_events_client_occurred_at");
-
-                    b.HasIndex("ClientId", "RequestId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_procursor_token_usage_events_client_request");
-
-                    b.HasIndex("ProCursorSourceId", "OccurredAtUtc")
-                        .HasDatabaseName("ix_procursor_token_usage_events_source_occurred_at");
-
-                    b.HasIndex("ClientId", "ModelName", "OccurredAtUtc")
-                        .HasDatabaseName("ix_procursor_token_usage_events_client_model_occurred_at");
-
-                    b.ToTable("procursor_token_usage_events", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorTokenUsageRollup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateOnly>("BucketStartDate")
-                        .HasColumnType("date")
-                        .HasColumnName("bucket_start_date");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<long>("CompletionTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("completion_tokens");
-
-                    b.Property<decimal?>("EstimatedCostUsd")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)")
-                        .HasColumnName("estimated_cost_usd");
-
-                    b.Property<long>("EstimatedEventCount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("estimated_event_count");
-
-                    b.Property<long>("EventCount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("event_count");
-
-                    b.Property<short>("Granularity")
-                        .HasColumnType("smallint")
-                        .HasColumnName("granularity");
-
-                    b.Property<DateTimeOffset>("LastRecomputedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_recomputed_at_utc");
-
-                    b.Property<string>("ModelName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("model_name");
-
-                    b.Property<Guid?>("ProCursorSourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("procursor_source_id");
-
-                    b.Property<long>("PromptTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("prompt_tokens");
-
-                    b.Property<string>("SourceDisplayNameSnapshot")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("source_display_name_snapshot");
-
-                    b.Property<long>("TotalTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_tokens");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "Granularity", "BucketStartDate")
-                        .HasDatabaseName("ix_procursor_token_usage_rollups_client_granularity_bucket");
-
-                    b.HasIndex("ClientId", "ModelName", "Granularity", "BucketStartDate")
-                        .HasDatabaseName("ix_procursor_token_usage_rollups_client_model_granularity_bucket");
-
-                    b.HasIndex("ClientId", "ProCursorSourceId", "Granularity", "BucketStartDate")
-                        .HasDatabaseName("ix_procursor_token_usage_rollups_source_granularity_bucket");
-
-                    b.HasIndex("ClientId", "ProCursorSourceId", "BucketStartDate", "Granularity", "ModelName")
-                        .IsUnique()
-                        .HasDatabaseName("ux_procursor_token_usage_rollups_scope");
-
-                    b.ToTable("procursor_token_usage_rollups", (string)null);
-                });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorTrackedBranch", b =>
                 {
@@ -1835,7 +1278,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("model_category");
 
-                    b.PrimitiveCollection<string>("Models")
+                    b.PrimitiveCollection<string[]>("Models")
+                        .ElementType()
+                        .IsRequired();
+
+                    b.PrimitiveCollection<string[]>("Models")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("models");
@@ -2420,7 +1867,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source_provider");
 
-                    b.PrimitiveCollection<string>("TargetBranchPatterns")
+                    b.PrimitiveCollection<string[]>("TargetBranchPatterns")
+                        .ElementType()
+                        .IsRequired();
+
+                    b.PrimitiveCollection<string[]>("TargetBranchPatterns")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("target_branch_patterns");
@@ -3062,7 +2513,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.PrimitiveCollection<string>("EnabledEvents")
+                    b.PrimitiveCollection<string[]>("EnabledEvents")
+                        .ElementType()
+                        .IsRequired();
+
+                    b.PrimitiveCollection<string[]>("EnabledEvents")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("enabled_events");
@@ -3133,7 +2588,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.PrimitiveCollection<string>("ActionSummaries")
+                    b.PrimitiveCollection<string[]>("ActionSummaries")
+                        .ElementType()
+                        .IsRequired();
+
+                    b.PrimitiveCollection<string[]>("ActionSummaries")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("action_summaries");
@@ -3229,7 +2688,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source_provider");
 
-                    b.PrimitiveCollection<string>("TargetBranchPatterns")
+                    b.PrimitiveCollection<string[]>("TargetBranchPatterns")
+                        .ElementType()
+                        .IsRequired();
+
+                    b.PrimitiveCollection<string[]>("TargetBranchPatterns")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("target_branch_patterns");
@@ -3283,50 +2746,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorIndexJob", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", null)
-                        .WithMany()
-                        .HasForeignKey("KnowledgeSourceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorTrackedBranch", null)
-                        .WithMany()
-                        .HasForeignKey("TrackedBranchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", null)
-                        .WithMany()
-                        .HasForeignKey("BaseSnapshotId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", null)
-                        .WithMany()
-                        .HasForeignKey("KnowledgeSourceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorTrackedBranch", null)
-                        .WithMany()
-                        .HasForeignKey("TrackedBranchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeChunk", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", null)
-                        .WithMany()
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
@@ -3339,24 +2758,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("OrganizationScopeId")
                         .OnDelete(DeleteBehavior.SetNull);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorSymbolEdge", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", null)
-                        .WithMany()
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorSymbolRecord", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ProCursorIndexSnapshot", null)
-                        .WithMany()
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorTrackedBranch", b =>
