@@ -25,7 +25,7 @@ jobs:
         run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Check formatting
-        run: dotnet format --verify-no-changes --verbosity diagnostic
+        run: dotnet format MeisterProPR.slnx --verify-no-changes --verbosity diagnostic && dotnet format MeisterProPR.ProCursor.slnx --verify-no-changes --verbosity diagnostic
 
   build:
     name: Build
