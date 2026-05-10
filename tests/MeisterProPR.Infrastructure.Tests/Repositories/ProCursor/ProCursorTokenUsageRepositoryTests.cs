@@ -12,9 +12,9 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories.ProCursor;
 
 public sealed class ProCursorTokenUsageRepositoryTests
 {
-    private static DbContextOptions<MeisterProPRDbContext> CreateOptions()
+    private static DbContextOptions<ProCursorOperationalDbContext> CreateOptions()
     {
-        return new DbContextOptionsBuilder<MeisterProPRDbContext>()
+        return new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
     }
@@ -23,7 +23,7 @@ public sealed class ProCursorTokenUsageRepositoryTests
     public async Task RecordAsync_DuplicateRequestId_IgnoresSecondEvent()
     {
         var options = CreateOptions();
-        await using var db = new MeisterProPRDbContext(options);
+        await using var db = new ProCursorOperationalDbContext(options);
         var factory = new TestDbContextFactory(options);
         var recorder = new EfProCursorTokenUsageRecorder(factory, NullLogger<EfProCursorTokenUsageRecorder>.Instance);
         var request = new ProCursorTokenUsageCaptureRequest(
@@ -49,17 +49,17 @@ public sealed class ProCursorTokenUsageRepositoryTests
         Assert.Equal(1, await db.ProCursorTokenUsageEvents.CountAsync());
     }
 
-    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)
-        : IDbContextFactory<MeisterProPRDbContext>
+    private sealed class TestDbContextFactory(DbContextOptions<ProCursorOperationalDbContext> options)
+        : IDbContextFactory<ProCursorOperationalDbContext>
     {
-        public MeisterProPRDbContext CreateDbContext()
+        public ProCursorOperationalDbContext CreateDbContext()
         {
-            return new MeisterProPRDbContext(options);
+            return new ProCursorOperationalDbContext(options);
         }
 
-        public Task<MeisterProPRDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        public Task<ProCursorOperationalDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(new MeisterProPRDbContext(options));
+            return Task.FromResult(new ProCursorOperationalDbContext(options));
         }
     }
 }

@@ -3,22 +3,29 @@
 
 using System.Reflection;
 using Azure.Core;
+using MeisterProPR.Api.Features.ProCursor;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Interfaces;
+using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Clients;
 using MeisterProPR.Infrastructure.Features.Crawling;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Features.Mentions;
+using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
+using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -69,10 +76,28 @@ public sealed class ModuleRegistrationTests
             contents,
             StringComparison.Ordinal);
         Assert.Contains(
-            "AddProCursorModule(builder.Configuration, builder.Environment)",
+            "AddLicensingModule(builder.Configuration, builder.Environment)",
             contents,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "AddProCursorRemoteMode(builder.Configuration)",
+            contents,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("AddProCursorModule(builder.Configuration, builder.Environment)", contents, StringComparison.Ordinal);
         Assert.DoesNotContain("AddInfrastructure(builder.Configuration)", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Program_ComposesProCursorThroughRemoteBoundaryOnly()
+    {
+        var contents = File.ReadAllText(Path.Combine(RepoRoot, "src/MeisterProPR.Api/Program.cs"));
+
+        Assert.Contains("ManagedRemoteProCursorGateway", contents, StringComparison.Ordinal);
+        Assert.Contains("DisabledProCursorGateway", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddProCursorModule(builder.Configuration, builder.Environment)", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProCursorIndexWorker", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProCursorTokenUsageRollupWorker", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProCursorOperationalDbContext", contents, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -184,7 +209,12 @@ public sealed class ModuleRegistrationTests
     public void ComposedModules_RegisterFeatureOwnedServices()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(true);
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_DB_CONNECTION_STRING"] = "Host=localhost;Database=procursor;Username=test;Password=test",
+            });
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -207,6 +237,7 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IPromptOverrideRepository>(services));
         Assert.NotNull(FindService<IClientTokenUsageRepository>(services));
         Assert.NotNull(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.NotNull(FindService<ProCursorOperationalDbContext>(services));
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
@@ -275,7 +306,12 @@ public sealed class ModuleRegistrationTests
     public void ComposedModules_TestingEnvironment_WithDatabaseConnectionString_StillRegistersDbServices()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(true);
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_DB_CONNECTION_STRING"] = "Host=localhost;Database=procursor;Username=test;Password=test",
+            });
         var environment = new TestHostEnvironment("Testing");
 
         services.AddInfrastructureSupport(configuration, environment);
@@ -299,6 +335,7 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IPromptOverrideRepository>(services));
         Assert.NotNull(FindService<IClientTokenUsageRepository>(services));
         Assert.NotNull(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.NotNull(FindService<ProCursorOperationalDbContext>(services));
         Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
@@ -364,6 +401,221 @@ public sealed class ModuleRegistrationTests
     }
 
     [Fact]
+    public void Program_WithoutRemoteProCursorConfiguration_DefaultsToDisabledMode()
+    {
+        var mode = InvokeEffectiveProCursorMode(CreateConfiguration(false));
+
+        Assert.Equal("disabled", mode);
+    }
+
+    [Fact]
+    public void Program_WithRemoteProCursorConfiguration_UsesManagedRemoteMode()
+    {
+        var mode = InvokeEffectiveProCursorMode(
+            CreateConfiguration(
+                false,
+                new Dictionary<string, string?>
+                {
+                    ["PROCURSOR_REMOTE_MODE"] = "proprManagedRemote",
+                    ["PROCURSOR_SERVICE_BASE_URL"] = "http://procursor.internal:8080",
+                    ["PROCURSOR_SHARED_KEY"] = "shared-test-key",
+                }));
+
+        Assert.Equal("proprManagedRemote", mode);
+    }
+
+    [Fact]
+    public void UsageReportingModule_WithoutExplicitOperationalConnection_DoesNotRegisterProCursorOperationalServices()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddUsageReportingModule(configuration);
+
+        Assert.Null(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.Null(FindService<ProCursorOperationalDbContext>(services));
+    }
+
+    [Fact]
+    public void UsageReportingModule_WithExplicitOperationalConnection_RegistersProCursorOperationalServices()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_DB_CONNECTION_STRING"] = "Host=localhost;Database=procursor;Username=test;Password=test",
+            });
+
+        services.AddUsageReportingModule(configuration);
+
+        Assert.NotNull(FindService<IClientTokenUsageRepository>(services));
+        Assert.Null(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.Null(FindService<ProCursorOperationalDbContext>(services));
+    }
+
+    [Fact]
+    public void ProCursorModule_WithExplicitOperationalConnection_RegistersProCursorOperationalServices()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_DB_CONNECTION_STRING"] = "Host=localhost;Database=procursor;Username=test;Password=test",
+            });
+
+        services.AddOptions();
+        services.AddLogging();
+        services.AddProCursorModule(configuration);
+
+        Assert.NotNull(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.NotNull(FindService<ProCursorOperationalDbContext>(services));
+    }
+
+    [Fact]
+    public void UsageReportingModule_InManagedRemoteMode_RegistersRemoteClientsWithoutOperationalDb()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_REMOTE_MODE"] = "proprManagedRemote",
+                ["PROCURSOR_SERVICE_BASE_URL"] = "http://procursor.internal:8080",
+                ["PROCURSOR_SHARED_KEY"] = "shared-test-key",
+            });
+
+        services.AddOptions();
+        services.AddLogging();
+        services.AddProCursorRemoteMode(configuration);
+        services.AddUsageReportingModule(configuration);
+
+        Assert.NotNull(FindService<IProCursorTokenUsageReadRepository>(services));
+        Assert.NotNull(FindService<IProCursorTokenUsageRebuildService>(services));
+        Assert.Null(FindService<IProCursorTokenUsageRecorder>(services));
+        Assert.Null(FindService<ProCursorOperationalDbContext>(services));
+        Assert.Null(services.FirstOrDefault(descriptor => descriptor.ImplementationType == typeof(ProCursorTokenUsageReadRepository)));
+        Assert.Null(services.FirstOrDefault(descriptor => descriptor.ImplementationType == typeof(ProCursorTokenUsageRebuildService)));
+    }
+
+    [Fact]
+    public void AddProCursorRemoteMode_InManagedRemoteMode_RegistersManagedRemoteGatewayWithoutOperationalRepositories()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            true,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_REMOTE_MODE"] = "proprManagedRemote",
+                ["PROCURSOR_SERVICE_BASE_URL"] = "http://procursor.internal:8080",
+                ["PROCURSOR_SHARED_KEY"] = "shared-test-key",
+            });
+
+        services.AddOptions();
+        services.AddLogging();
+        services.AddDataProtection();
+        services.AddInfrastructureSupport(configuration);
+        services.AddProCursorRemoteMode(configuration);
+        services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<IProCursorKnowledgeSourceRepository>());
+        services.AddScoped<ManagedRemoteProCursorGateway>();
+        services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<ManagedRemoteProCursorGateway>());
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+        using var scope = provider.CreateScope();
+
+        var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();
+
+        Assert.IsType<ManagedRemoteProCursorGateway>(gateway);
+        Assert.Null(FindService<IProCursorIndexJobRepository>(services));
+        Assert.Null(FindService<IProCursorIndexSnapshotRepository>(services));
+    }
+
+    [Fact]
+    public void Program_RegistersProPrOwnedBrokerBackends_ForApiHostComposition()
+    {
+        var contents = File.ReadAllText(Path.Combine(RepoRoot, "src/MeisterProPR.Api/Program.cs"));
+
+        Assert.Contains("LocalProPrScmBroker", contents, StringComparison.Ordinal);
+        Assert.Contains("LocalProPrEmbeddingBroker", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalProCursorScmBroker", contents, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalProCursorEmbeddingBroker", contents, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Program_WithDisabledProCursorConfiguration_UsesDisabledGatewayMode()
+    {
+        var mode = InvokeEffectiveProCursorMode(
+            CreateConfiguration(
+                false,
+                new Dictionary<string, string?>
+                {
+                    ["PROCURSOR_REMOTE_MODE"] = "disabled",
+                }));
+
+        Assert.Equal("disabled", mode);
+    }
+
+    [Fact]
+    public void AddProCursorRemoteMode_RegistersDisabledGatewayAndRemoteHealthDependencies()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            false,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_REMOTE_MODE"] = "disabled",
+            });
+
+        services.AddOptions();
+        services.AddLogging();
+        services.AddHealthChecks();
+        services.AddProCursorRemoteMode(configuration);
+
+        Assert.NotNull(FindService<DisabledProCursorGateway>(services));
+        Assert.NotNull(FindService<HttpProCursorGateway>(services));
+    }
+
+    [Fact]
+    public void AddProCursorRemoteMode_InDisabledMode_DoesNotResolveManagedRemoteGateway()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(
+            false,
+            new Dictionary<string, string?>
+            {
+                ["PROCURSOR_REMOTE_MODE"] = "disabled",
+            });
+
+        services.AddOptions();
+        services.AddLogging();
+        services.AddHealthChecks();
+        services.AddDataProtection();
+        services.AddInfrastructureSupport(configuration);
+        services.AddProCursorRemoteMode(configuration);
+        services.AddSingleton(Substitute.For<IAiConnectionRepository>());
+        services.AddSingleton(Substitute.For<IProCursorKnowledgeSourceRepository>());
+        services.AddScoped<ManagedRemoteProCursorGateway>();
+        services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<DisabledProCursorGateway>());
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+        using var scope = provider.CreateScope();
+
+        var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();
+
+        Assert.IsType<DisabledProCursorGateway>(gateway);
+    }
+
+    [Fact]
     public void ReviewingModule_RegistersDeterministicReviewFindingGateAndInvariantProviders()
     {
         var services = new ServiceCollection();
@@ -390,6 +642,19 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(method);
 
         var result = method!.Invoke(null, []);
+        Assert.IsType<string>(result);
+        return (string)result;
+    }
+
+    private static string InvokeEffectiveProCursorMode(IConfiguration configuration)
+    {
+        var method = typeof(Program).GetMethod(
+            "GetEffectiveProCursorMode",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, [configuration]);
         Assert.IsType<string>(result);
         return (string)result;
     }

@@ -4,10 +4,10 @@
 using System.Diagnostics;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.ProCursor.Core;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;

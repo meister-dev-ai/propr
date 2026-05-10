@@ -81,7 +81,7 @@ Provider connection secrets, webhook secrets, and per-client Azure DevOps creden
 through the shared `ISecretProtectionCodec` path backed by ASP.NET Core Data Protection. Provider
 operational audit records and webhook delivery history store normalized status, failure category,
 summary data, and readiness explanations without persisting raw secrets or authorization headers.
-Reviewer-trigger identity remains configuration-only state stored separately from connection secrets;
+Reviewer-trigger identity is configuration-only state stored separately from connection secrets;
 creating, updating, or clearing it does not rotate connection credentials or change the authenticated
 identity used for provider publication.
 

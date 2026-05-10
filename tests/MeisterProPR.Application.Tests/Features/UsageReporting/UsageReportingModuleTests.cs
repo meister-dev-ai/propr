@@ -15,7 +15,7 @@ public sealed class UsageReportingModuleTests
     [Fact]
     public async Task UpsertAsync_WhenSampleExists_AccumulatesTokenCounts()
     {
-        await using var db = CreateContext();
+        await using var db = CreateControlContext();
         var repository = new ClientTokenUsageRepository(db);
         var clientId = Guid.NewGuid();
         var date = new DateOnly(2026, 4, 6);
@@ -31,7 +31,7 @@ public sealed class UsageReportingModuleTests
     [Fact]
     public async Task RefreshAsync_WithSingleEvent_RebuildsDailyRollup()
     {
-        await using var db = CreateContext();
+        await using var db = CreateOperationalContext();
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
         db.ProCursorTokenUsageEvents.Add(
@@ -65,12 +65,21 @@ public sealed class UsageReportingModuleTests
         Assert.Contains(rollups, rollup => rollup.TotalTokens == 120 && rollup.EventCount == 1);
     }
 
-    private static MeisterProPRDbContext CreateContext()
+    private static MeisterProPRDbContext CreateControlContext()
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseInMemoryDatabase($"UsageReportingModuleTests_{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"UsageReportingModuleTests-Control-{Guid.NewGuid()}")
             .Options;
 
         return new MeisterProPRDbContext(options);
+    }
+
+    private static ProCursorOperationalDbContext CreateOperationalContext()
+    {
+        var options = new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
+            .UseInMemoryDatabase($"UsageReportingModuleTests-Operational-{Guid.NewGuid()}")
+            .Options;
+
+        return new ProCursorOperationalDbContext(options);
     }
 }

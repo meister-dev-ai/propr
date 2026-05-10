@@ -16,6 +16,8 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0"/>
         <PackageReference Include="NSubstitute" Version="5.3.0"/>
         <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.7"/>
+        <PackageReference Include="TngTech.ArchUnitNET" Version="0.13.3"/>
+        <PackageReference Include="TngTech.ArchUnitNET.xUnit" Version="0.13.3"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
             <PrivateAssets>all</PrivateAssets>
@@ -28,6 +30,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterProPR.Api\MeisterProPR.Api.csproj"/>
         <ProjectReference Include="..\..\src\MeisterProPR.Application\MeisterProPR.Application.csproj"/>
         <ProjectReference Include="..\..\src\MeisterProPR.Infrastructure\MeisterProPR.Infrastructure.csproj"/>
         <ProjectReference Include="..\..\src\MeisterProPR.ProCursor\MeisterProPR.ProCursor.csproj"/>

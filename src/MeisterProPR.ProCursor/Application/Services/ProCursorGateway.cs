@@ -3,28 +3,21 @@
 
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Licensing.Models;
-using MeisterProPR.Application.Features.Licensing.Ports;
-using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
-using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.ProCursor.Core;
 
 /// <summary>
 ///     In-process application facade for the ProCursor bounded module.
 /// </summary>
 public sealed partial class ProCursorGateway(
-    IClientAdminService clientAdminService,
-    IScmProviderRegistry providerRegistry,
     IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
     IProCursorIndexSnapshotRepository snapshotRepository,
     ProCursorQueryService queryService,
     ProCursorIndexCoordinator indexCoordinator,
-    ILogger<ProCursorGateway> logger,
-    ILicensingCapabilityService? licensingCapabilityService = null) : IProCursorGateway
+    ILogger<ProCursorGateway> logger) : IProCursorGateway
 {
     private const string AzureDevOpsProvider = "azureDevOps";
 
@@ -34,11 +27,6 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         await this.EnsureCapabilityEnabledAsync(clientId, ct);
-
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            throw new KeyNotFoundException($"Client {clientId} was not found.");
-        }
 
         var sources = await knowledgeSourceRepository.ListByClientAsync(clientId, ct);
         var sourceDtos = new List<ProCursorKnowledgeSourceDto>(sources.Count);
@@ -67,24 +55,17 @@ public sealed partial class ProCursorGateway(
 
         await this.EnsureCapabilityEnabledAsync(clientId, ct);
 
-        if (!await clientAdminService.ExistsAsync(clientId, ct))
-        {
-            throw new KeyNotFoundException($"Client {clientId} was not found.");
-        }
-
         if (request.TrackedBranches.Count == 0)
         {
             throw new InvalidOperationException("At least one tracked branch is required.");
         }
 
-        var resolvedSource = await this.ResolveSourceSelectionAsync(clientId, request, ct);
-
         var duplicateExists = await knowledgeSourceRepository.ExistsAsync(
             clientId,
             request.SourceKind,
-            resolvedSource.OrganizationUrl,
+            request.ProviderScopePath?.Trim() ?? string.Empty,
             request.ProviderProjectKey.Trim(),
-            resolvedSource.RepositoryId,
+            request.RepositoryId?.Trim() ?? string.Empty,
             request.RootPath,
             ct);
 
@@ -98,17 +79,17 @@ public sealed partial class ProCursorGateway(
             clientId,
             request.DisplayName,
             request.SourceKind,
-            resolvedSource.OrganizationUrl,
+            request.ProviderScopePath?.Trim() ?? string.Empty,
             request.ProviderProjectKey.Trim(),
-            resolvedSource.RepositoryId,
+            request.RepositoryId?.Trim() ?? string.Empty,
             request.DefaultBranch,
             request.RootPath,
             true,
             request.SymbolMode,
-            resolvedSource.OrganizationScopeId,
-            resolvedSource.CanonicalSourceRef?.Provider,
-            resolvedSource.CanonicalSourceRef?.Value,
-            resolvedSource.SourceDisplayName);
+            request.OrganizationScopeId,
+            request.CanonicalSourceRef?.Provider,
+            request.CanonicalSourceRef?.Value,
+            NormalizeOptional(request.SourceDisplayName) ?? request.RepositoryId?.Trim());
 
         foreach (var trackedBranch in request.TrackedBranches)
         {
@@ -262,16 +243,7 @@ public sealed partial class ProCursorGateway(
 
     private async Task EnsureCapabilityEnabledAsync(Guid clientId, CancellationToken ct)
     {
-        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
-            licensingCapabilityService,
-            PremiumCapabilityKey.ProCursor,
-            ct);
-
-        if (capability is not null)
-        {
-            LogCapabilityUnavailable(logger, clientId, capability.Key);
-            throw new InvalidOperationException(capability.Message ?? $"Capability '{capability.Key}' is unavailable.");
-        }
+        await Task.CompletedTask;
     }
 
     private async Task<ProCursorIndexJobDto> QueueRefreshInternalAsync(
@@ -288,16 +260,6 @@ public sealed partial class ProCursorGateway(
         ProCursorKnowledgeQueryRequest request,
         CancellationToken ct)
     {
-        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
-            licensingCapabilityService,
-            PremiumCapabilityKey.ProCursor,
-            ct);
-        if (capability is not null)
-        {
-            LogCapabilityUnavailable(logger, request.ClientId, capability.Key);
-            return new ProCursorKnowledgeAnswerDto("unavailable", [], capability.Message);
-        }
-
         return await this.LogKnowledgeQueryAsync(request, ct);
     }
 
@@ -305,16 +267,6 @@ public sealed partial class ProCursorGateway(
         ProCursorSymbolQueryRequest request,
         CancellationToken ct)
     {
-        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
-            licensingCapabilityService,
-            PremiumCapabilityKey.ProCursor,
-            ct);
-        if (capability is not null)
-        {
-            LogCapabilityUnavailable(logger, request.ClientId, capability.Key);
-            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
-        }
-
         return await this.LogSymbolQueryAsync(request, ct);
     }
 
@@ -351,136 +303,6 @@ public sealed partial class ProCursorGateway(
             source.OrganizationScopeId,
             canonicalSourceRef,
             string.IsNullOrWhiteSpace(source.SourceDisplayName) ? source.RepositoryId : source.SourceDisplayName);
-    }
-
-    private async Task<ResolvedSourceSelection> ResolveSourceSelectionAsync(
-        Guid clientId,
-        ProCursorKnowledgeSourceRegistrationRequest request,
-        CancellationToken ct)
-    {
-        if (request.OrganizationScopeId.HasValue)
-        {
-            return await this.ResolveGuidedSourceSelectionAsync(clientId, request, ct);
-        }
-
-        if (string.IsNullOrWhiteSpace(request.ProviderScopePath) || string.IsNullOrWhiteSpace(request.RepositoryId))
-        {
-            throw new InvalidOperationException("Legacy source creation requires ProviderScopePath and RepositoryId when OrganizationScopeId is not provided.");
-        }
-
-        var canonicalSourceRef = request.CanonicalSourceRef ??
-                                 new CanonicalSourceReferenceDto(AzureDevOpsProvider, request.RepositoryId.Trim());
-        var sourceDisplayName = NormalizeOptional(request.SourceDisplayName) ?? request.RepositoryId.Trim();
-
-        return new ResolvedSourceSelection(
-            request.ProviderScopePath.Trim(),
-            request.RepositoryId.Trim(),
-            null,
-            canonicalSourceRef,
-            sourceDisplayName);
-    }
-
-    private async Task<ResolvedSourceSelection> ResolveGuidedSourceSelectionAsync(
-        Guid clientId,
-        ProCursorKnowledgeSourceRegistrationRequest request,
-        CancellationToken ct)
-    {
-        if (!request.OrganizationScopeId.HasValue)
-        {
-            throw new InvalidOperationException("OrganizationScopeId is required for guided source selection.");
-        }
-
-        var canonicalSourceRef = request.CanonicalSourceRef
-                                 ?? throw new InvalidOperationException("CanonicalSourceRef is required for guided source selection.");
-
-        var scope = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-            .GetScopeAsync(clientId, request.OrganizationScopeId.Value, ct);
-        if (scope is null)
-        {
-            LogGuidedOrganizationScopeMissing(logger, clientId, request.OrganizationScopeId.Value);
-            throw new KeyNotFoundException($"Organization scope {request.OrganizationScopeId.Value} was not found for client {clientId}.");
-        }
-
-        if (!scope.IsEnabled)
-        {
-            LogGuidedOrganizationScopeDisabled(logger, clientId, scope.Id);
-            throw new InvalidOperationException("The selected organization scope is disabled.");
-        }
-
-        var projectId = request.ProviderProjectKey.Trim();
-        var availableSources = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-            .ListSourcesAsync(clientId, scope.Id, projectId, request.SourceKind, ct);
-
-        var sourceOption = availableSources.FirstOrDefault(option =>
-            string.Equals(
-                option.CanonicalSourceRef.Provider,
-                canonicalSourceRef.Provider,
-                StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(
-                option.CanonicalSourceRef.Value,
-                canonicalSourceRef.Value,
-                StringComparison.OrdinalIgnoreCase));
-
-        if (sourceOption is null)
-        {
-            LogGuidedSourceUnavailable(logger, clientId, projectId, canonicalSourceRef.Value);
-            throw new InvalidOperationException("The selected source is no longer available in Azure DevOps.");
-        }
-
-        var availableBranches = await providerRegistry.GetProviderAdminDiscoveryService(ScmProvider.AzureDevOps)
-            .ListBranchesAsync(clientId, scope.Id, projectId, request.SourceKind, canonicalSourceRef, ct);
-
-        var branchNames = availableBranches
-            .Select(branch => branch.BranchName)
-            .Where(static branchName => !string.IsNullOrWhiteSpace(branchName))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var sourceDisplayName = NormalizeOptional(request.SourceDisplayName) ?? sourceOption.DisplayName;
-        var branchValidationError = ValidateBranchSelection(request, branchNames, sourceDisplayName);
-        if (branchValidationError is not null)
-        {
-            LogGuidedBranchValidationFailed(logger, clientId, sourceDisplayName, branchValidationError);
-            throw new InvalidOperationException(branchValidationError);
-        }
-
-        return new ResolvedSourceSelection(
-            scope.ScopePath,
-            canonicalSourceRef.Value,
-            scope.Id,
-            canonicalSourceRef,
-            sourceDisplayName);
-    }
-
-    private static string? ValidateBranchSelection(
-        ProCursorKnowledgeSourceRegistrationRequest request,
-        IReadOnlyCollection<string> availableBranches,
-        string sourceDisplayName)
-    {
-        if (availableBranches.Count == 0)
-        {
-            return $"The selected source '{sourceDisplayName}' does not currently expose any branches.";
-        }
-
-        if (!availableBranches.Contains(request.DefaultBranch.Trim(), StringComparer.OrdinalIgnoreCase))
-        {
-            return
-                $"The selected default branch '{request.DefaultBranch}' is no longer available for source '{sourceDisplayName}'.";
-        }
-
-        var invalidTrackedBranches = request.TrackedBranches
-            .Select(branch => branch.BranchName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(branchName => !availableBranches.Contains(branchName, StringComparer.OrdinalIgnoreCase))
-            .ToList();
-
-        if (invalidTrackedBranches.Count > 0)
-        {
-            return
-                $"The selected source '{sourceDisplayName}' no longer exposes tracked branches: {string.Join(", ", invalidTrackedBranches)}.";
-        }
-
-        return null;
     }
 
     private static string? NormalizeOptional(string? value)
@@ -564,11 +386,4 @@ public sealed partial class ProCursorGateway(
         Level = LogLevel.Information,
         Message = "Skipped ProCursor operation for client {ClientId} because capability {CapabilityKey} is unavailable")]
     private static partial void LogCapabilityUnavailable(ILogger logger, Guid clientId, string capabilityKey);
-
-    private sealed record ResolvedSourceSelection(
-        string OrganizationUrl,
-        string RepositoryId,
-        Guid? OrganizationScopeId,
-        CanonicalSourceReferenceDto? CanonicalSourceRef,
-        string? SourceDisplayName);
 }

@@ -3,7 +3,7 @@
     <ItemGroup>
         <ProjectReference Include="..\MeisterProPR.Application\MeisterProPR.Application.csproj"/>
         <ProjectReference Include="..\MeisterProPR.Infrastructure\MeisterProPR.Infrastructure.csproj"/>
-        <ProjectReference Include="..\MeisterProPR.ProCursor\MeisterProPR.ProCursor.csproj"/>
+        <ProjectReference Include="..\MeisterProPR.ProCursor.Contracts\MeisterProPR.ProCursor.Contracts.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -20,6 +20,7 @@
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.0-beta.1"/>
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3"/>
         <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2"/>
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.13.0"/>
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
         <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>
         <PackageReference Include="Serilog.Sinks.Grafana.Loki" Version="8.3.2"/>

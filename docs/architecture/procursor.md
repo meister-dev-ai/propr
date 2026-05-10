@@ -1,14 +1,32 @@
 # ProCursor Architecture
 
-This page covers the ProCursor bounded slice: how review orchestration reaches it, how tracked
-sources are refreshed, and how ProCursor token usage is captured and rolled up.
+This page covers the ProCursor bounded slice: how review orchestration reaches the ProCursor host,
+how tracked sources are refreshed, and how ProCursor token usage is captured and rolled up.
 
 ## Boundary And Runtime Position
 
-ProCursor runs inside the same deployment as a bounded slice with its own facade and options
-surface. Review orchestration reaches it only through `IProCursorGateway` and `PROCURSOR_*`
-settings; it does not talk directly to ProCursor repositories, Azure DevOps materializers, or
-snapshot tables.
+ProCursor runs as a separate internal ASP.NET Core service with its own health endpoint, worker
+lifecycle, and extracted-host settings. Review orchestration reaches it only through
+`IProCursorGateway` and `PROCURSOR_*` settings; it does not talk directly to ProCursor repositories,
+Azure DevOps materializers, or snapshot tables.
+
+ProPR is the only public control plane. Browser traffic, admin UI calls, and public auth are
+anchored to ProPR. The ProCursor host is internal-only and authenticates both directions
+with `X-ProCursor-Key` using one shared `PROCURSOR_SHARED_KEY`.
+
+ProPR is also the durable source of truth for ProCursor-capable source definitions and execution-time
+runtime configuration. The ProCursor host keeps that runtime configuration in memory only, warms it on
+startup, refreshes it on cache miss or staleness, and persists only operational data such as jobs,
+snapshots, chunks, symbol graphs, and token-usage records through `PROCURSOR_DB_CONNECTION_STRING`.
+
+In managed remote mode, ProPR does not register `ProCursorOperationalDbContext` and does not need
+`PROCURSOR_DB_CONNECTION_STRING`. ProPR reaches ProCursor-owned reporting and maintenance data through
+shared-key-authenticated internal ProCursor HTTP endpoints, while the public admin surface remains on
+ProPR.
+
+Both services emit distinct OTLP service identities, `MeisterProPR.Api` and
+`MeisterProPR.ProCursor.Service`, so distributed traces can distinguish the public control plane from
+the internal ProCursor execution host.
 
 For guided admin flows, the same gateway boundary owns save-time validation of
 `organizationScopeId`, canonical source references, and default or tracked branch selections. That
@@ -48,6 +66,7 @@ sequenceDiagram
     participant VER as ReviewContextEvidenceCollector
     participant TOOLS as ProviderReviewContextToolsBase
     participant GW as IProCursorGateway
+    participant HTTP as HttpProCursorGateway
     participant QUERY as ProCursorQueryService
 
     ORCH->>FACT: Create(ReviewContextToolsRequest)
@@ -55,15 +74,19 @@ sequenceDiagram
     ORCH->>LOOP: ReviewAsync(..., ReviewSystemContext)
     LOOP->>TOOLS: ask_procursor_knowledge / get_procursor_symbol_info
     TOOLS->>GW: AskKnowledgeAsync(...) / GetSymbolInsightAsync(...)
-    GW->>QUERY: Query repository-scoped chunks and symbols
-    QUERY-->>GW: Answer or symbol insight
+    GW->>HTTP: ProPR -> ProCursor internal call
+    HTTP->>QUERY: Query repository-scoped chunks and symbols
+    QUERY-->>HTTP: Answer or symbol insight
+    HTTP-->>GW: DTO
     GW-->>TOOLS: DTO
     TOOLS-->>LOOP: Tool result
     ORCH->>VER: CollectEvidenceAsync(work item, tools, modelId)
     VER->>TOOLS: get_changed_files / get_file_content / ask_procursor_knowledge / get_procursor_symbol_info
     TOOLS->>GW: Forward bounded repository-aware lookups
-    GW->>QUERY: Query repository-scoped chunks and symbols
-    QUERY-->>GW: Evidence DTOs
+    GW->>HTTP: ProPR -> ProCursor internal call
+    HTTP->>QUERY: Query repository-scoped chunks and symbols
+    QUERY-->>HTTP: Evidence DTOs
+    HTTP-->>GW: DTOs
     GW-->>TOOLS: DTOs
     TOOLS-->>VER: Evidence items
 ```
@@ -82,16 +105,20 @@ sequenceDiagram
 5. `ProviderReviewContextToolsBase` forwards review-time ProCursor calls through
    `IProCursorGateway` with repository or review-target context instead of querying ProCursor tables
    directly.
-6. This keeps ProCursor as a bounded evidence dependency: verification can use repository-aware
+6. When ProPR runs with `PROCURSOR_REMOTE_MODE=disabled`, tool-aware review omits the ProCursor tools
+   entirely. When ProCursor is configured but unavailable, the same boundary returns explicit
+   `Unavailable` results so review and verification continue without aborting the wider job.
+7. This keeps ProCursor as a bounded evidence dependency: verification can use repository-aware
    knowledge and symbol lookups without adding direct reviewing-to-ProCursor persistence coupling.
-7. `DeterministicReviewFindingGate` remains retrieval-free. It consumes `VerificationOutcome`
+8. `DeterministicReviewFindingGate` is retrieval-free. It consumes `VerificationOutcome`
    produced upstream rather than issuing its own ProCursor queries.
 
 ## Refresh Flow
 
 Tracked branches refresh independently from the pull-request worker. The scheduler polls branch
 heads, queues durable jobs, and the dedicated worker drains those jobs with per-source isolation so
-one slow or failing source does not block unrelated repositories and wikis.
+one slow or failing source does not block unrelated repositories and wikis. The durable index worker
+and token rollup worker run in the ProCursor host rather than the public API host.
 
 ```mermaid
 sequenceDiagram
@@ -151,3 +178,13 @@ sequenceDiagram
 
 A dedicated rollup worker refreshes daily and monthly aggregates so the admin UI can read stable
 totals and gap-fill the newest uncaptured window from raw events.
+
+## Operational Expectations
+
+1. ProPR health includes a `procursor-remote` dependency entry only when remote ProCursor mode is configured.
+2. The ProCursor host exposes its own `/healthz` endpoint for worker readiness and host health.
+3. ProPR and ProCursor may share a Data Protection key ring for deployment convenience, but the architecture does not require a shared key ring or shared secret-protection store.
+4. Missing or mismatched `X-ProCursor-Key` values return `401 Unauthorized` in both directions without a differentiated response body.
+5. OTLP and Prometheus instrumentation cover inbound requests and outbound broker/gateway `HttpClient` traffic on both sides of the service boundary.
+6. Structured logging redacts shared-key values, and request logging records only whether
+   `X-ProCursor-Key` was present for service-boundary requests.

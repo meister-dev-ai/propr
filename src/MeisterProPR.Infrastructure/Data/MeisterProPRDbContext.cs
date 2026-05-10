@@ -144,38 +144,24 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Tracked branches configured for ProCursor knowledge sources.</summary>
     public DbSet<ProCursorTrackedBranch> ProCursorTrackedBranches => this.Set<ProCursorTrackedBranch>();
 
-    /// <summary>Durable ProCursor indexing jobs.</summary>
-    public DbSet<ProCursorIndexJob> ProCursorIndexJobs => this.Set<ProCursorIndexJob>();
-
-    /// <summary>Persisted ProCursor index snapshots.</summary>
-    public DbSet<ProCursorIndexSnapshot> ProCursorIndexSnapshots => this.Set<ProCursorIndexSnapshot>();
-
-    /// <summary>Persisted ProCursor knowledge chunks.</summary>
-    public DbSet<ProCursorKnowledgeChunk> ProCursorKnowledgeChunks => this.Set<ProCursorKnowledgeChunk>();
-
-    /// <summary>Persisted ProCursor symbol records.</summary>
-    public DbSet<ProCursorSymbolRecord> ProCursorSymbolRecords => this.Set<ProCursorSymbolRecord>();
-
-    /// <summary>Persisted ProCursor symbol edges.</summary>
-    public DbSet<ProCursorSymbolEdge> ProCursorSymbolEdges => this.Set<ProCursorSymbolEdge>();
-
     /// <summary>Crawl-side memory lifecycle audit log (append-only).</summary>
     public DbSet<MemoryActivityLogEntry> MemoryActivityLogEntries => this.Set<MemoryActivityLogEntry>();
 
     /// <summary>Daily token usage aggregates per client and model.</summary>
     public DbSet<ClientTokenUsageSample> ClientTokenUsageSamples => this.Set<ClientTokenUsageSample>();
 
-    /// <summary>Raw ProCursor token usage events.</summary>
-    public DbSet<ProCursorTokenUsageEvent> ProCursorTokenUsageEvents => this.Set<ProCursorTokenUsageEvent>();
-
-    /// <summary>Daily and monthly ProCursor token usage rollups.</summary>
-    public DbSet<ProCursorTokenUsageRollup> ProCursorTokenUsageRollups => this.Set<ProCursorTokenUsageRollup>();
-
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(MeisterProPRDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(MeisterProPRDbContext).Assembly,
+            type => !type.Name.StartsWith("ProCursorIndex", StringComparison.Ordinal)
+                    && !string.Equals(type.Name, "ProCursorKnowledgeChunkEntityTypeConfiguration", StringComparison.Ordinal)
+                    && !string.Equals(type.Name, "ProCursorSymbolRecordEntityTypeConfiguration", StringComparison.Ordinal)
+                    && !string.Equals(type.Name, "ProCursorSymbolEdgeEntityTypeConfiguration", StringComparison.Ordinal)
+                    && !string.Equals(type.Name, "ProCursorTokenUsageEventEntityTypeConfiguration", StringComparison.Ordinal)
+                    && !string.Equals(type.Name, "ProCursorTokenUsageRollupEntityTypeConfiguration", StringComparison.Ordinal));
 
         // Apply pgvector-specific configuration only when using the Npgsql provider.
         // The in-memory provider used in lightweight unit tests cannot map the Vector CLR type.
@@ -189,12 +175,6 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
                     v => new Vector(v),
                     v => v.ToArray());
 
-            modelBuilder.Entity<ProCursorKnowledgeChunk>()
-                .Property(chunk => chunk.EmbeddingVector)
-                .HasColumnType($"vector({GetProCursorEmbeddingDimensions()})")
-                .HasConversion(
-                    v => new Vector(v),
-                    v => v.ToArray());
         }
     }
 
@@ -205,8 +185,4 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
         return 1536;
     }
 
-    private static int GetProCursorEmbeddingDimensions()
-    {
-        return 1536;
-    }
 }

@@ -105,7 +105,7 @@ public sealed class VerticalSliceDependencyTests
                 ]),
             new ModuleBoundary(
                 "src/MeisterProPR.Infrastructure/Features/UsageReporting/UsageReportingModuleServiceCollectionExtensions.cs",
-                ["IClientTokenUsageRepository", "IProCursorTokenUsageRecorder", "IProCursorTokenUsageReadRepository"],
+                ["IClientTokenUsageRepository", "IProCursorTokenUsageReadRepository", "IProCursorTokenUsageRebuildService"],
                 [
                     "IJobRepository", "ICrawlConfigurationRepository", "IClientRegistry", "IUserRepository",
                     "IMentionScanRepository", "IPromptOverrideRepository",
@@ -126,6 +126,17 @@ public sealed class VerticalSliceDependencyTests
                 Assert.DoesNotContain(forbiddenToken, contents, StringComparison.Ordinal);
             }
         }
+    }
+
+    [Fact]
+    public void UsageReportingModule_RemoteModeBoundary_DoesNotUseProCursorOperationalDbContext()
+    {
+        var contents = ReadRepoFile("src/MeisterProPR.Infrastructure/Features/UsageReporting/UsageReportingModuleServiceCollectionExtensions.cs");
+
+        Assert.Contains("isManagedRemoteMode", contents, StringComparison.Ordinal);
+        Assert.Contains("RemoteProCursorTokenUsageReadRepository", contents, StringComparison.Ordinal);
+        Assert.Contains("RemoteProCursorTokenUsageRebuildService", contents, StringComparison.Ordinal);
+        Assert.Contains("return services;", contents, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(string relativePath)

@@ -1,12 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
+using MeisterProPR.ProCursor.Contracts.ProCursor;
+using MeisterProPR.ProCursor.Workers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -122,22 +122,36 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenCapabilityUnavailable_SkipsRefreshAndRetention()
+    public async Task ExecuteAsync_WhenCapabilityUnavailable_StillMaintainsOperationalRollups()
     {
         var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
+        var refreshInvoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                refreshInvoked.TrySetResult();
+                return Task.FromResult(1);
+            });
+
         var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
+        retentionService.PurgeExpiredAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProCursorTokenUsageRetentionResult(0, 0, DateTimeOffset.UtcNow)));
+
         var scopeFactory = CreateScopeFactory(
             aggregationService,
             retentionService,
             CreateLicensingService(false));
         var worker = BuildWorker(scopeFactory);
 
-        await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(30, CancellationToken.None);
-        await worker.StopAsync(CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        await worker.StartAsync(cts.Token);
+        await refreshInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
-        await aggregationService.DidNotReceive().RefreshRecentAsync(Arg.Any<CancellationToken>());
-        await retentionService.DidNotReceive().PurgeExpiredAsync(Arg.Any<CancellationToken>());
+        await aggregationService.Received(1).RefreshRecentAsync(Arg.Any<CancellationToken>());
+        await retentionService.Received(1).PurgeExpiredAsync(Arg.Any<CancellationToken>());
         Assert.NotNull(worker.LastCycleCompletedAt);
+
+        cts.Cancel();
+        await worker.StopAsync(CancellationToken.None);
     }
 }

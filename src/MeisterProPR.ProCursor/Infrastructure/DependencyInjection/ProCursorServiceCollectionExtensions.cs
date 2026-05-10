@@ -3,13 +3,17 @@
 
 using System.Globalization;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.AI.ProCursor;
 using MeisterProPR.Infrastructure.CodeAnalysis.ProCursor;
-using MeisterProPR.Infrastructure.DependencyInjection;
-using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterProPR.ProCursor.Contracts.ProCursor;
+using MeisterProPR.ProCursor.Core;
 using MeisterProPR.ProCursor.Infrastructure.AzureDevOps.DependencyInjection;
+using MeisterProPR.ProCursor.Infrastructure.Remote;
+using MeisterProPR.ProCursor.Options;
+using MeisterProPR.ProCursor.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,6 +33,8 @@ public static class ProCursorModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        var proCursorDbConnectionString = configuration["PROCURSOR_DB_CONNECTION_STRING"];
+
         services.AddOptions<ProCursorOptions>()
             .Configure(opts =>
             {
@@ -78,27 +84,100 @@ public static class ProCursorModuleServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        if (configuration.HasDatabaseConnectionString())
+        if (!string.IsNullOrWhiteSpace(proCursorDbConnectionString))
         {
-            services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
+            services.AddDbContext<ProCursorOperationalDbContext>(
+                options => options
+                    .UseNpgsql(
+                        proCursorDbConnectionString,
+                        o => o.UseVector().MigrationsHistoryTable("__EFMigrationsHistory_ProCursor"))
+                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
+                ServiceLifetime.Scoped,
+                ServiceLifetime.Singleton);
+            services.AddDbContextFactory<ProCursorOperationalDbContext>(options => options
+                .UseNpgsql(
+                    proCursorDbConnectionString,
+                    o => o.UseVector().MigrationsHistoryTable("__EFMigrationsHistory_ProCursor"))
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+
             services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
             services.AddScoped<IProCursorIndexSnapshotRepository, ProCursorIndexSnapshotRepository>();
             services.AddScoped<ProCursorSymbolGraphRepository>();
             services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
                 sp.GetRequiredService<ProCursorSymbolGraphRepository>());
+            services.AddSingleton<IProCursorTokenUsageRecorder, EfProCursorTokenUsageRecorder>();
+            services.AddScoped<IProCursorTokenUsageReadRepository, ProCursorTokenUsageReadRepository>();
+            services.AddScoped<IProCursorTokenUsageAggregationService, ProCursorTokenUsageAggregationService>();
+            services.AddScoped<IProCursorTokenUsageRebuildService, ProCursorTokenUsageRebuildService>();
+            services.AddScoped<IProCursorTokenUsageRetentionService, ProCursorTokenUsageRetentionService>();
         }
 
+        services.AddHttpClient<ProPrRuntimeConfigurationBroker>((sp, httpClient) =>
+        {
+            var currentHostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(currentHostOptions.ProPrBaseUrl))
+            {
+                httpClient.BaseAddress = new Uri(currentHostOptions.ProPrBaseUrl.TrimEnd('/') + "/");
+            }
+
+            httpClient.Timeout = TimeSpan.FromSeconds(Math.Max(1, currentHostOptions.RequestTimeoutSeconds));
+            if (!string.IsNullOrWhiteSpace(currentHostOptions.SharedKey))
+            {
+                httpClient.DefaultRequestHeaders.Remove(ProCursorSharedKeyAuthenticationDefaults.HeaderName);
+                httpClient.DefaultRequestHeaders.Add(ProCursorSharedKeyAuthenticationDefaults.HeaderName, currentHostOptions.SharedKey);
+            }
+        });
+        services.AddSingleton<IProCursorRuntimeConfigurationBroker>(sp => sp.GetRequiredService<ProPrRuntimeConfigurationBroker>());
+        services.AddSingleton<RuntimeConfiguredKnowledgeSourceRepository>();
+        services.AddSingleton<IProCursorRuntimeConfigurationCache>(sp => sp.GetRequiredService<RuntimeConfiguredKnowledgeSourceRepository>());
+        services.AddScoped<IProCursorKnowledgeSourceRepository>(sp => sp.GetRequiredService<RuntimeConfiguredKnowledgeSourceRepository>());
         services.AddScoped<IProCursorChunkExtractor, ProCursorChunkExtractor>();
         services.AddScoped<IProCursorEmbeddingService, ProCursorEmbeddingService>();
         services.AddScoped<IProCursorSymbolExtractor, RoslynProCursorSymbolExtractor>();
-        services.AddScoped<ProCursorRefreshScheduler>();
+
+        services.AddHttpClient<ProPrScmBroker>((sp, httpClient) =>
+        {
+            var hostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(hostOptions.ProPrBaseUrl))
+            {
+                httpClient.BaseAddress = new Uri(hostOptions.ProPrBaseUrl.TrimEnd('/') + "/");
+            }
+
+            httpClient.Timeout = TimeSpan.FromSeconds(Math.Max(1, hostOptions.RequestTimeoutSeconds));
+
+            if (!string.IsNullOrWhiteSpace(hostOptions.SharedKey))
+            {
+                httpClient.DefaultRequestHeaders.Remove(ProCursorSharedKeyAuthenticationDefaults.HeaderName);
+                httpClient.DefaultRequestHeaders.Add(ProCursorSharedKeyAuthenticationDefaults.HeaderName, hostOptions.SharedKey);
+            }
+        });
+        services.AddHttpClient<ProPrEmbeddingBroker>((sp, httpClient) =>
+        {
+            var hostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(hostOptions.ProPrBaseUrl))
+            {
+                httpClient.BaseAddress = new Uri(hostOptions.ProPrBaseUrl.TrimEnd('/') + "/");
+            }
+
+            httpClient.Timeout = TimeSpan.FromSeconds(Math.Max(1, hostOptions.RequestTimeoutSeconds));
+
+            if (!string.IsNullOrWhiteSpace(hostOptions.SharedKey))
+            {
+                httpClient.DefaultRequestHeaders.Remove(ProCursorSharedKeyAuthenticationDefaults.HeaderName);
+                httpClient.DefaultRequestHeaders.Add(ProCursorSharedKeyAuthenticationDefaults.HeaderName, hostOptions.SharedKey);
+            }
+        });
+        services.AddScoped<IProCursorScmBroker>(sp =>
+            sp.GetRequiredService<ProPrScmBroker>());
+        services.AddScoped<IProCursorEmbeddingBroker>(sp =>
+            sp.GetRequiredService<ProPrEmbeddingBroker>());
 
         services.AddAzureDevOpsProCursorServices(configuration);
-
         services.AddScoped<ProCursorQueryService>();
         services.AddScoped<ProCursorMiniIndexBuilder>();
         services.AddScoped<ProCursorIndexCoordinator>();
-        services.AddScoped<IProCursorGateway, ProCursorGateway>();
+        services.AddScoped<ProCursorGateway>();
+        services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<ProCursorGateway>());
 
         return services;
     }

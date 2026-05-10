@@ -23,10 +23,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release && dotnet build MeisterProPR.ProCursor.slnx --no-restore --configuration Release
 
   test:
     name: Test
@@ -43,7 +43,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
 
       - name: Run domain tests
         run: dotnet test tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
@@ -56,6 +56,9 @@ jobs:
 
       - name: Run API tests
         run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+      - name: Run ProCursor service tests
+        run: dotnet test tests/MeisterProPR.ProCursor.Service.Tests/MeisterProPR.ProCursor.Service.Tests.csproj --no-restore --configuration Release --verbosity normal
 
   release:
     name: Build, push, and sign images
@@ -87,12 +90,14 @@ jobs:
         run: |
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "backend=${{ env.REGISTRY }}/${REPO}" >> "$GITHUB_OUTPUT"
+          echo "procursor=${{ env.REGISTRY }}/${REPO}/procursor" >> "$GITHUB_OUTPUT"
           echo "frontend=${{ env.REGISTRY }}/${REPO}/admin-ui" >> "$GITHUB_OUTPUT"
 
       - name: Compute Docker tags
         id: tags
         run: |
           BACKEND="${{ steps.images.outputs.backend }}"
+          PROCURSOR="${{ steps.images.outputs.procursor }}"
           FRONTEND="${{ steps.images.outputs.frontend }}"
           VERSION="${{ steps.version.outputs.version }}"
 
@@ -101,6 +106,9 @@ jobs:
             {
               echo "backend<<ENDOFTAGS"
               echo "${BACKEND}:${VERSION}"
+              echo "ENDOFTAGS"
+              echo "procursor<<ENDOFTAGS"
+              echo "${PROCURSOR}:${VERSION}"
               echo "ENDOFTAGS"
               echo "frontend<<ENDOFTAGS"
               echo "${FRONTEND}:${VERSION}"
@@ -112,6 +120,10 @@ jobs:
               echo "backend<<ENDOFTAGS"
               echo "${BACKEND}:${VERSION}"
               echo "${BACKEND}:latest"
+              echo "ENDOFTAGS"
+              echo "procursor<<ENDOFTAGS"
+              echo "${PROCURSOR}:${VERSION}"
+              echo "${PROCURSOR}:latest"
               echo "ENDOFTAGS"
               echo "frontend<<ENDOFTAGS"
               echo "${FRONTEND}:${VERSION}"
@@ -153,6 +165,31 @@ jobs:
         with:
           subject-name: ${{ steps.images.outputs.backend }}
           subject-digest: ${{ steps.build-backend.outputs.digest }}
+          push-to-registry: true
+
+      # ProCursor image
+
+      - name: Build and push ProCursor image
+        id: build-procursor
+        uses: docker/build-push-action@v7.0.0
+        with:
+          context: .
+          file: Dockerfile.procursor
+          push: true
+          tags: ${{ steps.tags.outputs.procursor }}
+          labels: |
+            org.opencontainers.image.title=Meister DEV ProPR ProCursor
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Attest ProCursor image
+        uses: actions/attest@v4.1.0
+        with:
+          subject-name: ${{ steps.images.outputs.procursor }}
+          subject-digest: ${{ steps.build-procursor.outputs.digest }}
           push-to-registry: true
 
       # Frontend image

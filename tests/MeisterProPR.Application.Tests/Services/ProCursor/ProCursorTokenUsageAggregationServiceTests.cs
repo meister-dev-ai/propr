@@ -11,12 +11,12 @@ namespace MeisterProPR.Application.Tests.Services.ProCursor;
 
 public sealed class ProCursorTokenUsageAggregationServiceTests
 {
-    private static MeisterProPRDbContext CreateContext()
+    private static ProCursorOperationalDbContext CreateContext()
     {
-        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+        var options = new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new MeisterProPRDbContext(options);
+        return new ProCursorOperationalDbContext(options);
     }
 
     [Fact]

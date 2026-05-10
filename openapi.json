@@ -5136,7 +5136,7 @@
         "tags": [
           "ClientReviewerIdentities"
         ],
-        "summary": "Resolves candidate reviewer identities for one client provider connection.",
+        "summary": "Resolves candidate reviewer-trigger identities for one client provider connection.",
         "parameters": [
           {
             "name": "clientId",
@@ -5161,7 +5161,7 @@
           {
             "name": "search",
             "in": "query",
-            "description": "Search text used to find reviewer identities.",
+            "description": "Search text used to find reviewer-trigger candidates.",
             "schema": {
               "type": "string"
             }
@@ -5169,7 +5169,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Reviewer identity candidates found.",
+            "description": "Reviewer-trigger identity candidates found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5305,7 +5305,7 @@
         "tags": [
           "ClientReviewerIdentities"
         ],
-        "summary": "Gets the configured reviewer identity for one client provider connection.",
+        "summary": "Gets the configured reviewer-trigger identity for one client provider connection.",
         "parameters": [
           {
             "name": "clientId",
@@ -5330,7 +5330,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Configured reviewer identity found.",
+            "description": "Configured reviewer-trigger identity found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5390,7 +5390,7 @@
             }
           },
           "404": {
-            "description": "Client provider connection or reviewer identity not found.",
+            "description": "Client provider connection or reviewer-trigger identity not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5415,7 +5415,7 @@
         "tags": [
           "ClientReviewerIdentities"
         ],
-        "summary": "Creates or replaces the configured reviewer identity for one client provider connection.",
+        "summary": "Creates or replaces the configured reviewer-trigger identity for one client provider connection.",
         "parameters": [
           {
             "name": "clientId",
@@ -5439,7 +5439,7 @@
           }
         ],
         "requestBody": {
-          "description": "Reviewer identity details.",
+          "description": "Reviewer-trigger identity details.",
           "content": {
             "application/json": {
               "schema": {
@@ -5460,7 +5460,7 @@
         },
         "responses": {
           "200": {
-            "description": "Reviewer identity stored.",
+            "description": "Reviewer-trigger identity stored.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5565,7 +5565,7 @@
         "tags": [
           "ClientReviewerIdentities"
         ],
-        "summary": "Clears the configured reviewer identity for one client provider connection.",
+        "summary": "Clears the configured reviewer-trigger identity for one client provider connection.",
         "parameters": [
           {
             "name": "clientId",
@@ -5590,7 +5590,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Reviewer identity cleared."
+            "description": "Reviewer-trigger identity cleared."
           },
           "401": {
             "description": "Missing or invalid credentials.",
@@ -7347,6 +7347,130 @@
         }
       }
     },
+    "/internal/propr/procursor/broker/scm/materialize": {
+      "post": {
+        "tags": [
+          "ProCursorBroker"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/broker/scm/branch-head": {
+      "post": {
+        "tags": [
+          "ProCursorBroker"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/broker/embeddings/deployment": {
+      "post": {
+        "tags": [
+          "ProCursorBroker"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingDeploymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingDeploymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingDeploymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/broker/embeddings/generate": {
+      "post": {
+        "tags": [
+          "ProCursorBroker"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingBatchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingBatchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorEmbeddingBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/clients/{clientId}/procursor/sources": {
       "get": {
         "tags": [
@@ -7357,7 +7481,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7367,7 +7490,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Configured ProCursor sources for the client.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7396,7 +7519,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7416,7 +7539,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7436,7 +7559,7 @@
             }
           },
           "404": {
-            "description": "Client not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7454,6 +7577,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       },
@@ -7466,7 +7592,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7475,7 +7600,6 @@
           }
         ],
         "requestBody": {
-          "description": "Knowledge source registration payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7496,7 +7620,7 @@
         },
         "responses": {
           "201": {
-            "description": "Source created.",
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7516,7 +7640,7 @@
             }
           },
           "400": {
-            "description": "Validation failure.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7536,7 +7660,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7556,7 +7680,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have administrator access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7576,7 +7700,7 @@
             }
           },
           "404": {
-            "description": "Client not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7596,7 +7720,7 @@
             }
           },
           "409": {
-            "description": "A duplicate source already exists.",
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7614,6 +7738,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
@@ -7628,7 +7755,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7638,7 +7764,6 @@
           {
             "name": "sourceId",
             "in": "path",
-            "description": "Knowledge source identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7647,7 +7772,6 @@
           }
         ],
         "requestBody": {
-          "description": "Optional refresh request overrides.",
           "content": {
             "application/json": {
               "schema": {
@@ -7668,7 +7792,7 @@
         },
         "responses": {
           "202": {
-            "description": "Refresh job queued.",
+            "description": "Accepted",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7688,7 +7812,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7708,7 +7832,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have administrator access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7728,7 +7852,7 @@
             }
           },
           "404": {
-            "description": "Client or source not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7748,7 +7872,7 @@
             }
           },
           "409": {
-            "description": "Embedding configuration is incomplete or incompatible for the client.",
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7766,6 +7890,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
@@ -7780,7 +7907,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7790,7 +7916,6 @@
           {
             "name": "sourceId",
             "in": "path",
-            "description": "Knowledge source identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7800,7 +7925,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Tracked branches returned.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7829,7 +7954,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7849,7 +7974,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7869,7 +7994,7 @@
             }
           },
           "404": {
-            "description": "Client or source not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7887,6 +8012,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       },
@@ -7899,7 +8027,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7909,7 +8036,6 @@
           {
             "name": "sourceId",
             "in": "path",
-            "description": "Knowledge source identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -7918,7 +8044,6 @@
           }
         ],
         "requestBody": {
-          "description": "Tracked-branch creation payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7939,7 +8064,7 @@
         },
         "responses": {
           "201": {
-            "description": "Tracked branch created.",
+            "description": "Created",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7959,7 +8084,7 @@
             }
           },
           "400": {
-            "description": "Validation failure.",
+            "description": "Bad Request",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7979,7 +8104,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7999,7 +8124,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have administrator access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8019,7 +8144,7 @@
             }
           },
           "404": {
-            "description": "Client or source not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8039,7 +8164,7 @@
             }
           },
           "409": {
-            "description": "A duplicate tracked branch already exists.",
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8057,6 +8182,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
@@ -8071,7 +8199,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8081,7 +8208,6 @@
           {
             "name": "sourceId",
             "in": "path",
-            "description": "Knowledge source identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8091,7 +8217,6 @@
           {
             "name": "branchId",
             "in": "path",
-            "description": "Tracked branch identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8100,7 +8225,6 @@
           }
         ],
         "requestBody": {
-          "description": "Tracked-branch update payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -8121,7 +8245,7 @@
         },
         "responses": {
           "200": {
-            "description": "Tracked branch updated.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8141,7 +8265,7 @@
             }
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8161,7 +8285,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have administrator access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8181,7 +8305,7 @@
             }
           },
           "404": {
-            "description": "Client, source, or branch not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8199,6 +8323,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       },
@@ -8211,7 +8338,6 @@
           {
             "name": "clientId",
             "in": "path",
-            "description": "Client identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8221,7 +8347,6 @@
           {
             "name": "sourceId",
             "in": "path",
-            "description": "Knowledge source identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8231,7 +8356,6 @@
           {
             "name": "branchId",
             "in": "path",
-            "description": "Tracked branch identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -8241,10 +8365,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Tracked branch removed."
+            "description": "No Content"
           },
           "401": {
-            "description": "Missing or invalid credentials.",
+            "description": "Unauthorized",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8264,7 +8388,7 @@
             }
           },
           "403": {
-            "description": "Caller does not have administrator access to the client.",
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8284,7 +8408,7 @@
             }
           },
           "404": {
-            "description": "Client, source, or branch not found.",
+            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8304,7 +8428,7 @@
             }
           },
           "409": {
-            "description": "The last tracked branch cannot be removed.",
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {
@@ -8322,6 +8446,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
@@ -14209,7 +14336,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Client-scoped provider reviewer identity returned by admin APIs."
+        "description": "Client-scoped provider reviewer-trigger identity returned by admin APIs."
       },
       "ClientRole": {
         "enum": [
@@ -15767,6 +15894,116 @@
         "additionalProperties": false,
         "description": "JSON payload used for premium-unavailable responses."
       },
+      "ProCursorEmbeddingBatchRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "expectedDimensions": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request used to generate one embedding vector per input string."
+      },
+      "ProCursorEmbeddingDeploymentRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expectedDimensions": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request used to resolve the active embedding deployment for a client."
+      },
+      "ProCursorKnowledgeSourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/ProCursorSourceKind"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "defaultBranch": {
+            "type": "string",
+            "nullable": true
+          },
+          "rootPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "symbolMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "latestSnapshot": {
+            "$ref": "#/components/schemas/ProCursorSnapshotDto"
+          },
+          "trackedBranches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProCursorTrackedBranchDto"
+            },
+            "nullable": true
+          },
+          "organizationScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "canonicalSourceRef": {
+            "$ref": "#/components/schemas/CanonicalSourceReferenceDto"
+          },
+          "sourceDisplayName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Client-scoped ProCursor source descriptor returned by the module facade."
+      },
       "ProCursorKnowledgeSourceRequest": {
         "type": "object",
         "properties": {
@@ -15982,6 +16219,86 @@
         ],
         "type": "string",
         "description": "Trigger behavior for tracked-branch refresh scheduling."
+      },
+      "ProCursorScmMaterializationRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/ProCursorKnowledgeSourceDto"
+          },
+          "trackedBranch": {
+            "$ref": "#/components/schemas/ProCursorTrackedBranchDto"
+          },
+          "requestedCommitSha": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request used by the extracted ProCursor host to ask ProPR for source materialization data."
+      },
+      "ProCursorSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "knowledgeSourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trackedBranchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchName": {
+            "type": "string",
+            "nullable": true
+          },
+          "commitSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "supportsSymbolQueries": {
+            "type": "boolean"
+          },
+          "fileCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chunkCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "symbolCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "freshnessStatus": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "ProCursor snapshot metadata exposed through application contracts."
       },
       "ProCursorSourceKind": {
         "enum": [
@@ -16491,6 +16808,55 @@
         },
         "additionalProperties": false,
         "description": "Ranked top-sources response returned for a selected client reporting period."
+      },
+      "ProCursorTrackedBranchDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchName": {
+            "type": "string",
+            "nullable": true
+          },
+          "refreshTriggerMode": {
+            "$ref": "#/components/schemas/ProCursorRefreshTriggerMode"
+          },
+          "miniIndexEnabled": {
+            "type": "boolean"
+          },
+          "lastSeenCommitSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastIndexedCommitSha": {
+            "type": "string",
+            "nullable": true
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "freshnessStatus": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One tracked branch configured for a ProCursor knowledge source."
+      },
+      "ProCursorTrackedBranchHeadRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/ProCursorKnowledgeSourceDto"
+          },
+          "trackedBranch": {
+            "$ref": "#/components/schemas/ProCursorTrackedBranchDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request used by the extracted ProCursor host to resolve the latest tracked-branch commit."
       },
       "ProCursorTrackedBranchPatchRequest": {
         "type": "object",
@@ -17048,7 +17414,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Resolved reviewer identity candidate returned by provider onboarding APIs."
+        "description": "Resolved reviewer-trigger identity candidate returned by provider onboarding APIs."
       },
       "ReviewCodeReviewRefDto": {
         "type": "object",
@@ -17377,7 +17743,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Provider-neutral reviewer identity supplied by review intake clients."
+        "description": "Provider-neutral reviewer identity supplied by review intake clients as trigger context."
       },
       "ReviewRevisionRefDto": {
         "type": "object",
@@ -18336,6 +18702,9 @@
     },
     {
       "name": "Jobs"
+    },
+    {
+      "name": "ProCursorBroker"
     },
     {
       "name": "ProCursorKnowledgeSources"

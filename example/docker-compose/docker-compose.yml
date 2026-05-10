@@ -82,6 +82,8 @@ services:
         condition: service_healthy
       loki:
         condition: service_healthy
+      procursor:
+        condition: service_healthy
     environment:
       - MEISTER_JWT_SECRET=${MEISTER_JWT_SECRET}
       - MEISTER_BOOTSTRAP_ADMIN_USER=${MEISTER_BOOTSTRAP_ADMIN_USER}
@@ -89,6 +91,9 @@ services:
       - MEISTER_PUBLIC_BASE_URL=${MEISTER_PUBLIC_BASE_URL:-https://localhost:5443/api}
       - MEISTER_DATA_PROTECTION_KEYS_PATH=/app/.data-protection-keys
       - DB_CONNECTION_STRING=${DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=meisterpropr;Username=postgres;Password=devpass}
+      - PROCURSOR_REMOTE_MODE=${PROCURSOR_REMOTE_MODE:-proprManagedRemote}
+      - PROCURSOR_SERVICE_BASE_URL=${PROCURSOR_SERVICE_BASE_URL:-http://procursor:8081}
+      - PROCURSOR_SHARED_KEY=${PROCURSOR_SHARED_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - AI_MAX_ITERATIONS_LOW=${AI_MAX_ITERATIONS_LOW:-}
       - AI_MAX_ITERATIONS_MEDIUM=${AI_MAX_ITERATIONS_MEDIUM:-}
@@ -108,6 +113,30 @@ services:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  procursor:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.procursor
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - MEISTER_JWT_SECRET=${MEISTER_JWT_SECRET}
+      - MEISTER_DATA_PROTECTION_KEYS_PATH=/app/.data-protection-keys
+      - PROCURSOR_PROPR_BASE_URL=${PROCURSOR_PROPR_BASE_URL:-http://meisterpropr:8080}
+      - PROCURSOR_DB_CONNECTION_STRING=${PROCURSOR_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=meisterpropr;Username=postgres;Password=devpass}
+      - PROCURSOR_SHARED_KEY=${PROCURSOR_SHARED_KEY}
+      - LOKI_URL=http://loki:3100
+    volumes:
+      - meisterpropr_data_protection_keys:/app/.data-protection-keys
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/healthz" ]
       interval: 30s
       timeout: 10s
       retries: 3

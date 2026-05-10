@@ -54,6 +54,19 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2025-10-02-previ
   }
 }
 
+resource envDataProtectionStorage 'Microsoft.App/managedEnvironments/storages@2025-10-02-preview' = {
+  parent: env
+  name: '${storageAccountName}-data-protection'
+  properties: {
+    azureFile: {
+      accountName: storageAccountName
+      accountKey: storageAccountKey
+      shareName: 'data-protection-keys'
+      accessMode: 'ReadWrite'
+    }
+  }
+}
+
 output envId string = env.id
 output envPrincipalId string = env.identity.principalId
 output defaultDomain string = env.properties.defaultDomain

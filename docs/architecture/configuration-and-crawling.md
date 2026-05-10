@@ -41,7 +41,7 @@ Azure DevOps in this order:
 4. Re-save crawl, ProCursor, or webhook configuration against the recreated provider-backed scope.
 
 The reviewer identity stored on a provider connection is optional and acts only as an automatic
-review trigger/filter. If it is empty, baseline crawl and webhook processing still applies. Provider
+review trigger/filter. If it is empty, baseline crawl and webhook processing applies. Provider
 reads and writes continue to authenticate through the connection credentials, not through the saved
 reviewer-trigger identity.
 

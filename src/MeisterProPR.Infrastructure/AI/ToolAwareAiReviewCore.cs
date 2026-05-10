@@ -10,6 +10,7 @@ using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -318,6 +319,8 @@ public sealed partial class ToolAwareAiReviewCore(
             return [];
         }
 
+        var supportsProCursorTools = reviewTools is not IProCursorAvailabilityAware { SupportsProCursorTools: false };
+
         var getChangedFiles = AIFunctionFactory.Create(
             () => reviewTools.GetChangedFilesAsync(cancellationToken),
             new AIFunctionFactoryOptions
@@ -345,26 +348,38 @@ public sealed partial class ToolAwareAiReviewCore(
                     "Get the content of a file at a specific line range (1-based, inclusive). Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
             });
 
-        var askProCursorKnowledge = AIFunctionFactory.Create(
-            (string question) => reviewTools.AskProCursorKnowledgeAsync(question, cancellationToken),
-            new AIFunctionFactoryOptions
-            {
-                Name = "ask_procursor_knowledge",
-                Description =
-                    "Ask ProCursor a repository-aware knowledge question using the current review repository context. Returns sourced results with freshness metadata or an explicit no-result/unavailable status.",
-            });
+        var tools = new List<AIFunction>
+        {
+            getChangedFiles,
+            getFileTree,
+            getFileContent,
+        };
 
-        var getProCursorSymbolInfo = AIFunctionFactory.Create(
-            (string symbol, string? queryMode, int? maxRelations) =>
-                reviewTools.GetProCursorSymbolInfoAsync(symbol, queryMode, maxRelations, cancellationToken),
-            new AIFunctionFactoryOptions
-            {
-                Name = "get_procursor_symbol_info",
-                Description =
-                    "Ask ProCursor for symbol-aware insight using the current review repository context. Returns definitions plus related references, calls, inheritance, or containment when available.",
-            });
+        if (supportsProCursorTools)
+        {
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string question) => reviewTools.AskProCursorKnowledgeAsync(question, cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "ask_procursor_knowledge",
+                        Description =
+                            "Ask ProCursor a repository-aware knowledge question using the current review repository context. Returns sourced results with freshness metadata or an explicit no-result/unavailable status.",
+                    }));
 
-        return [getChangedFiles, getFileTree, getFileContent, askProCursorKnowledge, getProCursorSymbolInfo];
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string symbol, string? queryMode, int? maxRelations) =>
+                        reviewTools.GetProCursorSymbolInfoAsync(symbol, queryMode, maxRelations, cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "get_procursor_symbol_info",
+                        Description =
+                            "Ask ProCursor for symbol-aware insight using the current review repository context. Returns definitions plus related references, calls, inheritance, or containment when available.",
+                    }));
+        }
+
+        return tools;
     }
 
     private async Task<string> InvokeToolAsync(

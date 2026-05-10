@@ -4,12 +4,15 @@
         <Project Path="src/MeisterProPR.Application/MeisterProPR.Application.csproj"/>
         <Project Path="src/MeisterProPR.Domain/MeisterProPR.Domain.csproj"/>
         <Project Path="src/MeisterProPR.Infrastructure/MeisterProPR.Infrastructure.csproj"/>
+        <Project Path="src/MeisterProPR.ProCursor.Contracts/MeisterProPR.ProCursor.Contracts.csproj"/>
         <Project Path="src/MeisterProPR.ProCursor/MeisterProPR.ProCursor.csproj"/>
+        <Project Path="src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj"/>
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj"/>
         <Project Path="tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj"/>
         <Project Path="tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj"/>
         <Project Path="tests/MeisterProPR.Infrastructure.Tests/MeisterProPR.Infrastructure.Tests.csproj"/>
+        <Project Path="tests/MeisterProPR.ProCursor.Service.Tests/MeisterProPR.ProCursor.Service.Tests.csproj"/>
     </Folder>
 </Solution>

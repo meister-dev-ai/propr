@@ -12,22 +12,34 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories.ProCursor;
 
 public sealed class ProCursorTokenUsageReadRepositoryTests
 {
-    private static MeisterProPRDbContext CreateContext()
+    private static (MeisterProPRDbContext Control, ProCursorOperationalDbContext Operational) CreateContexts()
     {
-        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+        var controlOptions = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"control-{Guid.NewGuid():N}")
             .Options;
-        return new MeisterProPRDbContext(options);
+        var operationalOptions = new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
+            .UseInMemoryDatabase($"operational-{Guid.NewGuid():N}")
+            .Options;
+        return (new MeisterProPRDbContext(controlOptions), new ProCursorOperationalDbContext(operationalOptions));
+    }
+
+    private static ProCursorTokenUsageReadRepository CreateRepository(
+        ProCursorOperationalDbContext operationalDb,
+        MeisterProPRDbContext controlDb)
+    {
+        return new ProCursorTokenUsageReadRepository(operationalDb, new ProCursorKnowledgeSourceRepository(controlDb));
     }
 
     [Fact]
     public async Task GetClientUsageAsync_AggregatesPersistedEvents()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(
+        controlDb.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        operationalDb.ProCursorTokenUsageEvents.Add(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -37,7 +49,7 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 120,
                 0,
                 0.00012m));
-        db.ProCursorTokenUsageEvents.Add(
+        operationalDb.ProCursorTokenUsageEvents.Add(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -47,9 +59,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 80,
                 0,
                 0.00008m));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetClientUsageAsync(
             clientId,
@@ -68,15 +81,17 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetTopSourcesAsync_OrdersSourcesByDescendingTokenUsage()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var dominantSourceId = Guid.NewGuid();
         var smallerSourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.AddRange(
+        controlDb.ProCursorKnowledgeSources.AddRange(
             CreateSource(dominantSourceId, clientId, "Dominant Source", "repo-dominant"),
             CreateSource(smallerSourceId, clientId, "Smaller Source", "repo-smaller"));
-        db.ProCursorTokenUsageEvents.AddRange(
+        operationalDb.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
                 dominantSourceId,
@@ -95,9 +110,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 100,
                 0,
                 0.0001m));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetTopSourcesAsync(
             clientId,
@@ -114,12 +130,14 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task ExportAsync_ReturnsOneRowPerEventWithinRange()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.AddRange(
+        controlDb.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        operationalDb.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -140,9 +158,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 0,
                 0.00006m,
                 "/docs/setup.md"));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.ExportAsync(
             clientId,
@@ -160,15 +179,17 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetSourceUsageAsync_ReturnsSourceTotalsAndModelBreakdown()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
         var otherSourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.AddRange(
+        controlDb.ProCursorKnowledgeSources.AddRange(
             CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki),
             CreateSource(otherSourceId, clientId, "Ignored Source", "wiki-b", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.AddRange(
+        operationalDb.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -198,9 +219,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 999,
                 0,
                 0.00099m));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetSourceUsageAsync(
             clientId,
@@ -227,13 +249,15 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetRecentEventsAsync_ReturnsRecentSafeEventsNewestFirst()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
         var chunkId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.AddRange(
+        controlDb.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        operationalDb.ProCursorTokenUsageEvents.AddRange(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -257,9 +281,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 0.00007m,
                 "/docs/setup.md",
                 resourceId: "ado://wiki/setup"));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetRecentEventsAsync(clientId, sourceId, 10);
 
@@ -275,13 +300,15 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetRecentEventsAsync_DoesNotExposeSafeMetadataJson()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
         const string safeMetadataMarker = "private-safe-metadata-marker";
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(
+        controlDb.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        operationalDb.ProCursorTokenUsageEvents.Add(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -292,9 +319,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 0,
                 0.00012m,
                 safeMetadataJson: $"{{\"traceId\":\"{safeMetadataMarker}\"}}"));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetRecentEventsAsync(clientId, sourceId, 10);
 
@@ -307,12 +335,14 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetRecentEventsAsync_ZeroLimit_ReturnsEmptyCollection()
     {
-        await using var db = CreateContext();
+        var contexts = CreateContexts();
+        await using var controlDb = contexts.Control;
+        await using var operationalDb = contexts.Operational;
         var clientId = Guid.NewGuid();
         var sourceId = Guid.NewGuid();
 
-        db.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
-        db.ProCursorTokenUsageEvents.Add(
+        controlDb.ProCursorKnowledgeSources.Add(CreateSource(sourceId, clientId, "Platform Wiki", "wiki-a", ProCursorSourceKind.AdoWiki));
+        operationalDb.ProCursorTokenUsageEvents.Add(
             CreateEvent(
                 clientId,
                 sourceId,
@@ -322,9 +352,10 @@ public sealed class ProCursorTokenUsageReadRepositoryTests
                 120,
                 0,
                 0.00012m));
-        await db.SaveChangesAsync();
+        await controlDb.SaveChangesAsync();
+        await operationalDb.SaveChangesAsync();
 
-        var repository = new ProCursorTokenUsageReadRepository(db);
+        var repository = CreateRepository(operationalDb, controlDb);
 
         var result = await repository.GetRecentEventsAsync(clientId, sourceId, 0);
 

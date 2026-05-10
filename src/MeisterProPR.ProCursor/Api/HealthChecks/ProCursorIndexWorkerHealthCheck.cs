@@ -1,12 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Api.Workers;
-using MeisterProPR.Application.Options;
+using MeisterProPR.ProCursor.Options;
+using MeisterProPR.ProCursor.Workers;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
-namespace MeisterProPR.Api.HealthChecks;
+namespace MeisterProPR.ProCursor.HealthChecks;
 
 /// <summary>
 ///     Health check that reports whether the ProCursor index worker is running and making progress.

@@ -8,6 +8,7 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -315,6 +316,42 @@ public class ToolAwareAiReviewCoreTests
         // Assert — AI was called twice (once for tool call, once for final response)
         Assert.Equal(2, callCount);
         Assert.Equal("Done.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhenProCursorIsUnavailable_OmitsProCursorAiFunctions()
+    {
+        List<string> toolNames = [];
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                toolNames = callInfo.Arg<ChatOptions?>()?.Tools?
+                    .OfType<AIFunction>()
+                    .Select(tool => tool.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Cast<string>()
+                    .ToList() ?? [];
+
+                return CreateFinalReviewResponse("Done.");
+            });
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), CreateContext(new DisabledProCursorReviewTools()));
+
+        Assert.Contains("get_changed_files", toolNames);
+        Assert.Contains("get_file_tree", toolNames);
+        Assert.Contains("get_file_content", toolNames);
+        Assert.DoesNotContain("ask_procursor_knowledge", toolNames);
+        Assert.DoesNotContain("get_procursor_symbol_info", toolNames);
     }
 
     [Fact]
@@ -1235,5 +1272,39 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<IEnumerable<ChatMessage>>(),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
+    }
+
+    private sealed class DisabledProCursorReviewTools : IReviewContextTools, IProCursorAvailabilityAware
+    {
+        public bool SupportsProCursorTools => false;
+
+        public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<ChangedFileSummary>>([]);
+        }
+
+        public Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+
+        public Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        public Task<MeisterProPR.Application.DTOs.ProCursor.ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<MeisterProPR.Application.DTOs.ProCursor.ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+            string symbol,
+            string? queryMode,
+            int? maxRelations,
+            CancellationToken ct)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

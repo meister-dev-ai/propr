@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -117,7 +119,15 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
             }
 
             attemptOrder++;
-            var knowledge = await reviewTools.AskProCursorKnowledgeAsync(workItem.Claim.AssertionText, ct);
+            ProCursorKnowledgeAnswerDto knowledge;
+            try
+            {
+                knowledge = await reviewTools.AskProCursorKnowledgeAsync(workItem.Claim.AssertionText, ct);
+            }
+            catch (ProCursorDependencyUnavailableException ex)
+            {
+                knowledge = new ProCursorKnowledgeAnswerDto("unavailable", [], ex.Message);
+            }
             if (string.Equals(knowledge.Status, "ok", StringComparison.OrdinalIgnoreCase) && knowledge.Results.Count > 0)
             {
                 evidenceItems.Add(
@@ -157,7 +167,15 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
             if (workItem.Claim.RequiresSymbolEvidence && !string.IsNullOrWhiteSpace(workItem.Claim.SubjectIdentifier))
             {
                 attemptOrder++;
-                var symbol = await reviewTools.GetProCursorSymbolInfoAsync(workItem.Claim.SubjectIdentifier, "name", 5, ct);
+                ProCursorSymbolInsightDto symbol;
+                try
+                {
+                    symbol = await reviewTools.GetProCursorSymbolInfoAsync(workItem.Claim.SubjectIdentifier, "name", 5, ct);
+                }
+                catch (ProCursorDependencyUnavailableException)
+                {
+                    symbol = new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
+                }
                 if (string.Equals(symbol.Status, "ok", StringComparison.OrdinalIgnoreCase) && symbol.Symbol is not null)
                 {
                     evidenceItems.Add(

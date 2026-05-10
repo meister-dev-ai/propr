@@ -4,6 +4,7 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -12,6 +13,7 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.ProCursor.Core;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -145,6 +147,42 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                     request.ReviewContext.PullRequestId == job.PullRequestId &&
                     request.ReviewContext.IterationId == job.IterationId),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenProCursorKnowledgeDependencyIsUnavailable_ContinuesReview()
+    {
+        var job = CreateJob();
+        var proCursorGateway = Substitute.For<IProCursorGateway>();
+        proCursorGateway.AskKnowledgeAsync(Arg.Any<ProCursorKnowledgeQueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ProCursorKnowledgeAnswerDto>>(_ =>
+                throw new ProCursorDependencyUnavailableException("The configured ProCursor service is unavailable."));
+
+        var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(async call =>
+            {
+                var systemContext = call.ArgAt<ReviewSystemContext>(2);
+                var knowledge = await systemContext.ReviewTools!.AskProCursorKnowledgeAsync(
+                    "How is token caching handled?",
+                    call.ArgAt<CancellationToken>(3));
+
+                Assert.Equal("unavailable", knowledge.Status);
+                Assert.Contains("unavailable", knowledge.NoResultReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+                return new ReviewResult("Review completed without ProCursor knowledge.", []);
+            });
+
+        var service = CreateService(job, orchestrator, proCursorGateway);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await proCursorGateway.Received(1)
+            .AskKnowledgeAsync(Arg.Any<ProCursorKnowledgeQueryRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

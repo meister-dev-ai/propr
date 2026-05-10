@@ -3,6 +3,7 @@
     <ItemGroup>
         <ProjectReference Include="..\MeisterProPR.Domain\MeisterProPR.Domain.csproj"/>
         <ProjectReference Include="..\MeisterProPR.Application\MeisterProPR.Application.csproj"/>
+        <ProjectReference Include="..\MeisterProPR.ProCursor.Contracts\MeisterProPR.ProCursor.Contracts.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

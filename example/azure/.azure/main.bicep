@@ -4,16 +4,20 @@ param projectName string = 'meister-propr'
 @description('Azure region for all resources.')
 param location string = 'switzerlandnorth'
 
-@description('Container image tag for the backend and admin-ui images.')
+@description('Container image tag for the backend, admin-ui, and ProCursor images.')
 param imageTag string = 'latest'
 
 @description('Set to false if you want to provision infrastructure without creating the app resources.')
 param deployApps bool = true
 
 // ── Key Vault secret values ───────────────────────────────────────────────────
-@description('Optional PostgreSQL connection string override stored in Key Vault. Leave empty to use the internal database app.')
+@description('Optional PostgreSQL connection string override input stored in Key Vault. Leave empty to derive the effective runtime connection string for the internal database app.')
 @secure()
 param dbConnectionString string = ''
+
+@description('Optional ProCursor operational PostgreSQL connection string override input stored in Key Vault. Leave empty to reuse the effective backend runtime database connection.')
+@secure()
+param proCursorDbConnectionString string = ''
 
 @description('JWT signing secret for backend auth. Must be at least 32 characters.')
 @secure()
@@ -25,6 +29,10 @@ param bootstrapAdminUser string = 'admin'
 @description('Bootstrap admin password seeded on first startup when no admin exists.')
 @secure()
 param bootstrapAdminPassword string
+
+@description('Shared symmetric key used for ProPR <-> ProCursor X-ProCursor-Key authentication.')
+@secure()
+param proCursorSharedKey string
 
 @description('PostgreSQL username stored in Key Vault.')
 @secure()
@@ -90,15 +98,18 @@ module containerEnvironment 'modules/containerEnvironment.bicep' = {
 
 var internalDbConnectionString = 'Host=${projectName}-db;Port=5432;Database=meisterpropr;Username=${dbUser};Password=${dbPassword};Ssl Mode=Disable'
 var effectiveDbConnectionString = empty(dbConnectionString) ? internalDbConnectionString : dbConnectionString
+var effectiveProCursorDbConnectionString = empty(proCursorDbConnectionString) ? effectiveDbConnectionString : proCursorDbConnectionString
 
 module kvSecrets 'modules/kvSecrets.bicep' = {
   name: 'kvSecrets'
   params: {
     kvName: kvName
     dbConnectionString: effectiveDbConnectionString
+    proCursorDbConnectionString: effectiveProCursorDbConnectionString
     jwtSecret: jwtSecret
     bootstrapAdminUser: bootstrapAdminUser
     bootstrapAdminPassword: bootstrapAdminPassword
+    proCursorSharedKey: proCursorSharedKey
     dbUser: dbUser
     dbPassword: dbPassword
   }

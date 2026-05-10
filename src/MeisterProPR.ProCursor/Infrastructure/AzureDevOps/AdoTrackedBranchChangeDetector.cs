@@ -1,15 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
-using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
-using Microsoft.TeamFoundation.SourceControl.WebApi;
-using Microsoft.TeamFoundation.Wiki.WebApi;
-using Microsoft.VisualStudio.Services.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 
@@ -17,8 +12,7 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 ///     Azure DevOps-backed tracked-branch head detector for ProCursor scheduling.
 /// </summary>
 public sealed partial class AdoTrackedBranchChangeDetector(
-    VssConnectionFactory connectionFactory,
-    IClientScmConnectionRepository connectionRepository,
+    IProCursorScmBroker scmBroker,
     ILogger<AdoTrackedBranchChangeDetector> logger) : IProCursorTrackedBranchChangeDetector
 {
     /// <summary>
@@ -33,93 +27,50 @@ public sealed partial class AdoTrackedBranchChangeDetector(
         ProCursorTrackedBranch trackedBranch,
         CancellationToken ct = default)
     {
-        var credentials = source.ClientId != Guid.Empty
-            ? await this.ResolveConnectionCredentialsAsync(source.ClientId, source.ProviderScopePath, ct)
-            : null;
-
         try
         {
-            var repositoryId = await this.ResolveRepositoryIdAsync(source, credentials, ct);
-            var branch = await this.GetBranchAsync(source, repositoryId, trackedBranch.BranchName, credentials, ct);
-
-            return branch?.Commit?.CommitId;
+            return await scmBroker.GetLatestCommitShaAsync(ToDto(source), ToDto(trackedBranch), ct);
         }
-        catch (VssServiceResponseException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
         {
             LogBranchHeadResolutionFailed(logger, source.Id, trackedBranch.Id, trackedBranch.BranchName, ex);
             return null;
         }
     }
 
-    private static string NormalizeBranchName(string branchName)
+    private static ProCursorKnowledgeSourceDto ToDto(ProCursorKnowledgeSource source)
     {
-        return branchName.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
-            ? branchName["refs/heads/".Length..]
-            : branchName;
-    }
-
-    private async Task<string> ResolveRepositoryIdAsync(
-        ProCursorKnowledgeSource source,
-        AdoServicePrincipalCredentials? credentials,
-        CancellationToken ct)
-    {
-        if (source.SourceKind != ProCursorSourceKind.AdoWiki)
-        {
-            return source.RepositoryId;
-        }
-
-        var wikis = await this.ListWikisAsync(source, credentials, ct);
-        return AdoWikiRepositoryResolver.ResolveRepositoryId(source, wikis);
-    }
-
-    private async Task<IReadOnlyList<WikiV2>> ListWikisAsync(
-        ProCursorKnowledgeSource source,
-        AdoServicePrincipalCredentials? credentials,
-        CancellationToken ct)
-    {
-        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
-        var wikiClient = connection.GetClient<WikiHttpClient>();
-        var wikis = await wikiClient.GetAllWikisAsync(source.ProviderProjectKey, null, ct);
-        return wikis.ToList().AsReadOnly();
-    }
-
-    private async Task<GitBranchStats?> GetBranchAsync(
-        ProCursorKnowledgeSource source,
-        string repositoryId,
-        string branchName,
-        AdoServicePrincipalCredentials? credentials,
-        CancellationToken ct)
-    {
-        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
-        var gitClient = connection.GetClient<GitHttpClient>();
-        return await gitClient.GetBranchAsync(
+        return new ProCursorKnowledgeSourceDto(
+            source.Id,
+            source.ClientId,
+            source.DisplayName,
+            source.SourceKind,
+            source.ProviderScopePath,
             source.ProviderProjectKey,
-            repositoryId,
-            NormalizeBranchName(branchName),
-            cancellationToken: ct);
+            source.RepositoryId,
+            source.DefaultBranch,
+            source.RootPath,
+            source.IsEnabled,
+            source.SymbolMode,
+            null,
+            source.TrackedBranches.Select(ToDto).ToList().AsReadOnly(),
+            source.OrganizationScopeId,
+            string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
+                ? null
+                : new MeisterProPR.Application.DTOs.AzureDevOps.CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
+            source.SourceDisplayName);
     }
 
-    private async Task<AdoServicePrincipalCredentials?> ResolveConnectionCredentialsAsync(
-        Guid clientId,
-        string organizationUrl,
-        CancellationToken ct)
+    private static ProCursorTrackedBranchDto ToDto(ProCursorTrackedBranch trackedBranch)
     {
-        var connection = await connectionRepository.GetOperationalConnectionAsync(
-            clientId,
-            new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl),
-            ct);
-
-        if (connection is null ||
-            string.IsNullOrWhiteSpace(connection.OAuthTenantId) ||
-            string.IsNullOrWhiteSpace(connection.OAuthClientId) ||
-            string.IsNullOrWhiteSpace(connection.Secret))
-        {
-            return null;
-        }
-
-        return new AdoServicePrincipalCredentials(
-            connection.OAuthTenantId,
-            connection.OAuthClientId,
-            connection.Secret);
+        return new ProCursorTrackedBranchDto(
+            trackedBranch.Id,
+            trackedBranch.BranchName,
+            trackedBranch.RefreshTriggerMode,
+            trackedBranch.MiniIndexEnabled,
+            trackedBranch.LastSeenCommitSha,
+            trackedBranch.LastIndexedCommitSha,
+            trackedBranch.IsEnabled,
+            "unknown");
     }
 }

@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Api.Workers;
+namespace MeisterProPR.ProCursor.Workers;
 
 public sealed partial class ProCursorTokenUsageRollupWorker
 {

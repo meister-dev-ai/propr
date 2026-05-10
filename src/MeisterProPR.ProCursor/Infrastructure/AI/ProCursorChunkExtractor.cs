@@ -5,10 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.ProCursor;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

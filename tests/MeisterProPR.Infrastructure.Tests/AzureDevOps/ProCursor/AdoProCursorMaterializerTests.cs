@@ -1,13 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.TeamFoundation.Wiki.WebApi;
@@ -266,8 +265,7 @@ public sealed class AdoProCursorMaterializerTests
 
         public TestableRepositoryMaterializer(IOptions<ProCursorOptions>? options = null)
             : base(
-                new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientScmConnectionRepository>(),
+                Substitute.For<IProCursorScmBroker>(),
                 options ?? Microsoft.Extensions.Options.Options.Create(new ProCursorOptions()),
                 NullLogger<AdoRepositoryMaterializer>.Instance)
         {
@@ -334,8 +332,7 @@ public sealed class AdoProCursorMaterializerTests
 
         public TestableWikiMaterializer(IOptions<ProCursorOptions>? options = null)
             : base(
-                new VssConnectionFactory(Substitute.For<TokenCredential>()),
-                Substitute.For<IClientScmConnectionRepository>(),
+                Substitute.For<IProCursorScmBroker>(),
                 options ?? Microsoft.Extensions.Options.Options.Create(new ProCursorOptions()),
                 NullLogger<AdoWikiMaterializer>.Instance)
         {
@@ -369,14 +366,6 @@ public sealed class AdoProCursorMaterializerTests
         public Task<string> ResolveRepositoryIdPublicAsync(ProCursorKnowledgeSource source, CancellationToken ct)
         {
             return this.ResolveRepositoryIdAsync(source, ct);
-        }
-
-        protected internal override Task<IReadOnlyList<WikiV2>> ListWikisAsync(
-            ProCursorKnowledgeSource source,
-            AdoServicePrincipalCredentials? credentials,
-            CancellationToken ct)
-        {
-            return Task.FromResult<IReadOnlyList<WikiV2>>(this._wikisById.Values.ToList().AsReadOnly());
         }
 
         protected internal override Task<string> ResolveCommitShaAsync(
@@ -413,6 +402,26 @@ public sealed class AdoProCursorMaterializerTests
         {
             this._contents.TryGetValue((commitSha, NormalizePath(path)), out var content);
             return Task.FromResult(content);
+        }
+
+        protected internal override Task<string> ResolveRepositoryIdAsync(
+            ProCursorKnowledgeSource source,
+            CancellationToken ct)
+        {
+            var canonicalWikiId = !string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
+                ? source.CanonicalSourceValue.Trim()
+                : source.RepositoryId;
+
+            var wiki = this._wikisById.Values.FirstOrDefault(candidate =>
+                           string.Equals(candidate.Id.ToString(), canonicalWikiId, StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(candidate.RepositoryId.ToString(), canonicalWikiId, StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(candidate.Name, canonicalWikiId, StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(candidate.Name, source.DisplayName, StringComparison.OrdinalIgnoreCase)
+                           || (!string.IsNullOrWhiteSpace(source.SourceDisplayName)
+                                && string.Equals(candidate.Name, source.SourceDisplayName, StringComparison.OrdinalIgnoreCase)))
+                       ?? throw new InvalidOperationException($"Unable to resolve the backing repository for wiki source {source.Id}.");
+
+            return Task.FromResult(wiki.RepositoryId.ToString());
         }
     }
 }

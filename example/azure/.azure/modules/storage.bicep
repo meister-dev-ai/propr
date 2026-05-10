@@ -22,3 +22,9 @@ resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2025-0
   name: 'postgres-data'
   properties: { shareQuota: 512 }
 }
+
+resource dataProtectionFileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2025-06-01' = {
+  parent: fileServices
+  name: 'data-protection-keys'
+  properties: { shareQuota: 32 }
+}

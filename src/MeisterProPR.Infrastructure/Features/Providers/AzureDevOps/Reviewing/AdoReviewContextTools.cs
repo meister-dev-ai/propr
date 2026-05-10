@@ -3,10 +3,13 @@
 
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -21,7 +24,7 @@ namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 ///     File content is cached in memory for the lifetime of the instance to avoid
 ///     redundant network calls within a single review pass.
 /// </summary>
-public partial class AdoReviewContextTools : IReviewContextTools
+public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly Guid? _clientId;
     private readonly VssConnectionFactory _connectionFactory;
@@ -83,19 +86,25 @@ public partial class AdoReviewContextTools : IReviewContextTools
         this._logger = logger ?? NullLogger<AdoReviewContextTools>.Instance;
     }
 
+    public bool SupportsProCursorTools => this._proCursorGateway is not DisabledProCursorGateway;
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {
         var gitClient = await this.GetGitClientAsync(ct);
-        var changes = await gitClient.GetPullRequestIterationChangesAsync(
-            this._projectId,
-            this._repositoryId,
-            this._pullRequestId,
-            this._iterationId,
-            cancellationToken: ct);
+        var changeEntries = await AdoPullRequestIterationChangePager.LoadAllAsync(
+            (top, skip, cancellationToken) => gitClient.GetPullRequestIterationChangesAsync(
+                this._projectId,
+                this._repositoryId,
+                this._pullRequestId,
+                this._iterationId,
+                top,
+                skip,
+                cancellationToken: cancellationToken),
+            ct);
 
         var summaries = (
-            from change in changes.ChangeEntries ?? []
+            from change in changeEntries
             where change.Item?.IsFolder != true
             let path = change.Item?.Path ?? string.Empty
             where !string.IsNullOrEmpty(path)
@@ -213,32 +222,39 @@ public partial class AdoReviewContextTools : IReviewContextTools
     }
 
     /// <inheritdoc />
-    public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+    public async Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
     {
         if (this._clientId is null)
         {
-            return Task.FromResult(
-                new ProCursorKnowledgeAnswerDto(
-                    "unavailable",
-                    [],
-                    "The current review context does not include a client identifier for ProCursor."));
+            return new ProCursorKnowledgeAnswerDto(
+                "unavailable",
+                [],
+                "The current review context does not include a client identifier for ProCursor.");
         }
 
-        return this._proCursorGateway.AskKnowledgeAsync(
-            new ProCursorKnowledgeQueryRequest(
-                this._clientId.Value,
-                question,
-                this._knowledgeSourceIds,
-                new ProCursorRepositoryContextDto(
-                    this._organizationUrl,
-                    this._projectId,
-                    this._repositoryId,
-                    NormalizeBranchName(this._sourceBranch))),
-            ct);
+        try
+        {
+            return await this._proCursorGateway.AskKnowledgeAsync(
+                new ProCursorKnowledgeQueryRequest(
+                    this._clientId.Value,
+                    question,
+                    this._knowledgeSourceIds,
+                    new ProCursorRepositoryContextDto(
+                        this._organizationUrl,
+                        this._projectId,
+                        this._repositoryId,
+                        NormalizeBranchName(this._sourceBranch))),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException ex)
+        {
+            this._logger.LogWarning(ex, "ProCursor knowledge query unavailable during Azure DevOps review context execution.");
+            return new ProCursorKnowledgeAnswerDto("unavailable", [], ex.Message);
+        }
     }
 
     /// <inheritdoc />
-    public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+    public async Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
         string symbol,
         string? queryMode,
         int? maxRelations,
@@ -246,29 +262,36 @@ public partial class AdoReviewContextTools : IReviewContextTools
     {
         if (this._clientId is null)
         {
-            return Task.FromResult(
-                new ProCursorSymbolInsightDto(
-                    "unavailable",
-                    null,
-                    false,
-                    false,
-                    null,
-                    []));
+            return new ProCursorSymbolInsightDto(
+                "unavailable",
+                null,
+                false,
+                false,
+                null,
+                []);
         }
 
-        return this._proCursorGateway.GetSymbolInsightAsync(
-            new ProCursorSymbolQueryRequest(
-                this._clientId.Value,
-                symbol,
-                string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
-                StateMode: "reviewTarget",
-                ReviewContext: new ProCursorReviewContextDto(
-                    this._repositoryId,
-                    NormalizeBranchName(this._sourceBranch),
-                    this._pullRequestId,
-                    this._iterationId),
-                MaxRelations: maxRelations),
-            ct);
+        try
+        {
+            return await this._proCursorGateway.GetSymbolInsightAsync(
+                new ProCursorSymbolQueryRequest(
+                    this._clientId.Value,
+                    symbol,
+                    string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                    StateMode: "reviewTarget",
+                    ReviewContext: new ProCursorReviewContextDto(
+                        this._repositoryId,
+                        NormalizeBranchName(this._sourceBranch),
+                        this._pullRequestId,
+                        this._iterationId),
+                    MaxRelations: maxRelations),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException ex)
+        {
+            this._logger.LogWarning(ex, "ProCursor symbol query unavailable during Azure DevOps review context execution.");
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
+        }
     }
 
     /// <summary>

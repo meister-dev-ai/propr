@@ -6,6 +6,12 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers.ProCursor;
+using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Interfaces;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Features.ProCursor;
 
@@ -67,5 +73,104 @@ public sealed class ProCursorModuleIntegrationTests(ProCursorKnowledgeSourcesCon
             .ToList();
         Assert.Single(items);
         Assert.Equal("Knowledge Repo", items[0].GetProperty("displayName").GetString());
+    }
+
+    [Fact]
+    public async Task Healthz_WhenRemoteProCursorIsConfigured_ReportsRemoteDependencyFailure()
+    {
+        await using var remoteFactory = new RemoteProCursorHealthApiFactory();
+        var client = remoteFactory.CreateClient();
+
+        var response = await client.GetAsync("/healthz");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var entries = document.RootElement.GetProperty("entries");
+        var remoteEntry = entries.GetProperty("procursor-remote");
+
+        Assert.Equal("Unhealthy", remoteEntry.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Healthz_WhenProCursorIsDisabled_OmitsRemoteDependencyCheck()
+    {
+        await using var disabledFactory = new DisabledProCursorHealthApiFactory();
+        var client = disabledFactory.CreateClient();
+
+        var response = await client.GetAsync("/healthz");
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var entries = document.RootElement.GetProperty("entries");
+
+        Assert.False(entries.TryGetProperty("procursor-remote", out _));
+    }
+
+    private sealed class RemoteProCursorHealthApiFactory : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("MEISTER_JWT_SECRET", "test-procursor-remote-health-jwt-secret");
+            builder.UseSetting("PROCURSOR_REMOTE_MODE", "proprManagedRemote");
+            builder.UseSetting("PROCURSOR_SERVICE_BASE_URL", "http://127.0.0.1:1");
+            builder.UseSetting("PROCURSOR_SHARED_KEY", "test-shared-key");
+            builder.UseSetting("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+
+            builder.ConfigureServices(services =>
+            {
+                ReplaceService(services, Substitute.For<IPullRequestFetcher>());
+                ReplaceService(services, Substitute.For<IAdoCommentPoster>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
+                services.AddSingleton(Substitute.For<IJobRepository>());
+                services.AddSingleton(Substitute.For<IClientRegistry>());
+            });
+        }
+
+        private static void ReplaceService<T>(IServiceCollection services, T implementation) where T : class
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
+            if (descriptor is not null)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddSingleton(implementation);
+        }
+    }
+
+    private sealed class DisabledProCursorHealthApiFactory : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("MEISTER_JWT_SECRET", "test-procursor-disabled-health-jwt-secret");
+            builder.UseSetting("PROCURSOR_REMOTE_MODE", "disabled");
+            builder.UseSetting("AI_ENDPOINT", "https://fake-ai.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+
+            builder.ConfigureServices(services =>
+            {
+                ReplaceService(services, Substitute.For<IPullRequestFetcher>());
+                ReplaceService(services, Substitute.For<IAdoCommentPoster>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
+                services.AddSingleton(Substitute.For<IJobRepository>());
+                services.AddSingleton(Substitute.For<IClientRegistry>());
+            });
+        }
+
+        private static void ReplaceService<T>(IServiceCollection services, T implementation) where T : class
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(T));
+            if (descriptor is not null)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddSingleton(implementation);
+        }
     }
 }

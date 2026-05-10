@@ -5,13 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.ProCursor.Core;
 
 /// <summary>
 ///     Reads persisted ProCursor snapshots and returns sourced knowledge matches for reviewer questions.

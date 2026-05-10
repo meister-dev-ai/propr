@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ComponentModel.DataAnnotations;
-using MeisterProPR.Application.Options;
+using MeisterProPR.ProCursor.Options;
 
 namespace MeisterProPR.Application.Tests.Options;
 

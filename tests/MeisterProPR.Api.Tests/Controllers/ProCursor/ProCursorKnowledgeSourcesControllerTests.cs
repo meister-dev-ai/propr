@@ -10,6 +10,8 @@ using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Licensing.Dtos;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
@@ -20,6 +22,7 @@ using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -304,6 +307,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+
     [Fact]
     public async Task CreateSource_ClientUser_Returns403()
     {
@@ -400,7 +404,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         Assert.Equal(1, await db.ProCursorIndexJobs.CountAsync(job => job.KnowledgeSourceId == sourceId));
     }
 
@@ -451,6 +455,73 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
     }
 
     [Fact]
+    public async Task BrokerMaterialize_WithoutSharedKey_Returns401()
+    {
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync(
+            "/internal/propr/procursor/broker/scm/materialize",
+            this.CreateMaterializationRequest());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BrokerMaterialize_WithSharedKey_DelegatesToScmBroker()
+    {
+        var request = this.CreateMaterializationRequest();
+        factory.ScmBroker.MaterializeAsync(
+                Arg.Any<ProCursorKnowledgeSourceDto>(),
+                Arg.Any<ProCursorTrackedBranchDto>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ProCursorScmMaterializationResponse(
+                    "abc123",
+                    [new ProCursorScmFileDto("src/Greeter.cs", "public class Greeter {}")]));
+
+        var client = this.CreateBrokerClient();
+        var response = await client.PostAsJsonAsync(
+            "/internal/propr/procursor/broker/scm/materialize",
+            request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("abc123", payload.GetProperty("commitSha").GetString());
+        Assert.Equal("src/Greeter.cs", payload.GetProperty("files")[0].GetProperty("path").GetString());
+        await factory.ScmBroker.Received(1).MaterializeAsync(
+            Arg.Is<ProCursorKnowledgeSourceDto>(source =>
+                source.ClientId == factory.ClientId &&
+                source.RepositoryId == "repo-a" &&
+                source.DefaultBranch == "main"),
+            Arg.Is<ProCursorTrackedBranchDto>(branch =>
+                branch.BranchName == "main" &&
+                branch.RefreshTriggerMode == ProCursorRefreshTriggerMode.BranchUpdate),
+            "requested-sha",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BrokerGenerateEmbeddings_WhenBrokerUnavailable_Returns503()
+    {
+        factory.EmbeddingBroker.GenerateEmbeddingsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns<Task<ProCursorEmbeddingBatchResponse>>(_ =>
+                throw new ProCursorDependencyUnavailableException("embedding runtime unavailable"));
+
+        var client = this.CreateBrokerClient();
+        var response = await client.PostAsJsonAsync(
+            "/internal/propr/procursor/broker/embeddings/generate",
+            new ProCursorEmbeddingBatchRequest(factory.ClientId, ["alpha", "beta"], 1536));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("embedding runtime unavailable", payload.GetProperty("error").GetString());
+    }
+
+    [Fact]
     public async Task OpenApi_ContainsProCursorPaths()
     {
         var openApiPath = Path.GetFullPath(
@@ -475,11 +546,54 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
             StringComparison.Ordinal);
     }
 
+    private HttpClient CreateBrokerClient()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ProCursorSharedKeyAuthenticationDefaults.HeaderName, ProCursorApiFactory.SharedKey);
+        return client;
+    }
+
+    private ProCursorScmMaterializationRequest CreateMaterializationRequest()
+    {
+        var trackedBranch = new ProCursorTrackedBranchDto(
+            Guid.NewGuid(),
+            "main",
+            ProCursorRefreshTriggerMode.BranchUpdate,
+            true,
+            null,
+            null,
+            true,
+            "fresh");
+
+        return new ProCursorScmMaterializationRequest(
+            new ProCursorKnowledgeSourceDto(
+                Guid.NewGuid(),
+                factory.ClientId,
+                "Knowledge Repo",
+                ProCursorSourceKind.Repository,
+                "https://dev.azure.com/test-org",
+                "project-a",
+                "repo-a",
+                "main",
+                null,
+                true,
+                "auto",
+                null,
+                [trackedBranch],
+                null,
+                null,
+                "Knowledge Repo"),
+            trackedBranch,
+            "requested-sha");
+    }
+
     public sealed class ProCursorApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-procursor-api-jwt-secret-32char";
+        public const string SharedKey = "test-procursor-shared-key";
 
         private readonly string _dbName = $"TestDb_ProCursor_{Guid.NewGuid()}";
+        private readonly string _operationalDbName = $"TestDb_ProCursor_Operational_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
         public Guid ClientId { get; } = Guid.NewGuid();
@@ -492,6 +606,10 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
 
         public ILicensingCapabilityService LicensingCapabilityService { get; } =
             Substitute.For<ILicensingCapabilityService>();
+
+        public IProCursorScmBroker ScmBroker { get; } = Substitute.For<IProCursorScmBroker>();
+
+        public IProCursorEmbeddingBroker EmbeddingBroker { get; } = Substitute.For<IProCursorEmbeddingBroker>();
 
         public void SetProCursorCapabilityAvailability(bool isAvailable, string? message = null)
         {
@@ -626,18 +744,20 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         {
             using var scope = this.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var operationalDb = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
 
-            db.ProCursorTokenUsageRollups.RemoveRange(db.ProCursorTokenUsageRollups);
-            db.ProCursorTokenUsageEvents.RemoveRange(db.ProCursorTokenUsageEvents);
-            db.ProCursorSymbolEdges.RemoveRange(db.ProCursorSymbolEdges);
-            db.ProCursorSymbolRecords.RemoveRange(db.ProCursorSymbolRecords);
-            db.ProCursorKnowledgeChunks.RemoveRange(db.ProCursorKnowledgeChunks);
-            db.ProCursorIndexSnapshots.RemoveRange(db.ProCursorIndexSnapshots);
-            db.ProCursorIndexJobs.RemoveRange(db.ProCursorIndexJobs);
+            operationalDb.ProCursorTokenUsageRollups.RemoveRange(operationalDb.ProCursorTokenUsageRollups);
+            operationalDb.ProCursorTokenUsageEvents.RemoveRange(operationalDb.ProCursorTokenUsageEvents);
+            operationalDb.ProCursorSymbolEdges.RemoveRange(operationalDb.ProCursorSymbolEdges);
+            operationalDb.ProCursorSymbolRecords.RemoveRange(operationalDb.ProCursorSymbolRecords);
+            operationalDb.ProCursorKnowledgeChunks.RemoveRange(operationalDb.ProCursorKnowledgeChunks);
+            operationalDb.ProCursorIndexSnapshots.RemoveRange(operationalDb.ProCursorIndexSnapshots);
+            operationalDb.ProCursorIndexJobs.RemoveRange(operationalDb.ProCursorIndexJobs);
             db.ProCursorTrackedBranches.RemoveRange(db.ProCursorTrackedBranches);
             db.ProCursorKnowledgeSources.RemoveRange(db.ProCursorKnowledgeSources);
             db.ClientScmScopes.RemoveRange(db.ClientScmScopes);
             db.ClientScmConnections.RemoveRange(db.ClientScmConnections);
+            await operationalDb.SaveChangesAsync();
             await db.SaveChangesAsync();
         }
 
@@ -647,9 +767,11 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
             builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
             builder.UseSetting("DB_CONNECTION_STRING", string.Empty);
             builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+            builder.UseSetting("PROCURSOR_SHARED_KEY", SharedKey);
             builder.UseSetting("PROCURSOR_REFRESH_POLL_SECONDS", "17");
 
             var dbName = this._dbName;
+            var operationalDbName = this._operationalDbName;
             var dbRoot = this._dbRoot;
             var clientId = this.ClientId;
             var otherClientId = this.OtherClientId;
@@ -662,6 +784,10 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddDbContext<MeisterProPRDbContext>(options => options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddDbContext<ProCursorOperationalDbContext>(options =>
+                    options.UseInMemoryDatabase(operationalDbName, dbRoot));
+                services.AddDbContextFactory<ProCursorOperationalDbContext>(options =>
+                    options.UseInMemoryDatabase(operationalDbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientScmConnectionRepository, ClientScmConnectionRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
@@ -672,6 +798,12 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddScoped<ProCursorSymbolGraphRepository>();
                 services.AddScoped<IProCursorSymbolGraphRepository>(sp =>
                     sp.GetRequiredService<ProCursorSymbolGraphRepository>());
+                services.RemoveAll<IProCursorGateway>();
+                services.RemoveAll<IProCursorScmBroker>();
+                services.RemoveAll<IProCursorEmbeddingBroker>();
+                services.AddScoped<IProCursorGateway, TestManagedRemoteProCursorGateway>();
+                services.AddSingleton(this.ScmBroker);
+                services.AddSingleton(this.EmbeddingBroker);
 
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());
                 ReplaceService(services, Substitute.For<IAdoCommentPoster>());
@@ -885,6 +1017,401 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
             }
 
             services.AddSingleton(implementation);
+        }
+
+        private sealed class TestManagedRemoteProCursorGateway(
+            IProCursorKnowledgeSourceRepository knowledgeSourceRepository,
+            ProCursorOperationalDbContext operationalDb) : IProCursorGateway
+        {
+            public async Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
+            {
+                var sources = await knowledgeSourceRepository.ListByClientAsync(clientId, ct);
+                var snapshots = await operationalDb.ProCursorIndexSnapshots
+                    .Where(snapshot => snapshot.KnowledgeSourceId != Guid.Empty)
+                    .ToListAsync(ct);
+
+                return sources
+                    .Select(source => MapSource(source, GetLatestSnapshotForSource(source, snapshots)))
+                    .ToList()
+                    .AsReadOnly();
+            }
+
+            public async Task<ProCursorKnowledgeSourceDto> CreateSourceAsync(
+                Guid clientId,
+                ProCursorKnowledgeSourceRegistrationRequest request,
+                CancellationToken ct = default)
+            {
+                if (request.TrackedBranches.Count == 0)
+                {
+                    throw new InvalidOperationException("At least one tracked branch is required.");
+                }
+
+                var duplicateExists = await knowledgeSourceRepository.ExistsAsync(
+                    clientId,
+                    request.SourceKind,
+                    request.ProviderScopePath?.Trim() ?? string.Empty,
+                    request.ProviderProjectKey.Trim(),
+                    request.RepositoryId?.Trim() ?? string.Empty,
+                    request.RootPath,
+                    ct);
+
+                if (duplicateExists)
+                {
+                    throw new InvalidOperationException("A ProCursor source with the same coordinates already exists for this client.");
+                }
+
+                var source = new ProCursorKnowledgeSource(
+                    Guid.NewGuid(),
+                    clientId,
+                    request.DisplayName,
+                    request.SourceKind,
+                    request.ProviderScopePath?.Trim() ?? string.Empty,
+                    request.ProviderProjectKey.Trim(),
+                    request.RepositoryId?.Trim() ?? string.Empty,
+                    request.DefaultBranch,
+                    request.RootPath,
+                    true,
+                    request.SymbolMode,
+                    request.OrganizationScopeId,
+                    request.CanonicalSourceRef?.Provider,
+                    request.CanonicalSourceRef?.Value,
+                    NormalizeOptional(request.SourceDisplayName) ?? request.RepositoryId?.Trim());
+
+                foreach (var trackedBranch in request.TrackedBranches)
+                {
+                    source.AddTrackedBranch(
+                        Guid.NewGuid(),
+                        trackedBranch.BranchName,
+                        trackedBranch.RefreshTriggerMode,
+                        trackedBranch.MiniIndexEnabled);
+                }
+
+                await knowledgeSourceRepository.AddAsync(source, ct);
+                return MapSource(source, snapshot: null);
+            }
+
+            public async Task<ProCursorIndexJobDto> QueueRefreshAsync(
+                Guid clientId,
+                Guid sourceId,
+                ProCursorRefreshRequest request,
+                CancellationToken ct = default)
+            {
+                var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct)
+                             ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
+
+                var trackedBranch = ResolveTrackedBranch(source, request.TrackedBranchId)
+                                  ?? throw new KeyNotFoundException($"Tracked branch was not found for source {sourceId}.");
+
+                var jobKind = string.IsNullOrWhiteSpace(request.JobKind) ? "refresh" : request.JobKind.Trim();
+                var job = new ProCursorIndexJob(
+                    Guid.NewGuid(),
+                    sourceId,
+                    trackedBranch.Id,
+                    NormalizeOptional(request.RequestedCommitSha),
+                    jobKind,
+                    $"test:{sourceId:D}:{trackedBranch.Id:D}:{jobKind}:{NormalizeOptional(request.RequestedCommitSha) ?? "latest"}");
+
+                operationalDb.ProCursorIndexJobs.Add(job);
+                await operationalDb.SaveChangesAsync(ct);
+
+                return new ProCursorIndexJobDto(
+                    job.Id,
+                    job.KnowledgeSourceId,
+                    job.TrackedBranchId,
+                    trackedBranch.BranchName,
+                    job.RequestedCommitSha,
+                    job.JobKind,
+                    job.Status,
+                    job.QueuedAt,
+                    job.StartedAt,
+                    job.CompletedAt,
+                    job.FailureReason);
+            }
+
+            public async Task<IReadOnlyList<ProCursorTrackedBranchDto>> ListTrackedBranchesAsync(
+                Guid clientId,
+                Guid sourceId,
+                CancellationToken ct = default)
+            {
+                var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct)
+                             ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
+
+                var snapshots = await operationalDb.ProCursorIndexSnapshots
+                    .Where(snapshot => snapshot.KnowledgeSourceId == sourceId)
+                    .ToListAsync(ct);
+
+                return source.TrackedBranches
+                    .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase)
+                    .Select(branch =>
+                    {
+                        var latestSnapshot = GetLatestSnapshotForBranch(branch.Id, snapshots);
+                        return MapTrackedBranch(branch, latestSnapshot);
+                    })
+                    .ToList()
+                    .AsReadOnly();
+            }
+
+            public async Task<ProCursorTrackedBranchDto> AddTrackedBranchAsync(
+                Guid clientId,
+                Guid sourceId,
+                ProCursorTrackedBranchCreateRequest request,
+                CancellationToken ct = default)
+            {
+                var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct)
+                             ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
+
+                var branch = source.AddTrackedBranch(
+                    Guid.NewGuid(),
+                    request.BranchName,
+                    request.RefreshTriggerMode,
+                    request.MiniIndexEnabled);
+
+                await knowledgeSourceRepository.UpdateAsync(source, ct);
+                return MapTrackedBranch(branch, latestSnapshot: null);
+            }
+
+            public async Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(
+                Guid clientId,
+                Guid sourceId,
+                Guid trackedBranchId,
+                ProCursorTrackedBranchUpdateRequest request,
+                CancellationToken ct = default)
+            {
+                var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct)
+                             ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
+                var branch = source.TrackedBranches.FirstOrDefault(candidate => candidate.Id == trackedBranchId);
+                if (branch is null)
+                {
+                    return null;
+                }
+
+                branch.UpdateSettings(
+                    request.RefreshTriggerMode ?? branch.RefreshTriggerMode,
+                    request.MiniIndexEnabled ?? branch.MiniIndexEnabled,
+                    request.IsEnabled);
+
+                await knowledgeSourceRepository.UpdateAsync(source, ct);
+
+                var latestSnapshot = await operationalDb.ProCursorIndexSnapshots
+                    .Where(snapshot => snapshot.TrackedBranchId == trackedBranchId)
+                    .OrderByDescending(snapshot => snapshot.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+
+                return MapTrackedBranch(branch, latestSnapshot);
+            }
+
+            public async Task<bool> RemoveTrackedBranchAsync(
+                Guid clientId,
+                Guid sourceId,
+                Guid trackedBranchId,
+                CancellationToken ct = default)
+            {
+                var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct)
+                             ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
+
+                if (source.TrackedBranches.Count <= 1)
+                {
+                    throw new InvalidOperationException("The last tracked branch cannot be removed.");
+                }
+
+                return await knowledgeSourceRepository.DeleteTrackedBranchAsync(clientId, sourceId, trackedBranchId, ct);
+            }
+
+            public Task<ProCursorKnowledgeAnswerDto> AskKnowledgeAsync(
+                ProCursorKnowledgeQueryRequest request,
+                CancellationToken ct = default)
+            {
+                throw new ProCursorDependencyUnavailableException("The configured ProCursor service is unavailable.");
+            }
+
+            public Task<ProCursorSymbolInsightDto> GetSymbolInsightAsync(
+                ProCursorSymbolQueryRequest request,
+                CancellationToken ct = default)
+            {
+                throw new ProCursorDependencyUnavailableException("The configured ProCursor service is unavailable.");
+            }
+
+            private static ProCursorTrackedBranch? ResolveTrackedBranch(ProCursorKnowledgeSource source, Guid? trackedBranchId)
+            {
+                if (trackedBranchId.HasValue)
+                {
+                    return source.TrackedBranches.FirstOrDefault(branch => branch.Id == trackedBranchId.Value);
+                }
+
+                return source.TrackedBranches.FirstOrDefault(branch =>
+                           string.Equals(branch.BranchName, source.DefaultBranch, StringComparison.OrdinalIgnoreCase))
+                       ?? source.TrackedBranches.FirstOrDefault();
+            }
+
+            private static ProCursorIndexSnapshot? GetLatestSnapshotForSource(
+                ProCursorKnowledgeSource source,
+                IReadOnlyList<ProCursorIndexSnapshot> snapshots)
+            {
+                var trackedBranchIds = source.TrackedBranches.Select(branch => branch.Id).ToHashSet();
+                return snapshots
+                    .Where(snapshot => snapshot.KnowledgeSourceId == source.Id && trackedBranchIds.Contains(snapshot.TrackedBranchId))
+                    .OrderByDescending(snapshot => snapshot.CreatedAt)
+                    .FirstOrDefault();
+            }
+
+            private static ProCursorIndexSnapshot? GetLatestSnapshotForBranch(
+                Guid trackedBranchId,
+                IReadOnlyList<ProCursorIndexSnapshot> snapshots)
+            {
+                return snapshots
+                    .Where(snapshot => snapshot.TrackedBranchId == trackedBranchId)
+                    .OrderByDescending(snapshot => snapshot.CreatedAt)
+                    .FirstOrDefault();
+            }
+
+            private static ProCursorKnowledgeSourceDto MapSource(
+                ProCursorKnowledgeSource source,
+                ProCursorIndexSnapshot? snapshot)
+            {
+                var trackedBranch = snapshot is null
+                    ? null
+                    : source.TrackedBranches.FirstOrDefault(branch => branch.Id == snapshot.TrackedBranchId);
+
+                var canonicalSourceRef = !string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) &&
+                                         !string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
+                    ? new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue)
+                    : new CanonicalSourceReferenceDto("azureDevOps", source.RepositoryId);
+
+                return new ProCursorKnowledgeSourceDto(
+                    source.Id,
+                    source.ClientId,
+                    source.DisplayName,
+                    source.SourceKind,
+                    source.ProviderScopePath,
+                    source.ProviderProjectKey,
+                    source.RepositoryId,
+                    source.DefaultBranch,
+                    source.RootPath,
+                    source.IsEnabled,
+                    source.SymbolMode,
+                    snapshot is null
+                        ? null
+                        : new ProCursorSnapshotDto(
+                            snapshot.Id,
+                            snapshot.KnowledgeSourceId,
+                            snapshot.TrackedBranchId,
+                            trackedBranch?.BranchName ?? source.DefaultBranch,
+                            snapshot.CommitSha,
+                            snapshot.Status,
+                            snapshot.SupportsSymbolQueries,
+                            snapshot.FileCount,
+                            snapshot.ChunkCount,
+                            snapshot.SymbolCount,
+                            snapshot.CreatedAt,
+                            snapshot.CompletedAt,
+                            snapshot.FailureReason,
+                            GetSnapshotFreshnessStatus(trackedBranch, snapshot)),
+                    source.TrackedBranches
+                        .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase)
+                        .Select(branch => MapTrackedBranch(branch, snapshot is not null && snapshot.TrackedBranchId == branch.Id ? snapshot : null))
+                        .ToList()
+                        .AsReadOnly(),
+                    source.OrganizationScopeId,
+                    canonicalSourceRef,
+                    string.IsNullOrWhiteSpace(source.SourceDisplayName) ? source.RepositoryId : source.SourceDisplayName);
+            }
+
+            private static ProCursorTrackedBranchDto MapTrackedBranch(
+                ProCursorTrackedBranch trackedBranch,
+                ProCursorIndexSnapshot? latestSnapshot)
+            {
+                return new ProCursorTrackedBranchDto(
+                    trackedBranch.Id,
+                    trackedBranch.BranchName,
+                    trackedBranch.RefreshTriggerMode,
+                    trackedBranch.MiniIndexEnabled,
+                    trackedBranch.LastSeenCommitSha,
+                    trackedBranch.LastIndexedCommitSha,
+                    trackedBranch.IsEnabled,
+                    GetBranchFreshnessStatus(trackedBranch, latestSnapshot));
+            }
+
+            private static string GetSnapshotFreshnessStatus(
+                ProCursorTrackedBranch? trackedBranch,
+                ProCursorIndexSnapshot? snapshot)
+            {
+                if (snapshot is null)
+                {
+                    return "missing";
+                }
+
+                if (string.Equals(snapshot.Status, "building", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "building";
+                }
+
+                if (string.Equals(snapshot.Status, "failed", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "failed";
+                }
+
+                if (trackedBranch is null)
+                {
+                    return string.Equals(snapshot.Status, "ready", StringComparison.OrdinalIgnoreCase)
+                        ? "fresh"
+                        : snapshot.Status;
+                }
+
+                if (!string.IsNullOrWhiteSpace(trackedBranch.LastSeenCommitSha) &&
+                    !string.Equals(trackedBranch.LastSeenCommitSha, snapshot.CommitSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    return "stale";
+                }
+
+                if (!string.IsNullOrWhiteSpace(trackedBranch.LastIndexedCommitSha) &&
+                    string.Equals(trackedBranch.LastIndexedCommitSha, snapshot.CommitSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    return "fresh";
+                }
+
+                return string.Equals(snapshot.Status, "ready", StringComparison.OrdinalIgnoreCase)
+                    ? "fresh"
+                    : snapshot.Status;
+            }
+
+            private static string GetBranchFreshnessStatus(
+                ProCursorTrackedBranch trackedBranch,
+                ProCursorIndexSnapshot? latestSnapshot)
+            {
+                if (latestSnapshot is not null &&
+                    string.Equals(latestSnapshot.Status, "building", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "building";
+                }
+
+                if (latestSnapshot is not null &&
+                    string.Equals(latestSnapshot.Status, "failed", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(latestSnapshot.CommitSha, trackedBranch.LastSeenCommitSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    return "failed";
+                }
+
+                if (string.IsNullOrWhiteSpace(trackedBranch.LastIndexedCommitSha))
+                {
+                    return "missing";
+                }
+
+                if (!string.IsNullOrWhiteSpace(trackedBranch.LastSeenCommitSha) &&
+                    !string.Equals(
+                        trackedBranch.LastSeenCommitSha,
+                        trackedBranch.LastIndexedCommitSha,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return "stale";
+                }
+
+                return "fresh";
+            }
+
+            private static string? NormalizeOptional(string? value)
+            {
+                return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            }
         }
 
         private sealed class TestProviderAdminDiscoveryService(

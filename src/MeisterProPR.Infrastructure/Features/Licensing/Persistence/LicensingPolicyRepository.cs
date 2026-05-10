@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MeisterProPR.Infrastructure.Features.Licensing.Persistence;
 
@@ -114,15 +115,32 @@ public sealed class LicensingPolicyRepository(
             return;
         }
 
-        dbContext.InstallationEditions.Add(
-            new InstallationEditionRecord
-            {
-                Id = SingletonPolicyId,
-                Edition = InstallationEdition.Community,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
+        var seededRecord = new InstallationEditionRecord
+        {
+            Id = SingletonPolicyId,
+            Edition = InstallationEdition.Community,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.InstallationEditions.Add(seededRecord);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsSingletonPolicyAlreadySeededViolation(ex))
+        {
+            dbContext.Entry(seededRecord).State = EntityState.Detached;
+        }
+    }
+
+    private static bool IsSingletonPolicyAlreadySeededViolation(DbUpdateException exception)
+    {
+        return exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "PK_installation_edition",
+        };
     }
 
     private static InstallationLicensingPolicy ToPolicy(

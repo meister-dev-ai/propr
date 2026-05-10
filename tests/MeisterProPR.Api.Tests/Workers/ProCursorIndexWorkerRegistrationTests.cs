@@ -1,11 +1,11 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
+using MeisterProPR.ProCursor.Core;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
+using MeisterProPR.ProCursor.Options;
+using MeisterProPR.ProCursor.Workers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;

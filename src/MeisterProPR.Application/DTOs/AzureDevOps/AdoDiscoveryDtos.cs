@@ -4,11 +4,6 @@
 namespace MeisterProPR.Application.DTOs.AzureDevOps;
 
 /// <summary>
-///     Transport shape for a provider-aware canonical source reference.
-/// </summary>
-public sealed record CanonicalSourceReferenceDto(string Provider, string Value);
-
-/// <summary>
 ///     A project option discovered for one organization scope.
 /// </summary>
 public sealed record AdoProjectOptionDto(Guid OrganizationScopeId, string ProjectId, string ProjectName);

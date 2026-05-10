@@ -12,12 +12,16 @@ using MeisterProPR.Api.Features.Clients.Controllers;
 using MeisterProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterProPR.Api.Features.IdentityAndAccess.Validators;
 using MeisterProPR.Api.Features.Licensing;
+using MeisterProPR.Api.Features.ProCursor;
+using MeisterProPR.Api.Features.ProCursor.Broker.Auth;
+using MeisterProPR.Api.Features.ProCursor.Broker.Services;
 using MeisterProPR.Api.HealthChecks;
 using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Validators;
 using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Auth;
@@ -28,19 +32,24 @@ using MeisterProPR.Infrastructure.Features.Crawling;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Features.Licensing;
 using MeisterProPR.Infrastructure.Features.Mentions;
+using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
+using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
-using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.FeatureManagement;
 using Microsoft.OpenApi;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
@@ -65,6 +74,7 @@ try
     if (builder.Environment.IsDevelopment())
     {
         builder.Configuration.AddUserSecrets<Program>(true);
+        builder.Configuration.AddEnvironmentVariables();
     }
 
     var hasDatabaseConnectionString = builder.Configuration.HasDatabaseConnectionString();
@@ -131,6 +141,7 @@ try
             {
                 r.Method,
                 r.Path,
+                HasProCursorSharedKey = r.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
             });
 
         if (!context.HostingEnvironment.IsDevelopment())
@@ -162,7 +173,21 @@ try
     builder.Services.AddPromptCustomizationModule(builder.Configuration, builder.Environment);
     builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
     builder.Services.AddLicensingModule(builder.Configuration, builder.Environment);
-    builder.Services.AddProCursorModule(builder.Configuration, builder.Environment);
+    builder.Services.AddProCursorRemoteMode(builder.Configuration);
+    builder.Services.AddScoped<ProCursorRuntimeConfigurationProjectionService>();
+    builder.Services.AddScoped<ManagedRemoteProCursorGateway>();
+    builder.Services.AddScoped<LocalProPrScmBroker>();
+    builder.Services.AddScoped<LocalProPrEmbeddingBroker>();
+    if (hasDatabaseConnectionString)
+    {
+        builder.Services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
+    }
+
+    builder.Services.AddAuthentication(ProCursorSharedKeyAuthenticationDefaults.Scheme)
+        .AddScheme<AuthenticationSchemeOptions, ProCursorSharedKeyAuthenticationHandler>(
+            ProCursorSharedKeyAuthenticationDefaults.Scheme,
+            _ => { });
+    builder.Services.AddAuthorization();
 
     if (hasDatabaseConnectionString)
     {
@@ -241,21 +266,19 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
     }
 
-    // ProCursor indexing uses a dedicated durable worker and exposes live state via health checks.
-    // Keep the worker registered for DI/health consumers, but allow tests to suppress its hosted
-    // startup when they only need an HTTP pipeline or service graph.
-    builder.Services.AddSingleton<ProCursorIndexWorker>();
-    if (!disableHostedServices)
-    {
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorIndexWorker>());
-    }
+    var proCursorGatewayMode = Program.GetEffectiveProCursorMode(builder.Configuration);
+    var useRemoteProCursor = Program.IsRemoteProCursorMode(proCursorGatewayMode);
+    var disableProCursor = Program.IsDisabledProCursorMode(proCursorGatewayMode);
 
-    // ProCursor usage reporting uses a dedicated rollup worker so reads can rely on refreshed aggregates.
-    builder.Services.AddSingleton<ProCursorTokenUsageRollupWorker>();
-    if (!isTesting && !disableHostedServices)
-    {
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<ProCursorTokenUsageRollupWorker>());
-    }
+    builder.Services.AddScoped<IProCursorGateway>(sp =>
+        useRemoteProCursor
+            ? sp.GetRequiredService<ManagedRemoteProCursorGateway>()
+            : sp.GetRequiredService<DisabledProCursorGateway>());
+
+    builder.Services.RemoveAll<IProCursorScmBroker>();
+    builder.Services.RemoveAll<IProCursorEmbeddingBroker>();
+    builder.Services.AddScoped<IProCursorScmBroker>(sp => sp.GetRequiredService<LocalProPrScmBroker>());
+    builder.Services.AddScoped<IProCursorEmbeddingBroker>(sp => sp.GetRequiredService<LocalProPrEmbeddingBroker>());
 
     // MentionScanWorker (producer) and MentionReplyWorker (consumer) share a single bounded
     // Channel<MentionReplyJob>. Channel capacity is 1000; writer blocks when full (Wait mode).
@@ -300,19 +323,20 @@ try
     });
 
     builder.Services.AddControllers()
-        .AddApplicationPart(typeof(ProCursorKnowledgeSourcesController).Assembly)
         .AddJsonOptions(opts =>
             opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
     builder.Services.AddSingleton<ReviewJobMetrics>();
 
     builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(serviceName: "MeisterProPR.Api"))
         .WithTracing(tracing => tracing
             .AddSource(ReviewJobTelemetry.Source.Name)
             .AddSource("MeisterProPR.Webhooks")
             .AddSource("MeisterProPR.Crawling")
             .AddSource("MeisterProPR.Infrastructure")
             .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
             .AddOtlpExporter(o =>
             {
                 var endpoint = builder.Configuration["OTLP_ENDPOINT"];
@@ -324,6 +348,7 @@ try
         .WithMetrics(metrics => metrics
             .AddMeter("MeisterProPR")
             .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
             .AddPrometheusExporter());
 
     builder.Services.AddEndpointsApiExplorer();
@@ -337,9 +362,13 @@ try
     });
 
     var healthChecksBuilder = builder.Services.AddHealthChecks()
-        .AddCheck<WorkerHealthCheck>("worker")
-        .AddCheck<ProCursorIndexWorkerHealthCheck>("procursor-index-worker")
-        .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
+        .AddCheck<WorkerHealthCheck>("worker");
+
+    if (useRemoteProCursor)
+    {
+        builder.Services.AddHttpClient(nameof(RemoteProCursorHealthCheck));
+        healthChecksBuilder.AddCheck<RemoteProCursorHealthCheck>("procursor-remote");
+    }
 
     if (hasDatabaseConnectionString)
     {
@@ -453,8 +482,10 @@ try
     });
 
     app.UseCors();
+    app.UseAuthentication();
     // Populate admin, client-role, and tenant-role auth context before controller dispatch.
     app.UseMiddleware<AuthMiddleware>();
+    app.UseAuthorization();
     app.MapControllers();
     app.MapHealthChecks(
         "/healthz",
@@ -478,6 +509,33 @@ finally
 /// <summary>Entry point for the API application used by tests and host.</summary>
 public partial class Program
 {
+    internal static string GetEffectiveProCursorMode(IConfiguration configuration)
+    {
+        var mode = new ProCursorRemoteOptions
+        {
+            Mode = configuration["PROCURSOR_REMOTE_MODE"],
+            ServiceBaseUrl = configuration["PROCURSOR_SERVICE_BASE_URL"],
+            SharedKey = configuration["PROCURSOR_SHARED_KEY"],
+        }.GetEffectiveMode();
+
+        return mode switch
+        {
+            var value when IsRemoteProCursorMode(value) => ProCursorRemoteOptions.ProprManagedRemoteMode,
+            var value when IsDisabledProCursorMode(value) => ProCursorRemoteOptions.DisabledMode,
+            _ => ProCursorRemoteOptions.DisabledMode,
+        };
+    }
+
+    internal static bool IsRemoteProCursorMode(string? mode)
+    {
+        return string.Equals(mode, ProCursorRemoteOptions.ProprManagedRemoteMode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsDisabledProCursorMode(string? mode)
+    {
+        return string.Equals(mode, ProCursorRemoteOptions.DisabledMode, StringComparison.OrdinalIgnoreCase);
+    }
+
     internal static string GetSelectedCommentRelevanceFilterId()
     {
         return "hybrid-v1";

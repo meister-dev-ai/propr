@@ -3,12 +3,9 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Domain.Enums;
-using Microsoft.Extensions.AI;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.AI.ProCursor;
@@ -18,7 +15,7 @@ namespace MeisterProPR.Infrastructure.AI.ProCursor;
 /// </summary>
 public sealed class ProCursorEmbeddingService(
     IOptions<ProCursorOptions> options,
-    IAiRuntimeResolver aiRuntimeResolver,
+    IProCursorEmbeddingBroker embeddingBroker,
     IProCursorTokenUsageRecorder? tokenUsageRecorder = null) : IProCursorEmbeddingService
 {
     private readonly ProCursorOptions _options = options.Value;
@@ -26,11 +23,7 @@ public sealed class ProCursorEmbeddingService(
     /// <inheritdoc />
     public async Task EnsureConfigurationAsync(Guid clientId, CancellationToken ct = default)
     {
-        _ = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
-            clientId,
-            AiPurpose.EmbeddingDefault,
-            this._options.EmbeddingDimensions,
-            ct);
+        _ = await embeddingBroker.GetDeploymentAsync(clientId, this._options.EmbeddingDimensions, ct);
     }
 
     /// <inheritdoc />
@@ -45,12 +38,7 @@ public sealed class ProCursorEmbeddingService(
             return [];
         }
 
-        var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
-            clientId,
-            AiPurpose.EmbeddingDefault,
-            this._options.EmbeddingDimensions,
-            ct);
-        var deployment = new ValidatedEmbeddingDeployment(runtime.Connection, runtime.Model);
+        var deployment = await embeddingBroker.GetDeploymentAsync(clientId, this._options.EmbeddingDimensions, ct);
 
         var normalizedChunks = new List<ProCursorExtractedChunk>(chunks.Count);
         var nextChunkOrdinalsBySourcePath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -59,8 +47,8 @@ public sealed class ProCursorEmbeddingService(
         {
             foreach (var splitChunk in SplitChunkToFitBudget(
                          chunk,
-                         deployment.Capability.TokenizerName,
-                         deployment.Capability.MaxInputTokens))
+                         deployment.TokenizerName,
+                         deployment.MaxInputTokens))
             {
                 var nextChunkOrdinal = nextChunkOrdinalsBySourcePath.GetValueOrDefault(splitChunk.SourcePath, 0);
                 nextChunkOrdinalsBySourcePath[splitChunk.SourcePath] = nextChunkOrdinal + 1;
@@ -84,13 +72,7 @@ public sealed class ProCursorEmbeddingService(
             return [];
         }
 
-        var runtime = await aiRuntimeResolver.ResolveEmbeddingRuntimeAsync(
-            clientId,
-            AiPurpose.EmbeddingDefault,
-            this._options.EmbeddingDimensions,
-            ct);
-        var deployment = new ValidatedEmbeddingDeployment(runtime.Connection, runtime.Model);
-        var generator = runtime.Generator;
+        var deployment = await embeddingBroker.GetDeploymentAsync(clientId, this._options.EmbeddingDimensions, ct);
 
         var embeddings = new List<float[]>(inputs.Count);
         var currentBatch = new List<string>();
@@ -101,20 +83,18 @@ public sealed class ProCursorEmbeddingService(
         for (var index = 0; index < inputs.Count; index++)
         {
             var input = inputs[index];
-            var tokenCount = EmbeddingTokenizerRegistry.CountTokens(
-                deployment.Capability.TokenizerName,
-                input);
+            var tokenCount = EmbeddingTokenizerRegistry.CountTokens(deployment.TokenizerName, input);
 
-            if (tokenCount > deployment.Capability.MaxInputTokens)
+            if (tokenCount > deployment.MaxInputTokens)
             {
                 throw new InvalidOperationException(
-                    $"Embedding input exceeds the configured limit of {deployment.Capability.MaxInputTokens} tokens for deployment '{deployment.DeploymentName}'.");
+                    $"Embedding input exceeds the configured limit of {deployment.MaxInputTokens} tokens for deployment '{deployment.DeploymentName}'.");
             }
 
-            if (currentBatch.Count > 0 && currentBatchTokenCount + tokenCount > deployment.Capability.MaxInputTokens)
+            if (currentBatch.Count > 0 && currentBatchTokenCount + tokenCount > deployment.MaxInputTokens)
             {
                 batchOrdinal = await AppendBatchEmbeddingsAsync(
-                    generator,
+                    embeddingBroker,
                     deployment,
                     clientId,
                     tokenUsageRecorder,
@@ -137,7 +117,7 @@ public sealed class ProCursorEmbeddingService(
         }
 
         _ = await AppendBatchEmbeddingsAsync(
-            generator,
+            embeddingBroker,
             deployment,
             clientId,
             tokenUsageRecorder,
@@ -152,8 +132,8 @@ public sealed class ProCursorEmbeddingService(
     }
 
     private static async Task<int> AppendBatchEmbeddingsAsync(
-        IEmbeddingGenerator<string, Embedding<float>> generator,
-        ValidatedEmbeddingDeployment deployment,
+        IProCursorEmbeddingBroker embeddingBroker,
+        ProCursorEmbeddingDeploymentDto deployment,
         Guid clientId,
         IProCursorTokenUsageRecorder? tokenUsageRecorder,
         ProCursorEmbeddingUsageContext? usageContext,
@@ -169,17 +149,25 @@ public sealed class ProCursorEmbeddingService(
             return batchOrdinal;
         }
 
-        var result = await generator.GenerateAsync(batch, cancellationToken: ct);
-        if (result.Count != batch.Count)
+        var result = await embeddingBroker.GenerateEmbeddingsAsync(
+            clientId,
+            batch.AsReadOnly(),
+            deployment.EmbeddingDimensions,
+            ct);
+        if (result.Embeddings.Count != batch.Count)
         {
-            throw new InvalidOperationException($"Expected {batch.Count} embedding vectors but received {result.Count}.");
+            throw new InvalidOperationException($"Expected {batch.Count} embedding vectors but received {result.Embeddings.Count}.");
         }
 
-        embeddings.AddRange(result.Select(item => item.Vector.ToArray()));
+        embeddings.AddRange(result.Embeddings);
 
         if (tokenUsageRecorder is not null && usageContext is not null)
         {
-            var capturedUsage = ResolveCapturedUsage(result.Usage, promptTokenCount);
+            var capturedUsage = ResolveCapturedUsage(
+                result.PromptTokens,
+                result.CompletionTokens,
+                result.TotalTokens,
+                promptTokenCount);
             var firstContext = batchContexts.FirstOrDefault(context => context is not null);
             await tokenUsageRecorder.RecordAsync(
                 new ProCursorTokenUsageCaptureRequest(
@@ -191,7 +179,7 @@ public sealed class ProCursorEmbeddingService(
                     usageContext.CallType,
                     deployment.DeploymentName,
                     deployment.DeploymentName,
-                    deployment.Capability.TokenizerName,
+                    deployment.TokenizerName,
                     capturedUsage.PromptTokens,
                     capturedUsage.CompletionTokens,
                     capturedUsage.TotalTokens,
@@ -199,9 +187,9 @@ public sealed class ProCursorEmbeddingService(
                     CalculateEstimatedCost(
                         capturedUsage.PromptTokens,
                         capturedUsage.CompletionTokens,
-                        deployment.Capability),
+                        deployment),
                     true,
-                    deployment.Connection.Id,
+                    deployment.AiConnectionId,
                     usageContext.IndexJobId,
                     firstContext?.ResourceId,
                     firstContext?.SourcePath,
@@ -214,27 +202,21 @@ public sealed class ProCursorEmbeddingService(
         return batchOrdinal + 1;
     }
 
-    private static CapturedUsage ResolveCapturedUsage(UsageDetails? usage, int estimatedPromptTokenCount)
+    private static CapturedUsage ResolveCapturedUsage(
+        long? promptTokens,
+        long? completionTokens,
+        long? totalTokens,
+        int estimatedPromptTokenCount)
     {
-        if (usage is null)
+        if (!promptTokens.HasValue && !completionTokens.HasValue && !totalTokens.HasValue)
         {
             return new CapturedUsage(estimatedPromptTokenCount, 0, estimatedPromptTokenCount, true);
         }
 
-        var inputTokens = usage.InputTokenCount;
-        var outputTokens = usage.OutputTokenCount;
-        var totalTokens = usage.TotalTokenCount;
-        var hasProviderUsage = inputTokens.HasValue || outputTokens.HasValue || totalTokens.HasValue;
-
-        if (!hasProviderUsage)
-        {
-            return new CapturedUsage(estimatedPromptTokenCount, 0, estimatedPromptTokenCount, true);
-        }
-
-        var resolvedPromptTokens = inputTokens
+        var resolvedPromptTokens = promptTokens
                                    ?? totalTokens
-                                   ?? estimatedPromptTokenCount;
-        var resolvedCompletionTokens = outputTokens ?? 0;
+                                    ?? estimatedPromptTokenCount;
+        var resolvedCompletionTokens = completionTokens ?? 0;
         var resolvedTotalTokens = totalTokens ?? resolvedPromptTokens + resolvedCompletionTokens;
 
         if (resolvedTotalTokens < resolvedPromptTokens + resolvedCompletionTokens)
@@ -248,7 +230,7 @@ public sealed class ProCursorEmbeddingService(
     private static decimal? CalculateEstimatedCost(
         long promptTokens,
         long completionTokens,
-        AiConnectionModelCapabilityDto capability)
+        ProCursorEmbeddingDeploymentDto capability)
     {
         if (!capability.InputCostPer1MUsd.HasValue && !capability.OutputCostPer1MUsd.HasValue)
         {

@@ -26,8 +26,10 @@ public sealed class StubReviewContextToolsFactory : IReviewContextToolsFactory, 
 }
 
 /// <summary>No-op <see cref="IReviewContextTools" /> that returns empty results for all calls.</summary>
-internal sealed class NullReviewContextTools : IReviewContextTools
+internal sealed class NullReviewContextTools : IReviewContextTools, IProCursorAvailabilityAware
 {
+    public bool SupportsProCursorTools => false;
+
     /// <inheritdoc />
     public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {

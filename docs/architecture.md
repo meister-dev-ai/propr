@@ -18,16 +18,17 @@ instead of as a single long page.
 
 ## System Context
 
-The API is the main entry point, background workers perform review and crawl execution, PostgreSQL
-stores durable state, and Azure OpenAI or AI Foundry provides model execution. Azure DevOps
-provides guided discovery, crawl materialization, and ProCursor source validation. GitHub, GitLab,
-and Forgejo-family hosts integrate through shared provider-neutral review, webhook, publication,
-and observability seams without forking lifecycle, mention, or audit logic. The reviewing flow
-includes structured verification before publication: local contradiction checks precede per-file
-persistence, PR-level evidence retrieval and bounded AI micro-verification precede the deterministic
-final gate, summary reconciliation aligns the final summary with surviving outcomes, and a
-client-owned publication policy can suppress outbound SCM comments without skipping internal review
-result persistence or diagnostics.
+The API is the public control plane, the ProCursor host is an internal execution service,
+background workers perform review and crawl execution, PostgreSQL stores durable state, and Azure
+OpenAI or AI Foundry provides model execution. Azure DevOps provides guided discovery, crawl
+materialization, and ProCursor source validation. GitHub, GitLab, and Forgejo-family hosts integrate
+through shared provider-neutral review, webhook, publication, and observability seams without
+forking lifecycle, mention, or audit logic. The reviewing flow includes structured verification
+before publication: local contradiction checks precede per-file persistence, PR-level evidence
+retrieval and bounded AI micro-verification precede the deterministic final gate, summary
+reconciliation aligns the final summary with surviving outcomes, and a client-owned publication
+policy can suppress outbound SCM comments without skipping internal review result persistence or
+diagnostics.
 
 ```mermaid
 flowchart TD
@@ -38,11 +39,15 @@ flowchart TD
     PG[("PostgreSQL")]
     ADMINUI["Admin UI (Vue 3 SPA)"]
 
-    subgraph backend["Meister DEV's ProPR Backend"]
+    subgraph backend["Meister DEV's ProPR Control Plane"]
         API["ASP.NET Core API"]
         WORKER["ReviewJobWorker (BackgroundService)"]
         CRAWLER["PrCrawlerWorker (BackgroundService)"]
-        PROCURSOR["ProCursor Module\n(Gateway + Index Worker)"]
+        PROXY["IProCursorGateway\n(Remote or Disabled)"]
+    end
+
+    subgraph procursorHost["ProCursor Internal Service"]
+        PROCURSOR["ASP.NET Core ProCursor Host\n(Query + Index Workers)"]
     end
 
     EXT -- "POST /clients/{clientId}/reviewing/jobs" --> API
@@ -52,14 +57,14 @@ flowchart TD
     WORKER -- "fetch PR diff" --> ADO
     WORKER -- "fetch PR diff + publish comments" --> SCM
     WORKER -- "AI review" --> AOAI
-    WORKER -- "knowledge + symbol lookups" --> PROCURSOR
+    WORKER -- "knowledge + symbol lookups" --> PROXY
     WORKER -- "post comment threads" --> ADO
     CRAWLER -- "poll open PRs" --> ADO
     CRAWLER -- "enqueue jobs" --> PG
     SCM -- "provider webhooks" --> API
+    PROXY -- "internal HTTP + X-ProCursor-Key" --> PROCURSOR
     PROCURSOR -- "persist snapshots + jobs" --> PG
-    PROCURSOR -- "materialize tracked branches" --> ADO
-    PROCURSOR -- "embedding generation" --> AOAI
+    PROCURSOR -- "broker calls + X-ProCursor-Key" --> API
 ```
 
 ## Provider-Neutral SCM Model
@@ -67,10 +72,10 @@ flowchart TD
 - The shared review engine, crawl convergence, mention handling, and ProCursor boundary follow one
     application flow; provider families attach through capability interfaces rather than separate
     workflow implementations.
-- Provider-specific behavior is being moved behind adapters for connection verification, discovery,
+- Provider-specific behavior is implemented behind adapters for connection verification, discovery,
     review query and publication, reviewer identity resolution, and webhook ingress.
 - Reviewer-trigger identity is a configuration-only filter used for automatic PR selection. The
-    authenticated provider connection identity remains the author for provider write operations and
+    authenticated provider connection identity is the author for provider write operations and
     reviewer-owned thread detection.
 - Azure DevOps provides guided discovery and crawl materialization. GitHub, GitLab, and
     Forgejo-family adapters use the same normalized review, webhook, and thread-memory flows.
@@ -94,11 +99,34 @@ feature ownership stays visible at the composition root.
 | `AddPromptCustomizationModule()` | Prompt override persistence and application services |
 | `AddUsageReportingModule()` | Client and ProCursor usage reporting services |
 | `AddLicensingModule()` | Installation edition persistence, premium capability resolution, admin/auth licensing contracts, and feature-management integration |
-| `AddProCursorModule()` | ProCursor indexing, graph extraction, and query composition |
+| `AddProCursorModule()` | ProCursor-owned execution, query, indexing, and operational-persistence composition used by the extracted ProCursor host |
 
 This composition model keeps feature-owned registrations in module roots while shared support stays
 cross-cutting and feature-agnostic. DB-backed registrations are enabled whenever
 `DB_CONNECTION_STRING` is configured, including in `Testing`.
+
+When `PROCURSOR_REMOTE_MODE=proprManagedRemote`, the API host binds `IProCursorGateway` to the remote
+HTTP transport, registers the `procursor-remote` dependency health check, and leaves ProCursor worker
+ownership to the ProCursor host. When `PROCURSOR_REMOTE_MODE=disabled`, ProPR binds the disabled
+gateway so tool-aware review omits ProCursor cleanly instead of exposing a broken dependency.
+
+Both hosts emit OTLP traces and Prometheus metrics for inbound ASP.NET Core requests and outbound
+`HttpClient` calls across the ProPR <-> ProCursor boundary. Structured logs redact shared-key
+configuration and request logging records only whether the service-auth header was present, never its
+value. OTLP resource identity is emitted separately for `MeisterProPR.Api` and
+`MeisterProPR.ProCursor.Service` so cross-service traces are attributable.
+
+ProPR is the durable owner of client, provider, AI, and ProCursor source configuration. The ProCursor
+host keeps runtime configuration in memory only,
+refreshes it from ProPR over the shared-key-authenticated internal boundary, and persists only
+ProCursor-owned operational tables through `PROCURSOR_DB_CONNECTION_STRING`.
+ProPR does not require `PROCURSOR_DB_CONNECTION_STRING` and reaches
+ProCursor-owned reporting and maintenance data only through authenticated internal ProCursor APIs.
+
+Compile-time ownership is enforced through the dedicated `MeisterProPR.ProCursor.Contracts`
+assembly for shared wire contracts and broker abstractions, plus the focused
+`MeisterProPR.ProCursor.slnx` solution that contains only ProCursor-owned projects, the shared
+contracts boundary, and the ProCursor service tests.
 
 ## Reading Order
 

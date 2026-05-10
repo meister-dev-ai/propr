@@ -81,7 +81,7 @@ public sealed class ProCursorTokenUsageModuleIntegrationTests(ProCursorKnowledge
 
         using (var scope = factory.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
             db.ProCursorTokenUsageEvents.AddRange(
                 CreateEvent(
                     factory.ClientId,

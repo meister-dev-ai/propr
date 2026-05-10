@@ -82,12 +82,13 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 # 1. Create a minimal .env file (see docs/getting-started.md for setup guidance)
 cat > .env <<'EOF'
 MEISTER_JWT_SECRET=<random-32+-char-string>
+PROCURSOR_SHARED_KEY=<random-32+-char-string>
 MEISTER_BOOTSTRAP_ADMIN_USER=admin
 MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password>
 MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api
 EOF
 
-# 2. Start the API + PostgreSQL (examples)
+# 2. Start the full local stack (examples)
 
 # From repository root: specify compose file and env file explicitly
 docker compose --env-file .env -f example/docker-compose/docker-compose.yml up --build
@@ -102,12 +103,31 @@ curl -k https://localhost:5443/api/healthz
 
 Open `https://localhost:5443/` for the admin UI.
 
+The default compose topology now runs three application processes: `meisterpropr` (public control plane),
+`procursor` (internal execution service), and `admin-ui`. ProPR talks to ProCursor over the internal
+compose network with the shared `PROCURSOR_SHARED_KEY` carried in `X-ProCursor-Key`.
+
+Release artifacts follow the same split. Published runtime images are:
+
+- `ghcr.io/meister-dev-ai/propr:<tag>` for the ProPR API/control plane
+- `ghcr.io/meister-dev-ai/propr/procursor:<tag>` for the extracted internal ProCursor host
+- `ghcr.io/meister-dev-ai/propr/admin-ui:<tag>` for the admin UI
+
+Stable releases publish both `<tag>` and `latest` for all three images. Pre-releases publish only the
+versioned tag.
+
 The `curl -k` examples in this repository are intended for local development against the
 self-signed `https://localhost:5443` endpoint only.
 
-The default compose stack now mounts a named volume for the ASP.NET Core Data Protection key ring
-at `/app/.data-protection-keys`. Preserve that volume across restarts and redeployments so stored
-client ADO secrets and AI connection API keys remain decryptable.
+For ProCursor-only build and test validation, use `MeisterProPR.ProCursor.slnx`. That focused
+solution contains only ProCursor-owned projects plus the shared `MeisterProPR.ProCursor.Contracts`
+boundary and its dedicated service tests.
+
+The default compose stack mounts a shared named volume for the ASP.NET Core Data Protection key ring
+at `/app/.data-protection-keys` on both `meisterpropr` and `procursor`. That shared mount is a
+deployment convenience for the example topology, not a corrected-architecture requirement. ProPR and
+ProCursor may use independent key-ring stores as long as each service can still decrypt the secrets it
+owns.
 
 If you are upgrading from the retired client System Azure DevOps setup, recreate each Azure DevOps
 integration through the Providers tab before re-enabling crawl or webhook automation: add the
@@ -115,7 +135,16 @@ provider connection, add the organization scope, and confirm the reviewer identi
 connection. The reviewer identity is only an optional trigger/filter for automatic PR processing.
 Posting still uses the authenticated provider connection identity.
 
-Alternatively you can use the script `./scripts/run_local.ps1`, which boosts faster but does not spin up a DB or grafana on its own.
+For source-based development without Docker, `./scripts/run-local.sh` now generates one per-run shared
+ProCursor key, starts `MeisterProPR.Api`, waits for its health endpoint, starts
+`MeisterProPR.ProCursor.Service`, waits for its health endpoint, and then starts the admin UI. The
+script defaults `PROCURSOR_DB_CONNECTION_STRING` to `DB_CONNECTION_STRING` for the extracted host so
+the local topology can reuse one physical PostgreSQL database while still keeping the control-plane and
+ProCursor operational ownership boundaries separate.
+
+When `OTLP_ENDPOINT` is configured, both hosts emit OTLP traces for ASP.NET Core and `HttpClient`
+activity with distinct service names, `MeisterProPR.Api` and `MeisterProPR.ProCursor.Service`, and
+continue exposing Prometheus metrics locally.
 
 See [docs/getting-started.md](docs/getting-started.md) for Admin UI setup and
 [docs/api.md](docs/api.md) for API examples.
@@ -186,6 +215,11 @@ For the internal processing flow and the implementation checklist for new licens
 | `MEISTER_JWT_SECRET`               | Yes           | HS256 signing secret — minimum 32 characters                                    |
 | `MEISTER_BOOTSTRAP_ADMIN_USER`     | Yes           | Username for the initial admin account seeded on first startup                  |
 | `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Yes           | Password for the initial admin account                                          |
+| `PROCURSOR_REMOTE_MODE`            | Optional      | ProPR-side ProCursor mode. Use `proprManagedRemote` for the extracted service or `disabled` to omit ProCursor from review tools |
+| `PROCURSOR_SERVICE_BASE_URL`       | Remote mode   | Internal ProPR -> ProCursor base URL                                            |
+| `PROCURSOR_PROPR_BASE_URL`         | ProCursor host| Internal ProCursor -> ProPR broker base URL                                     |
+| `PROCURSOR_DB_CONNECTION_STRING`   | ProCursor host| ProCursor-owned operational-state connection string; required by the extracted ProCursor host only; may target the same PostgreSQL server/database as ProPR or a separate one |
+| `PROCURSOR_SHARED_KEY`             | Remote mode   | Shared symmetric key used in the `X-ProCursor-Key` header in both directions    |
 
 See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup values.
 

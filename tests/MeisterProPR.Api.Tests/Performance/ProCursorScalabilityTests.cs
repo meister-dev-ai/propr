@@ -2,16 +2,16 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
-using MeisterProPR.Api.Workers;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.ProCursor.Core;
+using MeisterProPR.ProCursor.Options;
+using MeisterProPR.ProCursor.Workers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -76,7 +76,7 @@ public sealed class ProCursorScalabilityTests
             $"Expected tracked-branch refresh p95 latency to stay below 15 minutes for SC-004, but observed {p95}.");
 
         await using var verificationScope = provider.CreateAsyncScope();
-        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         Assert.Equal(expectedCommitsByBranchId.Count, await verificationDb.ProCursorIndexSnapshots.CountAsync());
     }
 
@@ -138,7 +138,7 @@ public sealed class ProCursorScalabilityTests
         }
 
         await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         var jobs = await db.ProCursorIndexJobs
             .Where(job => jobIds.Contains(job.Id))
             .ToListAsync();
@@ -164,7 +164,9 @@ public sealed class ProCursorScalabilityTests
         services.AddLogging();
 
         var databaseName = Guid.NewGuid().ToString("N");
+        var operationalDatabaseName = Guid.NewGuid().ToString("N");
         services.AddDbContext<MeisterProPRDbContext>(builder => builder.UseInMemoryDatabase(databaseName));
+        services.AddDbContext<ProCursorOperationalDbContext>(builder => builder.UseInMemoryDatabase(operationalDatabaseName));
 
         services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
         services.AddScoped<IProCursorIndexJobRepository, ProCursorIndexJobRepository>();
@@ -254,7 +256,7 @@ public sealed class ProCursorScalabilityTests
             "commit-old");
 
         await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         db.ProCursorIndexJobs.Add(
             new ProCursorIndexJob(
                 jobId,
@@ -317,7 +319,7 @@ public sealed class ProCursorScalabilityTests
         while (stopwatch.Elapsed < timeout)
         {
             await using var scope = provider.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
             var jobs = await db.ProCursorIndexJobs
                 .Where(job => jobIds.Contains(job.Id))
                 .ToListAsync();

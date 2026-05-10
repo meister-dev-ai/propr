@@ -39,9 +39,11 @@ param(
     [string]$BootstrapAdminUser,
     [object]$BootstrapAdminPassword, # string or SecureString
     [object]$JwtSecret,              # string or SecureString
-    [object]$DbConnectionString,    # string or SecureString
-    [object]$DbUser,                # string or SecureString
-    [object]$DbPassword             # string or SecureString
+    [object]$ProCursorSharedKey,     # string or SecureString
+    [object]$DbConnectionString,     # string or SecureString
+    [object]$ProCursorDbConnectionString, # string or SecureString
+    [object]$DbUser,                 # string or SecureString
+    [object]$DbPassword              # string or SecureString
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,6 +85,7 @@ function Assert-MinLength([object]$Value, [string]$Name, [int]$MinLength) {
 }
 
 $script:PublishedBackendTags = $null
+$script:PublishedProCursorTags = $null
 $script:PublishedAdminUiTags = $null
 
 function Get-GhcrRepositoryTags([string]$Repository) {
@@ -125,8 +128,13 @@ function Get-PublishedImageTagSets() {
         $script:PublishedAdminUiTags = Get-GhcrRepositoryTags 'meister-dev-ai/propr/admin-ui'
     }
 
+    if (-not $script:PublishedProCursorTags) {
+        $script:PublishedProCursorTags = Get-GhcrRepositoryTags 'meister-dev-ai/propr/procursor'
+    }
+
     return [pscustomobject]@{
         Backend = $script:PublishedBackendTags
+        ProCursor = $script:PublishedProCursorTags
         AdminUi = $script:PublishedAdminUiTags
     }
 }
@@ -134,16 +142,16 @@ function Get-PublishedImageTagSets() {
 function Resolve-PublishedImageTag() {
     $tagSets = Get-PublishedImageTagSets
 
-    if (($tagSets.Backend -contains 'latest') -and ($tagSets.AdminUi -contains 'latest')) {
+    if (($tagSets.Backend -contains 'latest') -and ($tagSets.AdminUi -contains 'latest') -and ($tagSets.ProCursor -contains 'latest')) {
         return 'latest'
     }
 
     $commonTags = $tagSets.Backend |
-        Where-Object { $_ -ne 'latest' -and $_ -notlike 'sha256-*' -and ($tagSets.AdminUi -contains $_) } |
+        Where-Object { $_ -ne 'latest' -and $_ -notlike 'sha256-*' -and ($tagSets.AdminUi -contains $_) -and ($tagSets.ProCursor -contains $_) } |
         Sort-Object
 
     if (-not $commonTags) {
-        throw 'No common published GHCR tag was found for backend and admin-ui images.'
+        throw 'No common published GHCR tag was found for backend, admin-ui, and ProCursor images.'
     }
 
     return $commonTags[-1]
@@ -157,6 +165,10 @@ function Assert-PublishedImageTag([string]$Tag) {
 
     if ($tagSets.AdminUi -notcontains $Tag) {
         throw "Admin UI image tag '$Tag' is not published in GHCR."
+    }
+
+    if ($tagSets.ProCursor -notcontains $Tag) {
+        throw "ProCursor image tag '$Tag' is not published in GHCR."
     }
 }
 
@@ -185,7 +197,9 @@ Use-Config 'ImageTag'           ([ref]$ImageTag)
 Use-Config 'BootstrapAdminUser' ([ref]$BootstrapAdminUser)
 Use-Config 'BootstrapAdminPassword' ([ref]$BootstrapAdminPassword) -IsSecret $true
 Use-Config 'JwtSecret'          ([ref]$JwtSecret)          -IsSecret $true
+Use-Config 'ProCursorSharedKey' ([ref]$ProCursorSharedKey) -IsSecret $true
 Use-Config 'DbConnectionString' ([ref]$DbConnectionString) -IsSecret $true
+Use-Config 'ProCursorDbConnectionString' ([ref]$ProCursorDbConnectionString) -IsSecret $true
 Use-Config 'DbUser'             ([ref]$DbUser)             -IsSecret $true
 Use-Config 'DbPassword'         ([ref]$DbPassword)         -IsSecret $true
 
@@ -221,6 +235,7 @@ Write-Step "Collecting parameters"
 if (-not $ResourceGroup)      { $ResourceGroup      = Read-Host "Resource group name" }
 if (-not $BootstrapAdminPassword) { $BootstrapAdminPassword = Read-Host "Bootstrap admin password" -AsSecureString }
 if (-not $JwtSecret)          { $JwtSecret          = Read-Host "JWT signing secret (32+ chars)" -AsSecureString }
+if (-not $ProCursorSharedKey) { $ProCursorSharedKey = Read-Host "ProCursor shared key (32+ chars)" -AsSecureString }
 if (-not $DbUser)             { $DbUser             = Read-Host "PostgreSQL username"              -AsSecureString }
 if (-not $DbPassword)         { $DbPassword         = Read-Host "PostgreSQL password"              -AsSecureString }
 
@@ -234,6 +249,8 @@ Assert-NotEmpty $BootstrapAdminUser 'BootstrapAdminUser'
 Assert-NotEmpty $BootstrapAdminPassword 'BootstrapAdminPassword'
 Assert-NotEmpty $JwtSecret          'JwtSecret'
 Assert-MinLength $JwtSecret         'JwtSecret' 32
+Assert-NotEmpty $ProCursorSharedKey 'ProCursorSharedKey'
+Assert-MinLength $ProCursorSharedKey 'ProCursorSharedKey' 32
 Assert-NotEmpty $DbUser             'DbUser'
 Assert-NotEmpty $DbPassword         'DbPassword'
 
@@ -246,6 +263,7 @@ if (-not $rgExists) {
 Write-Success "All parameters valid"
 
 $BackendImage      = "ghcr.io/meister-dev-ai/propr`:$ImageTag"
+$ProCursorImage    = "ghcr.io/meister-dev-ai/propr/procursor`:$ImageTag"
 $AdminUiImage      = "ghcr.io/meister-dev-ai/propr/admin-ui`:$ImageTag"
 $ReverseProxyImage = "nginx:alpine"
 $DbImage           = "pgvector/pgvector:pg17"
@@ -259,10 +277,12 @@ Write-Host "  Location        : $Location"
 Write-Host "  Image tag       : $ImageTag"
 Write-Host "  Bootstrap admin : $BootstrapAdminUser"
 Write-Host "  Backend image   : $BackendImage"
+Write-Host "  ProCursor image : $ProCursorImage"
 Write-Host "  Admin UI image  : $AdminUiImage"
 Write-Host "  Reverse proxy   : $ReverseProxyImage"
 Write-Host "  Database image  : $DbImage"
 Write-Host "  DB connection   : $(if ($DbConnectionString) { 'override provided' } else { 'derived from internal db app' })"
+Write-Host "  ProCursor DB    : $(if ($ProCursorDbConnectionString) { 'override provided' } else { 'same effective connection as backend unless overridden' })"
 Write-Host ""
 
 $confirm = Read-Host "Proceed? (y/N)"
@@ -280,7 +300,9 @@ function Get-BicepParams([bool]$DeployApps) {
         "bootstrapAdminUser=$BootstrapAdminUser"
         "bootstrapAdminPassword=$(ConvertTo-PlainText $BootstrapAdminPassword)"
         "jwtSecret=$(ConvertTo-PlainText $JwtSecret)"
+        "proCursorSharedKey=$(ConvertTo-PlainText $ProCursorSharedKey)"
         "dbConnectionString=$(ConvertTo-PlainText $DbConnectionString)"
+        "proCursorDbConnectionString=$(ConvertTo-PlainText $ProCursorDbConnectionString)"
         "dbUser=$(ConvertTo-PlainText $DbUser)"
         "dbPassword=$(ConvertTo-PlainText $DbPassword)"
     )

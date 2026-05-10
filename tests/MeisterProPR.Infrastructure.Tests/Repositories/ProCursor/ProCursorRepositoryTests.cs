@@ -23,7 +23,8 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
 {
     private static readonly Guid ClientId = Guid.Parse("cccccccc-1000-0000-0000-000000000001");
 
-    private MeisterProPRDbContext _db = null!;
+    private MeisterProPRDbContext _controlDb = null!;
+    private ProCursorOperationalDbContext _operationalDb = null!;
     private ProCursorIndexJobRepository _jobs = null!;
     private ProCursorKnowledgeSourceRepository _knowledgeSources = null!;
     private ProCursorIndexSnapshotRepository _snapshots = null!;
@@ -36,11 +37,15 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
             .Options;
-        this._db = new MeisterProPRDbContext(options);
+        this._controlDb = new MeisterProPRDbContext(options);
+        var operationalOptions = new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        this._operationalDb = new ProCursorOperationalDbContext(operationalOptions);
 
-        if (!await this._db.Clients.AnyAsync(client => client.Id == ClientId))
+        if (!await this._controlDb.Clients.AnyAsync(client => client.Id == ClientId))
         {
-            this._db.Clients.Add(
+            this._controlDb.Clients.Add(
                 new ClientRecord
                 {
                     Id = ClientId,
@@ -49,28 +54,33 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                 });
-            await this._db.SaveChangesAsync();
+            await this._controlDb.SaveChangesAsync();
         }
 
-        await this._db.ProCursorSymbolEdges.ExecuteDeleteAsync();
-        await this._db.ProCursorSymbolRecords.ExecuteDeleteAsync();
-        await this._db.ProCursorKnowledgeChunks.ExecuteDeleteAsync();
-        await this._db.ProCursorIndexSnapshots.ExecuteDeleteAsync();
-        await this._db.ProCursorIndexJobs.ExecuteDeleteAsync();
-        await this._db.ProCursorTrackedBranches.ExecuteDeleteAsync();
-        await this._db.ProCursorKnowledgeSources.ExecuteDeleteAsync();
+        await this._operationalDb.ProCursorSymbolEdges.ExecuteDeleteAsync();
+        await this._operationalDb.ProCursorSymbolRecords.ExecuteDeleteAsync();
+        await this._operationalDb.ProCursorKnowledgeChunks.ExecuteDeleteAsync();
+        await this._operationalDb.ProCursorIndexSnapshots.ExecuteDeleteAsync();
+        await this._operationalDb.ProCursorIndexJobs.ExecuteDeleteAsync();
+        await this._controlDb.ProCursorTrackedBranches.ExecuteDeleteAsync();
+        await this._controlDb.ProCursorKnowledgeSources.ExecuteDeleteAsync();
 
-        this._knowledgeSources = new ProCursorKnowledgeSourceRepository(this._db);
-        this._jobs = new ProCursorIndexJobRepository(this._db);
-        this._snapshots = new ProCursorIndexSnapshotRepository(this._db);
-        this._symbolGraph = new ProCursorSymbolGraphRepository(this._db);
+        this._knowledgeSources = new ProCursorKnowledgeSourceRepository(this._controlDb);
+        this._jobs = new ProCursorIndexJobRepository(this._operationalDb);
+        this._snapshots = new ProCursorIndexSnapshotRepository(this._operationalDb);
+        this._symbolGraph = new ProCursorSymbolGraphRepository(this._operationalDb);
     }
 
     public async Task DisposeAsync()
     {
-        if (this._db is not null)
+        if (this._operationalDb is not null)
         {
-            await this._db.DisposeAsync();
+            await this._operationalDb.DisposeAsync();
+        }
+
+        if (this._controlDb is not null)
+        {
+            await this._controlDb.DisposeAsync();
         }
     }
 
@@ -137,7 +147,7 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
                 CreateChunk(snapshot.Id, 0, "docs/second.md", V(0f, 1f)),
             ]);
 
-        var chunks = await this._db.ProCursorKnowledgeChunks
+        var chunks = await this._operationalDb.ProCursorKnowledgeChunks
             .Where(chunk => chunk.SnapshotId == snapshot.Id)
             .ToListAsync();
 
@@ -158,7 +168,7 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
 
         var queryVector = new Vector(V(0.99f, 0.01f, 0f));
 
-        var nearest = await this._db.ProCursorKnowledgeChunks
+        var nearest = await this._operationalDb.ProCursorKnowledgeChunks
             .OrderBy(chunk => chunk.EmbeddingVector.CosineDistance(queryVector))
             .FirstAsync();
 
@@ -214,8 +224,8 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
 
         await this._symbolGraph.ReplaceAsync(snapshot.Id, [symbol], [edge]);
 
-        Assert.Equal(1, await this._db.ProCursorSymbolRecords.CountAsync(record => record.SnapshotId == snapshot.Id));
-        Assert.Equal(1, await this._db.ProCursorSymbolEdges.CountAsync(record => record.SnapshotId == snapshot.Id));
+        Assert.Equal(1, await this._operationalDb.ProCursorSymbolRecords.CountAsync(record => record.SnapshotId == snapshot.Id));
+        Assert.Equal(1, await this._operationalDb.ProCursorSymbolEdges.CountAsync(record => record.SnapshotId == snapshot.Id));
     }
 
     private async Task<ProCursorKnowledgeSource> PersistSourceWithBranchAsync()

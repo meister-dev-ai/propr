@@ -6,7 +6,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.ProCursor.Core;
 
 /// <summary>
 ///     Polls tracked branches for head changes and queues durable refresh jobs when required.

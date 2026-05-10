@@ -3,10 +3,12 @@
 
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +23,7 @@ internal abstract class ProviderReviewContextToolsBase(
     Guid? clientId,
     IReadOnlyList<Guid>? knowledgeSourceIds,
     ILogger logger,
-    string? providerScopePath = null) : IReviewContextTools
+    string? providerScopePath = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly Guid? _clientId = clientId;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
@@ -43,6 +45,8 @@ internal abstract class ProviderReviewContextToolsBase(
     private readonly int _pullRequestNumber = review.Number;
     private readonly RepositoryRef _repository = review.Repository;
     private readonly string _sourceBranch = sourceBranch;
+
+    public bool SupportsProCursorTools => proCursorGateway is not DisabledProCursorGateway;
 
     public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {
@@ -127,17 +131,7 @@ internal abstract class ProviderReviewContextToolsBase(
                     "The current review context does not include a client identifier for ProCursor."));
         }
 
-        return this._proCursorGateway.AskKnowledgeAsync(
-            new ProCursorKnowledgeQueryRequest(
-                this._clientId.Value,
-                question,
-                this._knowledgeSourceIds,
-                new ProCursorRepositoryContextDto(
-                    this._providerScopePath,
-                    this._repository.OwnerOrNamespace,
-                    this._repository.ExternalRepositoryId,
-                    this.NormalizeBranch(this._sourceBranch))),
-            ct);
+        return this.ExecuteKnowledgeQueryAsync(question, ct);
     }
 
     public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
@@ -174,19 +168,59 @@ internal abstract class ProviderReviewContextToolsBase(
                     []));
         }
 
-        return this._proCursorGateway.GetSymbolInsightAsync(
-            new ProCursorSymbolQueryRequest(
-                this._clientId.Value,
-                symbol,
-                string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
-                StateMode: "reviewTarget",
-                ReviewContext: new ProCursorReviewContextDto(
-                    this._repository.ExternalRepositoryId,
-                    this.NormalizeBranch(this._sourceBranch),
-                    this._pullRequestNumber,
-                    this._iterationId),
-                MaxRelations: maxRelations),
-            ct);
+        return this.ExecuteSymbolQueryAsync(symbol, queryMode, maxRelations, ct);
+    }
+
+    private async Task<ProCursorKnowledgeAnswerDto> ExecuteKnowledgeQueryAsync(string question, CancellationToken ct)
+    {
+        try
+        {
+            return await this._proCursorGateway.AskKnowledgeAsync(
+                new ProCursorKnowledgeQueryRequest(
+                    this._clientId!.Value,
+                    question,
+                    this._knowledgeSourceIds,
+                    new ProCursorRepositoryContextDto(
+                        this._providerScopePath,
+                        this._repository.OwnerOrNamespace,
+                        this._repository.ExternalRepositoryId,
+                        this.NormalizeBranch(this._sourceBranch))),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException ex)
+        {
+            this._logger.LogWarning(ex, "ProCursor knowledge query unavailable during review context execution.");
+            return new ProCursorKnowledgeAnswerDto("unavailable", [], ex.Message);
+        }
+    }
+
+    private async Task<ProCursorSymbolInsightDto> ExecuteSymbolQueryAsync(
+        string symbol,
+        string? queryMode,
+        int? maxRelations,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await this._proCursorGateway.GetSymbolInsightAsync(
+                new ProCursorSymbolQueryRequest(
+                    this._clientId!.Value,
+                    symbol,
+                    string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                    StateMode: "reviewTarget",
+                    ReviewContext: new ProCursorReviewContextDto(
+                        this._repository.ExternalRepositoryId,
+                        this.NormalizeBranch(this._sourceBranch),
+                        this._pullRequestNumber,
+                        this._iterationId),
+                    MaxRelations: maxRelations),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException ex)
+        {
+            this._logger.LogWarning(ex, "ProCursor symbol query unavailable during review context execution.");
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, [], ex.Message);
+        }
     }
 
     protected abstract Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct);

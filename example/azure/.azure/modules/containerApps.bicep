@@ -19,6 +19,7 @@ exec /docker-entrypoint.sh nginx -g 'daemon off;'
 var normalizedKvUri = endsWith(kvUri, '/') ? kvUri : '${kvUri}/'
 var adminUiHost = '${projectName}-admin-ui.internal.${env.properties.defaultDomain}'
 var backendHost = '${projectName}-backend.internal.${env.properties.defaultDomain}'
+var proCursorHost = '${projectName}-procursor.internal.${env.properties.defaultDomain}'
 
 // Built-in role definition IDs
 var kvSecretsUserRoleId    = '4633458b-17de-408a-b874-0445c86b69e6'
@@ -41,6 +42,11 @@ resource backendSecretIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   location: location
 }
 
+resource proCursorSecretIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${projectName}-procursor-secrets'
+  location: location
+}
+
 resource dbKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(dbSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   scope: kv
@@ -57,6 +63,16 @@ resource backendKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: backendSecretIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource proCursorKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(proCursorSecretIdentity.id, kv.id, kvSecretsUserRoleId)
+  scope: kv
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
+    principalId: proCursorSecretIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -144,6 +160,7 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
         { name: 'jwt-secret', keyVaultUrl: '${normalizedKvUri}secrets/MEISTER-JWT-SECRET', identity: backendSecretIdentity.id }
         { name: 'bootstrap-admin-user', keyVaultUrl: '${normalizedKvUri}secrets/MEISTER-BOOTSTRAP-ADMIN-USER', identity: backendSecretIdentity.id }
         { name: 'bootstrap-admin-password', keyVaultUrl: '${normalizedKvUri}secrets/MEISTER-BOOTSTRAP-ADMIN-PASSWORD', identity: backendSecretIdentity.id }
+        { name: 'procursor-shared-key', keyVaultUrl: '${normalizedKvUri}secrets/PROCURSOR-SHARED-KEY', identity: backendSecretIdentity.id }
       ]
       activeRevisionsMode: 'Single'
       ingress: {
@@ -167,6 +184,10 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
             { name: 'MEISTER_JWT_SECRET',         secretRef: 'jwt-secret' }
             { name: 'MEISTER_BOOTSTRAP_ADMIN_USER', secretRef: 'bootstrap-admin-user' }
             { name: 'MEISTER_BOOTSTRAP_ADMIN_PASSWORD', secretRef: 'bootstrap-admin-password' }
+            { name: 'PROCURSOR_REMOTE_MODE', value: 'proprManagedRemote' }
+            { name: 'PROCURSOR_SERVICE_BASE_URL', value: 'http://${proCursorHost}' }
+            { name: 'PROCURSOR_SHARED_KEY', secretRef: 'procursor-shared-key' }
+            { name: 'MEISTER_DATA_PROTECTION_KEYS_PATH', value: '/app/.data-protection-keys' }
           ]
           resources: { cpu: json('0.5'), memory: '1Gi' }
           probes: [
@@ -174,12 +195,86 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
             { type: 'Readiness', failureThreshold: 48,  periodSeconds: 5,  successThreshold: 1, tcpSocket: { port: 8080 }, timeoutSeconds: 5 }
             { type: 'Startup',   failureThreshold: 240, periodSeconds: 1,  successThreshold: 1, initialDelaySeconds: 1, tcpSocket: { port: 8080 }, timeoutSeconds: 3 }
           ]
+          volumeMounts: [{ volumeName: 'data-protection-keys', mountPath: '/app/.data-protection-keys' }]
         }
       ]
       scale: { minReplicas: 1, maxReplicas: 1 }
+      volumes: [
+        {
+          name: 'data-protection-keys'
+          storageType: 'AzureFile'
+          storageName: '${storageAccountName}-data-protection'
+          mountOptions: 'uid=999,gid=999,dir_mode=0700,file_mode=0600'
+        }
+      ]
     }
   }
   dependsOn: [backendKvAccess]
+}
+
+resource proCursor 'Microsoft.App/containerapps@2025-10-02-preview' = {
+  name: '${projectName}-procursor'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${proCursorSecretIdentity.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: env.id
+    environmentId: env.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      secrets: [
+        { name: 'db-connectionstring', keyVaultUrl: '${normalizedKvUri}secrets/DB-CONNECTIONSTRING', identity: proCursorSecretIdentity.id }
+        { name: 'procursor-db-connectionstring', keyVaultUrl: '${normalizedKvUri}secrets/PROCURSOR-DB-CONNECTIONSTRING', identity: proCursorSecretIdentity.id }
+        { name: 'jwt-secret', keyVaultUrl: '${normalizedKvUri}secrets/MEISTER-JWT-SECRET', identity: proCursorSecretIdentity.id }
+        { name: 'procursor-shared-key', keyVaultUrl: '${normalizedKvUri}secrets/PROCURSOR-SHARED-KEY', identity: proCursorSecretIdentity.id }
+      ]
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        targetPort: 8081
+        transport: 'Auto'
+        traffic: [{ weight: 100, latestRevision: true }]
+        allowInsecure: true
+      }
+    }
+    template: {
+      containers: [
+        {
+          image: 'ghcr.io/meister-dev-ai/propr/procursor:${imageTag}'
+          name: '${projectName}-procursor'
+          env: [
+            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
+            { name: 'MEISTER_JWT_SECRET', secretRef: 'jwt-secret' }
+            { name: 'PROCURSOR_PROPR_BASE_URL', value: 'http://${backendHost}' }
+            { name: 'PROCURSOR_DB_CONNECTION_STRING', secretRef: 'procursor-db-connectionstring' }
+            { name: 'PROCURSOR_SHARED_KEY', secretRef: 'procursor-shared-key' }
+            { name: 'MEISTER_DATA_PROTECTION_KEYS_PATH', value: '/app/.data-protection-keys' }
+          ]
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+          probes: [
+            { type: 'Liveness',  failureThreshold: 3,   periodSeconds: 10, successThreshold: 1, tcpSocket: { port: 8081 }, timeoutSeconds: 5 }
+            { type: 'Readiness', failureThreshold: 48,  periodSeconds: 5,  successThreshold: 1, tcpSocket: { port: 8081 }, timeoutSeconds: 5 }
+            { type: 'Startup',   failureThreshold: 240, periodSeconds: 1,  successThreshold: 1, initialDelaySeconds: 1, tcpSocket: { port: 8081 }, timeoutSeconds: 3 }
+          ]
+          volumeMounts: [{ volumeName: 'data-protection-keys', mountPath: '/app/.data-protection-keys' }]
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 1 }
+      volumes: [
+        {
+          name: 'data-protection-keys'
+          storageType: 'AzureFile'
+          storageName: '${storageAccountName}-data-protection'
+          mountOptions: 'uid=999,gid=999,dir_mode=0700,file_mode=0600'
+        }
+      ]
+    }
+  }
+  dependsOn: [proCursorKvAccess, backend]
 }
 
 // ── Admin UI ──────────────────────────────────────────────────────────────────

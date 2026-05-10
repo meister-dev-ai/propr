@@ -305,6 +305,8 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
         Assert.Equal(PremiumCapabilityKey.ProCursor, body.GetProperty("feature").GetString());
+
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
     }
 
     public sealed class AdoDiscoveryApiFactory : WebApplicationFactory<Program>
@@ -434,8 +436,6 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
                     .Returns(discoveryService);
                 services.AddSingleton(discoveryService);
                 services.AddSingleton(this.ProviderRegistry);
-                this.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, true);
-                this.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
                 services.AddSingleton(this.LicensingCapabilityService);
 
                 var userRepo = Substitute.For<IUserRepository>();

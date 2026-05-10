@@ -3,9 +3,10 @@
 
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
+using MeisterProPR.ProCursor.Infrastructure.Remote;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -15,7 +16,7 @@ namespace MeisterProPR.Application.Tests.Features.ProCursor;
 public sealed class ProCursorModuleTests
 {
     [Fact]
-    public void AddProCursorModule_BindsOptionsAndRegistersGatewayContract()
+    public void AddProCursorModule_BindsOptionsAndRegistersRemoteRuntimeContracts()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -23,6 +24,9 @@ public sealed class ProCursorModuleTests
         services.AddProCursorModule(BuildConfiguration(false, true));
 
         Assert.NotNull(FindService<IProCursorGateway>(services));
+        Assert.NotNull(FindService<IProCursorRuntimeConfigurationBroker>(services));
+        Assert.NotNull(FindService<IProCursorRuntimeConfigurationCache>(services));
+        Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
 
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<ProCursorOptions>>().Value;
@@ -32,7 +36,20 @@ public sealed class ProCursorModuleTests
     }
 
     [Fact]
-    public void AddProCursorModule_WhenDatabaseConnectionStringIsConfigured_RegistersPersistenceContracts()
+    public void AddProCursorModule_WhenOperationalConnectionStringIsConfigured_RegistersPersistenceContracts()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddProCursorModule(BuildConfiguration(true, true, true));
+
+        Assert.NotNull(FindService<IProCursorIndexJobRepository>(services));
+        Assert.NotNull(FindService<IProCursorIndexSnapshotRepository>(services));
+        Assert.NotNull(FindService<IProCursorSymbolGraphRepository>(services));
+    }
+
+    [Fact]
+    public void AddProCursorModule_WithoutOperationalConnection_DoesNotRegisterOperationalPersistenceContracts()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -40,9 +57,10 @@ public sealed class ProCursorModuleTests
         services.AddProCursorModule(BuildConfiguration(true, true));
 
         Assert.NotNull(FindService<IProCursorKnowledgeSourceRepository>(services));
-        Assert.NotNull(FindService<IProCursorIndexJobRepository>(services));
-        Assert.NotNull(FindService<IProCursorIndexSnapshotRepository>(services));
-        Assert.NotNull(FindService<IProCursorSymbolGraphRepository>(services));
+        Assert.Null(FindService<IProCursorIndexJobRepository>(services));
+        Assert.Null(FindService<IProCursorIndexSnapshotRepository>(services));
+        Assert.Null(FindService<IProCursorSymbolGraphRepository>(services));
+        Assert.Null(FindService<IProCursorTokenUsageRecorder>(services));
     }
 
     [Fact]
@@ -77,7 +95,10 @@ public sealed class ProCursorModuleTests
         Assert.Equal("{\"traceId\":\"abc\"}", request.SafeMetadataJson);
     }
 
-    private static IConfiguration BuildConfiguration(bool withDatabaseConnectionString, bool stubMode)
+    private static IConfiguration BuildConfiguration(
+        bool withDatabaseConnectionString,
+        bool stubMode,
+        bool withOperationalConnectionString = false)
     {
         return new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -85,6 +106,9 @@ public sealed class ProCursorModuleTests
                 {
                     ["DB_CONNECTION_STRING"] = withDatabaseConnectionString
                         ? "Host=localhost;Database=meister;Username=test;Password=test"
+                        : null,
+                    ["PROCURSOR_DB_CONNECTION_STRING"] = withOperationalConnectionString
+                        ? "Host=localhost;Database=procursor;Username=test;Password=test"
                         : null,
                     ["ADO_STUB_PR"] = stubMode ? "true" : "false",
                     ["PROCURSOR_MAX_INDEX_CONCURRENCY"] = "7",

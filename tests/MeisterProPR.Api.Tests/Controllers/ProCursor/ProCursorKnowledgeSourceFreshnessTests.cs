@@ -46,9 +46,11 @@ public sealed class ProCursorKnowledgeSourceFreshnessTests(ProCursorKnowledgeSou
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            var operationalDb = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
             db.ProCursorKnowledgeSources.Add(source);
-            db.ProCursorIndexSnapshots.Add(snapshot);
+            operationalDb.ProCursorIndexSnapshots.Add(snapshot);
             await db.SaveChangesAsync();
+            await operationalDb.SaveChangesAsync();
         }
 
         var client = factory.CreateClient();

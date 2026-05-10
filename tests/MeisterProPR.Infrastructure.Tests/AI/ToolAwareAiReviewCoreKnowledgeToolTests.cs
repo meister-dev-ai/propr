@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -127,6 +128,49 @@ public sealed class ToolAwareAiReviewCoreKnowledgeToolTests
             .AskProCursorKnowledgeAsync(
                 "Where is the stale snapshot policy documented?",
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithAskProCursorKnowledgeTool_WhenToolReturnsUnavailableStillCompletes()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.AskProCursorKnowledgeAsync(
+                "How is token caching handled?",
+                Arg.Any<CancellationToken>())
+            .Returns<Task<ProCursorKnowledgeAnswerDto>>(_ =>
+                throw new ProCursorDependencyUnavailableException("The configured ProCursor service is unavailable."));
+
+        var callCount = 0;
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return Task.FromResult(
+                        CreateFunctionCallResponse(
+                            "call-knowledge-3",
+                            "ask_procursor_knowledge",
+                            "{\"question\":\"How is token caching handled?\"}"));
+                }
+
+                return Task.FromResult(CreateFinalReviewResponse("Knowledge unavailable, continued review."));
+            });
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        Assert.Equal(2, callCount);
+        Assert.Equal("Knowledge unavailable, continued review.", result.Summary);
     }
 
     private static IOptions<AiReviewOptions> DefaultOptions(int maxIterations = 5)

@@ -67,14 +67,18 @@ public sealed class AdoCommentPoster(
 
         // Build a map of normalized file path → changeTrackingId for inline comment anchoring.
         // changeTrackingId is required by ADO to resolve a file thread against the correct diff.
-        var changes = await gitClient.GetPullRequestIterationChangesAsync(
-            projectId,
-            repositoryId,
-            pullRequestId,
-            iterationId,
-            cancellationToken: cancellationToken);
+        var changes = await AdoPullRequestIterationChangePager.LoadAllAsync(
+            (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
+                projectId,
+                repositoryId,
+                pullRequestId,
+                iterationId,
+                top,
+                skip,
+                cancellationToken: ct),
+            cancellationToken);
 
-        var changeTrackingIds = (changes.ChangeEntries ?? [])
+        var changeTrackingIds = changes
             .Where(c => c.Item?.Path is not null)
             .ToDictionary(
                 c => NormalizePath(c.Item!.Path!),

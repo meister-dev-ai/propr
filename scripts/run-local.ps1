@@ -1,22 +1,32 @@
 Param(
     [string]$DbConnectionString = $env:DB_CONNECTION_STRING,
     [int]$BackendPort = 8080,
-    [switch]$SkipUiInstall
+    [int]$ProCursorPort = 8081,
+    [switch]$SkipUiInstall,
+    [string]$ProCursorDbConnectionString = $env:PROCURSOR_DB_CONNECTION_STRING
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot   = Split-Path -Parent $PSScriptRoot
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 $ApiProject = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
-$ApiFolder  = Join-Path $RepoRoot 'src\MeisterProPR.Api'
-$UiFolder   = Join-Path $RepoRoot 'admin-ui'
-$EnvFile    = Join-Path $RepoRoot '.env'
-$LogDir     = if ($env:RUN_LOCAL_LOG_DIR) { $env:RUN_LOCAL_LOG_DIR } else { Join-Path $RepoRoot 'logs\local' }
-$LogFile    = if ($env:RUN_LOCAL_LOG_FILE) { $env:RUN_LOCAL_LOG_FILE } else { Join-Path $LogDir ("run-local-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+$ProCursorProject = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\MeisterProPR.ProCursor.Service.csproj'
+$ApiFolder = Join-Path $RepoRoot 'src\MeisterProPR.Api'
+$ProCursorFolder = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service'
+$UiFolder = Join-Path $RepoRoot 'admin-ui'
+$EnvFile = Join-Path $RepoRoot '.env'
+$ApiDll = Join-Path $RepoRoot 'src\MeisterProPR.Api\bin\Debug\net10.0\MeisterProPR.Api.dll'
+$ProCursorDll = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\bin\Debug\net10.0\MeisterProPR.ProCursor.Service.dll'
+$LogDir = if ($env:RUN_LOCAL_LOG_DIR) { $env:RUN_LOCAL_LOG_DIR } else { Join-Path $RepoRoot 'logs\local' }
+$LogFile = if ($env:RUN_LOCAL_LOG_FILE) { $env:RUN_LOCAL_LOG_FILE } else { Join-Path $LogDir ("run-local-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+$DataProtectionKeysDir = if ($env:RUN_LOCAL_KEYS_DIR) { $env:RUN_LOCAL_KEYS_DIR } else { Join-Path (Join-Path $HOME '.aspnet') 'DataProtection-Keys' }
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
+New-Item -ItemType Directory -Force -Path $DataProtectionKeysDir | Out-Null
 Set-Content -Path $LogFile -Value $null -Encoding utf8
+
+$script:UserSecretsList = $null
 
 function Write-RunLocalMessage {
     param(
@@ -27,6 +37,253 @@ function Write-RunLocalMessage {
     $formatted = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
     Add-Content -Path $script:LogFile -Value $formatted -Encoding utf8
     Write-Host $formatted -ForegroundColor $Color
+}
+
+function Get-ConnectionTarget {
+    param([string]$ConnectionString)
+
+    $hostName = $null
+    $port = $null
+    $database = $null
+
+    foreach ($segment in ($ConnectionString -split ';')) {
+        $trimmed = $segment.Trim()
+        if (-not $trimmed) {
+            continue
+        }
+
+        $parts = $trimmed -split '=', 2
+        if ($parts.Count -ne 2) {
+            continue
+        }
+
+        $key = $parts[0].Trim().ToLowerInvariant()
+        $value = $parts[1].Trim()
+
+        switch ($key) {
+            'host' { $hostName = $value }
+            'server' { $hostName = $value }
+            'data source' { $hostName = $value }
+            'port' { $port = $value }
+            'database' { $database = $value }
+            'initial catalog' { $database = $value }
+        }
+    }
+
+    if (-not $hostName) { $hostName = '<unspecified-host>' }
+    if (-not $port) { $port = '<default-port>' }
+    if (-not $database) { $database = '<unspecified-db>' }
+
+    return "host=$hostName port=$port database=$database"
+}
+
+function Get-UserSecretsList {
+    if ($null -ne $script:UserSecretsList) {
+        return $script:UserSecretsList
+    }
+
+    $script:UserSecretsList = @()
+
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue) -or -not (Test-Path $ApiProject)) {
+        return $script:UserSecretsList
+    }
+
+    try {
+        $secretList = dotnet user-secrets list --project $ApiProject 2>$null
+        if ($LASTEXITCODE -eq 0 -and $secretList) {
+            $script:UserSecretsList = @($secretList)
+        }
+    }
+    catch {
+    }
+
+    return $script:UserSecretsList
+}
+
+function Get-UserSecretValue {
+    param([string]$WantedKey)
+
+    foreach ($line in (Get-UserSecretsList)) {
+        if ($null -eq $line) {
+            continue
+        }
+
+        $trimmed = $line.Trim()
+        if (-not $trimmed) {
+            continue
+        }
+
+        $idx = $trimmed.IndexOf('=')
+        if ($idx -lt 0) {
+            continue
+        }
+
+        $key = $trimmed.Substring(0, $idx).Trim()
+        $value = $trimmed.Substring($idx + 1).Trim()
+        if ($key -eq $WantedKey) {
+            return $value
+        }
+    }
+
+    return $null
+}
+
+function Get-DbConnectionStringFromUserSecrets {
+    $candidates = @(
+        'DB_CONNECTION_STRING',
+        'DbConnectionString',
+        'ConnectionStrings:DefaultConnection',
+        'ConnectionStrings:Default',
+        'Database:ConnectionString',
+        'ConnectionStrings__DefaultConnection',
+        'ConnectionStrings__Default'
+    )
+
+    $candidateLookup = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidate in $candidates) {
+        [void]$candidateLookup.Add($candidate)
+        [void]$candidateLookup.Add($candidate -replace ':', '__')
+    }
+
+    foreach ($line in (Get-UserSecretsList)) {
+        if ($null -eq $line) {
+            continue
+        }
+
+        $trimmed = $line.Trim()
+        if (-not $trimmed) {
+            continue
+        }
+
+        $idx = $trimmed.IndexOf('=')
+        if ($idx -lt 0) {
+            continue
+        }
+
+        $key = $trimmed.Substring(0, $idx).Trim()
+        $value = $trimmed.Substring($idx + 1).Trim()
+        if ($candidateLookup.Contains($key)) {
+            return $value
+        }
+    }
+
+    return $null
+}
+
+function Get-DbConnectionFromLocalPodman {
+    if (-not (Get-Command podman -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    $candidates = @(
+        'meisterpropr-pgvector-db',
+        'docker-compose-postgres-1'
+    )
+
+    foreach ($containerName in $candidates) {
+        try {
+            $inspect = podman inspect $containerName 2>$null | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or -not $inspect) {
+                continue
+            }
+
+            $container = if ($inspect -is [array]) { $inspect[0] } else { $inspect }
+            if ($container.State.Status -ne 'running') {
+                continue
+            }
+
+            $bindings = $container.NetworkSettings.Ports.'5432/tcp'
+            if (-not $bindings -or $bindings.Count -lt 1) {
+                continue
+            }
+
+            $hostPort = $bindings[0].HostPort
+            if (-not $hostPort) {
+                continue
+            }
+
+            $envMap = @{}
+            foreach ($entry in $container.Config.Env) {
+                $parts = $entry -split '=', 2
+                if ($parts.Count -eq 2) {
+                    $envMap[$parts[0]] = $parts[1]
+                }
+            }
+
+            $username = if ($envMap.ContainsKey('POSTGRES_USER') -and $envMap['POSTGRES_USER']) { $envMap['POSTGRES_USER'] } else { 'postgres' }
+            $password = if ($envMap.ContainsKey('POSTGRES_PASSWORD')) { $envMap['POSTGRES_PASSWORD'] } else { $null }
+            $database = if ($envMap.ContainsKey('POSTGRES_DB') -and $envMap['POSTGRES_DB']) { $envMap['POSTGRES_DB'] } else { 'postgres' }
+
+            if (-not $password) {
+                continue
+            }
+
+            return [PSCustomObject]@{
+                ContainerName = $containerName
+                ConnectionString = "Host=localhost;Port=$hostPort;Database=$database;Username=$username;Password=$password"
+            }
+        }
+        catch {
+        }
+    }
+
+    return $null
+}
+
+function Read-DotEnv {
+    param([string]$Path)
+
+    $ht = @{}
+    if (Test-Path $Path) {
+        foreach ($line in Get-Content $Path -ErrorAction SilentlyContinue) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '' -or $trimmed.StartsWith('#')) {
+                continue
+            }
+
+            $idx = $trimmed.IndexOf('=')
+            if ($idx -lt 1) {
+                continue
+            }
+
+            $key = $trimmed.Substring(0, $idx).Trim()
+            $value = $trimmed.Substring($idx + 1).Trim()
+            if ($value.StartsWith('"') -and $value.EndsWith('"')) { $value = $value.Substring(1, $value.Length - 2) }
+            if ($value.StartsWith("'") -and $value.EndsWith("'")) { $value = $value.Substring(1, $value.Length - 2) }
+            $ht[$key] = $value
+        }
+    }
+
+    return $ht
+}
+
+function Add-DotEnvValues {
+    param(
+        [hashtable]$Target,
+        [hashtable]$DotEnv,
+        [string[]]$ExcludedKeys = @()
+    )
+
+    $excluded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($key in $ExcludedKeys) {
+        [void]$excluded.Add($key)
+    }
+
+    foreach ($key in $DotEnv.Keys) {
+        if (-not $excluded.Contains([string]$key)) {
+            $Target[$key] = $DotEnv[$key]
+        }
+    }
+}
+
+function New-ProCursorSharedKey {
+    if ($env:PROCURSOR_SHARED_KEY) {
+        return $env:PROCURSOR_SHARED_KEY
+    }
+
+    $bytes = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
 }
 
 function Test-ChildStructuredLogLine {
@@ -47,71 +304,11 @@ function Format-ChildOutputLine {
     }
 
     if ($Child.InDbCommandBlock) {
-        return "                    [$($Child.Label)] │ $Line"
+        return "                    [$($Child.Label)] | $Line"
     }
 
     return "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$($Child.Label)] $Line"
 }
-
-if (-not $DbConnectionString) {
-    Write-RunLocalMessage -Message "DB connection string not provided; checking dotnet user-secrets..." -Color Cyan
-    try {
-        if (Get-Command dotnet -ErrorAction SilentlyContinue) {
-            $secretList = dotnet user-secrets list --project $ApiProject 2>$null
-            if ($LASTEXITCODE -eq 0 -and $secretList) {
-                $candidates = @('DB_CONNECTION_STRING','DbConnectionString','ConnectionStrings:DefaultConnection','ConnectionStrings:Default','Database:ConnectionString','ConnectionStrings__DefaultConnection','ConnectionStrings__Default')
-                foreach ($k in $candidates) {
-                    $pattern = '^\s*' + [regex]::Escape($k) + '\s*='
-                    $match = $secretList | Where-Object { $_ -match $pattern } | Select-Object -First 1
-                    if ($match) {
-                        $idx = $match.IndexOf('=')
-                        if ($idx -ge 0) {
-                            $DbConnectionString = $match.Substring($idx+1).Trim()
-                            break
-                        }
-                    }
-                    # also try double-underscore form for hierarchical keys
-                    $k2 = $k -replace ':','__'
-                    $pattern2 = '^\s*' + [regex]::Escape($k2) + '\s*='
-                    $match2 = $secretList | Where-Object { $_ -match $pattern2 } | Select-Object -First 1
-                    if ($match2) {
-                        $idx = $match2.IndexOf('=')
-                        if ($idx -ge 0) {
-                            $DbConnectionString = $match2.Substring($idx+1).Trim()
-                            break
-                        }
-                    }
-                }
-            }
-        }
-    } catch {
-    }
-
-    if (-not $DbConnectionString) {
-        Write-RunLocalMessage -Message "Provide -DbConnectionString or set DB_CONNECTION_STRING env var." -Color Yellow
-        exit 1
-    }
-}
-
-function Read-DotEnv($path) {
-    $ht = @{}
-    if (Test-Path $path) {
-        foreach ($line in Get-Content $path -ErrorAction SilentlyContinue) {
-            $line = $line.Trim()
-            if ($line -eq '' -or $line.StartsWith('#')) { continue }
-            $idx = $line.IndexOf('=')
-            if ($idx -lt 1) { continue }
-            $k = $line.Substring(0,$idx).Trim()
-            $v = $line.Substring($idx+1).Trim()
-            if ($v.StartsWith('"') -and $v.EndsWith('"')) { $v = $v.Substring(1,$v.Length-2) }
-            if ($v.StartsWith("'") -and $v.EndsWith("'")) { $v = $v.Substring(1,$v.Length-2) }
-            $ht[$k] = $v
-        }
-    }
-    return $ht
-}
-
-$dotenv = Read-DotEnv $EnvFile
 
 function Flush-ChildOutput {
     param(
@@ -189,6 +386,31 @@ function Wait-ForChildren {
     }
 }
 
+function Stop-Children {
+    param([object[]]$Children)
+
+    foreach ($child in $Children) {
+        if (-not $child) {
+            continue
+        }
+
+        $process = $child.Process
+        if ($process -and -not $process.HasExited) {
+            try { $process.CloseMainWindow() | Out-Null } catch {}
+            Start-Sleep -Milliseconds 250
+            if (-not $process.HasExited) {
+                try { $process.Kill($true) } catch { try { $process.Kill() } catch {} }
+            }
+        }
+    }
+
+    foreach ($child in $Children) {
+        if ($child) {
+            try { Wait-ForChildren -Children @($child) } catch {}
+        }
+    }
+}
+
 function Start-ChildProcess {
     param(
         [string]$FileName,
@@ -197,15 +419,18 @@ function Start-ChildProcess {
         [hashtable]$Env = @{},
         [string]$Label = 'proc'
     )
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
 
-    # On Windows calling scripts like 'npm' or 'npx' requires launching via cmd.exe
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
     $runningOnWindows = $false
-    try { $runningOnWindows = $IsWindows } catch { $runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) }
+    try {
+        $runningOnWindows = $IsWindows
+    }
+    catch {
+        $runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+    }
 
     if ($runningOnWindows -and ($FileName -match '^(npm|npx|node)$')) {
         $psi.FileName = 'cmd.exe'
-        # Use /c so the cmd process exits when the child completes
         $psi.Arguments = "/c $FileName $Arguments"
     }
     else {
@@ -219,21 +444,22 @@ function Start-ChildProcess {
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $false
 
-    # inherit parent env, then apply overrides
-    foreach ($kv in [System.Environment]::GetEnvironmentVariables().GetEnumerator()) {
-        $psi.Environment[$kv.Key] = $kv.Value
+    foreach ($entry in [System.Environment]::GetEnvironmentVariables().GetEnumerator()) {
+        $psi.Environment[$entry.Key] = $entry.Value
     }
-    foreach ($kv in $Env.GetEnumerator()) {
-        $psi.Environment[$kv.Key] = $kv.Value
+
+    foreach ($entry in $Env.GetEnumerator()) {
+        $psi.Environment[$entry.Key] = $entry.Value
     }
 
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
 
-    # Log the start command so failures are visible immediately
-    Write-RunLocalMessage -Message "Starting $($Label): $($psi.FileName) $($psi.Arguments) (cwd=$WorkingDirectory)"
+    Write-RunLocalMessage -Message "Starting ${Label}: $($psi.FileName) $($psi.Arguments) (cwd=$WorkingDirectory)"
 
-    if (-not $proc.Start()) { throw "Failed to start $Label ($psi.FileName $psi.Arguments)" }
+    if (-not $proc.Start()) {
+        throw "Failed to start $Label ($($psi.FileName) $($psi.Arguments))"
+    }
 
     $child = [PSCustomObject]@{
         Process = $proc
@@ -243,7 +469,6 @@ function Start-ChildProcess {
         InDbCommandBlock = $false
     }
 
-    # If the child process exits immediately, surface any available output now.
     Start-Sleep -Milliseconds 250
     Flush-ChildOutput -Child $child
 
@@ -255,37 +480,195 @@ function Start-ChildProcess {
     return $child
 }
 
-# Optionally install admin-ui deps (npm ci)
-if (-not $SkipUiInstall) {
-    if (-not (Test-Path (Join-Path $UiFolder 'node_modules'))) {
-        Write-RunLocalMessage -Message "Installing admin-ui dependencies (npm ci)..." -Color Cyan
-        $ciEnv = @{}
-        foreach ($k in $dotenv.Keys) { $ciEnv[$k] = $dotenv[$k] }
-        $ci = Start-ChildProcess -FileName 'npm' -Arguments 'ci' -WorkingDirectory $UiFolder -Env $ciEnv -Label 'npm-ci'
-        Wait-ForChildren -Children @($ci)
-        if ($ci.Process.ExitCode -ne 0) { Write-RunLocalMessage -Message 'npm ci failed' -Color Red; exit 1 }
+function Invoke-LoggedCommand {
+    param(
+        [string]$FileName,
+        [string]$Arguments,
+        [string]$WorkingDirectory,
+        [hashtable]$Env = @{},
+        [string]$Label
+    )
+
+    $child = Start-ChildProcess -FileName $FileName -Arguments $Arguments -WorkingDirectory $WorkingDirectory -Env $Env -Label $Label
+    Wait-ForChildren -Children @($child)
+    if ($child.Process.ExitCode -ne 0) {
+        throw "$Label exited with code $($child.Process.ExitCode)"
     }
 }
 
-# Prepare child envs (pass .env values to children but do not mutate this shell)
-$apiEnv = @{ 'DB_CONNECTION_STRING' = $DbConnectionString; 'ASPNETCORE_URLS' = "http://localhost:$BackendPort"; 'ASPNETCORE_ENVIRONMENT'='Development'; 'LOKI_URL' = '' }
-foreach ($k in $dotenv.Keys) { if (-not $apiEnv.ContainsKey($k)) { $apiEnv[$k] = $dotenv[$k] } }
+function Test-HttpReady {
+    param([string]$Url)
 
-$uiEnv = @{}
-foreach ($k in $dotenv.Keys) { $uiEnv[$k] = $dotenv[$k] }
+    try {
+        $null = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 2 -SkipHttpErrorCheck
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
 
-Write-RunLocalMessage -Message "Starting backend and admin UI in this terminal. Press Ctrl+C to stop both." -Color Green
-Write-RunLocalMessage -Message "Local run log: $LogFile" -Color DarkGray
+function Wait-ForHttpReady {
+    param(
+        [string]$Name,
+        [int]$Port,
+        [pscustomobject]$Child,
+        [int]$TimeoutSeconds = 60
+    )
 
-$apiArgs = "run --project `"$ApiProject`" --no-launch-profile"
-$api = Start-ChildProcess -FileName 'dotnet' -Arguments $apiArgs -WorkingDirectory $ApiFolder -Env $apiEnv -Label 'API'
-$ui  = Start-ChildProcess -FileName 'npm'   -Arguments 'run dev'            -WorkingDirectory $UiFolder  -Env $uiEnv  -Label 'UI'
+    $readyUrl = "http://localhost:$Port/healthz"
+    Write-RunLocalMessage -Message "Waiting for $Name readiness at $readyUrl" -Color Cyan
 
-$children = @($api, $ui)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        Flush-ChildOutput -Child $Child
+        $Child.Process.Refresh()
+
+        if (Test-HttpReady -Url $readyUrl) {
+            Write-RunLocalMessage -Message "$Name is ready on http://localhost:$Port" -Color Green
+            return $true
+        }
+
+        if ($Child.Process.HasExited) {
+            Wait-ForChildren -Children @($Child)
+            Write-RunLocalMessage -Message "$Name exited before becoming ready" -Color Red
+            return $false
+        }
+
+        Start-Sleep -Seconds 1
+    }
+
+    Write-RunLocalMessage -Message "Timed out waiting for $Name readiness after ${TimeoutSeconds}s" -Color Red
+    return $false
+}
+
+if (-not $DbConnectionString) {
+    $podmanDb = Get-DbConnectionFromLocalPodman
+    if ($podmanDb) {
+        $DbConnectionString = $podmanDb.ConnectionString
+        Write-RunLocalMessage -Message "DB connection not provided; using running local Podman PostgreSQL container '$($podmanDb.ContainerName)' ($(Get-ConnectionTarget -ConnectionString $DbConnectionString))" -Color Cyan
+    }
+}
+
+if (-not $DbConnectionString) {
+    Write-RunLocalMessage -Message 'DB connection string not provided; checking dotnet user-secrets' -Color Cyan
+    $DbConnectionString = Get-DbConnectionStringFromUserSecrets
+}
+
+if (-not $DbConnectionString) {
+    Write-RunLocalMessage -Message 'Provide -DbConnectionString or set DB_CONNECTION_STRING env var.' -Color Yellow
+    exit 1
+}
+
+if (-not $ProCursorDbConnectionString) {
+    $ProCursorDbConnectionString = $DbConnectionString
+}
+
+$apiDbTarget = Get-ConnectionTarget -ConnectionString $DbConnectionString
+$proCursorDbTarget = Get-ConnectionTarget -ConnectionString $ProCursorDbConnectionString
+if ($DbConnectionString -eq $ProCursorDbConnectionString) {
+    Write-RunLocalMessage -Message "Using shared local PostgreSQL target for ProPR and ProCursor ($apiDbTarget)" -Color Cyan
+}
+else {
+    Write-RunLocalMessage -Message "Using ProPR PostgreSQL target ($apiDbTarget)" -Color Cyan
+    Write-RunLocalMessage -Message "Using ProCursor PostgreSQL target ($proCursorDbTarget)" -Color Cyan
+}
+
+$dotenv = Read-DotEnv -Path $EnvFile
+if (-not $dotenv.ContainsKey('MEISTER_JWT_SECRET') -and -not $env:MEISTER_JWT_SECRET) {
+    $userSecretJwt = Get-UserSecretValue -WantedKey 'MEISTER_JWT_SECRET'
+    if ($userSecretJwt) {
+        $dotenv['MEISTER_JWT_SECRET'] = $userSecretJwt
+    }
+}
+
+$proCursorSharedKey = New-ProCursorSharedKey
+
+$apiEnv = @{
+    'DB_CONNECTION_STRING' = $DbConnectionString
+    'ASPNETCORE_URLS' = "http://0.0.0.0:$BackendPort"
+    'ASPNETCORE_ENVIRONMENT' = 'Development'
+    'LOKI_URL' = ''
+    'PROCURSOR_REMOTE_MODE' = 'proprManagedRemote'
+    'PROCURSOR_SERVICE_BASE_URL' = "http://127.0.0.1:$ProCursorPort"
+    'PROCURSOR_SHARED_KEY' = $proCursorSharedKey
+    'MEISTER_DATA_PROTECTION_KEYS_PATH' = $DataProtectionKeysDir
+}
+Add-DotEnvValues -Target $apiEnv -DotEnv $dotenv -ExcludedKeys @(
+    'DB_CONNECTION_STRING',
+    'PROCURSOR_DB_CONNECTION_STRING',
+    'ASPNETCORE_URLS',
+    'ASPNETCORE_ENVIRONMENT',
+    'LOKI_URL',
+    'PROCURSOR_REMOTE_MODE',
+    'PROCURSOR_SERVICE_BASE_URL',
+    'PROCURSOR_SHARED_KEY',
+    'MEISTER_DATA_PROTECTION_KEYS_PATH'
+)
+
+$proCursorEnv = @{
+    'ASPNETCORE_URLS' = "http://0.0.0.0:$ProCursorPort"
+    'ASPNETCORE_ENVIRONMENT' = 'Development'
+    'LOKI_URL' = ''
+    'PROCURSOR_PROPR_BASE_URL' = "http://127.0.0.1:$BackendPort"
+    'PROCURSOR_DB_CONNECTION_STRING' = $ProCursorDbConnectionString
+    'PROCURSOR_SHARED_KEY' = $proCursorSharedKey
+    'MEISTER_DATA_PROTECTION_KEYS_PATH' = $DataProtectionKeysDir
+}
+Add-DotEnvValues -Target $proCursorEnv -DotEnv $dotenv -ExcludedKeys @(
+    'DB_CONNECTION_STRING',
+    'PROCURSOR_DB_CONNECTION_STRING',
+    'ASPNETCORE_URLS',
+    'ASPNETCORE_ENVIRONMENT',
+    'LOKI_URL',
+    'PROCURSOR_PROPR_BASE_URL',
+    'PROCURSOR_SHARED_KEY',
+    'MEISTER_DATA_PROTECTION_KEYS_PATH'
+)
+
+$uiEnv = @{
+    'VITE_API_BASE_URL' = '/api'
+}
+Add-DotEnvValues -Target $uiEnv -DotEnv $dotenv -ExcludedKeys @('VITE_API_BASE_URL')
+
+if (-not $SkipUiInstall) {
+    if (-not (Test-Path (Join-Path $UiFolder 'node_modules'))) {
+        Write-RunLocalMessage -Message 'Installing admin-ui dependencies (npm ci)' -Color Cyan
+        Invoke-LoggedCommand -FileName 'npm' -Arguments 'ci' -WorkingDirectory $UiFolder -Env $uiEnv -Label 'npm-ci'
+    }
+}
+
+Write-RunLocalMessage -Message 'Building backend and ProCursor host' -Color Cyan
+Invoke-LoggedCommand -FileName 'dotnet' -Arguments "build `"$ApiProject`"" -WorkingDirectory $RepoRoot -Label 'build-api'
+Invoke-LoggedCommand -FileName 'dotnet' -Arguments "build `"$ProCursorProject`"" -WorkingDirectory $RepoRoot -Label 'build-procursor'
+
+$api = $null
+$proCursor = $null
+$ui = $null
 
 try {
+    Write-RunLocalMessage -Message 'Starting backend, ProCursor, and admin UI in this terminal. Press Ctrl+C to stop all processes.' -Color Green
+    Write-RunLocalMessage -Message "Local run log: $LogFile" -Color DarkGray
+    Write-RunLocalMessage -Message 'Shared ProCursor key generated for this run' -Color DarkGray
+
+    $api = Start-ChildProcess -FileName 'dotnet' -Arguments "`"$ApiDll`"" -WorkingDirectory $ApiFolder -Env $apiEnv -Label 'API'
+    if (-not (Wait-ForHttpReady -Name 'API' -Port $BackendPort -Child $api -TimeoutSeconds 60)) {
+        throw 'API failed to become ready'
+    }
+
+    $proCursor = Start-ChildProcess -FileName 'dotnet' -Arguments "`"$ProCursorDll`"" -WorkingDirectory $ProCursorFolder -Env $proCursorEnv -Label 'PROCURSOR'
+    if (-not (Wait-ForHttpReady -Name 'ProCursor' -Port $ProCursorPort -Child $proCursor -TimeoutSeconds 60)) {
+        throw 'ProCursor failed to become ready'
+    }
+
+    $ui = Start-ChildProcess -FileName 'npm' -Arguments 'run dev' -WorkingDirectory $UiFolder -Env $uiEnv -Label 'UI'
+
+    $children = @($api, $proCursor, $ui)
+
     Write-RunLocalMessage -Message "API PID: $($api.Process.Id)" -Color DarkGray
-    Write-RunLocalMessage -Message "UI  PID: $($ui.Process.Id)" -Color DarkGray
+    Write-RunLocalMessage -Message "ProCursor PID: $($proCursor.Process.Id)" -Color DarkGray
+    Write-RunLocalMessage -Message "UI PID: $($ui.Process.Id)" -Color DarkGray
+    Write-RunLocalMessage -Message "API -> http://localhost:$BackendPort  ProCursor -> http://localhost:$ProCursorPort  Admin UI -> http://localhost:5173" -Color Green
 
     Wait-ForChildren -Children $children
 
@@ -293,20 +676,15 @@ try {
         throw "API exited with code $($api.Process.ExitCode)"
     }
 
+    if ($proCursor.Process.HasExited -and $proCursor.Process.ExitCode -ne 0) {
+        throw "ProCursor exited with code $($proCursor.Process.ExitCode)"
+    }
+
     if ($ui.Process.HasExited -and $ui.Process.ExitCode -ne 0) {
         throw "UI exited with code $($ui.Process.ExitCode)"
     }
 }
 finally {
-    Write-RunLocalMessage -Message "Shutting down child processes..." -Color Yellow
-    foreach ($c in $children) {
-        $p = $c.Process
-        if ($p -and -not $p.HasExited) {
-            try { $p.CloseMainWindow() | Out-Null } catch {}
-            Start-Sleep -Seconds 1
-            if (-not $p.HasExited) {
-                try { $p.Kill($true) } catch { try { $p.Kill() } catch {} }
-            }
-        }
-    }
+    Write-RunLocalMessage -Message 'Shutting down child processes' -Color Yellow
+    Stop-Children -Children @($api, $proCursor, $ui)
 }

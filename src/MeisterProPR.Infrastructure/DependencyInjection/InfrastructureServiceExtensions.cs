@@ -15,6 +15,7 @@ using MeisterProPR.Infrastructure.AI.Providers.AzureOpenAi;
 using MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 using MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Services;
@@ -41,10 +42,27 @@ public static class InfrastructureServiceExtensions
         return !string.IsNullOrWhiteSpace(configuration["DB_CONNECTION_STRING"]);
     }
 
+    /// <summary>
+    ///     Returns <see langword="true" /> when a ProCursor operational database connection string is configured.
+    /// </summary>
+    public static bool HasProCursorOperationalDatabaseConnectionString(this IConfiguration configuration)
+    {
+        return !string.IsNullOrWhiteSpace(configuration["PROCURSOR_DB_CONNECTION_STRING"]);
+    }
+
+    /// <summary>
+    ///     Resolves the ProCursor operational database connection string when explicitly configured.
+    /// </summary>
+    public static string? GetProCursorOperationalDatabaseConnectionString(this IConfiguration configuration)
+    {
+        return configuration["PROCURSOR_DB_CONNECTION_STRING"];
+    }
+
     public static IServiceCollection AddInfrastructureSupport(
         this IServiceCollection services,
         IConfiguration configuration,
-        IHostEnvironment? environment = null)
+        IHostEnvironment? environment = null,
+        bool includeProviderOperationalServices = true)
     {
         var dbConnectionString = configuration["DB_CONNECTION_STRING"];
         var hasDatabaseConnectionString = configuration.HasDatabaseConnectionString();
@@ -73,9 +91,12 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
 
         // ADO operational services are composed behind provider-local registration.
-        var adoOperationalCredential =
-            configuration.GetValue<bool>("ADO_STUB_PR") ? null : ResolveCredential(configuration);
-        services.AddAzureDevOpsInfrastructureServices(configuration, adoOperationalCredential);
+        if (includeProviderOperationalServices)
+        {
+            var adoOperationalCredential =
+                configuration.GetValue<bool>("ADO_STUB_PR") ? null : ResolveCredential(configuration);
+            services.AddAzureDevOpsInfrastructureServices(configuration, adoOperationalCredential);
+        }
 
         // AiReviewOptions — bound from individual env vars (not a config section)
         services.AddOptions<AiReviewOptions>()

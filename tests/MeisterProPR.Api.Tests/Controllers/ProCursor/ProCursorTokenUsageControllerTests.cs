@@ -475,7 +475,7 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
         string? safeMetadataJson = null)
     {
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         db.ProCursorTokenUsageEvents.Add(
             new ProCursorTokenUsageEvent(
                 Guid.NewGuid(),
@@ -502,7 +502,7 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
     private async Task SeedRollupAsync(DateOnly bucketStartDate, DateTimeOffset recomputedAtUtc)
     {
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
         db.ProCursorTokenUsageRollups.Add(
             new ProCursorTokenUsageRollup(
                 Guid.NewGuid(),

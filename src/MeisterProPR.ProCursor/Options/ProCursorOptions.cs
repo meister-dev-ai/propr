@@ -3,7 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 
-namespace MeisterProPR.Application.Options;
+namespace MeisterProPR.ProCursor.Options;
 
 /// <summary>
 ///     Configuration options for the ProCursor bounded module.

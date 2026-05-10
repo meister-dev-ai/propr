@@ -2,10 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
-using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.ProCursor.Core;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 

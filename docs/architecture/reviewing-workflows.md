@@ -109,7 +109,7 @@ flowchart TD
 3. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
    thread-memory reconsideration before extracting structured claims and running local verification.
-   Deterministic contradiction checks still use curated invariant facts, while evidence-needing local
+   Deterministic contradiction checks use curated invariant facts, while evidence-needing local
    generic claims are withheld conservatively until a bounded verifier can support them.
 4. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
    Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
@@ -169,7 +169,7 @@ flowchart TD
      `ICodeReviewPublicationService`, persists the final `ReviewResult`, and records aggregate
      duplicate-suppression diagnostics even when outbound SCM publication is skipped.
 4. Publication identity is derived from authenticated provider connection metadata fetched with the
-    PR, not from the configured reviewer-trigger identity. Optional reviewer assignment still uses
+   PR, not from the configured reviewer-trigger identity. Optional reviewer assignment uses
     the configured trigger identity when present.
 5. The publication service evaluates each candidate finding against existing bot-authored PR
      threads
@@ -181,7 +181,7 @@ flowchart TD
 
 This keeps incremental reviews additive: carried-forward findings remain visible in stored review
 history, but only genuinely fresh findings are allowed to create new provider-native threads, and
-clients with SCM publication disabled still retain internal review history plus posting-pass
+clients with SCM publication disabled retain internal review history plus posting-pass
 diagnostics without creating new provider-native comments.
 
 ## Verification Responsibilities
@@ -268,6 +268,6 @@ slots for the same pull request.
 ### 4 - Full Protocol Text Capture
 
 Protocol diagnostics persist the full captured AI prompt, AI response, and tool call text for each
-event. Recorder sanitization still strips embedded null bytes so PostgreSQL can safely store the
+event. Recorder sanitization strips embedded null bytes so PostgreSQL can safely store the
 content, but the persisted samples are no longer truncated before they reach the diagnostics API or
 admin UI.

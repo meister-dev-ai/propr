@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.ProCursor.Core;
 
 public sealed partial class ProCursorRefreshScheduler
 {

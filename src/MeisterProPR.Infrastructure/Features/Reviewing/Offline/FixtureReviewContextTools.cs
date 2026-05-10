@@ -3,10 +3,13 @@
 
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
@@ -19,10 +22,12 @@ public sealed class FixtureReviewContextTools(
     IOptions<AiReviewOptions> options,
     IProCursorGateway proCursorGateway,
     Guid? clientId,
-    IReadOnlyList<Guid>? knowledgeSourceIds) : IReviewContextTools
+    IReadOnlyList<Guid>? knowledgeSourceIds) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
     private readonly AiReviewOptions _options = options.Value;
+
+    public bool SupportsProCursorTools => proCursorGateway is not DisabledProCursorGateway;
 
     public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {
@@ -80,31 +85,37 @@ public sealed class FixtureReviewContextTools(
         return Task.FromResult(clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]));
     }
 
-    public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+    public async Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
     {
         if (!clientId.HasValue)
         {
-            return Task.FromResult(
-                new ProCursorKnowledgeAnswerDto(
-                    "unavailable",
-                    [],
-                    "The current review context does not include a client identifier for ProCursor."));
+            return new ProCursorKnowledgeAnswerDto(
+                "unavailable",
+                [],
+                "The current review context does not include a client identifier for ProCursor.");
         }
 
-        return proCursorGateway.AskKnowledgeAsync(
-            new ProCursorKnowledgeQueryRequest(
-                clientId.Value,
-                question,
-                knowledgeSourceIds,
-                new ProCursorRepositoryContextDto(
-                    fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
-                    fixture.PullRequestSnapshot.CodeReview.Repository.OwnerOrNamespace,
-                    fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
-                    fixture.PullRequestSnapshot.SourceBranch)),
-            ct);
+        try
+        {
+            return await proCursorGateway.AskKnowledgeAsync(
+                new ProCursorKnowledgeQueryRequest(
+                    clientId.Value,
+                    question,
+                    knowledgeSourceIds,
+                    new ProCursorRepositoryContextDto(
+                        fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+                        fixture.PullRequestSnapshot.CodeReview.Repository.OwnerOrNamespace,
+                        fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+                        fixture.PullRequestSnapshot.SourceBranch)),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException ex)
+        {
+            return new ProCursorKnowledgeAnswerDto("unavailable", [], ex.Message);
+        }
     }
 
-    public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+    public async Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
         string symbol,
         string? queryMode,
         int? maxRelations,
@@ -112,28 +123,34 @@ public sealed class FixtureReviewContextTools(
     {
         if (!clientId.HasValue)
         {
-            return Task.FromResult(
-                new ProCursorSymbolInsightDto(
-                    "unavailable",
-                    null,
-                    false,
-                    false,
-                    null,
-                    []));
+            return new ProCursorSymbolInsightDto(
+                "unavailable",
+                null,
+                false,
+                false,
+                null,
+                []);
         }
 
-        return proCursorGateway.GetSymbolInsightAsync(
-            new ProCursorSymbolQueryRequest(
-                clientId.Value,
-                symbol,
-                string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
-                StateMode: "reviewTarget",
-                ReviewContext: new ProCursorReviewContextDto(
-                    fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
-                    fixture.PullRequestSnapshot.SourceBranch,
-                    fixture.PullRequestSnapshot.CodeReview.Number,
-                    1),
-                MaxRelations: maxRelations),
-            ct);
+        try
+        {
+            return await proCursorGateway.GetSymbolInsightAsync(
+                new ProCursorSymbolQueryRequest(
+                    clientId.Value,
+                    symbol,
+                    string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                    StateMode: "reviewTarget",
+                    ReviewContext: new ProCursorReviewContextDto(
+                        fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+                        fixture.PullRequestSnapshot.SourceBranch,
+                        fixture.PullRequestSnapshot.CodeReview.Number,
+                        1),
+                    MaxRelations: maxRelations),
+                ct);
+        }
+        catch (ProCursorDependencyUnavailableException)
+        {
+            return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
+        }
     }
 }

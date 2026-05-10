@@ -5,8 +5,10 @@ using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Licensing.Persistence;
 using MeisterProPR.Infrastructure.Features.Licensing.Support;
+using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Licensing;
 
@@ -93,6 +95,65 @@ public sealed class LicensingPolicyRepositoryTests
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseInMemoryDatabase($"TestDb_LicensingPolicy_{Guid.NewGuid()}")
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        return new MeisterProPRDbContext(options);
+    }
+}
+
+[Collection("PostgresIntegration")]
+public sealed class LicensingPolicyRepositoryPostgresTests : IAsyncLifetime
+{
+    private readonly PostgresContainerFixture _fixture;
+
+    public LicensingPolicyRepositoryPostgresTests(PostgresContainerFixture fixture)
+    {
+        this._fixture = fixture;
+    }
+
+    public Task InitializeAsync()
+    {
+        this._fixture.SkipIfUnavailable();
+        return this.ResetTablesAsync();
+    }
+
+    public Task DisposeAsync()
+    {
+        return this.ResetTablesAsync();
+    }
+
+    [Fact]
+    public async Task GetAsync_ConcurrentFirstRead_SeedsSingletonOnlyOnce()
+    {
+        await using var db1 = this.CreatePostgresContext();
+        await using var db2 = this.CreatePostgresContext();
+        var sut1 = new LicensingPolicyRepository(db1, new StaticPremiumCapabilityCatalog());
+        var sut2 = new LicensingPolicyRepository(db2, new StaticPremiumCapabilityCatalog());
+
+        var policies = await Task.WhenAll(
+            sut1.GetAsync(CancellationToken.None),
+            sut2.GetAsync(CancellationToken.None));
+
+        Assert.All(policies, policy => Assert.Equal(InstallationEdition.Community, policy.Edition));
+
+        await using var verificationDb = this.CreatePostgresContext();
+        Assert.Equal(1, await verificationDb.InstallationEditions.CountAsync());
+        var record = await verificationDb.InstallationEditions.SingleAsync();
+        Assert.Equal(1, record.Id);
+        Assert.Equal(InstallationEdition.Community, record.Edition);
+    }
+
+    private async Task ResetTablesAsync()
+    {
+        await using var db = this.CreatePostgresContext();
+        await db.PremiumCapabilityOverrides.ExecuteDeleteAsync();
+        await db.InstallationEditions.ExecuteDeleteAsync();
+    }
+
+    private MeisterProPRDbContext CreatePostgresContext()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(this._fixture.ConnectionString, o => o.UseVector())
             .Options;
 
         return new MeisterProPRDbContext(options);

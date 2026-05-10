@@ -62,16 +62,20 @@ public sealed partial class AdoPrFetcher(
         // On a re-review pass, fetch only the delta (files changed since the last reviewed
         // iteration) with full content.  Also fetch the full cumulative manifest (no content)
         // so the AI still has the complete PR scope for context.
-        var deltaChanges = await gitClient.GetPullRequestIterationChangesAsync(
-            projectId,
-            repositoryId,
-            pullRequestId,
-            iterationId,
-            compareTo: compareToIterationId,
-            cancellationToken: cancellationToken);
+        var deltaChanges = await AdoPullRequestIterationChangePager.LoadAllAsync(
+            (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
+                projectId,
+                repositoryId,
+                pullRequestId,
+                iterationId,
+                top,
+                skip,
+                compareToIterationId,
+                cancellationToken: ct),
+            cancellationToken);
 
         var changedFiles = new List<ChangedFile>();
-        foreach (var change in deltaChanges.ChangeEntries ?? [])
+        foreach (var change in deltaChanges)
         {
             var changedFile = await this.CreateChangedFileFromChangeAsync(
                 gitClient,
@@ -94,14 +98,18 @@ public sealed partial class AdoPrFetcher(
         IReadOnlyList<ChangedFileSummary>? allChangedFileSummaries = null;
         if (compareToIterationId.HasValue)
         {
-            var allChanges = await gitClient.GetPullRequestIterationChangesAsync(
-                projectId,
-                repositoryId,
-                pullRequestId,
-                iterationId,
-                cancellationToken: cancellationToken);
+            var allChanges = await AdoPullRequestIterationChangePager.LoadAllAsync(
+                (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                    iterationId,
+                    top,
+                    skip,
+                    cancellationToken: ct),
+                cancellationToken);
 
-            allChangedFileSummaries = (allChanges.ChangeEntries ?? [])
+            allChangedFileSummaries = allChanges
                 .Select(CreateSummaryFromChange)
                 .OfType<ChangedFileSummary>()
                 .ToList()

@@ -2,9 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Repositories;
-using MeisterProPR.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,14 +25,24 @@ public static class UsageReportingModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        var isManagedRemoteMode = new ProCursorRemoteOptions
+        {
+            Mode = configuration["PROCURSOR_REMOTE_MODE"],
+            ServiceBaseUrl = configuration["PROCURSOR_SERVICE_BASE_URL"],
+            SharedKey = configuration["PROCURSOR_SHARED_KEY"],
+        }.IsRemoteEnabled;
+
         if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
-            services.AddSingleton<IProCursorTokenUsageRecorder, EfProCursorTokenUsageRecorder>();
-            services.AddScoped<IProCursorTokenUsageReadRepository, ProCursorTokenUsageReadRepository>();
-            services.AddScoped<IProCursorTokenUsageAggregationService, ProCursorTokenUsageAggregationService>();
-            services.AddScoped<IProCursorTokenUsageRebuildService, ProCursorTokenUsageRebuildService>();
-            services.AddScoped<IProCursorTokenUsageRetentionService, ProCursorTokenUsageRetentionService>();
+        }
+
+        if (isManagedRemoteMode)
+        {
+            services.AddScoped<IProCursorTokenUsageReadRepository>(sp =>
+                sp.GetRequiredService<RemoteProCursorTokenUsageReadRepository>());
+            services.AddScoped<IProCursorTokenUsageRebuildService>(sp =>
+                sp.GetRequiredService<RemoteProCursorTokenUsageRebuildService>());
         }
 
         return services;

@@ -3,7 +3,7 @@
 
 using MeisterProPR.Domain.Entities;
 
-namespace MeisterProPR.Application.Services;
+namespace MeisterProPR.ProCursor.Core;
 
 internal static class ProCursorFreshnessEvaluator
 {

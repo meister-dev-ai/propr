@@ -2,18 +2,14 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.ProCursor;
+using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.TeamFoundation.SourceControl.WebApi;
-using Microsoft.VisualStudio.Services.WebApi;
 
 namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 
@@ -21,8 +17,7 @@ namespace MeisterProPR.Infrastructure.AzureDevOps.ProCursor;
 ///     Shared Azure DevOps Git-backed materialization flow for ProCursor repository and wiki sources.
 /// </summary>
 public abstract class AdoGitProCursorMaterializerBase(
-    VssConnectionFactory connectionFactory,
-    IClientScmConnectionRepository connectionRepository,
+    IProCursorScmBroker scmBroker,
     IOptions<ProCursorOptions> options,
     ILogger logger) : IProCursorMaterializer
 {
@@ -30,6 +25,11 @@ public abstract class AdoGitProCursorMaterializerBase(
 
     private readonly TimeSpan _workspaceRetention =
         TimeSpan.FromMinutes(Math.Max(1, options.Value.TempWorkspaceRetentionMinutes));
+
+    private Guid? _activeSourceId;
+    private Guid? _activeTrackedBranchId;
+    private string? _activeCommitSha;
+    private ProCursorScmMaterializationResponse? _activeMaterialization;
 
     /// <inheritdoc />
     public abstract ProCursorSourceKind SourceKind { get; }
@@ -55,6 +55,8 @@ public abstract class AdoGitProCursorMaterializerBase(
         }
 
         var commitSha = await this.ResolveCommitShaAsync(source, trackedBranch, requestedCommitSha, ct);
+        this.SetActiveMaterializationContext(source.Id, trackedBranch.Id, commitSha);
+
         var discoveredPaths = await this.ListPathsAsync(source, commitSha, ct);
         var eligiblePaths = FilterPaths(discoveredPaths, source.RootPath)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -111,16 +113,15 @@ public abstract class AdoGitProCursorMaterializerBase(
             DeleteDirectory(rootDirectory);
             throw;
         }
+        finally
+        {
+            this.ClearActiveMaterializationContext();
+        }
     }
 
     /// <summary>
     ///     Resolves the commit SHA for the given tracked branch.
     /// </summary>
-    /// <param name="source">The ProCursor knowledge source.</param>
-    /// <param name="trackedBranch">The tracked branch.</param>
-    /// <param name="requestedCommitSha">The requested commit SHA, if any.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The resolved commit SHA.</returns>
     protected internal virtual async Task<string> ResolveCommitShaAsync(
         ProCursorKnowledgeSource source,
         ProCursorTrackedBranch trackedBranch,
@@ -132,27 +133,8 @@ public abstract class AdoGitProCursorMaterializerBase(
             return requestedCommitSha.Trim();
         }
 
-        var gitClient = await this.GetGitClientAsync(source, ct);
-        var repositoryId = await this.ResolveRepositoryIdAsync(source, ct);
-        var branchName = NormalizeBranchName(trackedBranch.BranchName);
-
-        GitBranchStats? branchRef;
-        try
-        {
-            branchRef = await gitClient.GetBranchAsync(
-                source.ProviderProjectKey,
-                repositoryId,
-                branchName,
-                cancellationToken: ct);
-        }
-        catch (VssServiceResponseException ex)
-        {
-            throw new InvalidOperationException(
-                $"Unable to resolve branch '{trackedBranch.BranchName}' for ProCursor source {source.Id}.",
-                ex);
-        }
-
-        return branchRef?.Commit?.CommitId
+        var commitSha = await scmBroker.GetLatestCommitShaAsync(ToDto(source), ToDto(trackedBranch), ct);
+        return commitSha
                ?? throw new InvalidOperationException(
                    $"Branch '{trackedBranch.BranchName}' for ProCursor source {source.Id} does not currently resolve to a commit.");
     }
@@ -160,47 +142,14 @@ public abstract class AdoGitProCursorMaterializerBase(
     /// <summary>
     ///     Lists all file paths in the repository at the specified commit.
     /// </summary>
-    /// <param name="source">The ProCursor knowledge source.</param>
-    /// <param name="commitSha">The commit SHA to list paths from.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of normalized file paths.</returns>
     protected internal virtual async Task<IReadOnlyList<string>> ListPathsAsync(
         ProCursorKnowledgeSource source,
         string commitSha,
         CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(source, ct);
-        var repositoryId = await this.ResolveRepositoryIdAsync(source, ct);
-
-        // Use GetItemsAsync with a commit-based version descriptor. This lets the server
-        // resolve the commit and return all items without requiring a tree id.
-        var versionDescriptor = new GitVersionDescriptor
-        {
-            Version = commitSha,
-            VersionType = GitVersionType.Commit,
-        };
-
-        List<GitItem>? items;
-        try
-        {
-            items = await gitClient.GetItemsAsync(
-                source.ProviderProjectKey,
-                repositoryId,
-                null,
-                VersionControlRecursionType.Full,
-                versionDescriptor: versionDescriptor,
-                userState: null,
-                cancellationToken: ct);
-        }
-        catch
-        {
-            // If the commit can't be resolved or access is denied, treat as no paths.
-            return new List<string>().AsReadOnly();
-        }
-
-        return (items ?? [])
-            .Where(item => !item.IsFolder)
-            .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
+        var materialized = await this.GetOrLoadMaterializationAsync(source, commitSha, ct);
+        return materialized.Files
+            .Select(file => NormalizeRepositoryPath(file.Path))
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .ToList()
             .AsReadOnly();
@@ -209,56 +158,20 @@ public abstract class AdoGitProCursorMaterializerBase(
     /// <summary>
     ///     Gets the content of a file from the repository at the specified commit.
     /// </summary>
-    /// <param name="source">The ProCursor knowledge source.</param>
-    /// <param name="commitSha">The commit SHA to retrieve the file from.</param>
-    /// <param name="path">The path of the file to retrieve.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The file content, or null if the file cannot be retrieved.</returns>
     protected internal virtual async Task<string?> GetFileContentAsync(
         ProCursorKnowledgeSource source,
         string commitSha,
         string path,
         CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(source, ct);
-        var repositoryId = await this.ResolveRepositoryIdAsync(source, ct);
-
-        try
-        {
-            var item = await gitClient.GetItemAsync(
-                source.ProviderProjectKey,
-                repositoryId,
-                path,
-                null,
-                null,
-                null,
-                null,
-                null,
-                new GitVersionDescriptor
-                {
-                    Version = commitSha,
-                    VersionType = GitVersionType.Commit,
-                },
-                true,
-                null,
-                null,
-                null,
-                ct);
-
-            return item?.Content;
-        }
-        catch (VssServiceResponseException)
-        {
-            return null;
-        }
+        var materialized = await this.GetOrLoadMaterializationAsync(source, commitSha, ct);
+        return materialized.Files.FirstOrDefault(file =>
+            string.Equals(NormalizeRepositoryPath(file.Path), NormalizeRepositoryPath(path), StringComparison.OrdinalIgnoreCase))?.Content;
     }
 
     /// <summary>
     ///     Resolves the repository ID from the given ProCursor knowledge source.
     /// </summary>
-    /// <param name="source">The ProCursor knowledge source.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The repository ID.</returns>
     protected internal virtual Task<string> ResolveRepositoryIdAsync(
         ProCursorKnowledgeSource source,
         CancellationToken ct)
@@ -267,43 +180,8 @@ public abstract class AdoGitProCursorMaterializerBase(
     }
 
     /// <summary>
-    ///     Resolves the connection credentials for the given ProCursor knowledge source.
-    /// </summary>
-    /// <param name="source">The ProCursor knowledge source.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The service principal credentials, or null if not configured.</returns>
-    protected Task<AdoServicePrincipalCredentials?> ResolveConnectionCredentialsAsync(
-        ProCursorKnowledgeSource source,
-        CancellationToken ct)
-    {
-        if (source.ClientId == Guid.Empty)
-        {
-            return Task.FromResult<AdoServicePrincipalCredentials?>(null);
-        }
-
-        return this.ResolveConnectionCredentialsAsync(source.ClientId, source.ProviderScopePath, ct);
-    }
-
-    /// <summary>
-    ///     Normalizes the branch name by removing the "refs/heads/" prefix if present.
-    /// </summary>
-    /// <param name="branch">The branch name to normalize.</param>
-    /// <returns>The normalized branch name.</returns>
-    protected static string NormalizeBranchName(string branch)
-    {
-        return branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
-            ? branch["refs/heads/".Length..]
-            : branch;
-    }
-
-    /// <summary>
     ///     Logs the materialized source information.
     /// </summary>
-    /// <param name="logger">The logger instance.</param>
-    /// <param name="sourceId">The source identifier.</param>
-    /// <param name="branchName">The branch name.</param>
-    /// <param name="commitSha">The commit SHA.</param>
-    /// <param name="fileCount">The file count.</param>
     protected abstract void LogMaterializedSource(
         ILogger logger,
         Guid sourceId,
@@ -314,8 +192,6 @@ public abstract class AdoGitProCursorMaterializerBase(
     /// <summary>
     ///     Normalizes a repository path by converting backslashes to forward slashes and ensuring it starts with a forward slash.
     /// </summary>
-    /// <param name="value">The repository path to normalize.</param>
-    /// <returns>The normalized repository path.</returns>
     protected static string NormalizeRepositoryPath(string value)
     {
         var normalized = value.Replace('\\', '/').Trim();
@@ -327,41 +203,92 @@ public abstract class AdoGitProCursorMaterializerBase(
         return normalized.StartsWith('/') ? normalized : $"/{normalized}";
     }
 
-    private async Task<GitHttpClient> GetGitClientAsync(ProCursorKnowledgeSource source, CancellationToken ct)
-    {
-        var credentials = await this.ResolveConnectionCredentialsAsync(source, ct);
-
-        var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
-        return connection.GetClient<GitHttpClient>();
-    }
-
-    private async Task<AdoServicePrincipalCredentials?> ResolveConnectionCredentialsAsync(
-        Guid clientId,
-        string organizationUrl,
+    private async Task<ProCursorScmMaterializationResponse> GetOrLoadMaterializationAsync(
+        ProCursorKnowledgeSource source,
+        string commitSha,
         CancellationToken ct)
     {
-        var connection = await connectionRepository.GetOperationalConnectionAsync(
-            clientId,
-            new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl),
-            ct);
-
-        return ToAdoCredentials(connection);
-    }
-
-    private static AdoServicePrincipalCredentials? ToAdoCredentials(ClientScmConnectionCredentialDto? connection)
-    {
-        if (connection is null ||
-            string.IsNullOrWhiteSpace(connection.OAuthTenantId) ||
-            string.IsNullOrWhiteSpace(connection.OAuthClientId) ||
-            string.IsNullOrWhiteSpace(connection.Secret))
+        if (this._activeMaterialization is not null
+            && this._activeSourceId == source.Id
+            && string.Equals(this._activeCommitSha, commitSha, StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            return this._activeMaterialization;
         }
 
-        return new AdoServicePrincipalCredentials(
-            connection.OAuthTenantId,
-            connection.OAuthClientId,
-            connection.Secret);
+        var trackedBranch = this.ResolveActiveTrackedBranch(source);
+        this._activeMaterialization = await scmBroker.MaterializeAsync(ToDto(source), ToDto(trackedBranch), commitSha, ct);
+        this._activeSourceId = source.Id;
+        this._activeTrackedBranchId = trackedBranch.Id;
+        this._activeCommitSha = commitSha;
+        return this._activeMaterialization;
+    }
+
+    private ProCursorTrackedBranch ResolveActiveTrackedBranch(ProCursorKnowledgeSource source)
+    {
+        if (this._activeTrackedBranchId.HasValue)
+        {
+            var activeBranch = source.TrackedBranches.FirstOrDefault(branch => branch.Id == this._activeTrackedBranchId.Value);
+            if (activeBranch is not null)
+            {
+                return activeBranch;
+            }
+        }
+
+        return source.TrackedBranches.FirstOrDefault(branch =>
+                   string.Equals(branch.BranchName, source.DefaultBranch, StringComparison.OrdinalIgnoreCase))
+               ?? source.TrackedBranches.First();
+    }
+
+    private static ProCursorKnowledgeSourceDto ToDto(ProCursorKnowledgeSource source)
+    {
+        return new ProCursorKnowledgeSourceDto(
+            source.Id,
+            source.ClientId,
+            source.DisplayName,
+            source.SourceKind,
+            source.ProviderScopePath,
+            source.ProviderProjectKey,
+            source.RepositoryId,
+            source.DefaultBranch,
+            source.RootPath,
+            source.IsEnabled,
+            source.SymbolMode,
+            null,
+            source.TrackedBranches.Select(ToDto).ToList().AsReadOnly(),
+            source.OrganizationScopeId,
+            string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
+                ? null
+                : new MeisterProPR.Application.DTOs.AzureDevOps.CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
+            source.SourceDisplayName);
+    }
+
+    private static ProCursorTrackedBranchDto ToDto(ProCursorTrackedBranch trackedBranch)
+    {
+        return new ProCursorTrackedBranchDto(
+            trackedBranch.Id,
+            trackedBranch.BranchName,
+            trackedBranch.RefreshTriggerMode,
+            trackedBranch.MiniIndexEnabled,
+            trackedBranch.LastSeenCommitSha,
+            trackedBranch.LastIndexedCommitSha,
+            trackedBranch.IsEnabled,
+            "unknown");
+    }
+
+    private void SetActiveMaterializationContext(Guid sourceId, Guid trackedBranchId, string commitSha)
+    {
+        this._activeSourceId = sourceId;
+        this._activeTrackedBranchId = trackedBranchId;
+        this._activeCommitSha = commitSha;
+        this._activeMaterialization = null;
+    }
+
+    private void ClearActiveMaterializationContext()
+    {
+        this._activeSourceId = null;
+        this._activeTrackedBranchId = null;
+        this._activeCommitSha = null;
+        this._activeMaterialization = null;
     }
 
     private static IEnumerable<string> FilterPaths(IEnumerable<string> discoveredPaths, string? rootPath)
@@ -375,9 +302,9 @@ public abstract class AdoGitProCursorMaterializerBase(
                 continue;
             }
 
-            if (normalizedRootPath is null ||
-                string.Equals(discoveredPath, normalizedRootPath, StringComparison.OrdinalIgnoreCase) ||
-                discoveredPath.StartsWith($"{normalizedRootPath}/", StringComparison.OrdinalIgnoreCase))
+            if (normalizedRootPath is null
+                || string.Equals(discoveredPath, normalizedRootPath, StringComparison.OrdinalIgnoreCase)
+                || discoveredPath.StartsWith($"{normalizedRootPath}/", StringComparison.OrdinalIgnoreCase))
             {
                 yield return discoveredPath;
             }
