@@ -458,6 +458,7 @@ try
     {
         opts.GetLevel = (httpContext, _, _) =>
             httpContext.Request.Path.StartsWithSegments("/healthz")
+            || httpContext.Request.Path.StartsWithSegments("/livez")
                 ? LogEventLevel.Verbose // Verbose = Trace in Serilog
                 : LogEventLevel.Information;
     });
@@ -487,6 +488,13 @@ try
     app.UseMiddleware<AuthMiddleware>();
     app.UseAuthorization();
     app.MapControllers();
+    app.MapHealthChecks(
+        "/livez",
+        new HealthCheckOptions
+        {
+            Predicate = _ => false,
+            ResponseWriter = WriteHealthResponse,
+        });
     app.MapHealthChecks(
         "/healthz",
         new HealthCheckOptions

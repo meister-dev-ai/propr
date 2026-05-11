@@ -16,6 +16,7 @@ public sealed class LicensingPolicyRepository(
     IPremiumCapabilityCatalog capabilityCatalog) : ILicensingPolicyStore
 {
     private const int SingletonPolicyId = 1;
+    private const string PostgresProviderName = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
     public async Task<InstallationLicensingPolicy> GetAsync(CancellationToken cancellationToken = default)
     {
@@ -110,6 +111,18 @@ public sealed class LicensingPolicyRepository(
 
     private async Task EnsureSeededAsync(CancellationToken cancellationToken)
     {
+        if (string.Equals(dbContext.Database.ProviderName, PostgresProviderName, StringComparison.Ordinal))
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO installation_edition (id, edition, updated_at)
+                VALUES ({SingletonPolicyId}, {(int)InstallationEdition.Community}, {DateTimeOffset.UtcNow})
+                ON CONFLICT (id) DO NOTHING
+                """,
+                cancellationToken);
+            return;
+        }
+
         if (await dbContext.InstallationEditions.AnyAsync(cancellationToken))
         {
             return;

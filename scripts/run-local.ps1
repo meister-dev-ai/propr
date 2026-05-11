@@ -20,10 +20,39 @@ $ApiDll = Join-Path $RepoRoot 'src\MeisterProPR.Api\bin\Debug\net10.0\MeisterPro
 $ProCursorDll = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\bin\Debug\net10.0\MeisterProPR.ProCursor.Service.dll'
 $LogDir = if ($env:RUN_LOCAL_LOG_DIR) { $env:RUN_LOCAL_LOG_DIR } else { Join-Path $RepoRoot 'logs\local' }
 $LogFile = if ($env:RUN_LOCAL_LOG_FILE) { $env:RUN_LOCAL_LOG_FILE } else { Join-Path $LogDir ("run-local-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
-$DataProtectionKeysDir = if ($env:RUN_LOCAL_KEYS_DIR) { $env:RUN_LOCAL_KEYS_DIR } else { Join-Path (Join-Path $HOME '.aspnet') 'DataProtection-Keys' }
+$runningOnWindows = $false
+try {
+    $runningOnWindows = $IsWindows
+}
+catch {
+    $runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+}
+
+$LegacyDataProtectionKeysDir = Join-Path (Join-Path $HOME '.aspnet') 'DataProtection-Keys'
+$DefaultDataProtectionKeysDir = if ($runningOnWindows -and $env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA 'ASP.NET\DataProtection-Keys'
+}
+else {
+    $LegacyDataProtectionKeysDir
+}
+
+$DataProtectionKeysDir = if ($env:RUN_LOCAL_KEYS_DIR) { $env:RUN_LOCAL_KEYS_DIR } else { $DefaultDataProtectionKeysDir }
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
 New-Item -ItemType Directory -Force -Path $DataProtectionKeysDir | Out-Null
+
+if (-not $env:RUN_LOCAL_KEYS_DIR -and
+    $runningOnWindows -and
+    (Test-Path $LegacyDataProtectionKeysDir) -and
+    ([System.IO.Path]::GetFullPath($LegacyDataProtectionKeysDir) -ne [System.IO.Path]::GetFullPath($DataProtectionKeysDir))) {
+    foreach ($legacyKey in Get-ChildItem -Path $LegacyDataProtectionKeysDir -Filter 'key-*.xml' -File -ErrorAction SilentlyContinue) {
+        $targetKeyPath = Join-Path $DataProtectionKeysDir $legacyKey.Name
+        if (-not (Test-Path $targetKeyPath)) {
+            Copy-Item -Path $legacyKey.FullName -Destination $targetKeyPath
+        }
+    }
+}
+
 Set-Content -Path $LogFile -Value $null -Encoding utf8
 
 $script:UserSecretsList = $null
@@ -142,7 +171,7 @@ function Get-DbConnectionStringFromUserSecrets {
     $candidateLookup = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($candidate in $candidates) {
         [void]$candidateLookup.Add($candidate)
-        [void]$candidateLookup.Add($candidate -replace ':', '__')
+        [void]$candidateLookup.Add(($candidate -replace ':', '__'))
     }
 
     foreach ($line in (Get-UserSecretsList)) {
@@ -282,7 +311,16 @@ function New-ProCursorSharedKey {
     }
 
     $bytes = [byte[]]::new(32)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $random.GetBytes($bytes)
+    }
+    finally {
+        if ($null -ne $random) {
+            $random.Dispose()
+        }
+    }
+
     return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
 }
 
@@ -500,8 +538,24 @@ function Test-HttpReady {
     param([string]$Url)
 
     try {
-        $null = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 2 -SkipHttpErrorCheck
-        return $true
+        $request = [System.Net.WebRequest]::Create($Url)
+        $request.Method = 'GET'
+        $request.Timeout = 2000
+
+        if ($request -is [System.Net.HttpWebRequest]) {
+            $request.AllowAutoRedirect = $false
+            $request.Proxy = $null
+            $request.KeepAlive = $false
+            $request.ReadWriteTimeout = 2000
+        }
+
+        $response = $request.GetResponse()
+        try {
+            return $response -is [System.Net.HttpWebResponse] -and ([int]$response.StatusCode -ge 200) -and ([int]$response.StatusCode -lt 300)
+        }
+        finally {
+            $response.Close()
+        }
     }
     catch {
         return $false
@@ -513,10 +567,12 @@ function Wait-ForHttpReady {
         [string]$Name,
         [int]$Port,
         [pscustomobject]$Child,
+        [string]$Path = '/livez',
         [int]$TimeoutSeconds = 60
     )
 
-    $readyUrl = "http://localhost:$Port/healthz"
+    $normalizedPath = if ($Path.StartsWith('/')) { $Path } else { "/$Path" }
+    $readyUrl = "http://127.0.0.1:$Port$normalizedPath"
     Write-RunLocalMessage -Message "Waiting for $Name readiness at $readyUrl" -Color Cyan
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -525,7 +581,7 @@ function Wait-ForHttpReady {
         $Child.Process.Refresh()
 
         if (Test-HttpReady -Url $readyUrl) {
-            Write-RunLocalMessage -Message "$Name is ready on http://localhost:$Port" -Color Green
+            Write-RunLocalMessage -Message "$Name is ready on http://127.0.0.1:$Port" -Color Green
             return $true
         }
 
@@ -573,6 +629,8 @@ else {
     Write-RunLocalMessage -Message "Using ProPR PostgreSQL target ($apiDbTarget)" -Color Cyan
     Write-RunLocalMessage -Message "Using ProCursor PostgreSQL target ($proCursorDbTarget)" -Color Cyan
 }
+
+Write-RunLocalMessage -Message "Using data protection key ring at $DataProtectionKeysDir" -Color DarkGray
 
 $dotenv = Read-DotEnv -Path $EnvFile
 if (-not $dotenv.ContainsKey('MEISTER_JWT_SECRET') -and -not $env:MEISTER_JWT_SECRET) {

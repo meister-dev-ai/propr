@@ -170,31 +170,41 @@ try
     {
         options.GetLevel = (httpContext, _, _) =>
             httpContext.Request.Path.StartsWithSegments("/healthz")
+            || httpContext.Request.Path.StartsWithSegments("/livez")
                 ? LogEventLevel.Verbose
                 : LogEventLevel.Information;
     });
+
+    static Task WriteHealthResponse(HttpContext context, HealthReport report)
+    {
+        return context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            entries = report.Entries.ToDictionary(
+                item => item.Key,
+                item => new
+                {
+                    status = item.Value.Status.ToString(),
+                    description = item.Value.Description,
+                }),
+        });
+    }
 
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
     app.MapHealthChecks(
+        "/livez",
+        new HealthCheckOptions
+        {
+            Predicate = _ => false,
+            ResponseWriter = WriteHealthResponse,
+        });
+    app.MapHealthChecks(
         "/healthz",
         new HealthCheckOptions
         {
-            ResponseWriter = async (context, report) =>
-            {
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    status = report.Status.ToString(),
-                    entries = report.Entries.ToDictionary(
-                        item => item.Key,
-                        item => new
-                        {
-                            status = item.Value.Status.ToString(),
-                            description = item.Value.Description,
-                        }),
-                });
-            },
+            ResponseWriter = WriteHealthResponse,
         });
     app.MapPrometheusScrapingEndpoint();
 
