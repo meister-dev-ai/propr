@@ -1,43 +1,58 @@
 """
-description: Meister DEV ProPR layered architecture — intentional design patterns across Domain, Application, Infrastructure, and Api layers.
-when-to-use: When any C# source file changes in src/, particularly in controllers, services, repositories, domain entities, or dependency injection configuration.
+description: Modular backend architecture and intentional implementation patterns across the ProPR control plane, provider adapters, and extracted ProCursor host.
+when-to-use: When C# files change under src/, especially Program.cs, module registration, review orchestration, provider adapters, ProCursor integration, or secret handling.
 """
 
 # Meister DEV ProPR Architecture
 
-ProPR follows a clean layered architecture. Each layer has a defined role — do not flag patterns that are intentional by design.
+ProPR is no longer just a simple layered Azure DevOps app. Treat it as a modular monolith control plane with provider-neutral review workflows plus an extracted `MeisterProPR.ProCursor.Service` host.
 
-## Layers
+## Composition Model
 
-**Domain** (`MeisterProPR.Domain`): Entities, value objects, enums. No dependencies on infrastructure or application layers. Entities use `SetXxx(...)` methods rather than public property setters — this is intentional to enforce invariants at the domain boundary, not a missing setter oversight.
+- `src/MeisterProPR.Api` is the control-plane host and composition root. It is expected to wire shared support plus feature module entry points such as `AddReviewingModule()`, `AddCrawlingModule()`, `AddClientsModule()`, `AddIdentityAndAccessModule()`, `AddMentionsModule()`, `AddPromptCustomizationModule()`, `AddUsageReportingModule()`, `AddLicensingModule()`, and ProCursor remote-mode support.
+- Keep `Program.cs` focused on composition, host wiring, middleware, health checks, telemetry, and startup recovery. Do not scatter feature-internal repository/service registrations through controllers or unrelated startup code.
+- Preserve the dependency rule `Api -> Application -> Domain <- Infrastructure`. Provider-specific and persistence-specific behavior belongs behind interfaces and adapter registries, not in controllers or domain types.
 
-**Application** (`MeisterProPR.Application`): Interfaces (`IJobRepository`, `IPullRequestFetcher`, etc.), DTOs, service orchestration. Zero infrastructure dependencies. All infrastructure access goes through interfaces defined here.
+## Module And Provider Ownership
 
-**Infrastructure** (`MeisterProPR.Infrastructure`): Implementations of application interfaces. Contains EF Core repositories, Azure DevOps API clients, and AI review core. May depend on Application and Domain. The AI review loop lives here.
+- The current backend is organized by vertical slices. Reviewing, Crawling, Clients, IdentityAndAccess, Mentions, PromptCustomization, UsageReporting, Licensing, and ProCursor each have explicit ownership boundaries.
+- Reviewing, crawl activation, webhook intake, publication, and thread-memory handling are provider-neutral application flows. Azure DevOps, GitHub, GitLab, and Forgejo-family behavior attaches through provider registries and adapter interfaces.
+- Do not fork application-layer behavior per provider when the shared provider model already exists. Provider-specific query, publication, webhook, discovery, or reviewer-identity behavior belongs in the matching infrastructure adapter.
+- Reviewer-trigger identity is configuration-only state used to narrow automatic PR selection. It is not the authenticated publication identity and must not replace connection credentials.
 
-**Api** (`MeisterProPR.Api`): ASP.NET Core controllers and middleware. Thin layer — controllers delegate to application services and repositories via DI.
+## Reviewing Ownership
 
-## Sensitive Data Encryption Policy
+- `ReviewOrchestrationService` owns job-level review execution concerns such as carry-forward, publication context, posting policy, publication identity resolution, and empty-review cleanup.
+- `FileByFileReviewOrchestrator` owns per-file AI execution, hard guards, comment relevance filtering, local verification, synthesis input shaping, and cross-file deduplication.
+- `FindingDeduplicator` intentionally runs only after all file results are available. It is applied inside the reviewing flow after collection, not during individual file passes.
+- The selected comment relevance filter is code-selected in `Program.GetSelectedCommentRelevanceFilterId()` and is currently `hybrid-v1`. Treat that as intentional runtime selection, not missing configuration plumbing.
+- `ScmCommentPostingEnabled` can suppress outbound SCM comments while preserving internal review persistence and posting diagnostics. That behavior is intentional.
 
-All sensitive data (AI API keys, ADO PATs, client secrets, and other credentials) must be protected at rest using the project's protection codec (ASP.NET Core Data Protection). Use the infrastructure protection codec with these purpose strings:
+## ProCursor Boundary
 
-- `AiConnectionApiKey` — AI connection API keys
-- `ClientAdoCredentials` — client ADO credentials (PATs)
+- In the API host, `IProCursorGateway` is intentionally bound to remote or disabled implementations based on `PROCURSOR_REMOTE_MODE`.
+- The extracted `MeisterProPR.ProCursor.Service` host owns ProCursor operational persistence behind `PROCURSOR_DB_CONNECTION_STRING` and composes through `AddProCursorModule()`.
+- ProPR owns client/provider/AI/ProCursor source configuration. Do not add code paths that make ProPR read or write ProCursor operational tables directly.
+- Shared contracts across the ProPR <-> ProCursor boundary live in `MeisterProPR.ProCursor.Contracts`.
 
-The project includes a `SecretBackfillService` that runs after EF Core migrations at startup and will idempotently migrate plaintext secret rows to protected values. Ensure the Data Protection key ring is persisted by setting `MEISTER_DATA_PROTECTION_KEYS_PATH` and mounting a durable storage location (suggested Docker volume: `meisterpropr_data_protection_keys`). Losing the key ring makes previously protected values unrecoverable; include key-ring backup and rotation in operational runbooks.
+## Secret Handling
 
-Repositories should Protect on write and Unprotect on read where appropriate; DTOs must not expose plaintext secrets (secrets are write-only). Logging pipelines must redact sensitive fields like `apiKey`, `secret`, and `token`.
+- Data Protection-backed secrets go through `ISecretProtectionCodec`. Active purpose strings in the current code include:
+  - `AiConnectionApiKey`
+  - `ClientScmConnectionSecret`
+  - `WebhookSecret`
+  - `tenant-sso-provider-client-secret`
+  - `tenant-sso-external-auth-state`
+- `SecretBackfillService` currently backfills legacy plaintext AI connection secrets only. PATs and refresh tokens are not Data Protection-encrypted; PATs are hashed with BCrypt and refresh tokens are stored by SHA-256 hash.
+- Keep `MEISTER_DATA_PROTECTION_KEYS_PATH` durable. Losing the key ring breaks decryption of previously protected values.
+- DTOs and GET responses must remain write-only for secrets. Logging should continue redacting secret-looking fields instead of serializing them.
 
-## Key Intentional Patterns
+## Intentional Patterns
 
-**Optional dependencies via nullable constructor parameters**: Several services accept optional dependencies as `SomeType? dep = null` in their primary constructor. This is the project's pattern for optional features — not a missing DI registration. Guard with `if (dep is not null)` is the correct usage.
-
-**`IDbContextFactory<T>` for parallel operations**: The parallel per-file AI review passes create a new `DbContext` per task via `IDbContextFactory`. This is the correct EF Core pattern for concurrent async access. The scoped `DbContext` is used for sequential single-request flows. Do not flag this as inconsistent — both patterns are intentional and exist side by side.
-
-**`ReviewExclusionRules.Default` vs `.Empty`**: `Default` means "no file was found, use built-in patterns". `Empty` means "file was found but has no patterns — no exclusions". This distinction is intentional and load-bearing.
-
-**`FindingDeduplicator`**: Cross-file deduplication runs after all per-file results are collected, before synthesis. It is applied in `ReviewOrchestrationService`, not in the per-file orchestrator, because it needs all results simultaneously.
-
-**`AdoCommentPoster` posts one thread per comment**: Each `ReviewComment` becomes a separate ADO thread. This is intentional — ADO's API does not support bulk thread creation with line anchors in a single call.
-
-**Stub implementations**: Files under `AzureDevOps/Stub/` are no-op or in-memory implementations for integration testing and local development. They are not production code paths. Do not flag missing functionality in stub classes.
+- Nullable constructor dependencies and optional service parameters are common feature toggles and test seams, not automatically missing registrations.
+- `IDbContextFactory<T>` and scoped `DbContext` registrations intentionally coexist. Factories are used for concurrent/background or cross-scope work; scoped contexts are used for request-scoped flows.
+- `ReviewExclusionRules.Default` means `.meister-propr/exclude` was absent. `ReviewExclusionRules.Empty` means the file existed but yielded no usable patterns.
+- Repository instructions and exclusion files are fetched from the target branch only. Do not change that to source-branch reads; the current behavior is a prompt-injection guard.
+- `AdoCommentPoster` intentionally creates one Azure DevOps thread per finding.
+- Workers such as `ReviewJobWorker`, `AdoPrCrawlerWorker`, `MentionScanWorker`, and `MentionReplyWorker` are registered as singletons and then forwarded as hosted services so health checks can resolve the concrete instances.
+- Stub, offline, and no-op implementations under provider `Stub/` paths or `Features/Reviewing/Offline/` are intentional harnesses. Do not flag them as incomplete production logic.

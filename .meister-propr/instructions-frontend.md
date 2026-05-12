@@ -1,32 +1,55 @@
 """
-description: Vue 3 frontend conventions, generated OpenAPI TypeScript client, and MSW mock patterns.
-when-to-use: When files change under admin-ui/, including .vue, .ts, .spec.ts files, or openapi.ts.
+description: Vue 3 SPA conventions covering router-driven admin flows, generated OpenAPI client usage, session state, and frontend test/mocking patterns.
+when-to-use: When files change under admin-ui/, including .vue, .ts, router, services, mocks, or frontend tests.
 """
 
 # Frontend Architecture
 
-## Vue 3 Composition API
+## SPA Structure
 
-All components use `<script setup>` with the Vue 3 Composition API. `ref()`, `reactive()`, `computed()`, `watch()`, `onMounted()` are Vue reactivity primitives — not custom implementations. Do not flag their usage as unusual.
+- The admin UI is a Vue 3 SPA with Vue Router, not a single view with local tabs only. Major flows are route-driven (`/clients`, `/reviews`, `/settings`, `/tenants/...`, `/provider-settings`, etc.).
+- Some detail screens also sync local tab state through route query parameters. `ClientDetailView` is the main example: it keeps `activeTab` aligned with `route.query.tab`, applies role/capability gating, and deep-links directly into client sub-views.
+- Preserve query-synchronized tab state and lazy-loading behavior in those large detail screens instead of replacing them with unrelated local toggles or arbitrary nested routes.
 
-Tabs are implemented by conditionally showing `<div v-show="activeTab === 'x'">` sections rather than routing. Data for lazy-loaded tabs (e.g., AI Connections) is intentionally fetched only on first tab click to avoid unnecessary API calls on page load — not a missing initialisation.
+## Vue And Shared State
 
-## Generated TypeScript Client
+- Composition API primitives such as `ref()`, `reactive()`, `computed()`, `watch()`, and `onMounted()` are normal and heavily used.
+- `useSession()` is the shared reactive auth/licensing store. It tracks access token, refresh token, client roles, tenant roles, installation edition, premium capabilities, and local-password state using browser storage.
+- Do not introduce a second global state system unless the surrounding code already uses it. Router guards and many views already depend on `useSession()` semantics.
 
-`admin-ui/src/services/generated/openapi.ts` is generated from `openapi.json` by `openapi-typescript`. It is never edited by hand. Do not suggest changes to this file. Changes to it must be made by regenerating from the source OpenAPI spec.
+## Generated API Types And Client
 
-The `createAdminClient()` function (from `@hey-api/client-fetch` or similar) wraps the generated types into typed fetch calls. The return shape `{ data, response }` is the client's standard pattern.
+- `admin-ui/src/services/generated/openapi.ts` is generated from the root `openapi.json` via `npm run generate:api`. Do not edit generated OpenAPI type files by hand.
+- The runtime client is `openapi-fetch`, wrapped by `createAdminClient()` in `src/services/api.ts`.
+- `createAdminClient()` is responsible for adding the bearer token, attempting silent refresh near expiry, and throwing `UnauthorizedError` when refresh fails. Keep that behavior centralized.
+- The standard `openapi-fetch` response shape is `{ data, error, response }`. Existing handwritten service modules check `response.ok` and translate API errors before components consume them.
+- Use `API_BASE_URL` from `src/services/apiBase.ts` instead of hardcoding API origins or `/api` paths.
 
-## MSW (Mock Service Worker) Handlers
+## Service-Layer Pattern
 
-`admin-ui/src/mocks/handlers.ts` defines request handlers for development and test mocking. Handler paths use the same base path as the real API. Route parameter names (e.g., `:id`, `:jobId`) must match the `params` key used inside the handler — MSW v2 uses the route segment name directly.
+- Files under `admin-ui/src/services/*.ts` are the intended handwritten layer above the generated client. They provide typed convenience methods, error shaping, and small workflow helpers.
+- Do not collapse those wrappers into components and do not try to hand-edit generated OpenAPI types instead.
 
-Endpoint casing must match the generated client's calls exactly. MSW matching is case-sensitive for URL paths.
+## Security And Rendering
 
-## `aiConnectionsService.ts`
+- Secret fields are intentionally write-only in the UI. AI/provider credentials may be sent on create or update, but GET flows do not return raw secret material.
+- Markdown summaries and review comments are intentionally rendered through `markdown-it` plus `DOMPurify` before `v-html`. Do not replace that with raw HTML rendering.
 
-This is a hand-written service layer that wraps the generated client with convenience methods. It is intentionally separate from the generated client to allow typed convenience over the raw generated types. Do not suggest merging it into the generated client.
+## Roles, Capabilities, And Feature Gating
 
-## API Key Handling
+- UI authorization depends on both global admin state and scoped `clientRoles` / `tenantRoles`.
+- Capability checks are load-bearing. Features such as multiple SCM providers, crawl configs, tenant SSO, and ProCursor often show disabled states with explanatory messages instead of disappearing entirely.
+- Preserve those upgrade/unavailable messages when editing gated UI.
 
-The API key for AI connections is write-only: it is accepted on create/update calls but never returned in GET responses or DTOs. The UI reflects this — the API key input field exists on creation but the field is intentionally absent or masked on subsequent reads. This is correct security behaviour.
+## Mocking And Tests
+
+- MSW v2 handlers live in `src/mocks/handlers.ts` and use `http`, `HttpResponse`, and the shared `API_BASE_URL`. Handler paths and casing must exactly match client calls.
+- Frontend tests currently live in both `admin-ui/tests/**` and some legacy `src/**/__tests__` locations. Follow the nearby pattern rather than moving tests just for consistency.
+- Component and view tests commonly `vi.mock()` service modules, router helpers, and `useSession()` to isolate behavior. That is the expected unit-test style in this repo.
+- Playwright E2E coverage exists under `admin-ui/tests/e2e/` for higher-level auth and tenant flows.
+
+## Intentional Frontend Patterns
+
+- Some admin views are intentionally large single-file components because they coordinate multiple tabs, dialogs, capability states, and service calls in one screen.
+- On-demand data loading for expensive tabs or detail panels is a deliberate optimization, not missing initialization.
+- Optimistic button disabling, query-driven navigation, and capability-aware empty states are established UI patterns in the current codebase.

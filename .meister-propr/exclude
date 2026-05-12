@@ -10,8 +10,10 @@
 **/Migrations/*ModelSnapshot.cs
 
 # ── OpenAPI / generated client ─────────────────────────────────────────────────
-# openapi.json is generated from Swashbuckle attributes on controllers.
+# openapi.json is the generated API contract artifact at the repo root.
 # The TypeScript client under generated/ is produced from openapi.json.
-# Both are always derived from production code changes reviewed elsewhere.
+# Keep these diffs excluded from AI review to avoid spending review budget on
+# mechanical contract/client regeneration, even though API behavior changes must
+# still keep the contract aligned.
 openapi.json
 admin-ui/src/services/generated/**
