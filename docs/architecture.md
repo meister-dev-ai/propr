@@ -77,8 +77,16 @@ flowchart TD
 - Reviewer-trigger identity is a configuration-only filter used for automatic PR selection. The
     authenticated provider connection identity is the author for provider write operations and
     reviewer-owned thread detection.
+- Thread re-evaluation stays provider-neutral at the application layer: AI-owned closures require an
+    explicit explanation before resolve in reply-enabled mode, while provider adapters only handle
+    the concrete reply/status operations exposed through capability interfaces.
+- Azure DevOps display rendering uses a provider-local safe formatter for summaries, inline
+    comments, and thread replies so readable code-like text is preserved without reusing that output
+    as the duplicate-suppression normalization key.
 - Azure DevOps provides guided discovery and crawl materialization. GitHub, GitLab, and
-    Forgejo-family adapters use the same normalized review, webhook, and thread-memory flows.
+    Forgejo-family adapters use the same normalized review, webhook, and thread-memory flows, while
+    provider publication keeps host-specific anchor semantics behind the shared
+    `ICodeReviewPublicationService` seam.
 - Provider connections, scopes, repositories, reviews, revisions, threads, comments, and webhook
     deliveries form the normalized vocabulary for mixed-provider operation and reporting.
 

@@ -195,7 +195,7 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        await this.PublishReviewResultAsync(job, pr, result, ct);
+        await this.PublishReviewResultAsync(job, pr, result, compareToIterationId, ct);
         return pr;
     }
 
@@ -215,6 +215,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob job,
         PullRequest pr,
         ReviewResult result,
+        int? compareToIterationId,
         CancellationToken ct)
     {
         Guid? protocolId = null;
@@ -231,6 +232,7 @@ public sealed partial class ReviewOrchestrationService(
         {
             var publicationResult = this.PrepareResultForPublication(job, pr, result);
             var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
+            var publicationIdentity = ResolvePublicationIdentity(job, pr);
             var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
                 publicationResult.Comments.Count + publicationResult.CarriedForwardCandidatesSkipped,
                 publicationResult.CarriedForwardCandidatesSkipped);
@@ -238,14 +240,21 @@ public sealed partial class ReviewOrchestrationService(
             if (scmCommentPostingEnabled)
             {
                 var publicationRevision = await this.ResolvePublicationReviewRevisionAsync(job, ct);
+                var publicationContext = BuildPublicationContext(
+                    job,
+                    pr,
+                    publicationRevision,
+                    publicationIdentity,
+                    compareToIterationId);
                 diagnostics = await providerRegistry.GetCodeReviewPublicationService(job.Provider)
                     .PublishReviewAsync(
                         job.ClientId,
                         job.CodeReviewReference,
                         publicationRevision,
                         publicationResult,
-                        ResolvePublicationIdentity(job, pr),
-                        ct);
+                        publicationIdentity,
+                        ct,
+                        publicationContext);
             }
 
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
@@ -620,6 +629,7 @@ public sealed partial class ReviewOrchestrationService(
                             [],
                             ExistingThreads: pr?.ExistingThreads),
                         partial,
+                        compareToIterationId: null,
                         ct);
                     return;
                 }
@@ -1043,14 +1053,15 @@ public sealed partial class ReviewOrchestrationService(
                         ct);
                 }
 
-                if (resolution.IsResolved)
+                var resolvedAction = BuildResolvedThreadAction(thread, behavior, resolution, canReply);
+                if (resolvedAction.ShouldPostReply && resolvedAction.ReplyText is not null)
                 {
-                    if (canReply && behavior == CommentResolutionBehavior.WithReply && resolution.ReplyText is not null)
-                    {
-                        await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                            .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolution.ReplyText, ct);
-                    }
+                    await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
+                        .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolvedAction.ReplyText, ct);
+                }
 
+                if (resolvedAction.ShouldResolveThread)
+                {
                     await providerRegistry.GetReviewThreadStatusWriter(job.Provider)
                         .UpdateThreadStatusAsync(job.ClientId, CreateReviewThreadRef(job, thread), "fixed", ct);
 
@@ -1117,6 +1128,51 @@ public sealed partial class ReviewOrchestrationService(
                string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static ResolvedThreadAction BuildResolvedThreadAction(
+        PrCommentThread thread,
+        CommentResolutionBehavior behavior,
+        ThreadResolutionResult resolution,
+        bool canReply)
+    {
+        var normalizedReplyText = string.IsNullOrWhiteSpace(resolution.ReplyText)
+            ? null
+            : resolution.ReplyText.Trim();
+
+        if (!resolution.IsResolved)
+        {
+            return new ResolvedThreadAction(
+                thread.ThreadId,
+                behavior,
+                false,
+                normalizedReplyText,
+                false,
+                false,
+                ResolvedThreadReasonSource.None);
+        }
+
+        if (behavior == CommentResolutionBehavior.WithReply)
+        {
+            var shouldReplyAndResolve = canReply && normalizedReplyText is not null;
+            return new ResolvedThreadAction(
+                thread.ThreadId,
+                behavior,
+                shouldReplyAndResolve,
+                normalizedReplyText,
+                shouldReplyAndResolve,
+                shouldReplyAndResolve,
+                shouldReplyAndResolve ? ResolvedThreadReasonSource.AiGenerated : ResolvedThreadReasonSource.None);
+        }
+
+        return new ResolvedThreadAction(
+            thread.ThreadId,
+            behavior,
+            true,
+            normalizedReplyText,
+            false,
+            true,
+            normalizedReplyText is not null ? ResolvedThreadReasonSource.AiGenerated : ResolvedThreadReasonSource.None);
+    }
+
     private static ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
     {
         var externalUserId = pr.AuthorizedIdentityName
@@ -1127,6 +1183,25 @@ public sealed partial class ReviewOrchestrationService(
         var isBot = job.Provider is ScmProvider.GitHub && login.EndsWith("[bot]", StringComparison.OrdinalIgnoreCase);
 
         return new ReviewerIdentity(job.ProviderHost, externalUserId, login, displayName, isBot);
+    }
+
+    private static ReviewPublicationContext BuildPublicationContext(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewRevision revision,
+        ReviewerIdentity publicationIdentity,
+        int? compareToIterationId)
+    {
+        object? providerSpecificContext = job.Provider == ScmProvider.AzureDevOps
+            ? new AzureDevOpsPublicationContext(compareToIterationId)
+            : null;
+
+        return new ReviewPublicationContext(
+            job.CodeReviewReference,
+            revision,
+            publicationIdentity,
+            pr.ExistingThreads ?? [],
+            providerSpecificContext);
     }
 
     private static bool IsReviewerOwnedAuthor(Guid? authorId, string authorName, Guid? reviewerId, Guid? authorizedIdentityId, string? authorizedIdentityName)

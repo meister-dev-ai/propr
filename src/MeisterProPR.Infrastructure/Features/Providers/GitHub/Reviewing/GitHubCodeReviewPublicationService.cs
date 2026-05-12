@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -33,7 +34,8 @@ internal sealed class GitHubCodeReviewPublicationService : ICodeReviewPublicatio
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity reviewer,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null)
     {
         return await this._lifecyclePublicationService.PublishReviewAsync(
             clientId,
@@ -41,6 +43,7 @@ internal sealed class GitHubCodeReviewPublicationService : ICodeReviewPublicatio
             revision,
             result,
             reviewer,
-            ct);
+            ct,
+            publicationContext);
     }
 }

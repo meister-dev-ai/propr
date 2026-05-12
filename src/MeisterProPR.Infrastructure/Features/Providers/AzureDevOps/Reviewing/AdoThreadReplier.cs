@@ -2,9 +2,11 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
@@ -78,10 +80,11 @@ internal sealed partial class AdoThreadReplier(
         }
 
         var gitClient = connection.GetClient<GitHttpClient>();
+        var renderedReplyText = FormatReplyText(replyText);
 
         var comment = new Comment
         {
-            Content = replyText,
+            Content = renderedReplyText,
             CommentType = CommentType.Text,
         };
 
@@ -136,6 +139,11 @@ internal sealed partial class AdoThreadReplier(
 
         throw lastException ??
               new InvalidOperationException("No Azure DevOps organization URL could be resolved for thread replies.");
+    }
+
+    internal static string FormatReplyText(string replyText)
+    {
+        return HtmlSanitizer.RenderForDisplay(replyText, ReviewBodyRenderingMode.ThreadReply).RenderedText;
     }
 
     [LoggerMessage(

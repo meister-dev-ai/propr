@@ -35,7 +35,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Any<ReviewResult>(),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
             .Returns(call =>
             {
                 var result = call.Arg<ReviewResult>();
@@ -247,7 +248,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Any<ReviewResult>(),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty(twoComments.Count)));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, clientRegistry, prScanRepository);
@@ -264,7 +266,11 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Is<ReviewResult>(r => r.Comments.Count == 2),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Is<ReviewPublicationContext?>(context =>
+                    context != null
+                    && context.Review == job.CodeReviewReference
+                    && context.ExistingThreads.Count == 0));
     }
 
     [Fact]
@@ -343,7 +349,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Any<ReviewResult>(),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty(2, 2)));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, clientRegistry, prScanRepository);
@@ -361,7 +368,8 @@ public class ReviewOrchestrationServiceDeduplicationTests
                     result.CarriedForwardCandidatesSkipped == 2 &&
                     result.CarriedForwardFilePaths.SequenceEqual(expectedCarriedForwardPaths)),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>());
     }
 
     [Fact]
@@ -429,7 +437,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         await orchestrator.DidNotReceiveWithAnyArgs()
             .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
         await commentPoster.DidNotReceiveWithAnyArgs()
-            .PublishReviewAsync(Guid.Empty, null!, null!, null!, null!, Arg.Any<CancellationToken>());
+            .PublishReviewAsync(Guid.Empty, null!, null!, null!, null!, Arg.Any<CancellationToken>(), null!);
         await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
     }
 }

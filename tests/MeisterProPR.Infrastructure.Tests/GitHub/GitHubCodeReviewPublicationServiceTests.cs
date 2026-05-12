@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -81,6 +82,66 @@ public sealed class GitHubCodeReviewPublicationServiceTests
     }
 
     [Fact]
+    public async Task PublishReviewAsync_NormalizesInlineCommentPathBeforePosting()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("  /src/file.ts  ", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+
+        string? postedBody = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == "https://api.github.com/user")
+                {
+                    return CreateJsonResponse(new { login = "meister-dev" });
+                }
+
+                if (request.RequestUri.AbsoluteUri ==
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews")
+                {
+                    postedBody = await request.Content!.ReadAsStringAsync();
+                    return CreateJsonResponse(new { id = 1 });
+                }
+
+                return CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound);
+            }));
+        httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.NotNull(postedBody);
+        using var document = JsonDocument.Parse(postedBody);
+        var comments = document.RootElement.GetProperty("comments");
+        Assert.Equal("src/file.ts", comments[0].GetProperty("path").GetString());
+    }
+
+    [Fact]
     public async Task PublishReviewAsync_WhenReviewHasNoInlineComments_SendsEmptyCommentsArray()
     {
         var clientId = Guid.NewGuid();
@@ -137,6 +198,55 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.NotNull(postedBody);
         Assert.Contains("\"comments\":[]", postedBody, StringComparison.Ordinal);
         Assert.Contains("No blocking issues found.", postedBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_IgnoresAdditivePublicationContextForGitHub()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult("Looks solid overall.", []);
+        var publicationContext = new ReviewPublicationContext(
+            review,
+            revision,
+            reviewer,
+            [new PrCommentThread(1, "src/file.ts", 18, [new PrThreadComment("Bot", "Existing thread")])]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
+            {
+                "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 1 }),
+                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+            })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer, publicationContext: publicationContext);
+
+        Assert.Equal(0, diagnostics.PostedCount);
+        Assert.Equal(0, diagnostics.SuppressedCount);
     }
 
     [Fact]

@@ -169,15 +169,36 @@ flowchart TD
      `ICodeReviewPublicationService`, persists the final `ReviewResult`, and records aggregate
      duplicate-suppression diagnostics even when outbound SCM publication is skipped.
 4. Publication identity is derived from authenticated provider connection metadata fetched with the
-   PR, not from the configured reviewer-trigger identity. Optional reviewer assignment uses
-    the configured trigger identity when present.
-5. The publication service evaluates each candidate finding against existing bot-authored PR
-     threads
-    using normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text
-    matching, pull-request-scoped thread memory similarity, and a deterministic text-similarity
-    fallback when historical signals are degraded.
-6. The posting protocol emits `dedup_summary` on every posting pass and `dedup_degraded_mode`
-    only when historical duplicate protection had to fall back to reduced checks.
+    PR, not from the configured reviewer-trigger identity. Optional reviewer assignment uses
+     the configured trigger identity when present.
+5. Azure DevOps publication receives provider-local publication context from orchestration so it can
+   use the fetched thread list and the reviewed diff comparison baseline. Inline ADO anchors publish
+   only when the finding has a positive line number and the diff exposes a matching
+   `ChangeTrackingId` for the reviewed compare iteration. When that mapping is not trustworthy,
+   publication falls back to a file-level thread when the file path is known, or to a PR-level
+   thread when no trustworthy file anchor remains.
+6. On incremental Azure DevOps reviews, the same publication context carries the effective
+   publication identity used for bot-authorship checks. Summary suppression uses that identity to
+   recognize a prior bot-authored summary even when the live connection cannot rehydrate the same
+   author GUID, while fresh actionable findings in the reviewed run continue to publish normally.
+7. GitHub, GitLab, and Forgejo publication normalize inline file paths by trimming whitespace and
+   removing any leading slash before sending provider-native review payloads. Comments without a
+   positive line number remain overview or summary content instead of claiming a false inline anchor.
+8. The publication service evaluates each candidate finding against bot-authored PR threads using
+   normalized file-path and anchor matching, resolved-thread reuse, exact normalized-text matching,
+   pull-request-scoped thread memory similarity, and a deterministic text-similarity fallback when
+   historical signals are degraded.
+9. The posting protocol emits `dedup_summary` on every posting pass and `dedup_degraded_mode` when
+   duplicate protection falls back to reduced checks.
+10. AI-owned thread auto-resolution stays mode-aware behind the shared orchestration seam. In
+    `CommentResolutionBehavior.WithReply`, a resolved thread must have a non-empty AI explanation,
+    that reply is posted first, and only then is the provider-native thread status moved to
+    `fixed`. In `Silent`, the same resolved outcome skips the reply and only updates status, while
+    human-owned or already-resolved threads remain untouched.
+11. Azure DevOps review-body rendering separates display formatting from duplicate normalization.
+    Summaries, inline comments, and AI-authored thread replies preserve readable quotes and command
+    syntax while neutralizing HTML-like markup by breaking tag parsing instead of blanket-encoding
+    every quote character.
 
 This keeps incremental reviews additive: carried-forward findings remain visible in stored review
 history, but only genuinely fresh findings are allowed to create new provider-native threads, and

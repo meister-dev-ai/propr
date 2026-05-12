@@ -11,7 +11,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="OrganizationUrl">Organization URL containing the repository.</param>
 /// <param name="ProjectId">Project identifier.</param>
 /// <param name="RepositoryId">Repository identifier.</param>
-/// <param name="RepositoryName">Repository display name from ADO.</param>
+/// <param name="RepositoryName">Repository display name.</param>
 /// <param name="PullRequestId">Pull request numeric id.</param>
 /// <param name="IterationId">Iteration id within the pull request.</param>
 /// <param name="Title">Title of the pull request.</param>
@@ -36,9 +36,9 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     <see cref="ChangedFiles" />.
 /// </param>
 /// <param name="AuthorizedIdentityId">
-///     VSS identity GUID of the authenticated Azure DevOps connection used to fetch and post
-///     review correspondence. When populated, reviewer-owned thread detection treats this
-///     identity as equivalent to the configured reviewer identity.
+///     Provider-authenticated identity GUID when the review host exposes one.
+///     When populated, reviewer-owned thread detection treats this identity as equivalent to the
+///     configured reviewer identity.
 /// </param>
 /// <param name="AuthorizedIdentityName">
 ///     Provider-native login or display name of the authenticated connection identity used to

@@ -71,6 +71,34 @@ public sealed class AgentAiCommentResolutionCoreTests
     }
 
     [Fact]
+    public async Task EvaluateCodeChangeAsync_WhenAiMarksResolvedWithoutReplyText_ReturnsUnresolved()
+    {
+        var chatClient = BuildChatClient("""{"resolved": true, "replyText": null}""");
+        var sut = new AgentAiCommentResolutionCore();
+        var thread = BuildThread(1, ("Bot", "Null reference on line 10.", null));
+        var pr = BuildPr();
+
+        var result = await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
+
+        Assert.False(result.IsResolved);
+        Assert.Null(result.ReplyText);
+    }
+
+    [Fact]
+    public async Task EvaluateCodeChangeAsync_WhenAiMarksResolvedWithWhitespaceReplyText_ReturnsUnresolved()
+    {
+        var chatClient = BuildChatClient("""{"resolved": true, "replyText": "   "}""");
+        var sut = new AgentAiCommentResolutionCore();
+        var thread = BuildThread(1, ("Bot", "Null reference on line 10.", null));
+        var pr = BuildPr();
+
+        var result = await sut.EvaluateCodeChangeAsync(thread, pr, chatClient, ModelId);
+
+        Assert.False(result.IsResolved);
+        Assert.Null(result.ReplyText);
+    }
+
+    [Fact]
     public async Task EvaluateCodeChangeAsync_WhenAiReturnsUnresolved_ReturnsIsResolvedFalse()
     {
         var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");

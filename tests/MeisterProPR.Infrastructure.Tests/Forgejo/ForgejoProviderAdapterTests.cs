@@ -689,6 +689,61 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
     }
 
     [Fact]
+    public async Task PublishReviewAsync_NormalizesInlineCommentPathBeforePosting()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision(
+            "aabbccddeeff00112233445566778899aabbccdd",
+            "00112233445566778899aabbccddeeff00112233",
+            "00112233445566778899aabbccddeeff00112233",
+            "aabbccddeeff00112233445566778899aabbccdd",
+            "00112233445566778899aabbccddeeff00112233...aabbccddeeff00112233445566778899aabbccdd");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("  /src/file.ts  ", 18, CommentSeverity.Warning, "Guard this null case.")]);
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+
+        string? postedBody = null;
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            if (request.RequestUri!.AbsoluteUri == "https://codeberg.example.com/api/v1/user")
+            {
+                return ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsoluteUri ==
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100")
+            {
+                return ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>());
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri ==
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews")
+            {
+                postedBody = await request.Content!.ReadAsStringAsync();
+                return ForgejoTestHelpers.CreateJsonResponse(new { id = 9001 });
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var sut = new ForgejoCodeReviewPublicationService(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.NotNull(postedBody);
+        using var document = JsonDocument.Parse(postedBody);
+        var comments = document.RootElement.GetProperty("comments");
+        Assert.Equal("src/file.ts", comments[0].GetProperty("path").GetString());
+    }
+
+    [Fact]
     public async Task PublishReviewAsync_WithInvalidRevision_OmitsCommitIdFromPayload()
     {
         var clientId = Guid.NewGuid();

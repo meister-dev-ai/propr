@@ -36,7 +36,8 @@ public class ReviewOrchestrationServicePromptOverrideTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Any<ReviewResult>(),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
         return publicationService;
     }
@@ -470,6 +471,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
                     identity.Login == "ado-app-bot" &&
                     identity.DisplayName == "ado-app-bot" &&
                     identity.ExternalUserId == "ado-app-bot"),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>());
     }
 }

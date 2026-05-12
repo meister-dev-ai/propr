@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Text;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -33,6 +34,8 @@ public sealed class AdoCommentPoster(
         ReviewResult result,
         Guid? clientId = null,
         IReadOnlyList<PrCommentThread>? existingThreads = null,
+        AzureDevOpsPublicationContext? publicationContext = null,
+        ReviewerIdentity? publicationIdentity = null,
         CancellationToken cancellationToken = default)
     {
         using var activity = ActivitySource.StartActivity("AdoCommentPoster.Post");
@@ -75,6 +78,7 @@ public sealed class AdoCommentPoster(
                 iterationId,
                 top,
                 skip,
+                publicationContext?.CompareToIterationId,
                 cancellationToken: ct),
             cancellationToken);
 
@@ -85,7 +89,7 @@ public sealed class AdoCommentPoster(
                 c => c.ChangeTrackingId);
 
         // Post summary as PR-level thread, skipping if a bot summary already exists.
-        if (!HasBotSummary(existingThreads, botId))
+        if (!HasBotSummary(existingThreads, botId, publicationIdentity))
         {
             await CreateThreadAsync(
                 gitClient,
@@ -101,41 +105,13 @@ public sealed class AdoCommentPoster(
         // Post each inline comment, skipping locations the bot has already covered.
         foreach (var comment in result.Comments)
         {
-            CommentThreadContext? threadContext = null;
-            GitPullRequestCommentThreadContext? prThreadContext = null;
-            string? normalizedFilePath = null;
-
-            if (comment.FilePath is not null)
-            {
-                // ADO requires paths with a leading '/'; normalize in case the AI omits it.
-                normalizedFilePath = NormalizePath(comment.FilePath);
-                // ADO requires Line >= 1; treat 0 (invalid) the same as null (no line anchor).
-                var hasValidLine = comment.LineNumber.HasValue && comment.LineNumber.Value > 0;
-                threadContext = new CommentThreadContext
-                {
-                    FilePath = normalizedFilePath,
-                    RightFileStart = hasValidLine
-                        ? new CommentPosition { Line = comment.LineNumber!.Value, Offset = 1 }
-                        : null,
-                    RightFileEnd = hasValidLine
-                        ? new CommentPosition { Line = comment.LineNumber!.Value, Offset = 1 }
-                        : null,
-                };
-
-                // pullRequestThreadContext anchors the thread to the correct iteration diff.
-                if (changeTrackingIds.TryGetValue(normalizedFilePath, out var trackingId))
-                {
-                    prThreadContext = new GitPullRequestCommentThreadContext
-                    {
-                        ChangeTrackingId = trackingId,
-                        IterationContext = new CommentIterationContext
-                        {
-                            FirstComparingIteration = (short)iterationId,
-                            SecondComparingIteration = (short)iterationId,
-                        },
-                    };
-                }
-            }
+            var anchorContext = ResolveAnchorContext(
+                comment,
+                iterationId,
+                publicationContext?.CompareToIterationId,
+                changeTrackingIds);
+            var (threadContext, prThreadContext) = BuildThreadContexts(anchorContext);
+            var normalizedFilePath = anchorContext.NormalizedFilePath;
 
             var duplicateMatch = FindDeterministicDuplicateMatch(
                 existingThreads,
@@ -182,22 +158,12 @@ public sealed class AdoCommentPoster(
                 }
             }
 
-            var severityPrefix = comment.Severity switch
-            {
-                CommentSeverity.Error => "ERROR",
-                CommentSeverity.Warning => "WARNING",
-                CommentSeverity.Suggestion => "SUGGESTION",
-                _ => "INFO",
-            };
-
-            var sanitizedMessage = HtmlSanitizer.Sanitize(comment.Message);
-
             await CreateThreadAsync(
                 gitClient,
                 projectId,
                 repositoryId,
                 pullRequestId,
-                $"{severityPrefix}: {sanitizedMessage}",
+                FormatInlineCommentBody(comment),
                 threadContext,
                 prThreadContext,
                 cancellationToken);
@@ -216,18 +182,34 @@ public sealed class AdoCommentPoster(
     internal static string BuildSummaryText(ReviewResult result)
     {
         var sb = new StringBuilder("**AI Review Summary**\n\n");
-        sb.Append(HtmlSanitizer.Sanitize(result.Summary));
+        sb.Append(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText);
 
         if (result.CarriedForwardFilePaths.Count > 0)
         {
             sb.Append($"\n\n**Carried forward unchanged files** ({result.CarriedForwardFilePaths.Count} files — results from prior review retained)\n\n");
             foreach (var path in result.CarriedForwardFilePaths)
             {
-                sb.Append($"- {path}\n");
+                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                sb.Append($"- {renderedPath}\n");
             }
         }
 
         return sb.ToString();
+    }
+
+    internal static string FormatInlineCommentBody(ReviewComment comment)
+    {
+        ArgumentNullException.ThrowIfNull(comment);
+
+        var severityPrefix = comment.Severity switch
+        {
+            CommentSeverity.Error => "ERROR",
+            CommentSeverity.Warning => "WARNING",
+            CommentSeverity.Suggestion => "SUGGESTION",
+            _ => "INFO",
+        };
+        var renderedMessage = HtmlSanitizer.RenderForDisplay(comment.Message, ReviewBodyRenderingMode.InlineComment);
+        return $"{severityPrefix}: {renderedMessage.RenderedText}";
     }
 
     /// <summary>
@@ -235,11 +217,14 @@ public sealed class AdoCommentPoster(
     ///     Bot authorship is determined by comparing the comment's <see cref="PrThreadComment.AuthorId" />
     ///     against the current connection's authorized identity (<paramref name="botId" />).
     /// </summary>
-    internal static bool HasBotSummary(IReadOnlyList<PrCommentThread>? threads, Guid? botId)
+    internal static bool HasBotSummary(
+        IReadOnlyList<PrCommentThread>? threads,
+        Guid? botId,
+        ReviewerIdentity? publicationIdentity = null)
     {
         return (threads ?? []).Any(t =>
             t.FilePath is null &&
-            t.Comments.Any(c => IsBotAuthor(c.AuthorId, botId)
+            t.Comments.Any(c => IsBotAuthor(c.AuthorId, botId, c.AuthorName, publicationIdentity)
                                 && c.Content.StartsWith("**AI Review Summary**", StringComparison.Ordinal)));
     }
 
@@ -266,9 +251,24 @@ public sealed class AdoCommentPoster(
     ///     Returns <c>true</c> if the comment was authored by the bot, identified by VSS identity GUID equality.
     ///     Returns <c>false</c> if either GUID is unknown.
     /// </summary>
-    internal static bool IsBotAuthor(Guid? authorId, Guid? botId)
+    internal static bool IsBotAuthor(
+        Guid? authorId,
+        Guid? botId,
+        string? authorName = null,
+        ReviewerIdentity? publicationIdentity = null)
     {
-        return authorId.HasValue && botId.HasValue && authorId.Value == botId.Value;
+        if (authorId.HasValue && botId.HasValue && authorId.Value == botId.Value)
+        {
+            return true;
+        }
+
+        if (publicationIdentity is null || string.IsNullOrWhiteSpace(authorName))
+        {
+            return false;
+        }
+
+        return string.Equals(authorName, publicationIdentity.DisplayName, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(authorName, publicationIdentity.Login, StringComparison.OrdinalIgnoreCase);
     }
 
     internal static DuplicateSuppressionMatch? FindDeterministicDuplicateMatch(
@@ -337,6 +337,64 @@ public sealed class AdoCommentPoster(
             : new DuplicateSuppressionMatch("fallback_duplicate_match", bestMatch.ThreadId);
     }
 
+    internal static PublicationAnchorContext ResolveAnchorContext(
+        ReviewComment comment,
+        int iterationId,
+        int? compareToIterationId,
+        IReadOnlyDictionary<string, int> changeTrackingIds)
+    {
+        ArgumentNullException.ThrowIfNull(comment);
+        ArgumentNullException.ThrowIfNull(changeTrackingIds);
+
+        var normalizedFilePath = NormalizeOptionalPath(comment.FilePath);
+        var resolvedLineNumber = NormalizeLineNumber(comment.LineNumber);
+        var compareReference = BuildCompareRevisionReference(compareToIterationId, iterationId);
+
+        if (normalizedFilePath is null)
+        {
+            return new PublicationAnchorContext(
+                comment.FilePath,
+                comment.LineNumber,
+                null,
+                null,
+                PublicationAnchorPrecision.PrLevel,
+                CompareRevisionReference: compareReference);
+        }
+
+        if (resolvedLineNumber.HasValue && changeTrackingIds.TryGetValue(normalizedFilePath, out var trackingId))
+        {
+            return new PublicationAnchorContext(
+                comment.FilePath,
+                comment.LineNumber,
+                normalizedFilePath,
+                resolvedLineNumber,
+                PublicationAnchorPrecision.Inline,
+                trackingId.ToString(),
+                compareReference);
+        }
+
+        return new PublicationAnchorContext(
+            comment.FilePath,
+            comment.LineNumber,
+            normalizedFilePath,
+            null,
+            PublicationAnchorPrecision.File,
+            CompareRevisionReference: compareReference);
+    }
+
+    internal static (CommentThreadContext? ThreadContext, GitPullRequestCommentThreadContext? PrThreadContext)
+        BuildThreadContexts(PublicationAnchorContext anchorContext)
+    {
+        ArgumentNullException.ThrowIfNull(anchorContext);
+
+        return anchorContext.AnchorPrecision switch
+        {
+            PublicationAnchorPrecision.Inline => BuildInlineThreadContexts(anchorContext),
+            PublicationAnchorPrecision.File => BuildFileThreadContexts(anchorContext),
+            _ => (null, null),
+        };
+    }
+
     private static async Task CreateThreadAsync(
         GitHttpClient gitClient,
         string projectId,
@@ -387,6 +445,92 @@ public sealed class AdoCommentPoster(
     {
         var normalized = path.Replace('\\', '/').Trim();
         return normalized.StartsWith('/') ? normalized : "/" + normalized;
+    }
+
+    private static (CommentThreadContext? ThreadContext, GitPullRequestCommentThreadContext? PrThreadContext)
+        BuildInlineThreadContexts(PublicationAnchorContext anchorContext)
+    {
+        if (anchorContext.NormalizedFilePath is null ||
+            !anchorContext.ResolvedLineNumber.HasValue ||
+            !int.TryParse(anchorContext.ProviderTrackingReference, out var trackingId))
+        {
+            return BuildFileThreadContexts(anchorContext with { ResolvedLineNumber = null, AnchorPrecision = PublicationAnchorPrecision.File });
+        }
+
+        var threadContext = new CommentThreadContext
+        {
+            FilePath = anchorContext.NormalizedFilePath,
+            RightFileStart = new CommentPosition { Line = anchorContext.ResolvedLineNumber.Value, Offset = 1 },
+            RightFileEnd = new CommentPosition { Line = anchorContext.ResolvedLineNumber.Value, Offset = 1 },
+        };
+
+        var prThreadContext = new GitPullRequestCommentThreadContext
+        {
+            ChangeTrackingId = trackingId,
+            IterationContext = BuildIterationContext(anchorContext.CompareRevisionReference),
+        };
+
+        return (threadContext, prThreadContext);
+    }
+
+    private static (CommentThreadContext? ThreadContext, GitPullRequestCommentThreadContext? PrThreadContext)
+        BuildFileThreadContexts(PublicationAnchorContext anchorContext)
+    {
+        if (anchorContext.NormalizedFilePath is null)
+        {
+            return (null, null);
+        }
+
+        return (new CommentThreadContext
+        {
+            FilePath = anchorContext.NormalizedFilePath,
+            RightFileStart = null,
+            RightFileEnd = null,
+        }, null);
+    }
+
+    private static CommentIterationContext? BuildIterationContext(string? compareRevisionReference)
+    {
+        var (firstComparingIteration, secondComparingIteration) = ParseCompareRevisionReference(compareRevisionReference);
+
+        if (firstComparingIteration <= 0 || secondComparingIteration <= 0)
+        {
+            return null;
+        }
+
+        return new CommentIterationContext
+        {
+            FirstComparingIteration = (short)firstComparingIteration,
+            SecondComparingIteration = (short)secondComparingIteration,
+        };
+    }
+
+    private static string? BuildCompareRevisionReference(int? compareToIterationId, int iterationId)
+    {
+        if (!compareToIterationId.HasValue || compareToIterationId.Value <= 0 || iterationId <= 0)
+        {
+            return null;
+        }
+
+        return $"{compareToIterationId.Value}:{iterationId}";
+    }
+
+    private static (int FirstComparingIteration, int SecondComparingIteration) ParseCompareRevisionReference(string? compareRevisionReference)
+    {
+        if (string.IsNullOrWhiteSpace(compareRevisionReference))
+        {
+            return (0, 0);
+        }
+
+        var parts = compareRevisionReference.Split(':', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+        {
+            return (0, 0);
+        }
+
+        return (
+            int.TryParse(parts[0], out var firstComparingIteration) ? firstComparingIteration : 0,
+            int.TryParse(parts[1], out var secondComparingIteration) ? secondComparingIteration : 0);
     }
 
     private async Task<HistoricalDuplicateSuppressionMatchDto> FindHistoricalDuplicateMatchAsync(

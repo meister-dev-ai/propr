@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Infrastructure.Utilities;
 
 namespace MeisterProPR.Infrastructure.Tests.Utilities;
@@ -217,5 +218,48 @@ public class HtmlSanitizerTests
         const string input = """<img src="test.jpg" alt="bad<>quotes">""";
         var result = HtmlSanitizer.Sanitize(input);
         Assert.Equal("&lt;img src=&quot;test.jpg&quot; alt=&quot;bad&lt;&gt;quotes&quot;&gt;", result);
+    }
+
+    [Fact]
+    public void RenderForDisplay_QuotedShellCommand_PreservesReadableQuotes()
+    {
+        const string input = "dotnet \"$ProCursorDll\" --output \"$ApiDll\" && echo \"done\"";
+
+        var result = HtmlSanitizer.RenderForDisplay(input, ReviewBodyRenderingMode.ThreadReply);
+
+        Assert.Equal(input, result.RenderedText);
+        Assert.DoesNotContain("&quot;", result.RenderedText);
+        Assert.False(result.ContainsUnsafeMarkup);
+        Assert.Empty(result.SafetyTransformations);
+    }
+
+    [Fact]
+    public void RenderForDisplay_HtmlLikeMarkup_IsNeutralizedWithoutEntityNoise()
+    {
+        const string input = "Use \"$ApiDll\" after <script>alert('xss')</script> is removed.";
+
+        var result = HtmlSanitizer.RenderForDisplay(input, ReviewBodyRenderingMode.InlineComment);
+
+        Assert.DoesNotContain("&quot;", result.RenderedText);
+        Assert.Equal(-1, result.RenderedText.IndexOf("<script>", StringComparison.Ordinal));
+        Assert.Equal(-1, result.RenderedText.IndexOf("</script>", StringComparison.Ordinal));
+        Assert.Contains("<\u200Bscript>", result.RenderedText);
+        Assert.Contains("<\u200B/script>", result.RenderedText);
+        Assert.True(result.ContainsUnsafeMarkup);
+        Assert.NotEmpty(result.SafetyTransformations);
+    }
+
+    [Fact]
+    public void RenderForDisplay_TagEmbeddedInWord_IsStillNeutralized()
+    {
+        const string input = "prefix<script>alert(1)</script> suffix";
+
+        var result = HtmlSanitizer.RenderForDisplay(input, ReviewBodyRenderingMode.InlineComment);
+
+        Assert.Equal(-1, result.RenderedText.IndexOf("<script>", StringComparison.Ordinal));
+        Assert.Equal(-1, result.RenderedText.IndexOf("</script>", StringComparison.Ordinal));
+        Assert.Contains("prefix<\u200Bscript>", result.RenderedText);
+        Assert.Contains("<\u200B/script>", result.RenderedText);
+        Assert.True(result.ContainsUnsafeMarkup);
     }
 }

@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
@@ -29,7 +30,8 @@ internal sealed class GitHubLifecyclePublicationService(
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity author,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -137,7 +139,7 @@ internal sealed class GitHubLifecyclePublicationService(
 
     private static string NormalizePath(string path)
     {
-        return path.TrimStart('/');
+        return path.Trim().TrimStart('/');
     }
 
     private static string FormatSeverity(CommentSeverity severity)

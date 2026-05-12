@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -30,7 +31,8 @@ internal sealed class AdoCodeReviewPublicationService(
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity reviewer,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null)
     {
         EnsureAzureDevOps(review.Repository.Host);
 
@@ -68,6 +70,9 @@ internal sealed class AdoCodeReviewPublicationService(
                     iterationId,
                     result,
                     clientId,
+                    publicationContext?.ExistingThreads,
+                    publicationContext?.GetProviderSpecificContext<AzureDevOpsPublicationContext>(),
+                    publicationContext?.AuthorizedPublicationIdentity,
                     cancellationToken: ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)

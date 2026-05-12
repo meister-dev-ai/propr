@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -20,5 +21,6 @@ public interface ICodeReviewPublicationService
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity reviewer,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null);
 }

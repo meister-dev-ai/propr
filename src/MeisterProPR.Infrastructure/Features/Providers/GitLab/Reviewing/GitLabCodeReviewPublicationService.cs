@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -29,7 +30,8 @@ internal sealed class GitLabCodeReviewPublicationService(
         ReviewRevision revision,
         ReviewResult result,
         ReviewerIdentity author,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -167,7 +169,7 @@ internal sealed class GitLabCodeReviewPublicationService(
 
     private static string NormalizePath(string path)
     {
-        return path.TrimStart('/');
+        return path.Trim().TrimStart('/');
     }
 
     private static HttpContent BuildDiscussionContent(GitLabDiscussionRequest payload)

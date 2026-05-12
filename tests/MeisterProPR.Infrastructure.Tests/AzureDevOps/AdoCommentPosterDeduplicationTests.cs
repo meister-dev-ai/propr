@@ -93,6 +93,30 @@ public class AdoCommentPosterDeduplicationTests
         Assert.False(AdoCommentPoster.HasBotSummary(threads, null));
     }
 
+    [Fact]
+    public void HasBotSummary_WhenBotIdMissingButPublicationIdentityMatchesAuthorName_ReturnsTrue()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                1,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Meister Bot", "**AI Review Summary**\n\nLooks good."),
+                }.AsReadOnly()),
+        };
+        var publicationIdentity = new ReviewerIdentity(
+            new ProviderHostRef(Domain.Enums.ScmProvider.AzureDevOps, "https://dev.azure.com/org"),
+            "meister-bot",
+            "meister-bot",
+            "Meister Bot",
+            true);
+
+        Assert.True(AdoCommentPoster.HasBotSummary(threads, null, publicationIdentity));
+    }
+
 
     [Fact]
     public void HasBotThreadAt_BotThreadAtSameFileAndLine_ReturnsTrue()

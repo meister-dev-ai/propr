@@ -22,8 +22,13 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
                                                   concern. Be conservative: only mark as resolved if you are confident the issue is fixed.
                                                   If in doubt, return resolved=false.
 
+                                                  When you return resolved=true, you MUST also provide a non-empty replyText that explains
+                                                  why the latest change addresses the concern. Do not close the thread silently.
+                                                  When you return resolved=false, set replyText to null unless a short clarification is truly
+                                                  necessary.
+
                                                   Respond with valid JSON ONLY — no markdown fences, no preamble.
-                                                  Schema: { "resolved": true|false, "replyText": "<optional short reply or null>" }
+                                                  Schema: { "resolved": true|false, "replyText": "<required reasoning when resolved, otherwise null>" }
                                                   """;
 
     private const string ConversationalSystemPrompt = """
@@ -73,7 +78,11 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             messages,
             new ChatOptions { ModelId = modelId },
             cancellationToken);
-        return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
+        return ParseResult(
+            response.Text ?? "",
+            response.Usage?.InputTokenCount,
+            response.Usage?.OutputTokenCount,
+            requireReplyWhenResolved: true);
     }
 
     /// <inheritdoc />
@@ -168,7 +177,11 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
         }
     }
 
-    private static ThreadResolutionResult ParseResult(string json, long? inputTokens, long? outputTokens)
+    private static ThreadResolutionResult ParseResult(
+        string json,
+        long? inputTokens,
+        long? outputTokens,
+        bool requireReplyWhenResolved = false)
     {
         try
         {
@@ -178,12 +191,23 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
                 return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
             }
 
-            return new ThreadResolutionResult(dto.Resolved, dto.ReplyText, inputTokens, outputTokens);
+            var normalizedReplyText = NormalizeReplyText(dto.ReplyText);
+            if (dto.Resolved && requireReplyWhenResolved && normalizedReplyText is null)
+            {
+                return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
+            }
+
+            return new ThreadResolutionResult(dto.Resolved, normalizedReplyText, inputTokens, outputTokens);
         }
         catch (JsonException)
         {
             return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
         }
+    }
+
+    private static string? NormalizeReplyText(string? replyText)
+    {
+        return string.IsNullOrWhiteSpace(replyText) ? null : replyText.Trim();
     }
 
     private sealed record ResolutionDto(bool Resolved, string? ReplyText);

@@ -614,6 +614,65 @@ public sealed class GitLabCodeReviewPublicationServiceTests
     }
 
     [Fact]
+    public async Task PublishReviewAsync_NormalizesInlineDiscussionPathBeforePosting()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("  /src/file.ts  ", 18, CommentSeverity.Warning, "Guard this null case.")]);
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+
+        var postedBodies = new List<string>();
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(async request =>
+        {
+            if (request.RequestUri!.AbsoluteUri == "https://gitlab.example.com/api/v4/user")
+            {
+                return GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsoluteUri ==
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/versions")
+            {
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new object[]
+                    {
+                        new
+                        {
+                            id = 7, base_commit_sha = "latest-base-sha", head_commit_sha = "latest-head-sha",
+                            start_commit_sha = "latest-start-sha",
+                        },
+                    });
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri ==
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions")
+            {
+                postedBodies.Add(await request.Content!.ReadAsStringAsync());
+                return GitLabTestHelpers.CreateJsonResponse(new { id = "discussion-1" }, HttpStatusCode.Created);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.Equal(2, postedBodies.Count);
+        var inlineBody = postedBodies[1];
+        Assert.Contains("src/file.ts", inlineBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("/src/file.ts", inlineBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("  /src/file.ts  ", inlineBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PublishReviewAsync_HtmlEncodesDiscussionBodiesBeforePosting()
     {
         var clientId = Guid.NewGuid();

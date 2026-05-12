@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
@@ -18,5 +19,7 @@ public interface IAdoCommentPoster
         ReviewResult result,
         Guid? clientId = null,
         IReadOnlyList<PrCommentThread>? existingThreads = null,
+        AzureDevOpsPublicationContext? publicationContext = null,
+        ReviewerIdentity? publicationIdentity = null,
         CancellationToken cancellationToken = default);
 }

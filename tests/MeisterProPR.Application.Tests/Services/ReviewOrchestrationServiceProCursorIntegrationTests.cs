@@ -5,6 +5,7 @@ using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -347,7 +348,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
         await publicationService.DidNotReceiveWithAnyArgs()
-            .PublishReviewAsync(default, default!, default!, default!, default!, default);
+            .PublishReviewAsync(default, default!, default!, default!, default!, default, default);
     }
 
     private static ReviewOrchestrationService CreateService(
@@ -444,7 +445,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<ReviewRevision>(),
                 Arg.Any<ReviewResult>(),
                 Arg.Any<ReviewerIdentity>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
             .Returns(Task.FromResult(ReviewCommentPostingDiagnosticsDto.Empty()));
 
         var threadStatusWriter = Substitute.For<IReviewThreadStatusWriter>();

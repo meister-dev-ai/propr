@@ -14,7 +14,8 @@ namespace MeisterProPR.Api.HealthChecks;
 /// </summary>
 public sealed class RemoteProCursorHealthCheck(
     IHttpClientFactory httpClientFactory,
-    IOptions<ProCursorRemoteOptions> options) : IHealthCheck
+    IOptions<ProCursorRemoteOptions> options,
+    ILogger<RemoteProCursorHealthCheck> logger) : IHealthCheck
 {
     /// <inheritdoc />
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -51,7 +52,13 @@ public sealed class RemoteProCursorHealthCheck(
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return HealthCheckResult.Unhealthy("Remote ProCursor is unavailable.", ex);
+            logger.LogError(
+                "Remote ProCursor health probe failed for {ServiceBaseUrl}{HealthEndpointPath}: {ErrorMessage}",
+                remote.ServiceBaseUrl,
+                requestUri,
+                ex.Message);
+
+            return HealthCheckResult.Unhealthy("Remote ProCursor is unavailable.");
         }
     }
 }

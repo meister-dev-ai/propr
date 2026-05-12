@@ -1,8 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -97,6 +99,155 @@ public class AdoCommentPosterTests
         Assert.False(comment.LineNumber.HasValue && comment.LineNumber.Value > 0);
     }
 
+    [Fact]
+    public void ResolveAnchorContext_UsesCompareIterationForIncrementalInlineAnchor()
+    {
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(
+            comment,
+            iterationId: 7,
+            compareToIterationId: 3,
+            changeTrackingIds);
+
+        Assert.Equal(PublicationAnchorPrecision.Inline, anchor.AnchorPrecision);
+        Assert.Equal("/src/Program.cs", anchor.NormalizedFilePath);
+        Assert.Equal(42, anchor.ResolvedLineNumber);
+        Assert.Equal("177", anchor.ProviderTrackingReference);
+        Assert.Equal("3:7", anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void ResolveAnchorContext_WithoutCompareIteration_OmitsCompareRevisionReference()
+    {
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(
+            comment,
+            iterationId: 7,
+            compareToIterationId: null,
+            changeTrackingIds);
+
+        Assert.Equal(PublicationAnchorPrecision.Inline, anchor.AnchorPrecision);
+        Assert.Equal("/src/Program.cs", anchor.NormalizedFilePath);
+        Assert.Equal(42, anchor.ResolvedLineNumber);
+        Assert.Equal("177", anchor.ProviderTrackingReference);
+        Assert.Null(anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void ResolveAnchorContext_MissingTrackingId_FallsBackToFileAnchor()
+    {
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(
+            comment,
+            iterationId: 7,
+            compareToIterationId: 3,
+            changeTrackingIds: new Dictionary<string, int>());
+
+        Assert.Equal(PublicationAnchorPrecision.File, anchor.AnchorPrecision);
+        Assert.Equal("/src/Program.cs", anchor.NormalizedFilePath);
+        Assert.Null(anchor.ResolvedLineNumber);
+        Assert.Null(anchor.ProviderTrackingReference);
+        Assert.Equal("3:7", anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void BuildThreadContexts_InlineAnchor_UsesComparedIterations()
+    {
+        var anchor = new PublicationAnchorContext(
+            "/src/Program.cs",
+            42,
+            "/src/Program.cs",
+            42,
+            PublicationAnchorPrecision.Inline,
+            ProviderTrackingReference: "177",
+            CompareRevisionReference: "3:7");
+
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.NotNull(threadContext);
+        Assert.Equal("/src/Program.cs", threadContext!.FilePath);
+        Assert.Equal(42, threadContext.RightFileStart!.Line);
+        Assert.Equal(42, threadContext.RightFileEnd!.Line);
+
+        Assert.NotNull(prThreadContext);
+        Assert.Equal(177, prThreadContext!.ChangeTrackingId);
+        Assert.NotNull(prThreadContext.IterationContext);
+        Assert.Equal(3, prThreadContext.IterationContext.FirstComparingIteration);
+        Assert.Equal(7, prThreadContext.IterationContext.SecondComparingIteration);
+    }
+
+    [Fact]
+    public void BuildThreadContexts_InlineAnchorWithoutCompareRevision_OmitsIterationContext()
+    {
+        var anchor = new PublicationAnchorContext(
+            "/src/Program.cs",
+            42,
+            "/src/Program.cs",
+            42,
+            PublicationAnchorPrecision.Inline,
+            ProviderTrackingReference: "177",
+            CompareRevisionReference: null);
+
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.NotNull(threadContext);
+        Assert.Equal("/src/Program.cs", threadContext!.FilePath);
+        Assert.Equal(42, threadContext.RightFileStart!.Line);
+        Assert.Equal(42, threadContext.RightFileEnd!.Line);
+
+        Assert.NotNull(prThreadContext);
+        Assert.Equal(177, prThreadContext!.ChangeTrackingId);
+        Assert.Null(prThreadContext.IterationContext);
+    }
+
+    [Fact]
+    public void BuildThreadContexts_FileFallback_OmitsPrThreadContext()
+    {
+        var anchor = new PublicationAnchorContext(
+            "/src/Program.cs",
+            42,
+            "/src/Program.cs",
+            null,
+            PublicationAnchorPrecision.File,
+            CompareRevisionReference: "3:7");
+
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.NotNull(threadContext);
+        Assert.Equal("/src/Program.cs", threadContext!.FilePath);
+        Assert.Null(threadContext.RightFileStart);
+        Assert.Null(threadContext.RightFileEnd);
+        Assert.Null(prThreadContext);
+    }
+
+    [Fact]
+    public void BuildThreadContexts_PrLevelFallback_OmitsAllAnchorMetadata()
+    {
+        var anchor = new PublicationAnchorContext(
+            null,
+            42,
+            null,
+            null,
+            PublicationAnchorPrecision.PrLevel,
+            CompareRevisionReference: "3:7");
+
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.Null(threadContext);
+        Assert.Null(prThreadContext);
+    }
+
     // T008 — Content-length truncation tests
 
     [Fact]
@@ -134,5 +285,40 @@ public class AdoCommentPosterTests
         Assert.True(result.Length <= AdoCommentPoster.MaxCommentLength);
         // Result should not start mid-word from the overflow
         Assert.DoesNotContain("boundary", result.Split('\n')[0]);
+    }
+
+    [Fact]
+    public void BuildSummaryText_QuotedShellVariables_RemainReadable()
+    {
+        var result = new ReviewResult(
+            "Run dotnet \"$ProCursorDll\" --output \"$ApiDll\" to validate the fix.",
+            []);
+
+        var summary = AdoCommentPoster.BuildSummaryText(result);
+
+        Assert.Contains("dotnet \"$ProCursorDll\" --output \"$ApiDll\"", summary);
+        Assert.DoesNotContain("&quot;", summary);
+    }
+
+    [Theory]
+    [InlineData(CommentSeverity.Error, "ERROR")]
+    [InlineData(CommentSeverity.Warning, "WARNING")]
+    public void FormatInlineCommentBody_UnsafeMarkup_IsNeutralizedWithoutEncodingQuotes(
+        CommentSeverity severity,
+        string expectedPrefix)
+    {
+        var comment = new ReviewComment(
+            "/src/Foo.cs",
+            7,
+            severity,
+            "Use \"$ApiDll\" after removing <script>alert('xss')</script>.");
+
+        var body = AdoCommentPoster.FormatInlineCommentBody(comment);
+
+        Assert.StartsWith($"{expectedPrefix}: ", body, StringComparison.Ordinal);
+        Assert.Contains("\"$ApiDll\"", body);
+        Assert.DoesNotContain("&quot;", body);
+        Assert.Equal(-1, body.IndexOf("<script>", StringComparison.Ordinal));
+        Assert.Contains("<\u200Bscript>", body);
     }
 }
