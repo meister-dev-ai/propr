@@ -69,6 +69,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      security-events: write
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -167,6 +168,22 @@ jobs:
           subject-digest: ${{ steps.build-backend.outputs.digest }}
           push-to-registry: true
 
+      - name: Scan backend image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-backend
+        with:
+          image: ${{ steps.images.outputs.backend }}@${{ steps.build-backend.outputs.digest }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload backend scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-backend.outputs.sarif }}
+          category: backend-image
+
       # ProCursor image
 
       - name: Build and push ProCursor image
@@ -192,6 +209,22 @@ jobs:
           subject-digest: ${{ steps.build-procursor.outputs.digest }}
           push-to-registry: true
 
+      - name: Scan ProCursor image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-procursor
+        with:
+          image: ${{ steps.images.outputs.procursor }}@${{ steps.build-procursor.outputs.digest }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload ProCursor scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-procursor.outputs.sarif }}
+          category: procursor-image
+
       # Frontend image
 
       - name: Build and push frontend image
@@ -216,3 +249,19 @@ jobs:
           subject-name: ${{ steps.images.outputs.frontend }}
           subject-digest: ${{ steps.build-frontend.outputs.digest }}
           push-to-registry: true
+
+      - name: Scan frontend image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-frontend
+        with:
+          image: ${{ steps.images.outputs.frontend }}@${{ steps.build-frontend.outputs.digest }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload frontend scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-frontend.outputs.sarif }}
+          category: frontend-image

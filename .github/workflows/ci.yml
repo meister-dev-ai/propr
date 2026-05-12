@@ -153,6 +153,7 @@ jobs:
     needs: test
     permissions:
       contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -165,9 +166,26 @@ jobs:
           context: .
           file: Dockerfile
           push: false
+          load: true
           tags: meisterpropr:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan backend image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-backend
+        with:
+          image: meisterpropr:ci-${{ github.run_number }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload backend scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-backend.outputs.sarif }}
+          category: backend-image
 
   build-frontend-image:
     name: Build frontend image
@@ -175,6 +193,7 @@ jobs:
     needs: [ test, admin-ui-tests ]
     permissions:
       contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -187,6 +206,23 @@ jobs:
           context: .
           file: admin-ui/Dockerfile
           push: false
+          load: true
           tags: meisterpropr-admin-ui:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan frontend image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-frontend
+        with:
+          image: meisterpropr-admin-ui:ci-${{ github.run_number }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload frontend scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-frontend.outputs.sarif }}
+          category: frontend-image
