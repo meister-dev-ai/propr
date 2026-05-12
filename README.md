@@ -10,6 +10,17 @@
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
 </p>
 
+<p align="center">
+  <a href="https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528">
+    <img src="https://img.shields.io/badge/🏆%20AI%20Dev%20Days%20Hackathon-Best%20Enterprise%20Solution-gold?style=for-the-badge" alt="AI Dev Days Hackathon — Best Enterprise Solution">
+  </a>
+</p>
+
+---
+
+> **🏆 [Best Enterprise Solution — Microsoft AI Dev Days Hackathon](https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528)**
+> Recognised among global teams for helping engineering teams catch security and compliance issues earlier - right inside the PR flow.
+
 ---
 
 Meister DEV's ProPR automates your pull and merge request reviews, ensuring high code quality and security standards without slowing down your team.
