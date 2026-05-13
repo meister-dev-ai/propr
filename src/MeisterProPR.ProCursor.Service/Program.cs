@@ -30,7 +30,6 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddHttpContextAccessor();
 
@@ -105,9 +104,10 @@ try
             options.RuntimeConfigurationTtlSeconds = hostOptions.RuntimeConfigurationTtlSeconds;
         })
         .ValidateDataAnnotations()
-        .Validate(options =>
-            !string.IsNullOrWhiteSpace(options.ProPrBaseUrl)
-            && !string.IsNullOrWhiteSpace(options.SharedKey),
+        .Validate(
+            options =>
+                !string.IsNullOrWhiteSpace(options.ProPrBaseUrl)
+                && !string.IsNullOrWhiteSpace(options.SharedKey),
             "PROCURSOR_PROPR_BASE_URL and PROCURSOR_SHARED_KEY are required for the extracted ProCursor host.")
         .ValidateOnStart();
 
@@ -139,7 +139,7 @@ try
         .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
 
     builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource.AddService(serviceName: "MeisterProPR.ProCursor.Service"))
+        .ConfigureResource(resource => resource.AddService("MeisterProPR.ProCursor.Service"))
         .WithTracing(tracing => tracing
             .AddSource("MeisterProPR.Infrastructure")
             .AddAspNetCoreInstrumentation()
@@ -163,7 +163,7 @@ try
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
-        await Program.ApplyOperationalMigrationsAsync(db);
+        await ApplyOperationalMigrationsAsync(db);
     }
 
     app.UseSerilogRequestLogging(options =>
@@ -177,17 +177,18 @@ try
 
     static Task WriteHealthResponse(HttpContext context, HealthReport report)
     {
-        return context.Response.WriteAsJsonAsync(new
-        {
-            status = report.Status.ToString(),
-            entries = report.Entries.ToDictionary(
-                item => item.Key,
-                item => new
-                {
-                    status = item.Value.Status.ToString(),
-                    description = item.Value.Description,
-                }),
-        });
+        return context.Response.WriteAsJsonAsync(
+            new
+            {
+                status = report.Status.ToString(),
+                entries = report.Entries.ToDictionary(
+                    item => item.Key,
+                    item => new
+                    {
+                        status = item.Value.Status.ToString(),
+                        description = item.Value.Description,
+                    }),
+            });
     }
 
     app.UseAuthentication();

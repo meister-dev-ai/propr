@@ -63,7 +63,7 @@ public sealed class ProPrEmbeddingBroker(
         }
 
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<TResponse>(ProCursorRemoteJson.SerializerOptions, ct))
+        return await response.Content.ReadFromJsonAsync<TResponse>(ProCursorRemoteJson.SerializerOptions, ct)
                ?? throw new InvalidOperationException($"ProPR broker endpoint '{path}' returned an empty payload.");
     }
 
@@ -99,13 +99,13 @@ public sealed class ProPrEmbeddingBroker(
 
         if ((int)response.StatusCode >= 500)
         {
-            throw new ProCursorDependencyUnavailableException(
-                $"The configured ProPR broker returned upstream status {(int)response.StatusCode}.");
+            throw new ProCursorDependencyUnavailableException($"The configured ProPR broker returned upstream status {(int)response.StatusCode}.");
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-            ? $"ProPR broker request failed with status {(int)response.StatusCode}."
-            : body);
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(body)
+                ? $"ProPR broker request failed with status {(int)response.StatusCode}."
+                : body);
     }
 }

@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -53,14 +52,14 @@ internal sealed class ForgejoPullRequestFetcher(
             cancellationToken);
         var isDeltaReview = compareToIterationId.HasValue || compareToReviewRevision is not null;
         var deltaChangedFilesResponse = await this.TryGetDeltaFilesAsync(
-                                        context,
-                                        host,
-                                        repositoryPath,
-                                        pullRequest,
-                                        changedFilesResponse,
-                                        compareToReviewRevision,
-                                        cancellationToken)
-                                    ?? changedFilesResponse;
+                                            context,
+                                            host,
+                                            repositoryPath,
+                                            pullRequest,
+                                            changedFilesResponse,
+                                            compareToReviewRevision,
+                                            cancellationToken)
+                                        ?? changedFilesResponse;
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
@@ -560,9 +559,7 @@ internal sealed class ForgejoPullRequestFetcher(
         string? PreviousFileName,
         [property: JsonPropertyName("patch")] string? Patch);
 
-    private sealed record ForgejoCompareResponse(
-        [property: JsonPropertyName("files")]
-        IReadOnlyList<ForgejoPullRequestFileResponse>? Files);
+    private sealed record ForgejoCompareResponse([property: JsonPropertyName("files")] IReadOnlyList<ForgejoPullRequestFileResponse>? Files);
 
     private sealed record ForgejoContentResponse(
         [property: JsonPropertyName("content")]

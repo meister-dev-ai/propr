@@ -37,10 +37,11 @@ public sealed class PrCrawlServiceTests
 
     private readonly IAssignedReviewDiscoveryService _prFetcher = Substitute.For<IAssignedReviewDiscoveryService>();
 
+    private readonly IReviewPrScanRepository _prScanRepository = Substitute.For<IReviewPrScanRepository>();
+
     private readonly IProviderActivationService _providerActivationService =
         Substitute.For<IProviderActivationService>();
 
-    private readonly IReviewPrScanRepository _prScanRepository = Substitute.For<IReviewPrScanRepository>();
     private readonly IPrStatusFetcher _statusFetcher = Substitute.For<IPrStatusFetcher>();
     private readonly PrCrawlService _sut;
     private readonly IThreadMemoryService _threadMemoryService = Substitute.For<IThreadMemoryService>();
@@ -68,8 +69,7 @@ public sealed class PrCrawlServiceTests
         this._clientRegistry.GetReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
             .Returns(defaultReviewer);
         this._clientRegistry.GetEffectiveReviewerIdentityAsync(DefaultConfig.ClientId, Arg.Any<ProviderHostRef>(), Arg.Any<CancellationToken>())
-            .Returns(
-                defaultReviewer);
+            .Returns(defaultReviewer);
     }
 
     private static AssignedCodeReviewRef MakePr(

@@ -10,9 +10,7 @@ using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Api.Features.ProCursor.Controllers;
 

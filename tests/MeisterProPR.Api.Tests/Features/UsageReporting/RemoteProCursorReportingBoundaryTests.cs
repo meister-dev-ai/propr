@@ -16,13 +16,14 @@ public sealed class RemoteProCursorReportingBoundaryTests
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["DB_CONNECTION_STRING"] = "Host=localhost;Database=propr;Username=test;Password=test",
-                ["PROCURSOR_REMOTE_MODE"] = "proprManagedRemote",
-                ["PROCURSOR_SERVICE_BASE_URL"] = "http://procursor.internal:8080",
-                ["PROCURSOR_SHARED_KEY"] = "shared-test-key",
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["DB_CONNECTION_STRING"] = "Host=localhost;Database=propr;Username=test;Password=test",
+                    ["PROCURSOR_REMOTE_MODE"] = "proprManagedRemote",
+                    ["PROCURSOR_SERVICE_BASE_URL"] = "http://procursor.internal:8080",
+                    ["PROCURSOR_SHARED_KEY"] = "shared-test-key",
+                })
             .Build();
 
         services.AddOptions();

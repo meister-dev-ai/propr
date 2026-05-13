@@ -144,7 +144,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), "gpt-4o");
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);
@@ -427,8 +427,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             .Returns(pr);
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(
-                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1")));
+            .Returns(Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1")));
 
         var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, clientRegistry, prScanRepository);
 
@@ -437,7 +436,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         await orchestrator.DidNotReceiveWithAnyArgs()
             .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
         await commentPoster.DidNotReceiveWithAnyArgs()
-            .PublishReviewAsync(Guid.Empty, null!, null!, null!, null!, Arg.Any<CancellationToken>(), null!);
+            .PublishReviewAsync(Guid.Empty, null!, null!, null!, null!, Arg.Any<CancellationToken>());
         await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
     }
 }

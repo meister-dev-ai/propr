@@ -32,7 +32,7 @@ public sealed partial class WebhookReviewActivationService(
             ct);
 
         var result = await submitReviewJobHandler.HandleAsync(
-                new SubmitReviewJobCommand(
+            new SubmitReviewJobCommand(
                 configuration.ClientId,
                 new SubmitReviewJobRequestDto(
                     configuration.OrganizationUrl,

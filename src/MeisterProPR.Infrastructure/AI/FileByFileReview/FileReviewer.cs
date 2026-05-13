@@ -3,7 +3,6 @@
 
 using System.Text;
 using System.Text.Json;
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -14,7 +13,6 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -67,7 +65,7 @@ internal sealed partial class FileReviewer(
 
         var (tierClient, tierModelId) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
-        Guid? protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
+        var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
 
         ReviewSystemContext? fileContext = null;
 
@@ -129,15 +127,6 @@ internal sealed partial class FileReviewer(
             throw;
         }
     }
-
-    private sealed record ReviewResultPipelineState(
-        ReviewJob Job,
-        ChangedFile File,
-        PullRequest FilePullRequest,
-        ReviewFileResult FileResult,
-        ReviewSystemContext FileContext,
-        Guid? ProtocolId,
-        IReadOnlyList<InvariantFact> InvariantFacts);
 
     private async Task<ReviewFileResult> InitializeFileResultAsync(
         ReviewJob job,
@@ -689,18 +678,20 @@ internal sealed partial class FileReviewer(
         {
             builder.Append(' ');
             builder.Append(summaryOnlyCount);
-            builder.Append(summaryOnlyCount == 1
-                ? " candidate finding was withheld pending stronger evidence."
-                : " candidate findings were withheld pending stronger evidence.");
+            builder.Append(
+                summaryOnlyCount == 1
+                    ? " candidate finding was withheld pending stronger evidence."
+                    : " candidate findings were withheld pending stronger evidence.");
         }
 
         if (dropCount > 0)
         {
             builder.Append(' ');
             builder.Append(dropCount);
-            builder.Append(dropCount == 1
-                ? " candidate finding was dropped by deterministic verification."
-                : " candidate findings were dropped by deterministic verification.");
+            builder.Append(
+                dropCount == 1
+                    ? " candidate finding was dropped by deterministic verification."
+                    : " candidate findings were dropped by deterministic verification.");
         }
     }
 
@@ -778,4 +769,12 @@ internal sealed partial class FileReviewer(
         return downgradedCount;
     }
 
+    private sealed record ReviewResultPipelineState(
+        ReviewJob Job,
+        ChangedFile File,
+        PullRequest FilePullRequest,
+        ReviewFileResult FileResult,
+        ReviewSystemContext FileContext,
+        Guid? ProtocolId,
+        IReadOnlyList<InvariantFact> InvariantFacts);
 }

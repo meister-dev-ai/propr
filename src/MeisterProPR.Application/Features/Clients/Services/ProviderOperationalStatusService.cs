@@ -153,8 +153,8 @@ public sealed class ProviderOperationalStatusService(
         }
 
         var preserveDetailedVerificationError = string.IsNullOrWhiteSpace(connection.LastVerificationFailureCategory)
-                                              || connection.ProviderFamily != ScmProvider.GitHub
-                                              || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation;
+                                                || connection.ProviderFamily != ScmProvider.GitHub
+                                                || connection.AuthenticationKind != ScmAuthenticationKind.AppInstallation;
 
         var baseReason = string.IsNullOrWhiteSpace(connection.LastVerificationError) || !preserveDetailedVerificationError
             ? readinessReason

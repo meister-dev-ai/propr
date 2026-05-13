@@ -4,7 +4,6 @@
 using MeisterProPR.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace MeisterProPR.ProCursor.Persistence.Migrations;
 
@@ -96,7 +95,8 @@ public sealed class ProCursorOperationalDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("ToSymbolKey").HasColumnType("text").HasColumnName("to_symbol_key");
             b.HasKey("Id");
             b.HasIndex("SnapshotId", "FromSymbolKey").HasDatabaseName("ix_procursor_symbol_edges_snapshot_from_symbol");
-            b.HasIndex("SnapshotId", "FromSymbolKey", "ToSymbolKey", "EdgeKind", "FilePath", "LineStart", "LineEnd").HasDatabaseName("ix_procursor_symbol_edges_snapshot_relation");
+            b.HasIndex("SnapshotId", "FromSymbolKey", "ToSymbolKey", "EdgeKind", "FilePath", "LineStart", "LineEnd")
+                .HasDatabaseName("ix_procursor_symbol_edges_snapshot_relation");
             b.ToTable("procursor_symbol_edges", (string?)null);
         });
 
@@ -141,7 +141,8 @@ public sealed class ProCursorOperationalDbContextModelSnapshot : ModelSnapshot
             b.Property<string?>("ResourceId").HasColumnType("character varying(200)").HasMaxLength(200).HasColumnName("resource_id");
             b.Property<string?>("SafeMetadataJson").HasColumnType("jsonb").HasColumnName("safe_metadata_json");
             b.Property<string?>("SourcePath").HasColumnType("character varying(500)").HasMaxLength(500).HasColumnName("source_path");
-            b.Property<string>("SourceDisplayNameSnapshot").HasColumnType("character varying(200)").HasMaxLength(200).HasColumnName("source_display_name_snapshot");
+            b.Property<string>("SourceDisplayNameSnapshot").HasColumnType("character varying(200)").HasMaxLength(200)
+                .HasColumnName("source_display_name_snapshot");
             b.Property<string>("TokenizerName").HasColumnType("character varying(50)").HasMaxLength(50).HasColumnName("tokenizer_name");
             b.Property<long>("TotalTokens").HasColumnName("total_tokens");
             b.Property<bool>("TokensEstimated").HasColumnName("tokens_estimated");
@@ -168,13 +169,17 @@ public sealed class ProCursorOperationalDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("ModelName").HasColumnType("character varying(200)").HasMaxLength(200).HasColumnName("model_name");
             b.Property<long>("PromptTokens").HasColumnName("prompt_tokens");
             b.Property<Guid?>("ProCursorSourceId").HasColumnName("procursor_source_id");
-            b.Property<string?>("SourceDisplayNameSnapshot").HasColumnType("character varying(200)").HasMaxLength(200).HasColumnName("source_display_name_snapshot");
+            b.Property<string?>("SourceDisplayNameSnapshot").HasColumnType("character varying(200)").HasMaxLength(200)
+                .HasColumnName("source_display_name_snapshot");
             b.Property<long>("TotalTokens").HasColumnName("total_tokens");
             b.HasKey("Id");
             b.HasIndex("ClientId", "Granularity", "BucketStartDate").HasDatabaseName("ix_procursor_token_usage_rollups_client_granularity_bucket");
-            b.HasIndex("ClientId", "ModelName", "Granularity", "BucketStartDate").HasDatabaseName("ix_procursor_token_usage_rollups_client_model_granularity_bucket");
-            b.HasIndex("ClientId", "ProCursorSourceId", "BucketStartDate", "Granularity", "ModelName").IsUnique().HasDatabaseName("ux_procursor_token_usage_rollups_scope");
-            b.HasIndex("ClientId", "ProCursorSourceId", "Granularity", "BucketStartDate").HasDatabaseName("ix_procursor_token_usage_rollups_source_granularity_bucket");
+            b.HasIndex("ClientId", "ModelName", "Granularity", "BucketStartDate")
+                .HasDatabaseName("ix_procursor_token_usage_rollups_client_model_granularity_bucket");
+            b.HasIndex("ClientId", "ProCursorSourceId", "BucketStartDate", "Granularity", "ModelName").IsUnique()
+                .HasDatabaseName("ux_procursor_token_usage_rollups_scope");
+            b.HasIndex("ClientId", "ProCursorSourceId", "Granularity", "BucketStartDate")
+                .HasDatabaseName("ix_procursor_token_usage_rollups_source_granularity_bucket");
             b.ToTable("procursor_token_usage_rollups", (string?)null);
         });
 #pragma warning restore 612, 618

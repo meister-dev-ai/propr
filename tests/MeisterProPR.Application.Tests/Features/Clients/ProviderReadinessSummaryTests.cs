@@ -164,7 +164,11 @@ public sealed class ProviderReadinessSummaryTests
                         "selfHosted",
                         "GitHub App still needs automatic workflow proof.",
                         ["GitHub App automatic workflow proof is not yet marked workflow-complete."],
-                        [new ProviderReadinessCriterionResult("profile.automaticWorkflow", "hostVariant", "unsatisfied", "GitHub App automatic workflow proof is not yet marked workflow-complete.")])));
+                        [
+                            new ProviderReadinessCriterionResult(
+                                "profile.automaticWorkflow", "hostVariant", "unsatisfied",
+                                "GitHub App automatic workflow proof is not yet marked workflow-complete."),
+                        ])));
         readinessEvaluator.EvaluateAsync(
                 clientId,
                 Arg.Is<ClientScmConnectionDto>(connection => connection.Id == patConnectionId),

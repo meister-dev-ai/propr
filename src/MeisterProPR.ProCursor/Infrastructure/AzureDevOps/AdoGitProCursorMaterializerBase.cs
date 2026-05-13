@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -26,10 +27,11 @@ public abstract class AdoGitProCursorMaterializerBase(
     private readonly TimeSpan _workspaceRetention =
         TimeSpan.FromMinutes(Math.Max(1, options.Value.TempWorkspaceRetentionMinutes));
 
-    private Guid? _activeSourceId;
-    private Guid? _activeTrackedBranchId;
     private string? _activeCommitSha;
     private ProCursorScmMaterializationResponse? _activeMaterialization;
+
+    private Guid? _activeSourceId;
+    private Guid? _activeTrackedBranchId;
 
     /// <inheritdoc />
     public abstract ProCursorSourceKind SourceKind { get; }
@@ -258,7 +260,7 @@ public abstract class AdoGitProCursorMaterializerBase(
             source.OrganizationScopeId,
             string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
                 ? null
-                : new MeisterProPR.Application.DTOs.AzureDevOps.CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
+                : new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
             source.SourceDisplayName);
     }
 

@@ -19,7 +19,7 @@ public sealed class ClaimDescriptorTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: ClaimDescriptor.CodeContractFamily,
+            ClaimDescriptor.CodeContractFamily,
             anchorFilePath: "src/Foo.cs",
             anchorLineNumber: 12);
 
@@ -39,7 +39,7 @@ public sealed class ClaimDescriptorTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: ClaimDescriptor.CodeContractFamily,
+            ClaimDescriptor.CodeContractFamily,
             anchorLineNumber: 0));
     }
 
@@ -54,6 +54,6 @@ public sealed class ClaimDescriptorTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: string.Empty));
+            string.Empty));
     }
 }

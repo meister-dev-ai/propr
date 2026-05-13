@@ -13,9 +13,11 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
 {
     private static readonly Regex IdentifierInBackticksRegex = new("`(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)`", RegexOptions.Compiled);
+
     private static readonly Regex NamedProgramElementRegex = new(
         "\\b(?:method|function|helper|symbol|class|type|property|field|namespace)\\s+(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)\\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex MissingIdentifierRegex = new(
         "\\b(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)\\b\\s+(?:is|are)\\s+missing\\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -44,13 +46,13 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
                 finding.Severity,
                 DetermineVerificationMode(claimKind, claimFamily),
                 claimFamily,
-                subjectKind: DetermineSubjectKind(claimFamily, subjectIdentifier),
-                subjectIdentifier: subjectIdentifier,
-                anchorFilePath: finding.FilePath,
-                anchorLineNumber: finding.LineNumber,
-                requiresCrossFileEvidence: string.Equals(claimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal),
-                requiresSymbolEvidence: string.Equals(claimFamily, ClaimDescriptor.ApiOrSymbolUsageFamily, StringComparison.Ordinal) &&
-                                        !string.IsNullOrWhiteSpace(subjectIdentifier)),
+                DetermineSubjectKind(claimFamily, subjectIdentifier),
+                subjectIdentifier,
+                finding.FilePath,
+                finding.LineNumber,
+                string.Equals(claimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal),
+                string.Equals(claimFamily, ClaimDescriptor.ApiOrSymbolUsageFamily, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(subjectIdentifier)),
         ];
     }
 

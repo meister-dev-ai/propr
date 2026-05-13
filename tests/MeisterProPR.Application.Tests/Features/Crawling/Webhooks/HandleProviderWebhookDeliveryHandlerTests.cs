@@ -88,19 +88,19 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 reviewer,
                 Arg.Any<CancellationToken>())
             .Returns(
-                [
-                    new ReviewDiscoveryItemDto(
-                        ScmProvider.AzureDevOps,
-                        repository,
-                        review,
-                        CodeReviewState.Open,
-                        null,
-                        reviewer,
-                        "PR 42",
-                        null,
-                        "feature/test",
-                        "main"),
-                ]);
+            [
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"),
+            ]);
         queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
             .Returns(new ReviewRevision("head-sha", "base-sha", null, "7", "base-sha...head-sha"));
         synchronizationService.SynchronizeAsync(
@@ -323,8 +323,8 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                     && request.Repository.OwnerOrNamespace == "project-guid"
                     && request.Repository.ProjectPath == "project-guid"
                     && request.CodeReview != null
-                        && request.CodeReview.Repository.ExternalRepositoryId == "repo-guid"
-                        && request.CodeReview.Repository.ProjectPath == "project-guid"),
+                    && request.CodeReview.Repository.ExternalRepositoryId == "repo-guid"
+                    && request.CodeReview.Repository.ProjectPath == "project-guid"),
                 Arg.Any<CancellationToken>());
         await queryService.Received(1)
             .GetLatestRevisionAsync(configuration.ClientId, canonicalReview, Arg.Any<CancellationToken>());
@@ -609,19 +609,19 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 reviewer,
                 Arg.Any<CancellationToken>())
             .Returns(
-                [
-                    new ReviewDiscoveryItemDto(
-                        ScmProvider.Forgejo,
-                        repository,
-                        review,
-                        CodeReviewState.Open,
-                        refreshedRevision,
-                        reviewer,
-                        "PR 1",
-                        null,
-                        "feature/test-branch",
-                        "main"),
-                ]);
+            [
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.Forgejo,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    refreshedRevision,
+                    reviewer,
+                    "PR 1",
+                    null,
+                    "feature/test-branch",
+                    "main"),
+            ]);
         queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
             .Returns(refreshedRevision);
         synchronizationService.SynchronizeAsync(
@@ -755,19 +755,19 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 configuredReviewer,
                 Arg.Any<CancellationToken>())
             .Returns(
-                [
-                    new ReviewDiscoveryItemDto(
-                        ScmProvider.GitHub,
-                        repository,
-                        new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4300", 43),
-                        CodeReviewState.Open,
-                        new ReviewRevision("other-head", "other-base", null, "other-head", "other-base...other-head"),
-                        otherReviewer,
-                        "Different pull request",
-                        "https://github.com/acme/propr/pull/43",
-                        "feature/other",
-                        "main"),
-                ]);
+            [
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.GitHub,
+                    repository,
+                    new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4300", 43),
+                    CodeReviewState.Open,
+                    new ReviewRevision("other-head", "other-base", null, "other-head", "other-base...other-head"),
+                    otherReviewer,
+                    "Different pull request",
+                    "https://github.com/acme/propr/pull/43",
+                    "feature/other",
+                    "main"),
+            ]);
         deliveryLogRepository.AddAsync(
                 default,
                 default,
@@ -923,7 +923,7 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
 
         await queryService.Received(1).GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>());
         await reviewDiscoveryProvider.DidNotReceiveWithAnyArgs()
-            .ListOpenReviewsAsync(default, default!, default, default);
+            .ListOpenReviewsAsync(default, default!, default);
         await synchronizationService.Received(1)
             .SynchronizeAsync(
                 Arg.Is<PullRequestSynchronizationRequest>(request =>

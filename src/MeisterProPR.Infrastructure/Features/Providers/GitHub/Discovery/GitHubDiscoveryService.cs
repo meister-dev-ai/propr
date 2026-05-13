@@ -130,7 +130,7 @@ internal sealed class GitHubDiscoveryService(
         }
 
         var discoveredRepositories = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubRepositoryResponse>>(ct)
-                                   ?? [];
+                                     ?? [];
 
         return discoveredRepositories
             .Where(repository => !string.IsNullOrWhiteSpace(repository.FullName) &&
@@ -163,13 +163,11 @@ internal sealed class GitHubDiscoveryService(
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException(
-                    $"GitHub installation repository discovery failed with status {(int)response.StatusCode}.");
+                throw new InvalidOperationException($"GitHub installation repository discovery failed with status {(int)response.StatusCode}.");
             }
 
             var payload = await response.Content.ReadFromJsonAsync<GitHubInstallationRepositoriesResponse>(ct)
-                          ?? throw new InvalidOperationException(
-                              "GitHub installation repository discovery returned an empty payload.");
+                          ?? throw new InvalidOperationException("GitHub installation repository discovery returned an empty payload.");
 
             if (payload.Repositories.Count == 0)
             {

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -22,36 +23,6 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
     private readonly Dictionary<Guid, CacheEntry> _sourcesById = [];
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(Math.Max(1, hostOptions.Value.RuntimeConfigurationTtlSeconds));
     private DateTimeOffset? _lastFullRefreshAtUtc;
-
-    public async Task WarmAsync(CancellationToken ct = default)
-    {
-        var projections = await runtimeConfigurationBroker.ListEnabledAsync(ct);
-        var refreshedEntries = projections
-            .Select(projection => new CacheEntry(MapSource(projection.Source), projection.ProjectionVersion, projection.FetchedAt))
-            .ToList();
-
-        lock (this._lock)
-        {
-            this._sourcesById.Clear();
-            foreach (var entry in refreshedEntries)
-            {
-                this._sourcesById[entry.Source.Id] = entry;
-            }
-
-            this._lastFullRefreshAtUtc = DateTimeOffset.UtcNow;
-        }
-    }
-
-    public Task InvalidateAsync(Guid sourceId, CancellationToken ct = default)
-    {
-        lock (this._lock)
-        {
-            this._sourcesById.Remove(sourceId);
-            this._lastFullRefreshAtUtc = null;
-        }
-
-        return Task.CompletedTask;
-    }
 
     public async Task<IReadOnlyList<ProCursorKnowledgeSource>> ListEnabledAsync(CancellationToken ct = default)
     {
@@ -188,6 +159,36 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
         }
     }
 
+    public async Task WarmAsync(CancellationToken ct = default)
+    {
+        var projections = await runtimeConfigurationBroker.ListEnabledAsync(ct);
+        var refreshedEntries = projections
+            .Select(projection => new CacheEntry(MapSource(projection.Source), projection.ProjectionVersion, projection.FetchedAt))
+            .ToList();
+
+        lock (this._lock)
+        {
+            this._sourcesById.Clear();
+            foreach (var entry in refreshedEntries)
+            {
+                this._sourcesById[entry.Source.Id] = entry;
+            }
+
+            this._lastFullRefreshAtUtc = DateTimeOffset.UtcNow;
+        }
+    }
+
+    public Task InvalidateAsync(Guid sourceId, CancellationToken ct = default)
+    {
+        lock (this._lock)
+        {
+            this._sourcesById.Remove(sourceId);
+            this._lastFullRefreshAtUtc = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private async Task EnsureAllFreshAsync(CancellationToken ct)
     {
         var shouldRefresh = false;
@@ -300,37 +301,38 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
 
     private static ProCursorKnowledgeSource Clone(ProCursorKnowledgeSource source)
     {
-        return MapSource(new ProCursorKnowledgeSourceDto(
-            source.Id,
-            source.ClientId,
-            source.DisplayName,
-            source.SourceKind,
-            source.ProviderScopePath,
-            source.ProviderProjectKey,
-            source.RepositoryId,
-            source.DefaultBranch,
-            source.RootPath,
-            source.IsEnabled,
-            source.SymbolMode,
-            null,
-            source.TrackedBranches
-                .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase)
-                .Select(branch => new ProCursorTrackedBranchDto(
-                    branch.Id,
-                    branch.BranchName,
-                    branch.RefreshTriggerMode,
-                    branch.MiniIndexEnabled,
-                    branch.LastSeenCommitSha,
-                    branch.LastIndexedCommitSha,
-                    branch.IsEnabled,
-                    "unknown"))
-                .ToList()
-                .AsReadOnly(),
-            source.OrganizationScopeId,
-            string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
-                ? null
-                : new MeisterProPR.Application.DTOs.AzureDevOps.CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
-            source.SourceDisplayName));
+        return MapSource(
+            new ProCursorKnowledgeSourceDto(
+                source.Id,
+                source.ClientId,
+                source.DisplayName,
+                source.SourceKind,
+                source.ProviderScopePath,
+                source.ProviderProjectKey,
+                source.RepositoryId,
+                source.DefaultBranch,
+                source.RootPath,
+                source.IsEnabled,
+                source.SymbolMode,
+                null,
+                source.TrackedBranches
+                    .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase)
+                    .Select(branch => new ProCursorTrackedBranchDto(
+                        branch.Id,
+                        branch.BranchName,
+                        branch.RefreshTriggerMode,
+                        branch.MiniIndexEnabled,
+                        branch.LastSeenCommitSha,
+                        branch.LastIndexedCommitSha,
+                        branch.IsEnabled,
+                        "unknown"))
+                    .ToList()
+                    .AsReadOnly(),
+                source.OrganizationScopeId,
+                string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
+                    ? null
+                    : new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
+                source.SourceDisplayName));
     }
 
     private sealed record CacheEntry(ProCursorKnowledgeSource Source, string ProjectionVersion, DateTimeOffset LoadedAt);

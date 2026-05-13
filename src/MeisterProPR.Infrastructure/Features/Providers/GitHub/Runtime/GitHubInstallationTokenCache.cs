@@ -1,16 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Linq;
-
 namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Runtime;
 
 internal sealed class GitHubInstallationTokenCache
 {
     private const int MaxEntries = 128;
     private static readonly TimeSpan RefreshBuffer = TimeSpan.FromMinutes(5);
-    private readonly object _sync = new();
     private readonly Dictionary<string, CachedTokenEntry> _entries = new(StringComparer.Ordinal);
+    private readonly object _sync = new();
 
     public bool TryGet(string key, out string token)
     {

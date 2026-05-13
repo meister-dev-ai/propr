@@ -264,7 +264,6 @@ public sealed class PullRequestSynchronizationServiceTests
                 StringComparison.OrdinalIgnoreCase));
         await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
         await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
-
     }
 
     [Fact]

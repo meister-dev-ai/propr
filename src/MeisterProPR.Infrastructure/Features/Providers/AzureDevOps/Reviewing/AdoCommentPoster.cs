@@ -18,12 +18,11 @@ public sealed class AdoCommentPoster(
     IClientScmConnectionRepository connectionRepository,
     IThreadMemoryService? threadMemoryService = null) : IAdoCommentPoster
 {
-    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
-
     /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
     internal const int MaxCommentLength = 30_000;
 
     private const double FallbackDuplicateSimilarityThreshold = 0.72;
+    private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
     public async Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         string organizationUrl,

@@ -129,7 +129,7 @@ public sealed class DeterministicReviewFindingGateTests
             "Missing DI registration in multiple files.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily,
+            ClaimDescriptor.CrossFileConsistencyFamily,
             requiresCrossFileEvidence: true);
 
         var outcome = new VerificationOutcome(
@@ -172,7 +172,7 @@ public sealed class DeterministicReviewFindingGateTests
             "Missing DI registration in multiple files.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily,
+            ClaimDescriptor.CrossFileConsistencyFamily,
             requiresCrossFileEvidence: true);
 
         var outcome = new VerificationOutcome(

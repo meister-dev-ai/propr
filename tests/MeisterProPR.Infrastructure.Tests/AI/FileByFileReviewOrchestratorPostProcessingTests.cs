@@ -4,7 +4,6 @@
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 

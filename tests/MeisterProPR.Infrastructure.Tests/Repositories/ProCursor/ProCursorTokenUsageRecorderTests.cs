@@ -3,8 +3,6 @@
 
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 

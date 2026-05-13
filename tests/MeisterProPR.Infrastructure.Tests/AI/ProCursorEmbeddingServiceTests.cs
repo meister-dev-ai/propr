@@ -49,9 +49,9 @@ public sealed class ProCursorEmbeddingServiceTests
                 capturedDimensions = (int?)callInfo[2];
                 return new ProCursorEmbeddingBatchResponse(
                     [firstVector, secondVector],
-                    PromptTokens: 2,
-                    CompletionTokens: 0,
-                    TotalTokens: 2);
+                    2,
+                    0,
+                    2);
             });
 
         var options = Microsoft.Extensions.Options.Options.Create(

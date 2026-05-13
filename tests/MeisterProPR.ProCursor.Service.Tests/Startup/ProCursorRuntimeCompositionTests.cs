@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.ProCursor.Infrastructure.Remote;
+using MeisterProPR.ProCursor.Service.Tests.Support;
 using MeisterProPR.ProCursor.Workers;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,7 +32,7 @@ public sealed class ProCursorRuntimeCompositionTests
     [Fact]
     public void ProCursorServiceHost_ResolvesProCursorOwnedGatewayAndWorkers()
     {
-        using var factory = new Support.ProCursorServiceFactory();
+        using var factory = new ProCursorServiceFactory();
         using var scope = factory.Services.CreateScope();
 
         var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();

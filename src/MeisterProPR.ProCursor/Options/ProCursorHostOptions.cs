@@ -32,5 +32,4 @@ public sealed class ProCursorHostOptions
     /// </summary>
     [Range(1, int.MaxValue)]
     public int RuntimeConfigurationTtlSeconds { get; set; } = 300;
-
 }

@@ -106,7 +106,7 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             [WebhookEventType.PullRequestCreated, WebhookEventType.PullRequestUpdated],
             null,
             CancellationToken.None,
-            reviewTemperature: 0.15f);
+            0.15f);
 
         var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
 
@@ -138,8 +138,8 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             null,
             this._clientId,
             CancellationToken.None,
-            reviewTemperature: 0.35f,
-            shouldUpdateReviewTemperature: true);
+            0.35f,
+            true);
 
         var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
         var fetched = await this._configRepo.GetByIdAsync(created.Id, CancellationToken.None);
@@ -163,7 +163,7 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             [WebhookEventType.PullRequestCreated],
             null,
             CancellationToken.None,
-            reviewTemperature: 0.35f);
+            0.35f);
 
         var updated = await this._configRepo.UpdateAsync(
             created.Id,
@@ -171,8 +171,8 @@ public sealed class WebhookConfigurationRepositoryTests(PostgresContainerFixture
             null,
             this._clientId,
             CancellationToken.None,
-            reviewTemperature: null,
-            shouldUpdateReviewTemperature: true);
+            null,
+            true);
 
         var stored = await this._dbContext.WebhookConfigurations.SingleAsync(config => config.Id == created.Id);
         var fetched = await this._configRepo.GetByIdAsync(created.Id, CancellationToken.None);

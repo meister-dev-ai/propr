@@ -48,12 +48,14 @@ public sealed class ReviewContextEvidenceCollectorTests
 
         Assert.True(bundle.HasProCursorAttempt);
         Assert.Equal(EvidenceAttemptRecord.EmptyStatus, bundle.ProCursorResultStatus);
-        Assert.Contains(bundle.EvidenceAttempts, attempt =>
-            attempt.SourceFamily == EvidenceAttemptRecord.FileContentSource &&
-            attempt.Status == EvidenceAttemptRecord.EmptyStatus);
-        Assert.Contains(bundle.EvidenceAttempts, attempt =>
-            attempt.SourceFamily == EvidenceAttemptRecord.ProCursorKnowledgeSource &&
-            attempt.Status == EvidenceAttemptRecord.EmptyStatus);
+        Assert.Contains(
+            bundle.EvidenceAttempts, attempt =>
+                attempt.SourceFamily == EvidenceAttemptRecord.FileContentSource &&
+                attempt.Status == EvidenceAttemptRecord.EmptyStatus);
+        Assert.Contains(
+            bundle.EvidenceAttempts, attempt =>
+                attempt.SourceFamily == EvidenceAttemptRecord.ProCursorKnowledgeSource &&
+                attempt.Status == EvidenceAttemptRecord.EmptyStatus);
     }
 
     [Fact]
@@ -120,8 +122,9 @@ public sealed class ReviewContextEvidenceCollectorTests
 
         Assert.True(bundle.HasProCursorAttempt);
         Assert.Equal(EvidenceAttemptRecord.UnavailableStatus, bundle.ProCursorResultStatus);
-        Assert.Contains(bundle.EvidenceAttempts, attempt =>
-            attempt.SourceFamily == EvidenceAttemptRecord.ProCursorKnowledgeSource &&
-            attempt.Status == EvidenceAttemptRecord.UnavailableStatus);
+        Assert.Contains(
+            bundle.EvidenceAttempts, attempt =>
+                attempt.SourceFamily == EvidenceAttemptRecord.ProCursorKnowledgeSource &&
+                attempt.Status == EvidenceAttemptRecord.UnavailableStatus);
     }
 }

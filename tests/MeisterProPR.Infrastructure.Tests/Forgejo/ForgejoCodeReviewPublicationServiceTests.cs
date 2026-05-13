@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -62,7 +63,7 @@ public sealed class ForgejoPublicationContextContractTests
                     ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
                 "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews" =>
                     ForgejoTestHelpers.CreateJsonResponse(new { id = 9001 }),
-                _ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
             });
 
         var sut = new ForgejoCodeReviewPublicationService(

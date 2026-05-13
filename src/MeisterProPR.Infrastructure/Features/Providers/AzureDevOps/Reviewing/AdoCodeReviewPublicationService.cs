@@ -73,7 +73,7 @@ internal sealed class AdoCodeReviewPublicationService(
                     publicationContext?.ExistingThreads,
                     publicationContext?.GetProviderSpecificContext<AzureDevOpsPublicationContext>(),
                     publicationContext?.AuthorizedPublicationIdentity,
-                    cancellationToken: ct);
+                    ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

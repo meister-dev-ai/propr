@@ -17,7 +17,7 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    Microsoft.Extensions.Options.IOptions<ProCursorRemoteOptions> remoteOptions)
+    IOptions<ProCursorRemoteOptions> remoteOptions)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     /// <inheritdoc />
@@ -43,8 +43,10 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, "procursor-service")],
             ProCursorSharedKeyAuthenticationDefaults.Scheme);
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(
-            new ClaimsPrincipal(identity),
-            ProCursorSharedKeyAuthenticationDefaults.Scheme)));
+        return Task.FromResult(
+            AuthenticateResult.Success(
+                new AuthenticationTicket(
+                    new ClaimsPrincipal(identity),
+                    ProCursorSharedKeyAuthenticationDefaults.Scheme)));
     }
 }

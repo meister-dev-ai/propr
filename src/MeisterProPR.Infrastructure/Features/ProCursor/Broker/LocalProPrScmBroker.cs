@@ -6,7 +6,6 @@ using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Wiki.WebApi;
 using Microsoft.VisualStudio.Services.WebApi;
@@ -167,8 +166,7 @@ public sealed class LocalProPrScmBroker(
                        || string.Equals(candidate.Name, canonicalWikiId, StringComparison.OrdinalIgnoreCase)
                        || (!string.IsNullOrWhiteSpace(source.SourceDisplayName)
                            && string.Equals(candidate.Name, source.SourceDisplayName, StringComparison.OrdinalIgnoreCase)))
-                   ?? throw new InvalidOperationException(
-                       $"Unable to resolve the backing repository for wiki source {source.Id}.");
+                   ?? throw new InvalidOperationException($"Unable to resolve the backing repository for wiki source {source.Id}.");
 
         return wiki.RepositoryId.ToString();
     }

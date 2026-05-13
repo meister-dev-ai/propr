@@ -3,8 +3,6 @@
 
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Application.Tests.Services.ProCursor;

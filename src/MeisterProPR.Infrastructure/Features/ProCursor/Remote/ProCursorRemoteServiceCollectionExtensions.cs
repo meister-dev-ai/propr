@@ -5,6 +5,7 @@ using MeisterProPR.Application.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 
@@ -33,7 +34,7 @@ public static class ProCursorRemoteServiceCollectionExtensions
 
         services.AddHttpClient<HttpProCursorGateway>((sp, httpClient) =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorRemoteOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<ProCursorRemoteOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.ServiceBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(options.ServiceBaseUrl.TrimEnd('/') + "/");
@@ -48,7 +49,7 @@ public static class ProCursorRemoteServiceCollectionExtensions
         });
         services.AddHttpClient<RemoteProCursorTokenUsageReadRepository>((sp, httpClient) =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorRemoteOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<ProCursorRemoteOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.ServiceBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(options.ServiceBaseUrl.TrimEnd('/') + "/");
@@ -63,7 +64,7 @@ public static class ProCursorRemoteServiceCollectionExtensions
         });
         services.AddHttpClient<RemoteProCursorTokenUsageRebuildService>((sp, httpClient) =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorRemoteOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<ProCursorRemoteOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.ServiceBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(options.ServiceBaseUrl.TrimEnd('/') + "/");

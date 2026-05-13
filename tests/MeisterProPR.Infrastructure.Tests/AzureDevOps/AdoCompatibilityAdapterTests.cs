@@ -383,7 +383,7 @@ public sealed class AdoCompatibilityAdapterTests
         var result = new ReviewResult("Looks solid.", []);
         IReadOnlyList<PrCommentThread> existingThreads =
         [
-            new PrCommentThread(12, "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
+            new(12, "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
         ];
         var publicationContext = new ReviewPublicationContext(review, revision, reviewer, existingThreads);
         var (connectionRepository, scopeRepository) = CreateProviderRepositories(

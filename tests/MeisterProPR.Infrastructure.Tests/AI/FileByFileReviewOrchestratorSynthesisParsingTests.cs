@@ -3,7 +3,6 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.AI;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 

@@ -55,14 +55,14 @@ internal sealed class GitHubPullRequestFetcher(
             cancellationToken);
         var isDeltaReview = compareToIterationId.HasValue || compareToReviewRevision is not null;
         var deltaChangedFilesResponse = await this.TryGetDeltaFilesAsync(
-                                        context,
-                                        host,
-                                        repositoryPath,
-                                        pullRequest,
-                                        changedFilesResponse,
-                                        compareToReviewRevision,
-                                        cancellationToken)
-                                    ?? changedFilesResponse;
+                                            context,
+                                            host,
+                                            repositoryPath,
+                                            pullRequest,
+                                            changedFilesResponse,
+                                            compareToReviewRevision,
+                                            cancellationToken)
+                                        ?? changedFilesResponse;
         var changedFiles = await this.BuildChangedFilesAsync(
             context,
             host,
@@ -508,9 +508,7 @@ internal sealed class GitHubPullRequestFetcher(
         string? PreviousFileName,
         [property: JsonPropertyName("patch")] string? Patch);
 
-    private sealed record GitHubCompareResponse(
-        [property: JsonPropertyName("files")]
-        IReadOnlyList<GitHubPullRequestFileResponse>? Files);
+    private sealed record GitHubCompareResponse([property: JsonPropertyName("files")] IReadOnlyList<GitHubPullRequestFileResponse>? Files);
 
     private sealed record GitHubContentResponse(
         [property: JsonPropertyName("content")]

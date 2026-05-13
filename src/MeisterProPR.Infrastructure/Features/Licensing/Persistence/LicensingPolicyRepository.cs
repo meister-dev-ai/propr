@@ -115,10 +115,10 @@ public sealed class LicensingPolicyRepository(
         {
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""
-                INSERT INTO installation_edition (id, edition, updated_at)
-                VALUES ({SingletonPolicyId}, {(int)InstallationEdition.Community}, {DateTimeOffset.UtcNow})
-                ON CONFLICT (id) DO NOTHING
-                """,
+                 INSERT INTO installation_edition (id, edition, updated_at)
+                 VALUES ({SingletonPolicyId}, {(int)InstallationEdition.Community}, {DateTimeOffset.UtcNow})
+                 ON CONFLICT (id) DO NOTHING
+                 """,
                 cancellationToken);
             return;
         }

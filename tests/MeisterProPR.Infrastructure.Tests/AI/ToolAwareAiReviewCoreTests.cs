@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -330,11 +331,10 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                toolNames = callInfo.Arg<ChatOptions?>()?.Tools?
-                    .OfType<AIFunction>()
-                    .Select(tool => tool.Name)
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .Cast<string>()
+                toolNames = (callInfo.Arg<ChatOptions?>()?.Tools?
+                        .OfType<AIFunction>()
+                        .Select(tool => tool.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name)))
                     .ToList() ?? [];
 
                 return CreateFinalReviewResponse("Done.");
@@ -1293,12 +1293,12 @@ public class ToolAwareAiReviewCoreTests
             return Task.FromResult(string.Empty);
         }
 
-        public Task<MeisterProPR.Application.DTOs.ProCursor.ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
+        public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
         {
             throw new NotSupportedException();
         }
 
-        public Task<MeisterProPR.Application.DTOs.ProCursor.ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
+        public Task<ProCursorSymbolInsightDto> GetProCursorSymbolInfoAsync(
             string symbol,
             string? queryMode,
             int? maxRelations,

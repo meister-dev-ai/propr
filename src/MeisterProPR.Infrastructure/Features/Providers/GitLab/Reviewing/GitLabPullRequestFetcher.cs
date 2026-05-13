@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -490,9 +489,7 @@ internal sealed class GitLabPullRequestFetcher(
         [property: JsonPropertyName("changes")]
         IReadOnlyList<GitLabMergeRequestChangeResponse> Changes);
 
-    private sealed record GitLabCompareResponse(
-        [property: JsonPropertyName("diffs")]
-        IReadOnlyList<GitLabMergeRequestChangeResponse>? Diffs);
+    private sealed record GitLabCompareResponse([property: JsonPropertyName("diffs")] IReadOnlyList<GitLabMergeRequestChangeResponse>? Diffs);
 
     private sealed record GitLabMergeRequestChangeResponse(
         [property: JsonPropertyName("old_path")]

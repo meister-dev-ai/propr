@@ -21,8 +21,8 @@ internal sealed class GitHubConnectionVerifier(
     ILogger<GitHubConnectionVerifier>? logger = null)
 {
     private readonly GitHubAuthenticationService _authenticationService = authenticationService
-                                                                           ?? new GitHubAuthenticationService(
-                                                                               httpClientFactory);
+                                                                          ?? new GitHubAuthenticationService(httpClientFactory);
+
     private readonly ILogger<GitHubConnectionVerifier> _logger = logger ?? NullLogger<GitHubConnectionVerifier>.Instance;
 
     public async Task<GitHubConnectionContext> VerifyAsync(

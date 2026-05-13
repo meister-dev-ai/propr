@@ -249,12 +249,12 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
 
         await this._recorder.RecordAiCallAsync(
             this._protocolId,
-            iteration: 1,
-            inputTokens: 123,
-            outputTokens: 456,
-            inputTextSample: inputText,
-            systemPrompt: null,
-            outputTextSample: outputText);
+            1,
+            123,
+            456,
+            inputText,
+            null,
+            outputText);
 
         var stored = await this._db.ProtocolEvents
             .Where(e => e.ProtocolId == this._protocolId && e.Name == "ai_call_iter_1")
@@ -279,7 +279,7 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
             "read_file",
             "{\"path\":\"src/Foo.cs\"}",
             result,
-            iteration: 4);
+            4);
 
         var stored = await this._db.ProtocolEvents
             .Where(e => e.ProtocolId == this._protocolId && e.Name == "read_file")

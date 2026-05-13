@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
+using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -26,12 +28,12 @@ namespace MeisterProPR.Infrastructure.Tests.Repositories;
 [Collection("PostgresIntegration")]
 public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    private readonly List<Guid> _seededClientIds = [];
     private ClientScmConnectionRepository _connectionRepository = null!;
     private MeisterProPRDbContext _dbContext = null!;
     private IHttpClientFactory _httpClientFactory = null!;
     private DbClientRegistry _registry = null!;
     private ClientReviewerIdentityRepository _reviewerIdentityRepository = null!;
-    private readonly List<Guid> _seededClientIds = [];
 
     public async Task InitializeAsync()
     {
@@ -48,14 +50,14 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         this._httpClientFactory.CreateClient("GitHubProvider")
             .Returns(
                 new HttpClient(
-                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-                    {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "meister-dev-ai" }, app_slug = "propr-review" }),
-                        "https://api.github.com/app" => CreateJsonResponse(
-                            new { slug = "propr-review", name = "ProPR Review" }),
-                        _ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
-                    }))));
+                    new StubHttpMessageHandler(request => Task.FromResult(
+                        request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                                new { account = new { login = "meister-dev-ai" }, app_slug = "propr-review" }),
+                            "https://api.github.com/app" => CreateJsonResponse(new { slug = "propr-review", name = "ProPR Review" }),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        }))));
         this._registry = new DbClientRegistry(
             this._dbContext,
             this._connectionRepository,
@@ -192,10 +194,10 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             null,
             null,
             "GitHub App",
-            GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true),
+            GitHubAppTestHelpers.CreatePrivateKeyPem(true),
             true,
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012,
+            123456,
+            789012,
             CancellationToken.None);
 
         var result = await this._registry.GetEffectiveReviewerIdentityAsync(
@@ -347,9 +349,9 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
 
     private static HttpResponseMessage CreateJsonResponse<T>(T payload)
     {
-        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload)),
+            Content = new StringContent(JsonSerializer.Serialize(payload)),
         };
     }
 

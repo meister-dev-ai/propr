@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;

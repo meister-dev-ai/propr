@@ -16,45 +16,55 @@ namespace MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProCursorGateway> logger) : IProCursorGateway
 {
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
-        => this.SendAsync<IReadOnlyList<ProCursorKnowledgeSourceDto>>(HttpMethod.Get, $"internal/procursor/clients/{clientId:D}/sources", null, ct);
+    {
+        return this.SendAsync<IReadOnlyList<ProCursorKnowledgeSourceDto>>(HttpMethod.Get, $"internal/procursor/clients/{clientId:D}/sources", null, ct);
+    }
 
     public Task<ProCursorKnowledgeSourceDto> CreateSourceAsync(
         Guid clientId,
         ProCursorKnowledgeSourceRegistrationRequest request,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorKnowledgeSourceDto>(HttpMethod.Post, $"internal/procursor/clients/{clientId:D}/sources", request, ct);
+    {
+        return this.SendAsync<ProCursorKnowledgeSourceDto>(HttpMethod.Post, $"internal/procursor/clients/{clientId:D}/sources", request, ct);
+    }
 
     public Task<ProCursorIndexJobDto> QueueRefreshAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorRefreshRequest request,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorIndexJobDto>(
+    {
+        return this.SendAsync<ProCursorIndexJobDto>(
             HttpMethod.Post,
             $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/refresh",
             request,
             ct);
+    }
 
     public Task<IReadOnlyList<ProCursorTrackedBranchDto>> ListTrackedBranchesAsync(
         Guid clientId,
         Guid sourceId,
         CancellationToken ct = default)
-        => this.SendAsync<IReadOnlyList<ProCursorTrackedBranchDto>>(
+    {
+        return this.SendAsync<IReadOnlyList<ProCursorTrackedBranchDto>>(
             HttpMethod.Get,
             $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/branches",
             null,
             ct);
+    }
 
     public Task<ProCursorTrackedBranchDto> AddTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorTrackedBranchCreateRequest request,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorTrackedBranchDto>(
+    {
+        return this.SendAsync<ProCursorTrackedBranchDto>(
             HttpMethod.Post,
             $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/branches",
             request,
             ct);
+    }
 
     public Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(
         Guid clientId,
@@ -62,37 +72,47 @@ public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProC
         Guid trackedBranchId,
         ProCursorTrackedBranchUpdateRequest request,
         CancellationToken ct = default)
-        => this.SendOptionalAsync<ProCursorTrackedBranchDto>(
+    {
+        return this.SendOptionalAsync<ProCursorTrackedBranchDto>(
             HttpMethod.Put,
             $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/branches/{trackedBranchId:D}",
             request,
             ct);
+    }
 
     public Task<bool> RemoveTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         Guid trackedBranchId,
         CancellationToken ct = default)
-        => this.SendDeleteAsync(
+    {
+        return this.SendDeleteAsync(
             $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/branches/{trackedBranchId:D}",
             ct);
-
-    public Task InvalidateRuntimeConfigurationAsync(Guid sourceId, CancellationToken ct = default)
-        => this.SendAsync<object>(
-            HttpMethod.Post,
-            $"internal/procursor/runtime-config/sources/{sourceId:D}/invalidate",
-            new { },
-            ct);
+    }
 
     public Task<ProCursorKnowledgeAnswerDto> AskKnowledgeAsync(
         ProCursorKnowledgeQueryRequest request,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorKnowledgeAnswerDto>(HttpMethod.Post, "internal/procursor/queries/knowledge", request, ct);
+    {
+        return this.SendAsync<ProCursorKnowledgeAnswerDto>(HttpMethod.Post, "internal/procursor/queries/knowledge", request, ct);
+    }
 
     public Task<ProCursorSymbolInsightDto> GetSymbolInsightAsync(
         ProCursorSymbolQueryRequest request,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorSymbolInsightDto>(HttpMethod.Post, "internal/procursor/queries/symbols", request, ct);
+    {
+        return this.SendAsync<ProCursorSymbolInsightDto>(HttpMethod.Post, "internal/procursor/queries/symbols", request, ct);
+    }
+
+    public Task InvalidateRuntimeConfigurationAsync(Guid sourceId, CancellationToken ct = default)
+    {
+        return this.SendAsync<object>(
+            HttpMethod.Post,
+            $"internal/procursor/runtime-config/sources/{sourceId:D}/invalidate",
+            new { },
+            ct);
+    }
 
     private async Task<TResponse> SendAsync<TResponse>(
         HttpMethod method,
@@ -118,7 +138,7 @@ public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProC
         }
 
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: ct))
+        return await response.Content.ReadFromJsonAsync<TResponse>(ct)
                ?? throw new InvalidOperationException($"Remote ProCursor endpoint '{path}' returned an empty payload.");
     }
 
@@ -141,7 +161,7 @@ public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProC
         }
 
         await EnsureSuccessAsync(response, ct);
-        return await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: ct);
+        return await response.Content.ReadFromJsonAsync<TResponse>(ct);
     }
 
     private async Task<bool> SendDeleteAsync(string path, CancellationToken ct)
@@ -194,13 +214,13 @@ public sealed class HttpProCursorGateway(HttpClient httpClient, ILogger<HttpProC
 
         if ((int)response.StatusCode >= 500)
         {
-            throw new ProCursorDependencyUnavailableException(
-                $"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
+            throw new ProCursorDependencyUnavailableException($"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-            ? $"Remote ProCursor request failed with status {(int)response.StatusCode}."
-            : body);
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(body)
+                ? $"Remote ProCursor request failed with status {(int)response.StatusCode}."
+                : body);
     }
 }

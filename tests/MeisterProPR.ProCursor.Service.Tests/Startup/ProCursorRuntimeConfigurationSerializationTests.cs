@@ -2,13 +2,12 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
-using System.Net.Http;
 using System.Text;
-using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.ProCursor.Infrastructure.Remote;
 using MeisterProPR.ProCursor.Options;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
 
 namespace MeisterProPR.ProCursor.Service.Tests.Startup;
 
@@ -55,7 +54,7 @@ public sealed class ProCursorRuntimeConfigurationSerializationTests
                       """;
 
         using var httpClient = new HttpClient(new StubHandler(payload));
-        var logger = NSubstitute.Substitute.For<Microsoft.Extensions.Logging.ILogger<ProPrRuntimeConfigurationBroker>>();
+        var logger = Substitute.For<ILogger<ProPrRuntimeConfigurationBroker>>();
         var broker = new ProPrRuntimeConfigurationBroker(
             httpClient,
             logger,
@@ -73,20 +72,21 @@ public sealed class ProCursorRuntimeConfigurationSerializationTests
     public async Task EmbeddingBroker_UsesConfiguredAbsoluteBrokerUri_WhenHttpClientBaseAddressIsMissing()
     {
         Uri? requestUri = null;
-        using var httpClient = new HttpClient(new StubHandler(
-            """
-            {
-              "aiConnectionId": "3136e333-0110-4ac8-bff0-b01100d24d13",
-              "deploymentName": "text-embedding-3-large",
-              "tokenizerName": "cl100k_base",
-              "maxInputTokens": 8191,
-              "embeddingDimensions": 3072,
-              "inputCostPer1MUsd": 0.13,
-              "outputCostPer1MUsd": 0.0
-            }
-            """,
-            request => requestUri = request.RequestUri));
-        var logger = NSubstitute.Substitute.For<Microsoft.Extensions.Logging.ILogger<ProPrEmbeddingBroker>>();
+        using var httpClient = new HttpClient(
+            new StubHandler(
+                """
+                {
+                  "aiConnectionId": "3136e333-0110-4ac8-bff0-b01100d24d13",
+                  "deploymentName": "text-embedding-3-large",
+                  "tokenizerName": "cl100k_base",
+                  "maxInputTokens": 8191,
+                  "embeddingDimensions": 3072,
+                  "inputCostPer1MUsd": 0.13,
+                  "outputCostPer1MUsd": 0.0
+                }
+                """,
+                request => requestUri = request.RequestUri));
+        var logger = Substitute.For<ILogger<ProPrEmbeddingBroker>>();
         var broker = new ProPrEmbeddingBroker(
             httpClient,
             logger,
@@ -103,10 +103,11 @@ public sealed class ProCursorRuntimeConfigurationSerializationTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             onRequest?.Invoke(request);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(payload, Encoding.UTF8, "application/json")
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+                });
         }
     }
 }

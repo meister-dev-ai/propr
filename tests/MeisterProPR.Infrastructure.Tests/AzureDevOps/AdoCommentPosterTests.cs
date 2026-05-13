@@ -4,7 +4,6 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -110,8 +109,8 @@ public class AdoCommentPosterTests
 
         var anchor = AdoCommentPoster.ResolveAnchorContext(
             comment,
-            iterationId: 7,
-            compareToIterationId: 3,
+            7,
+            3,
             changeTrackingIds);
 
         Assert.Equal(PublicationAnchorPrecision.Inline, anchor.AnchorPrecision);
@@ -132,8 +131,8 @@ public class AdoCommentPosterTests
 
         var anchor = AdoCommentPoster.ResolveAnchorContext(
             comment,
-            iterationId: 7,
-            compareToIterationId: null,
+            7,
+            null,
             changeTrackingIds);
 
         Assert.Equal(PublicationAnchorPrecision.Inline, anchor.AnchorPrecision);
@@ -150,9 +149,9 @@ public class AdoCommentPosterTests
 
         var anchor = AdoCommentPoster.ResolveAnchorContext(
             comment,
-            iterationId: 7,
-            compareToIterationId: 3,
-            changeTrackingIds: new Dictionary<string, int>());
+            7,
+            3,
+            new Dictionary<string, int>());
 
         Assert.Equal(PublicationAnchorPrecision.File, anchor.AnchorPrecision);
         Assert.Equal("/src/Program.cs", anchor.NormalizedFilePath);
@@ -170,8 +169,8 @@ public class AdoCommentPosterTests
             "/src/Program.cs",
             42,
             PublicationAnchorPrecision.Inline,
-            ProviderTrackingReference: "177",
-            CompareRevisionReference: "3:7");
+            "177",
+            "3:7");
 
         var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
 
@@ -196,8 +195,8 @@ public class AdoCommentPosterTests
             "/src/Program.cs",
             42,
             PublicationAnchorPrecision.Inline,
-            ProviderTrackingReference: "177",
-            CompareRevisionReference: null);
+            "177",
+            null);
 
         var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
 

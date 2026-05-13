@@ -1,9 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.ProCursor.Persistence;
-using Microsoft.EntityFrameworkCore;
-
 namespace MeisterProPR.Infrastructure.Tests.Features.ProCursor;
 
 public sealed class ProCursorOperationalPersistenceOwnershipTests
@@ -42,11 +39,16 @@ public sealed class ProCursorOperationalPersistenceOwnershipTests
     public void ProCursorOperationalPersistence_SourceFiles_NoLongerLiveUnderInfrastructure()
     {
         Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Data/ProCursorOperationalDbContext.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Persistence/ProCursorTokenUsageReadRepository.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Persistence/EfProCursorTokenUsageRecorder.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageAggregationService.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageRebuildService.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageRetentionService.cs")));
+        Assert.False(
+            File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Persistence/ProCursorTokenUsageReadRepository.cs")));
+        Assert.False(
+            File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Persistence/EfProCursorTokenUsageRecorder.cs")));
+        Assert.False(
+            File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageAggregationService.cs")));
+        Assert.False(
+            File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageRebuildService.cs")));
+        Assert.False(
+            File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Infrastructure/Features/UsageReporting/Services/ProCursorTokenUsageRetentionService.cs")));
     }
 
     private static string ResolveRepoRoot()

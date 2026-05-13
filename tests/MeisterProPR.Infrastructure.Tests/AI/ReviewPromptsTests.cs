@@ -447,7 +447,7 @@ public class ReviewPromptsTests
             "Cross-file DI registration is missing.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily,
+            ClaimDescriptor.CrossFileConsistencyFamily,
             "ServiceRegistration",
             requiresCrossFileEvidence: true,
             requiresSymbolEvidence: true);

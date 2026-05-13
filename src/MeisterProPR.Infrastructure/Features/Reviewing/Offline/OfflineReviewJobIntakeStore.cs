@@ -17,12 +17,13 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
         SubmitReviewJobRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(jobs.FindActiveJob(
-            request.ProviderScopePath,
-            request.ProviderProjectKey,
-            request.RepositoryId,
-            request.PullRequestId,
-            request.IterationId));
+        return Task.FromResult(
+            jobs.FindActiveJob(
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                request.IterationId));
     }
 
     public async Task<ReviewJob> CreatePendingJobAsync(

@@ -121,49 +121,6 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         return await this.FetchFileTreePathsAsync(normalizedBranch, ct);
     }
 
-    /// <summary>
-    ///     Fetches the repository file tree for a branch using ADO's item listing API.
-    ///     Overridable in tests to avoid the ADO network layer.
-    /// </summary>
-    /// <param name="branch">Normalized branch name.</param>
-    /// <param name="ct">Cancellation token.</param>
-    protected internal virtual async Task<IReadOnlyList<string>> FetchFileTreePathsAsync(
-        string branch,
-        CancellationToken ct)
-    {
-        var gitClient = await this.GetGitClientAsync(ct);
-
-        var versionDescriptor = new GitVersionDescriptor
-        {
-            VersionType = GitVersionType.Branch,
-            Version = branch,
-        };
-
-        List<GitItem>? items;
-        try
-        {
-            items = await gitClient.GetItemsAsync(
-                this._projectId,
-                this._repositoryId,
-                null,
-                VersionControlRecursionType.Full,
-                versionDescriptor: versionDescriptor,
-                cancellationToken: ct);
-        }
-        catch (VssServiceResponseException)
-        {
-            // Branch does not exist in this repository, or the tree cannot be resolved.
-            return [];
-        }
-
-        return (items ?? [])
-            .Where(item => item.IsFolder != true)
-            .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
-            .Where(p => !string.IsNullOrEmpty(p))
-            .ToList()
-            .AsReadOnly();
-    }
-
     /// <inheritdoc />
     public async Task<string> GetFileContentAsync(
         string path,
@@ -292,6 +249,49 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             this._logger.LogWarning(ex, "ProCursor symbol query unavailable during Azure DevOps review context execution.");
             return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
+    }
+
+    /// <summary>
+    ///     Fetches the repository file tree for a branch using ADO's item listing API.
+    ///     Overridable in tests to avoid the ADO network layer.
+    /// </summary>
+    /// <param name="branch">Normalized branch name.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected internal virtual async Task<IReadOnlyList<string>> FetchFileTreePathsAsync(
+        string branch,
+        CancellationToken ct)
+    {
+        var gitClient = await this.GetGitClientAsync(ct);
+
+        var versionDescriptor = new GitVersionDescriptor
+        {
+            VersionType = GitVersionType.Branch,
+            Version = branch,
+        };
+
+        List<GitItem>? items;
+        try
+        {
+            items = await gitClient.GetItemsAsync(
+                this._projectId,
+                this._repositoryId,
+                null,
+                VersionControlRecursionType.Full,
+                versionDescriptor: versionDescriptor,
+                cancellationToken: ct);
+        }
+        catch (VssServiceResponseException)
+        {
+            // Branch does not exist in this repository, or the tree cannot be resolved.
+            return [];
+        }
+
+        return (items ?? [])
+            .Where(item => !item.IsFolder)
+            .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToList()
+            .AsReadOnly();
     }
 
     /// <summary>

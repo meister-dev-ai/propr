@@ -13,15 +13,25 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
 {
-    public Task UpsertAsync(ThreadMemoryRecord record, CancellationToken ct = default) => Task.CompletedTask;
+    public Task UpsertAsync(ThreadMemoryRecord record, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
-    public Task BulkUpsertAsync(IEnumerable<ThreadMemoryRecord> records, CancellationToken ct = default) => Task.CompletedTask;
+    public Task BulkUpsertAsync(IEnumerable<ThreadMemoryRecord> records, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
     public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, long threadId, CancellationToken ct = default)
-        => Task.FromResult(false);
+    {
+        return Task.FromResult(false);
+    }
 
     public Task<bool> RemoveByIdAsync(Guid id, Guid clientId, CancellationToken ct = default)
-        => Task.FromResult(false);
+    {
+        return Task.FromResult(false);
+    }
 
     public Task<PagedResult<ThreadMemoryRecord>> GetPagedAsync(
         Guid clientId,
@@ -32,7 +42,9 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         string? repositoryId = null,
         int? pullRequestId = null,
         CancellationToken ct = default)
-        => Task.FromResult(new PagedResult<ThreadMemoryRecord>([], 0, page, pageSize));
+    {
+        return Task.FromResult(new PagedResult<ThreadMemoryRecord>([], 0, page, pageSize));
+    }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarAsync(
         Guid clientId,
@@ -40,7 +52,9 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         int topN,
         float minSimilarity,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByFilePathAsync(
         Guid clientId,
@@ -48,7 +62,9 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         string filePath,
         int topN,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarInPullRequestAsync(
         Guid clientId,
@@ -58,7 +74,9 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         int topN,
         float minSimilarity,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    }
 
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindByPullRequestFilePathAsync(
         Guid clientId,
@@ -67,5 +85,7 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         string filePath,
         int topN,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ThreadMemoryMatchDto>>([]);
+    }
 }

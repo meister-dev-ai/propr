@@ -416,7 +416,7 @@ public sealed partial class AdminCrawlConfigsController(
                 request.CrawlIntervalSeconds,
                 resolvedOrganization.OrganizationScopeId,
                 ct,
-                reviewTemperature: request.ReviewTemperature);
+                request.ReviewTemperature);
 
             if (repoFilters.Count > 0)
             {
@@ -529,8 +529,8 @@ public sealed partial class AdminCrawlConfigsController(
                 request.IsActive,
                 ownerScope,
                 ct,
-                reviewTemperature: request.ReviewTemperature,
-                shouldUpdateReviewTemperature: request.ShouldUpdateReviewTemperature);
+                request.ReviewTemperature,
+                request.ShouldUpdateReviewTemperature);
 
             if (!updated)
             {
@@ -657,6 +657,8 @@ public sealed record CreateAdminCrawlConfigRequest(
 /// </summary>
 public sealed record PatchAdminCrawlConfigRequest
 {
+    private readonly float? _reviewTemperature;
+
     /// <summary>Optional crawl interval override in seconds.</summary>
     public int? CrawlIntervalSeconds { get; init; }
 
@@ -682,16 +684,13 @@ public sealed record PatchAdminCrawlConfigRequest
         init
         {
             this._reviewTemperature = value;
-            this._shouldUpdateReviewTemperature = true;
+            this.ShouldUpdateReviewTemperature = true;
         }
     }
 
     /// <summary>Whether the request should apply a review-temperature update, including clearing it to null.</summary>
     [JsonIgnore]
-    public bool ShouldUpdateReviewTemperature => this._shouldUpdateReviewTemperature;
-
-    private readonly float? _reviewTemperature;
-    private readonly bool _shouldUpdateReviewTemperature;
+    public bool ShouldUpdateReviewTemperature { get; private set; }
 }
 
 /// <summary>A single repo filter entry in a PATCH request.</summary>

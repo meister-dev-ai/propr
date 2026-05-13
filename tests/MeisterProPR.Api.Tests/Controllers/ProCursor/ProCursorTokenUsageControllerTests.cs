@@ -10,7 +10,6 @@ using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 

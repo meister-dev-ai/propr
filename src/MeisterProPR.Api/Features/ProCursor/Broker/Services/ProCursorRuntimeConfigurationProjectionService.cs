@@ -13,8 +13,7 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Services;
 /// <summary>
 ///     Builds runtime configuration projections that ProCursor can hydrate into its in-memory cache.
 /// </summary>
-public sealed class ProCursorRuntimeConfigurationProjectionService(
-    IProCursorKnowledgeSourceRepository knowledgeSourceRepository)
+public sealed class ProCursorRuntimeConfigurationProjectionService(IProCursorKnowledgeSourceRepository knowledgeSourceRepository)
 {
     /// <summary>
     ///     Lists enabled runtime-configuration projections for ProCursor.
@@ -45,7 +44,7 @@ public sealed class ProCursorRuntimeConfigurationProjectionService(
         ArgumentNullException.ThrowIfNull(request);
 
         var source = await knowledgeSourceRepository.GetBySourceIdAsync(sourceId, ct)
-            ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found.");
+                     ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found.");
 
         if (!source.IsEnabled)
         {

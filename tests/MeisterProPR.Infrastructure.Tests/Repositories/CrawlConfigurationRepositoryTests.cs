@@ -249,7 +249,7 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             60,
             organizationScopeId,
             CancellationToken.None,
-            reviewTemperature: 0.2f);
+            0.2f);
 
         var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
 
@@ -277,8 +277,8 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             null,
             this._clientId,
             CancellationToken.None,
-            reviewTemperature: 0.45f,
-            shouldUpdateReviewTemperature: true);
+            0.45f,
+            true);
 
         var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
         var fetched = await this._repo.GetByIdAsync(created.Id, CancellationToken.None);
@@ -300,7 +300,7 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             60,
             null,
             CancellationToken.None,
-            reviewTemperature: 0.45f);
+            0.45f);
 
         var updated = await this._repo.UpdateAsync(
             created.Id,
@@ -308,8 +308,8 @@ public sealed class CrawlConfigurationRepositoryTests(PostgresContainerFixture f
             null,
             this._clientId,
             CancellationToken.None,
-            reviewTemperature: null,
-            shouldUpdateReviewTemperature: true);
+            null,
+            true);
 
         var stored = await this._dbContext.CrawlConfigurations.SingleAsync(config => config.Id == created.Id);
         var fetched = await this._repo.GetByIdAsync(created.Id, CancellationToken.None);

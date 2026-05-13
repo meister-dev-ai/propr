@@ -112,6 +112,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         {
             services.AddScoped<IReviewWorkflowRunner, ReviewWorkflowRunner>();
         }
+
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
 
         if (hasDatabase)

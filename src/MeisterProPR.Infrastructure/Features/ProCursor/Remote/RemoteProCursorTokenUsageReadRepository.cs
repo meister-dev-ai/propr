@@ -26,7 +26,8 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         ProCursorTokenUsageGranularity granularity,
         string? groupBy,
         CancellationToken ct = default)
-        => this.SendAsync<ProCursorTokenUsageResponse>(
+    {
+        return this.SendAsync<ProCursorTokenUsageResponse>(
             BuildPath(
                 $"internal/procursor/clients/{clientId:D}/token-usage",
                 ("from", FormatDate(from)),
@@ -34,6 +35,7 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
                 ("granularity", FormatGranularity(granularity)),
                 ("groupBy", groupBy)),
             ct);
+    }
 
     public Task<ProCursorSourceTokenUsageResponse?> GetSourceUsageAsync(
         Guid clientId,
@@ -42,13 +44,15 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         DateOnly to,
         ProCursorTokenUsageGranularity granularity,
         CancellationToken ct = default)
-        => this.SendOptionalAsync<ProCursorSourceTokenUsageResponse>(
+    {
+        return this.SendOptionalAsync<ProCursorSourceTokenUsageResponse>(
             BuildPath(
                 $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/token-usage",
                 ("from", FormatDate(from)),
                 ("to", FormatDate(to)),
                 ("granularity", FormatGranularity(granularity))),
             ct);
+    }
 
     public Task<IReadOnlyList<ProCursorTopSourceUsageDto>> GetTopSourcesAsync(
         Guid clientId,
@@ -56,24 +60,28 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         DateOnly to,
         int limit,
         CancellationToken ct = default)
-        => this.SendAsync<IReadOnlyList<ProCursorTopSourceUsageDto>>(
+    {
+        return this.SendAsync<IReadOnlyList<ProCursorTopSourceUsageDto>>(
             BuildPath(
                 $"internal/procursor/clients/{clientId:D}/token-usage/top-sources",
                 ("from", FormatDate(from)),
                 ("to", FormatDate(to)),
                 ("limit", limit.ToString(CultureInfo.InvariantCulture))),
             ct);
+    }
 
     public Task<ProCursorTokenUsageEventsResponse?> GetRecentEventsAsync(
         Guid clientId,
         Guid sourceId,
         int limit,
         CancellationToken ct = default)
-        => this.SendOptionalAsync<ProCursorTokenUsageEventsResponse>(
+    {
+        return this.SendOptionalAsync<ProCursorTokenUsageEventsResponse>(
             BuildPath(
                 $"internal/procursor/clients/{clientId:D}/sources/{sourceId:D}/token-usage/events",
                 ("limit", limit.ToString(CultureInfo.InvariantCulture))),
             ct);
+    }
 
     public Task<IReadOnlyList<ProCursorTokenUsageExportRowDto>> ExportAsync(
         Guid clientId,
@@ -81,18 +89,22 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         DateOnly to,
         Guid? sourceId,
         CancellationToken ct = default)
-        => this.SendAsync<IReadOnlyList<ProCursorTokenUsageExportRowDto>>(
+    {
+        return this.SendAsync<IReadOnlyList<ProCursorTokenUsageExportRowDto>>(
             BuildPath(
                 $"internal/procursor/clients/{clientId:D}/token-usage/export",
                 ("from", FormatDate(from)),
                 ("to", FormatDate(to)),
                 ("sourceId", sourceId?.ToString("D"))),
             ct);
+    }
 
     public Task<ProCursorTokenUsageFreshnessResponse> GetFreshnessAsync(Guid clientId, CancellationToken ct = default)
-        => this.SendAsync<ProCursorTokenUsageFreshnessResponse>(
+    {
+        return this.SendAsync<ProCursorTokenUsageFreshnessResponse>(
             $"internal/procursor/clients/{clientId:D}/token-usage/freshness",
             ct);
+    }
 
     private async Task<TResponse> SendAsync<TResponse>(string path, CancellationToken ct)
     {
@@ -104,7 +116,7 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         }
 
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: ct))
+        return await response.Content.ReadFromJsonAsync<TResponse>(ct)
                ?? throw new InvalidOperationException($"Remote ProCursor endpoint '{path}' returned an empty payload.");
     }
 
@@ -118,7 +130,7 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
         }
 
         await EnsureSuccessAsync(response, ct);
-        return await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: ct);
+        return await response.Content.ReadFromJsonAsync<TResponse>(ct);
     }
 
     private async Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken ct)
@@ -153,14 +165,14 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
 
         if ((int)response.StatusCode >= 500)
         {
-            throw new ProCursorDependencyUnavailableException(
-                $"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
+            throw new ProCursorDependencyUnavailableException($"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-            ? $"Remote ProCursor request failed with status {(int)response.StatusCode}."
-            : body);
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(body)
+                ? $"Remote ProCursor request failed with status {(int)response.StatusCode}."
+                : body);
     }
 
     private static string BuildPath(string basePath, params (string Key, string? Value)[] query)
@@ -174,8 +186,12 @@ public sealed class RemoteProCursorTokenUsageReadRepository(
     }
 
     private static string FormatDate(DateOnly value)
-        => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    {
+        return value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
 
     private static string FormatGranularity(ProCursorTokenUsageGranularity granularity)
-        => granularity == ProCursorTokenUsageGranularity.Monthly ? "monthly" : "daily";
+    {
+        return granularity == ProCursorTokenUsageGranularity.Monthly ? "monthly" : "daily";
+    }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.ProCursor.Infrastructure.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,9 +12,8 @@ namespace MeisterProPR.ProCursor.Service.Controllers;
 ///     Internal runtime-configuration cache maintenance endpoints for the extracted ProCursor host.
 /// </summary>
 [ApiController]
-[Authorize(AuthenticationSchemes = MeisterProPR.Infrastructure.Features.ProCursor.Remote.ProCursorSharedKeyAuthenticationDefaults.Scheme)]
-public sealed class InternalProCursorRuntimeConfigurationController(
-    IProCursorRuntimeConfigurationCache cache) : ControllerBase
+[Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+public sealed class InternalProCursorRuntimeConfigurationController(IProCursorRuntimeConfigurationCache cache) : ControllerBase
 {
     /// <summary>
     ///     Invalidates the cached runtime configuration for a ProCursor source.

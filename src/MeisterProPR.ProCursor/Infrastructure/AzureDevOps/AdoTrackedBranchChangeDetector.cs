@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -57,7 +58,7 @@ public sealed partial class AdoTrackedBranchChangeDetector(
             source.OrganizationScopeId,
             string.IsNullOrWhiteSpace(source.CanonicalSourceProvider) || string.IsNullOrWhiteSpace(source.CanonicalSourceValue)
                 ? null
-                : new MeisterProPR.Application.DTOs.AzureDevOps.CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
+                : new CanonicalSourceReferenceDto(source.CanonicalSourceProvider, source.CanonicalSourceValue),
             source.SourceDisplayName);
     }
 

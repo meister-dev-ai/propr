@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
 
@@ -114,7 +115,7 @@ public static class ProCursorModuleServiceCollectionExtensions
 
         services.AddHttpClient<ProPrRuntimeConfigurationBroker>((sp, httpClient) =>
         {
-            var currentHostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            var currentHostOptions = sp.GetRequiredService<IOptions<ProCursorHostOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(currentHostOptions.ProPrBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(currentHostOptions.ProPrBaseUrl.TrimEnd('/') + "/");
@@ -137,7 +138,7 @@ public static class ProCursorModuleServiceCollectionExtensions
 
         services.AddHttpClient<ProPrScmBroker>((sp, httpClient) =>
         {
-            var hostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            var hostOptions = sp.GetRequiredService<IOptions<ProCursorHostOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(hostOptions.ProPrBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(hostOptions.ProPrBaseUrl.TrimEnd('/') + "/");
@@ -153,7 +154,7 @@ public static class ProCursorModuleServiceCollectionExtensions
         });
         services.AddHttpClient<ProPrEmbeddingBroker>((sp, httpClient) =>
         {
-            var hostOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProCursorHostOptions>>().Value;
+            var hostOptions = sp.GetRequiredService<IOptions<ProCursorHostOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(hostOptions.ProPrBaseUrl))
             {
                 httpClient.BaseAddress = new Uri(hostOptions.ProPrBaseUrl.TrimEnd('/') + "/");

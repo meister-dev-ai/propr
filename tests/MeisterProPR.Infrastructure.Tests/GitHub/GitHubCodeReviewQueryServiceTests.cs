@@ -104,8 +104,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                         seenAuthorizationHeaders.Add(request.Headers.Authorization?.Parameter);
                         return request.RequestUri!.AbsoluteUri switch
                         {
-                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                                new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                             "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
                                 new
                                 {
@@ -152,8 +151,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                 new HttpClient(
                     new StubHttpMessageHandler(request => request.RequestUri!.AbsoluteUri switch
                     {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                         "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
                             new
                             {
@@ -422,8 +420,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
             seenAuthorizationHeaders.Add(request.Headers.Authorization?.Parameter);
             return request.RequestUri!.AbsoluteUri switch
             {
-                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                    new { account = new { login = "acme-platform" } }),
+                "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                 "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
                     new
                     {

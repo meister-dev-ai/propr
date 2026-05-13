@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,7 +14,7 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Controllers;
 ///     Internal ProPR broker endpoints used by the extracted ProCursor runtime.
 /// </summary>
 [ApiController]
-[Authorize(AuthenticationSchemes = MeisterProPR.Infrastructure.Features.ProCursor.Remote.ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 public sealed class ProCursorBrokerController(
     IProCursorScmBroker scmBroker,
     IProCursorEmbeddingBroker embeddingBroker) : ControllerBase
@@ -68,8 +69,7 @@ public sealed class ProCursorBrokerController(
     {
         try
         {
-            return this.Ok(new ProCursorTrackedBranchHeadResponse(
-                await scmBroker.GetLatestCommitShaAsync(request.Source, request.TrackedBranch, ct)));
+            return this.Ok(new ProCursorTrackedBranchHeadResponse(await scmBroker.GetLatestCommitShaAsync(request.Source, request.TrackedBranch, ct)));
         }
         catch (KeyNotFoundException)
         {
@@ -135,11 +135,12 @@ public sealed class ProCursorBrokerController(
     {
         try
         {
-            return this.Ok(await embeddingBroker.GenerateEmbeddingsAsync(
-                request.ClientId,
-                request.Inputs,
-                request.ExpectedDimensions,
-                ct));
+            return this.Ok(
+                await embeddingBroker.GenerateEmbeddingsAsync(
+                    request.ClientId,
+                    request.Inputs,
+                    request.ExpectedDimensions,
+                    ct));
         }
         catch (KeyNotFoundException)
         {

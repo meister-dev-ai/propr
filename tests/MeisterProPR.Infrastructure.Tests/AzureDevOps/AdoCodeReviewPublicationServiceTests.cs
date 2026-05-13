@@ -3,14 +3,11 @@
 
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
-using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
-using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Support;
 using MeisterProPR.Infrastructure.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,7 +55,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
         var result = new ReviewResult("Looks solid.", []);
         IReadOnlyList<PrCommentThread> existingThreads =
         [
-            new PrCommentThread(12, "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
+            new(12, "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
         ];
 
         var publicationContext = new ReviewPublicationContext(
@@ -162,7 +159,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
         var result = new ReviewResult("Looks solid.", []);
         IReadOnlyList<PrCommentThread> existingThreads =
         [
-            new PrCommentThread(12, null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
+            new(12, null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
         ];
 
         var publicationContext = new ReviewPublicationContext(

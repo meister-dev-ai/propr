@@ -30,14 +30,16 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                 [],
                 EvidenceBundle.MissingCoverage,
                 "Review tools were unavailable for PR-level evidence collection.",
-                [CreateAttempt(
-                    workItem.Claim.ClaimId,
-                    1,
-                    EvidenceAttemptRecord.RepositoryStructureSource,
-                    EvidenceAttemptRecord.UnavailableStatus,
-                    "Review tools were unavailable for PR-level evidence collection.",
-                    EvidenceAttemptRecord.ReducedConfidenceCoverageImpact,
-                    failureReason: "review_tools_unavailable")]);
+                [
+                    CreateAttempt(
+                        workItem.Claim.ClaimId,
+                        1,
+                        EvidenceAttemptRecord.RepositoryStructureSource,
+                        EvidenceAttemptRecord.UnavailableStatus,
+                        "Review tools were unavailable for PR-level evidence collection.",
+                        EvidenceAttemptRecord.ReducedConfidenceCoverageImpact,
+                        failureReason: "review_tools_unavailable"),
+                ]);
         }
 
         var evidenceItems = new List<EvidenceItem>();
@@ -67,7 +69,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                             EvidenceAttemptRecord.SucceededStatus,
                             $"Fetched supporting file '{file}' from the PR source branch.",
                             EvidenceAttemptRecord.ExpandedCoverageImpact,
-                            payloadReference: file));
+                            file));
                     continue;
                 }
 
@@ -79,8 +81,8 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                         EvidenceAttemptRecord.EmptyStatus,
                         $"Fetched supporting file '{file}' from the PR source branch.",
                         EvidenceAttemptRecord.NoChangeCoverageImpact,
-                        payloadReference: file,
-                        failureReason: "empty_file_content"));
+                        file,
+                        "empty_file_content"));
             }
         }
 
@@ -103,7 +105,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                         EvidenceAttemptRecord.SucceededStatus,
                         $"Loaded {tree.Count} changed files from review context.",
                         EvidenceAttemptRecord.ExpandedCoverageImpact,
-                        payloadReference: JsonSerializer.Serialize(tree.Select(file => file.Path).Take(10))));
+                        JsonSerializer.Serialize(tree.Select(file => file.Path).Take(10))));
             }
             else
             {
@@ -128,6 +130,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
             {
                 knowledge = new ProCursorKnowledgeAnswerDto("unavailable", [], ex.Message);
             }
+
             if (string.Equals(knowledge.Status, "ok", StringComparison.OrdinalIgnoreCase) && knowledge.Results.Count > 0)
             {
                 evidenceItems.Add(
@@ -135,7 +138,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                         "ProCursorKnowledge",
                         "ProCursor returned repository knowledge relevant to the claim assertion.",
                         payloadReference: JsonSerializer.Serialize(knowledge.Results.Take(3))));
-                var status = MapProCursorStatus(knowledge.Status, hasResults: true);
+                var status = MapProCursorStatus(knowledge.Status, true);
                 proCursorStatuses.Add(status);
                 evidenceAttempts.Add(
                     CreateAttempt(
@@ -145,11 +148,11 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                         status,
                         "Queried ProCursor knowledge for the claim assertion.",
                         EvidenceAttemptRecord.ExpandedCoverageImpact,
-                        payloadReference: JsonSerializer.Serialize(knowledge.Results.Take(3))));
+                        JsonSerializer.Serialize(knowledge.Results.Take(3))));
             }
             else
             {
-                var status = MapProCursorStatus(knowledge.Status, hasResults: false);
+                var status = MapProCursorStatus(knowledge.Status, false);
                 proCursorStatuses.Add(status);
                 evidenceAttempts.Add(
                     CreateAttempt(
@@ -176,6 +179,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                 {
                     symbol = new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
                 }
+
                 if (string.Equals(symbol.Status, "ok", StringComparison.OrdinalIgnoreCase) && symbol.Symbol is not null)
                 {
                     evidenceItems.Add(
@@ -183,7 +187,7 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                             "ProCursorSymbolInsight",
                             $"Resolved symbol insight for '{workItem.Claim.SubjectIdentifier}'.",
                             payloadReference: JsonSerializer.Serialize(symbol.Symbol)));
-                    var status = MapProCursorStatus(symbol.Status, hasResults: true);
+                    var status = MapProCursorStatus(symbol.Status, true);
                     proCursorStatuses.Add(status);
                     evidenceAttempts.Add(
                         CreateAttempt(
@@ -193,11 +197,11 @@ public sealed class ReviewContextEvidenceCollector : IReviewEvidenceCollector
                             status,
                             $"Queried ProCursor symbol insight for '{workItem.Claim.SubjectIdentifier}'.",
                             EvidenceAttemptRecord.ExpandedCoverageImpact,
-                            payloadReference: JsonSerializer.Serialize(symbol.Symbol)));
+                            JsonSerializer.Serialize(symbol.Symbol)));
                 }
                 else
                 {
-                    var status = MapProCursorStatus(symbol.Status, hasResults: false);
+                    var status = MapProCursorStatus(symbol.Status, false);
                     proCursorStatuses.Add(status);
                     evidenceAttempts.Add(
                         CreateAttempt(

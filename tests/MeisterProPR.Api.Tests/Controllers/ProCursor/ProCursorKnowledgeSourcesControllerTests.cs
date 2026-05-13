@@ -593,8 +593,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         public const string SharedKey = "test-procursor-shared-key";
 
         private readonly string _dbName = $"TestDb_ProCursor_{Guid.NewGuid()}";
-        private readonly string _operationalDbName = $"TestDb_ProCursor_Operational_{Guid.NewGuid()}";
         private readonly InMemoryDatabaseRoot _dbRoot = new();
+        private readonly string _operationalDbName = $"TestDb_ProCursor_Operational_{Guid.NewGuid()}";
 
         public Guid ClientId { get; } = Guid.NewGuid();
         public Guid OtherClientId { get; } = Guid.NewGuid();
@@ -1087,7 +1087,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 }
 
                 await knowledgeSourceRepository.AddAsync(source, ct);
-                return MapSource(source, snapshot: null);
+                return MapSource(source, null);
             }
 
             public async Task<ProCursorIndexJobDto> QueueRefreshAsync(
@@ -1100,7 +1100,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                              ?? throw new KeyNotFoundException($"ProCursor source {sourceId} was not found for client {clientId}.");
 
                 var trackedBranch = ResolveTrackedBranch(source, request.TrackedBranchId)
-                                  ?? throw new KeyNotFoundException($"Tracked branch was not found for source {sourceId}.");
+                                    ?? throw new KeyNotFoundException($"Tracked branch was not found for source {sourceId}.");
 
                 var jobKind = string.IsNullOrWhiteSpace(request.JobKind) ? "refresh" : request.JobKind.Trim();
                 var job = new ProCursorIndexJob(
@@ -1167,7 +1167,7 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                     request.MiniIndexEnabled);
 
                 await knowledgeSourceRepository.UpdateAsync(source, ct);
-                return MapTrackedBranch(branch, latestSnapshot: null);
+                return MapTrackedBranch(branch, null);
             }
 
             public async Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(

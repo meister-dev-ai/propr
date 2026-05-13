@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
@@ -17,15 +16,16 @@ public sealed class AdoPullRequestIterationChangePagerTests
             (top, skip, _) =>
             {
                 calls.Add((top, skip));
-                return Task.FromResult(new GitPullRequestIterationChanges
-                {
-                    ChangeEntries =
-                    [
-                        CreateChange("/src/A.cs"),
-                        CreateChange("/src/B.cs"),
-                    ],
-                    NextSkip = 0,
-                });
+                return Task.FromResult(
+                    new GitPullRequestIterationChanges
+                    {
+                        ChangeEntries =
+                        [
+                            CreateChange("/src/A.cs"),
+                            CreateChange("/src/B.cs"),
+                        ],
+                        NextSkip = 0,
+                    });
             },
             CancellationToken.None);
 
@@ -42,21 +42,22 @@ public sealed class AdoPullRequestIterationChangePagerTests
             (top, skip, _) =>
             {
                 calls.Add((top, skip));
-                return Task.FromResult(skip switch
-                {
-                    0 => new GitPullRequestIterationChanges
+                return Task.FromResult(
+                    skip switch
                     {
-                        ChangeEntries = [CreateChange("/src/A.cs")],
-                        NextSkip = 1,
-                        NextTop = 50,
-                    },
-                    1 => new GitPullRequestIterationChanges
-                    {
-                        ChangeEntries = [CreateChange("/src/B.cs")],
-                        NextSkip = 0,
-                    },
-                    _ => throw new InvalidOperationException($"Unexpected skip value: {skip}")
-                });
+                        0 => new GitPullRequestIterationChanges
+                        {
+                            ChangeEntries = [CreateChange("/src/A.cs")],
+                            NextSkip = 1,
+                            NextTop = 50,
+                        },
+                        1 => new GitPullRequestIterationChanges
+                        {
+                            ChangeEntries = [CreateChange("/src/B.cs")],
+                            NextSkip = 0,
+                        },
+                        _ => throw new InvalidOperationException($"Unexpected skip value: {skip}"),
+                    });
             },
             CancellationToken.None);
 

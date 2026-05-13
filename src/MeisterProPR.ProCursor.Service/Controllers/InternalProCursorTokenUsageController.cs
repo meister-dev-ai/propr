@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,7 +14,7 @@ namespace MeisterProPR.ProCursor.Service.Controllers;
 ///     Internal token-usage reporting and rebuild endpoints for the extracted ProCursor host.
 /// </summary>
 [ApiController]
-[Authorize(AuthenticationSchemes = MeisterProPR.Infrastructure.Features.ProCursor.Remote.ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 public sealed class InternalProCursorTokenUsageController(
     IProCursorTokenUsageReadRepository readRepository,
     IProCursorTokenUsageRebuildService rebuildService) : ControllerBase

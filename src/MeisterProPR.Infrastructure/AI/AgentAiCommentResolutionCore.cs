@@ -82,7 +82,7 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             response.Text ?? "",
             response.Usage?.InputTokenCount,
             response.Usage?.OutputTokenCount,
-            requireReplyWhenResolved: true);
+            true);
     }
 
     /// <inheritdoc />

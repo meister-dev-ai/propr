@@ -12,33 +12,43 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 public sealed class NoOpProCursorGateway : IProCursorGateway
 {
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ProCursorKnowledgeSourceDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ProCursorKnowledgeSourceDto>>([]);
+    }
 
     public Task<ProCursorKnowledgeSourceDto> CreateSourceAsync(
         Guid clientId,
         ProCursorKnowledgeSourceRegistrationRequest request,
         CancellationToken ct = default)
-        => throw new NotSupportedException("Offline Reviewing composition does not manage ProCursor sources.");
+    {
+        throw new NotSupportedException("Offline Reviewing composition does not manage ProCursor sources.");
+    }
 
     public Task<ProCursorIndexJobDto> QueueRefreshAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorRefreshRequest request,
         CancellationToken ct = default)
-        => throw new NotSupportedException("Offline Reviewing composition does not queue ProCursor refresh jobs.");
+    {
+        throw new NotSupportedException("Offline Reviewing composition does not queue ProCursor refresh jobs.");
+    }
 
     public Task<IReadOnlyList<ProCursorTrackedBranchDto>> ListTrackedBranchesAsync(
         Guid clientId,
         Guid sourceId,
         CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ProCursorTrackedBranchDto>>([]);
+    {
+        return Task.FromResult<IReadOnlyList<ProCursorTrackedBranchDto>>([]);
+    }
 
     public Task<ProCursorTrackedBranchDto> AddTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorTrackedBranchCreateRequest request,
         CancellationToken ct = default)
-        => throw new NotSupportedException("Offline Reviewing composition does not manage ProCursor tracked branches.");
+    {
+        throw new NotSupportedException("Offline Reviewing composition does not manage ProCursor tracked branches.");
+    }
 
     public Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(
         Guid clientId,
@@ -46,14 +56,18 @@ public sealed class NoOpProCursorGateway : IProCursorGateway
         Guid trackedBranchId,
         ProCursorTrackedBranchUpdateRequest request,
         CancellationToken ct = default)
-        => Task.FromResult<ProCursorTrackedBranchDto?>(null);
+    {
+        return Task.FromResult<ProCursorTrackedBranchDto?>(null);
+    }
 
     public Task<bool> RemoveTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         Guid trackedBranchId,
         CancellationToken ct = default)
-        => Task.FromResult(false);
+    {
+        return Task.FromResult(false);
+    }
 
     public Task<ProCursorKnowledgeAnswerDto> AskKnowledgeAsync(
         ProCursorKnowledgeQueryRequest request,

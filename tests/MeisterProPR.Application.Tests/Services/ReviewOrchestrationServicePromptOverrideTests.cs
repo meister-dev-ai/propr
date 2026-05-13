@@ -148,7 +148,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
             .Returns(Task.FromResult(ReviewExclusionRules.Empty));
 
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), "gpt-4o");
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);

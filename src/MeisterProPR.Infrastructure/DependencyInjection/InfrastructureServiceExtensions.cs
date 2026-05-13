@@ -15,7 +15,6 @@ using MeisterProPR.Infrastructure.AI.Providers.AzureOpenAi;
 using MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 using MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Services;

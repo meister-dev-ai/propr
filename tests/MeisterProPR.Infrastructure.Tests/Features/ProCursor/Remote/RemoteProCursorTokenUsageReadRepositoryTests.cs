@@ -7,6 +7,7 @@ using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.ProCursor.Remote;
 
@@ -16,34 +17,36 @@ public sealed class RemoteProCursorTokenUsageReadRepositoryTests
     public async Task GetClientUsageAsync_MapsRouteAndQuery()
     {
         var clientId = Guid.NewGuid();
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(request =>
-        {
-            Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal(
-                $"http://procursor.internal/internal/procursor/clients/{clientId:D}/token-usage?from=2026-04-01&to=2026-04-30&granularity=daily&groupBy=source",
-                request.RequestUri!.ToString());
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request =>
             {
-                Content = JsonContent.Create(
-                    new ProCursorTokenUsageResponse(
-                        clientId,
-                        new DateOnly(2026, 4, 1),
-                        new DateOnly(2026, 4, 30),
-                        ProCursorTokenUsageGranularity.Daily,
-                        "source",
-                        new ProCursorTokenUsageTotalsDto(120, 0, 120, 0.00012m, 1, 0),
-                        [],
-                        [])),
-            });
-        }))
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal(
+                    $"http://procursor.internal/internal/procursor/clients/{clientId:D}/token-usage?from=2026-04-01&to=2026-04-30&granularity=daily&groupBy=source",
+                    request.RequestUri!.ToString());
+
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = JsonContent.Create(
+                            new ProCursorTokenUsageResponse(
+                                clientId,
+                                new DateOnly(2026, 4, 1),
+                                new DateOnly(2026, 4, 30),
+                                ProCursorTokenUsageGranularity.Daily,
+                                "source",
+                                new ProCursorTokenUsageTotalsDto(120, 0, 120, 0.00012m, 1, 0),
+                                [],
+                                [])),
+                    });
+            }))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
         var repository = new RemoteProCursorTokenUsageReadRepository(
             httpClient,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
+            NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
 
         var result = await repository.GetClientUsageAsync(
             clientId,
@@ -59,15 +62,16 @@ public sealed class RemoteProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetRecentEventsAsync_WhenUnauthorized_ThrowsDependencyUnavailable()
     {
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized))))
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized))))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
         var repository = new RemoteProCursorTokenUsageReadRepository(
             httpClient,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
+            NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
 
         var ex = await Assert.ThrowsAsync<ProCursorDependencyUnavailableException>(() =>
             repository.GetRecentEventsAsync(Guid.NewGuid(), Guid.NewGuid(), 10, CancellationToken.None));
@@ -78,15 +82,16 @@ public sealed class RemoteProCursorTokenUsageReadRepositoryTests
     [Fact]
     public async Task GetSourceUsageAsync_WhenMissing_ReturnsNull()
     {
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))))
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
         var repository = new RemoteProCursorTokenUsageReadRepository(
             httpClient,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
+            NullLogger<RemoteProCursorTokenUsageReadRepository>.Instance);
 
         var result = await repository.GetSourceUsageAsync(
             Guid.NewGuid(),

@@ -89,7 +89,7 @@ public sealed record VerificationWorkItem
         this.SupportsAiMicroVerification = supportsAiMicroVerification;
         this.ExistingEvidence = existingEvidence;
         this.VerifierFamilies = verifierFamilies?.Where(family => !string.IsNullOrWhiteSpace(family)).ToArray() ??
-            BuildDefaultVerifierFamilies(evidenceScope, supportsAiMicroVerification);
+                                BuildDefaultVerifierFamilies(evidenceScope, supportsAiMicroVerification);
         this.ExistingHints = existingHints?.Where(hint => !string.IsNullOrWhiteSpace(hint)).ToArray() ?? [];
     }
 

@@ -395,7 +395,7 @@ public class ReviewOrchestrationServiceTests
     private static (IAiConnectionRepository aiRepo, IAiChatClientFactory chatFactory) CreateAiSubstitutes()
     {
         var aiRepo = Substitute.For<IAiConnectionRepository>();
-        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid(), "gpt-4o");
+        var connDto = AiConnectionTestFactory.CreateChatConnection(Guid.NewGuid());
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
 
@@ -2228,7 +2228,7 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await threadReplyPublisher.DidNotReceiveWithAnyArgs()
-            .ReplyAsync(default, default!, default!, default);
+            .ReplyAsync(default, default!, default!);
         await threadStatusWriter.Received(1).UpdateThreadStatusAsync(
             job.ClientId,
             Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "201"),
@@ -2302,11 +2302,11 @@ public class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
         await threadReplyPublisher.DidNotReceiveWithAnyArgs()
-            .ReplyAsync(default, default!, default!, default);
+            .ReplyAsync(default, default!, default!);
         await threadStatusWriter.DidNotReceiveWithAnyArgs()
-            .UpdateThreadStatusAsync(default, default!, default!, default);
+            .UpdateThreadStatusAsync(default, default!, default!);
     }
 
     [Fact]
@@ -3419,8 +3419,8 @@ public class ReviewOrchestrationServiceTests
             .Returns(CreateReviewResult());
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(
-                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+            .Returns(
+                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
 
         var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
         priorJob.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
@@ -3584,8 +3584,8 @@ public class ReviewOrchestrationServiceTests
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(
-                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+            .Returns(
+                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
         jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3634,8 +3634,7 @@ public class ReviewOrchestrationServiceTests
                 job.IterationId,
                 null,
                 job.ClientId,
-                Arg.Any<CancellationToken>(),
-                null);
+                Arg.Any<CancellationToken>());
         await jobs.DidNotReceive()
             .AddFileResultAsync(
                 Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
@@ -3676,8 +3675,8 @@ public class ReviewOrchestrationServiceTests
 
         SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(
-                new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+            .Returns(
+                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
         jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -3726,8 +3725,7 @@ public class ReviewOrchestrationServiceTests
                 job.IterationId,
                 null,
                 job.ClientId,
-                Arg.Any<CancellationToken>(),
-                null);
+                Arg.Any<CancellationToken>());
         await jobs.DidNotReceive()
             .AddFileResultAsync(
                 Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),

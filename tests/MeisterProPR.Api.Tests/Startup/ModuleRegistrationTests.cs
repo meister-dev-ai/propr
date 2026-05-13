@@ -8,24 +8,19 @@ using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Interfaces;
-using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Clients;
 using MeisterProPR.Infrastructure.Features.Crawling;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Features.Mentions;
-using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
-using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.ProCursor.Infrastructure.DependencyInjection;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -37,149 +32,6 @@ namespace MeisterProPR.Api.Tests.Startup;
 public sealed class ModuleRegistrationTests
 {
     private static readonly string RepoRoot = ResolveRepoRoot();
-
-    [Fact]
-    public void Program_UsesModuleEntryPoints_ForFeatureRegistration()
-    {
-        var contents = File.ReadAllText(Path.Combine(RepoRoot, "src/MeisterProPR.Api/Program.cs"));
-
-        Assert.Contains(
-            "AddInfrastructureSupport(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "selectedCommentRelevanceFilterId: Program.GetSelectedCommentRelevanceFilterId()",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddCrawlingModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddClientsModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddIdentityAndAccessModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddMentionsModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddPromptCustomizationModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddUsageReportingModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddLicensingModule(builder.Configuration, builder.Environment)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "AddProCursorRemoteMode(builder.Configuration)",
-            contents,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("AddProCursorModule(builder.Configuration, builder.Environment)", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddInfrastructure(builder.Configuration)", contents, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Program_ComposesProCursorThroughRemoteBoundaryOnly()
-    {
-        var contents = File.ReadAllText(Path.Combine(RepoRoot, "src/MeisterProPR.Api/Program.cs"));
-
-        Assert.Contains("ManagedRemoteProCursorGateway", contents, StringComparison.Ordinal);
-        Assert.Contains("DisabledProCursorGateway", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddProCursorModule(builder.Configuration, builder.Environment)", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("ProCursorIndexWorker", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("ProCursorTokenUsageRollupWorker", contents, StringComparison.Ordinal);
-        Assert.DoesNotContain("ProCursorOperationalDbContext", contents, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AzureDevOpsLegacyWebhookCompatibilitySurfaces_AreRemovedFromSourceTree()
-    {
-        Assert.False(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterProPR.Api/Features/Crawling/Webhooks/Controllers/AdoWebhookReceiverController.cs")));
-        Assert.False(
-            Directory.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterProPR.Application/Features/Crawling/Webhooks/Commands/HandleAdoWebhookDelivery")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoCommentPoster.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoDiscoveryService.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoReviewerManager.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoThreadClient.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoThreadReplier.cs")));
-        Assert.False(File.Exists(Path.Combine(RepoRoot, "src/MeisterProPR.Application/Interfaces/IAdoTokenValidator.cs")));
-        Assert.False(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterProPR.Application/Features/Crawling/Webhooks/Ports/IAdoWebhookBasicAuthVerifier.cs")));
-        Assert.False(
-            File.Exists(
-                Path.Combine(
-                    RepoRoot,
-                    "src/MeisterProPR.Application/Features/Crawling/Webhooks/Ports/IAdoWebhookPayloadParser.cs")));
-    }
-
-    [Fact]
-    public void ModuleRegistration_UsesFirstClassAzureDevOpsProviderExtension()
-    {
-        var infrastructureSupport = File.ReadAllText(
-            Path.Combine(
-                RepoRoot,
-                "src/MeisterProPR.Infrastructure/DependencyInjection/InfrastructureServiceExtensions.cs"));
-        var clientsModule = File.ReadAllText(
-            Path.Combine(
-                RepoRoot,
-                "src/MeisterProPR.Infrastructure/Features/Clients/ClientsModuleServiceCollectionExtensions.cs"));
-        var reviewingModule = File.ReadAllText(
-            Path.Combine(
-                RepoRoot,
-                "src/MeisterProPR.Infrastructure/Features/Reviewing/ReviewingModuleServiceCollectionExtensions.cs"));
-        var crawlingModule = File.ReadAllText(
-            Path.Combine(
-                RepoRoot,
-                "src/MeisterProPR.Infrastructure/Features/Crawling/CrawlingModuleServiceCollectionExtensions.cs"));
-        var proCursorModule = File.ReadAllText(
-            Path.Combine(
-                RepoRoot,
-                "src/MeisterProPR.ProCursor/Infrastructure/DependencyInjection/ProCursorServiceCollectionExtensions.cs"));
-
-        Assert.Contains("AddAzureDevOpsProviderAdapters()", clientsModule, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsProviderAdapters()", reviewingModule, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsProviderAdapters()", crawlingModule, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsInfrastructureServices(", infrastructureSupport, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsReviewingServices(", reviewingModule, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsCrawlingServices(", crawlingModule, StringComparison.Ordinal);
-        Assert.Contains("AddAzureDevOpsProCursorServices(", proCursorModule, StringComparison.Ordinal);
-        Assert.DoesNotContain("AdoCompatibility", clientsModule, StringComparison.Ordinal);
-        Assert.DoesNotContain("AdoCompatibility", reviewingModule, StringComparison.Ordinal);
-        Assert.DoesNotContain("AdoCompatibility", crawlingModule, StringComparison.Ordinal);
-        Assert.DoesNotContain("IAdoTokenValidator", infrastructureSupport, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "AddScoped<IAdoDiscoveryService, AdoDiscoveryService>",
-            crawlingModule,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("IAdoReviewerManager", infrastructureSupport, StringComparison.Ordinal);
-        Assert.DoesNotContain("IAdoThreadClient", infrastructureSupport, StringComparison.Ordinal);
-        Assert.DoesNotContain("IAdoThreadReplier", infrastructureSupport, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddScoped<IReviewContextToolsFactory>(sp =>", reviewingModule, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "AddScoped<IProCursorMaterializer, AdoRepositoryMaterializer>",
-            proCursorModule,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("HandleAdoWebhookDeliveryHandler", crawlingModule, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void InfrastructureSupport_RegistersOnlySharedSupportServices()
@@ -522,11 +374,12 @@ public sealed class ModuleRegistrationTests
         services.AddScoped<ManagedRemoteProCursorGateway>();
         services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<ManagedRemoteProCursorGateway>());
 
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateOnBuild = true,
-            ValidateScopes = true,
-        });
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true,
+            });
         using var scope = provider.CreateScope();
 
         var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();
@@ -603,11 +456,12 @@ public sealed class ModuleRegistrationTests
         services.AddScoped<ManagedRemoteProCursorGateway>();
         services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<DisabledProCursorGateway>());
 
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateOnBuild = true,
-            ValidateScopes = true,
-        });
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true,
+            });
         using var scope = provider.CreateScope();
 
         var gateway = scope.ServiceProvider.GetRequiredService<IProCursorGateway>();

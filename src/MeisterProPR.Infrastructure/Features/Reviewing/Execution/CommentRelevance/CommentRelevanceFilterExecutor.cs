@@ -9,7 +9,7 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 
 /// <summary>
-/// Executes the selected comment relevance filter and handles fallback and protocol recording logic.
+///     Executes the selected comment relevance filter and handles fallback and protocol recording logic.
 /// </summary>
 /// <param name="filterRegistry">The registry containing available comment relevance filters.</param>
 /// <param name="protocolRecorder">The protocol recorder for logging events.</param>

@@ -33,5 +33,4 @@ public partial class AdoWikiMaterializer(
     {
         LogMaterializedWikiSource(logger, sourceId, branchName, commitSha, fileCount);
     }
-
 }

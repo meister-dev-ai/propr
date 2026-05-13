@@ -165,7 +165,7 @@ try
     builder.Services.AddReviewingModule(
         builder.Configuration,
         builder.Environment,
-        selectedCommentRelevanceFilterId: Program.GetSelectedCommentRelevanceFilterId());
+        GetSelectedCommentRelevanceFilterId());
     builder.Services.AddCrawlingModule(builder.Configuration, builder.Environment);
     builder.Services.AddClientsModule(builder.Configuration, builder.Environment);
     builder.Services.AddIdentityAndAccessModule(builder.Configuration, builder.Environment);
@@ -266,9 +266,9 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<AdoPrCrawlerWorker>());
     }
 
-    var proCursorGatewayMode = Program.GetEffectiveProCursorMode(builder.Configuration);
-    var useRemoteProCursor = Program.IsRemoteProCursorMode(proCursorGatewayMode);
-    var disableProCursor = Program.IsDisabledProCursorMode(proCursorGatewayMode);
+    var proCursorGatewayMode = GetEffectiveProCursorMode(builder.Configuration);
+    var useRemoteProCursor = IsRemoteProCursorMode(proCursorGatewayMode);
+    var disableProCursor = IsDisabledProCursorMode(proCursorGatewayMode);
 
     builder.Services.AddScoped<IProCursorGateway>(sp =>
         useRemoteProCursor
@@ -329,7 +329,7 @@ try
     builder.Services.AddSingleton<ReviewJobMetrics>();
 
     builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource.AddService(serviceName: "MeisterProPR.Api"))
+        .ConfigureResource(resource => resource.AddService("MeisterProPR.Api"))
         .WithTracing(tracing => tracing
             .AddSource(ReviewJobTelemetry.Source.Name)
             .AddSource("MeisterProPR.Webhooks")

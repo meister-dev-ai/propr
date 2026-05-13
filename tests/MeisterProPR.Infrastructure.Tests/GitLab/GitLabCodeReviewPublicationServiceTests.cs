@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -54,8 +55,8 @@ public sealed class GitLabPublicationContextContractTests
             {
                 "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
                 "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions" =>
-                    GitLabTestHelpers.CreateJsonResponse(new { id = "discussion-1" }, System.Net.HttpStatusCode.Created),
-                _ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
+                    GitLabTestHelpers.CreateJsonResponse(new { id = "discussion-1" }, HttpStatusCode.Created),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
             });
 
         var sut = new GitLabCodeReviewPublicationService(

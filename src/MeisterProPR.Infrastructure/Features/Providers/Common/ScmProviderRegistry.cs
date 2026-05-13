@@ -40,15 +40,15 @@ internal sealed class ScmProviderRegistry(
     private readonly IReadOnlyDictionary<ScmProvider, IReviewDiscoveryProvider> _reviewDiscoveryProvidersByProvider =
         reviewDiscoveryProviders.ToDictionary(provider => provider.Provider);
 
-    private readonly IReadOnlyDictionary<ScmProvider, IReviewerIdentityService> _reviewerIdentityServicesByProvider =
-        reviewerIdentityServices.ToDictionary(provider => provider.Provider);
-
     private readonly IReadOnlyDictionary<ScmProvider, IReviewThreadReplyPublisher>
         _reviewThreadReplyPublishersByProvider =
             reviewThreadReplyPublishers.ToDictionary(provider => provider.Provider);
 
     private readonly IReadOnlyDictionary<ScmProvider, IReviewThreadStatusWriter> _reviewThreadStatusWritersByProvider =
         reviewThreadStatusWriters.ToDictionary(provider => provider.Provider);
+
+    private readonly IReadOnlyDictionary<ScmProvider, IReviewerIdentityService> _reviewerIdentityServicesByProvider =
+        reviewerIdentityServices.ToDictionary(provider => provider.Provider);
 
     private readonly IReadOnlyDictionary<ScmProvider, IWebhookIngressService> _webhookIngressServicesByProvider =
         webhookIngressServices.ToDictionary(provider => provider.Provider);

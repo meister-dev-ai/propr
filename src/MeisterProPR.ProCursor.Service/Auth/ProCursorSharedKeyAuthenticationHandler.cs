@@ -43,8 +43,10 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, "propr-control-plane")],
             ProCursorSharedKeyAuthenticationDefaults.Scheme);
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(
-            new ClaimsPrincipal(identity),
-            ProCursorSharedKeyAuthenticationDefaults.Scheme)));
+        return Task.FromResult(
+            AuthenticateResult.Success(
+                new AuthenticationTicket(
+                    new ClaimsPrincipal(identity),
+                    ProCursorSharedKeyAuthenticationDefaults.Scheme)));
     }
 }

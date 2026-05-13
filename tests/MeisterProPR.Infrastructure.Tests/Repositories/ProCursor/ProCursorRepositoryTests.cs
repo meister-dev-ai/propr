@@ -24,9 +24,9 @@ public sealed class ProCursorRepositoryTests(PostgresContainerFixture fixture) :
     private static readonly Guid ClientId = Guid.Parse("cccccccc-1000-0000-0000-000000000001");
 
     private MeisterProPRDbContext _controlDb = null!;
-    private ProCursorOperationalDbContext _operationalDb = null!;
     private ProCursorIndexJobRepository _jobs = null!;
     private ProCursorKnowledgeSourceRepository _knowledgeSources = null!;
+    private ProCursorOperationalDbContext _operationalDb = null!;
     private ProCursorIndexSnapshotRepository _snapshots = null!;
     private ProCursorSymbolGraphRepository _symbolGraph = null!;
 

@@ -3,7 +3,6 @@
 
 using MeisterProPR.Application.Options;
 using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
-using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Repositories;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.ProCursor;

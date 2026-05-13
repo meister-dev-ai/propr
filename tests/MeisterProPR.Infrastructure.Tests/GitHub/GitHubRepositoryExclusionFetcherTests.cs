@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -80,20 +83,20 @@ public sealed class GitHubRepositoryExclusionFetcherTests
         httpClientFactory.CreateClient("GitHubProvider")
             .Returns(
                 new HttpClient(
-                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-                    {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "acme-platform" } }),
-                        "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
-                            new
-                            {
-                                token = "installation-token",
-                                expires_at = DateTimeOffset.UtcNow.AddHours(1),
-                            }),
-                        "https://api.github.com/repos/acme/propr/contents/.meister-propr%2Fexclude?ref=main" =>
-                            CaptureExcludeFile(request),
-                        _ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound),
-                    }))));
+                    new StubHttpMessageHandler(request => Task.FromResult(
+                        request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                                new
+                                {
+                                    token = "installation-token",
+                                    expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                                }),
+                            "https://api.github.com/repos/acme/propr/contents/.meister-propr%2Fexclude?ref=main" =>
+                                CaptureExcludeFile(request),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        }))));
 
         var sut = new GitHubRepositoryExclusionFetcher(
             connectionRepository,
@@ -118,10 +121,18 @@ public sealed class GitHubRepositoryExclusionFetcherTests
             return CreateJsonResponse(
                 new
                 {
-                    content = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("openapi.json\n")),
+                    content = Convert.ToBase64String(Encoding.UTF8.GetBytes("openapi.json\n")),
                     encoding = "base64",
                 });
         }
+    }
+
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload)),
+        };
     }
 
     private sealed class TestableGitHubRepositoryExclusionFetcher : GitHubRepositoryExclusionFetcher
@@ -162,14 +173,6 @@ public sealed class GitHubRepositoryExclusionFetcherTests
 
             return Task.FromResult<string?>(this._content);
         }
-    }
-
-    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
-    {
-        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-        {
-            Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload)),
-        };
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)

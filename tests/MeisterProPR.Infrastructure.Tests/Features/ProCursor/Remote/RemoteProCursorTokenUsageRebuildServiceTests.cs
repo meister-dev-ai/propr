@@ -7,6 +7,7 @@ using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.ProCursor.Remote;
 
@@ -16,35 +17,36 @@ public sealed class RemoteProCursorTokenUsageRebuildServiceTests
     public async Task RebuildAsync_MapsRouteAndPayload()
     {
         var clientId = Guid.NewGuid();
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(async request =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal(
-                $"http://procursor.internal/internal/procursor/clients/{clientId:D}/token-usage/rebuild",
-                request.RequestUri!.ToString());
-
-            var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync()).RootElement;
-            Assert.Equal("2026-04-01", payload.GetProperty("from").GetString());
-            Assert.Equal("2026-04-30", payload.GetProperty("to").GetString());
-            Assert.True(payload.GetProperty("includeMonthly").GetBoolean());
-
-            return new HttpResponseMessage(HttpStatusCode.OK)
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
             {
-                Content = JsonContent.Create(
-                    new ProCursorTokenUsageRebuildResponse(
-                        new DateOnly(2026, 4, 1),
-                        new DateOnly(2026, 4, 30),
-                        6,
-                        new DateTimeOffset(2026, 4, 30, 12, 0, 0, TimeSpan.Zero))),
-            };
-        }))
+                Assert.Equal(HttpMethod.Post, request.Method);
+                Assert.Equal(
+                    $"http://procursor.internal/internal/procursor/clients/{clientId:D}/token-usage/rebuild",
+                    request.RequestUri!.ToString());
+
+                var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync()).RootElement;
+                Assert.Equal("2026-04-01", payload.GetProperty("from").GetString());
+                Assert.Equal("2026-04-30", payload.GetProperty("to").GetString());
+                Assert.True(payload.GetProperty("includeMonthly").GetBoolean());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(
+                        new ProCursorTokenUsageRebuildResponse(
+                            new DateOnly(2026, 4, 1),
+                            new DateOnly(2026, 4, 30),
+                            6,
+                            new DateTimeOffset(2026, 4, 30, 12, 0, 0, TimeSpan.Zero))),
+                };
+            }))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
         var service = new RemoteProCursorTokenUsageRebuildService(
             httpClient,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteProCursorTokenUsageRebuildService>.Instance);
+            NullLogger<RemoteProCursorTokenUsageRebuildService>.Instance);
 
         var result = await service.RebuildAsync(
             clientId,
@@ -57,15 +59,16 @@ public sealed class RemoteProCursorTokenUsageRebuildServiceTests
     [Fact]
     public async Task RebuildAsync_WhenUnauthorized_ThrowsDependencyUnavailable()
     {
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized))))
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(_ =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized))))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
         var service = new RemoteProCursorTokenUsageRebuildService(
             httpClient,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<RemoteProCursorTokenUsageRebuildService>.Instance);
+            NullLogger<RemoteProCursorTokenUsageRebuildService>.Instance);
 
         var ex = await Assert.ThrowsAsync<ProCursorDependencyUnavailableException>(() =>
             service.RebuildAsync(

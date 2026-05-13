@@ -153,13 +153,11 @@ internal sealed class GitHubReviewerIdentityService(
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException(
-                    $"GitHub reviewer identity lookup failed with status {(int)response.StatusCode}.");
+                throw new InvalidOperationException($"GitHub reviewer identity lookup failed with status {(int)response.StatusCode}.");
             }
 
             var payload = await response.Content.ReadFromJsonAsync<GitHubInstallationRepositoriesResponse>(ct)
-                          ?? throw new InvalidOperationException(
-                              "GitHub reviewer identity lookup returned an empty installation-repository payload.");
+                          ?? throw new InvalidOperationException("GitHub reviewer identity lookup returned an empty installation-repository payload.");
 
             if (payload.Repositories.Count == 0)
             {
@@ -197,8 +195,7 @@ internal sealed class GitHubReviewerIdentityService(
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
-                $"GitHub reviewer identity lookup failed with status {(int)response.StatusCode}.");
+            throw new InvalidOperationException($"GitHub reviewer identity lookup failed with status {(int)response.StatusCode}.");
         }
 
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubCollaboratorResponse>>(ct) ?? [];
@@ -216,7 +213,9 @@ internal sealed class GitHubReviewerIdentityService(
         [property: JsonPropertyName("repositories")]
         IReadOnlyList<GitHubInstallationRepositoryResponse> Repositories);
 
-    private sealed record GitHubInstallationRepositoryResponse([property: JsonPropertyName("full_name")] string? FullName);
+    private sealed record GitHubInstallationRepositoryResponse(
+        [property: JsonPropertyName("full_name")]
+        string? FullName);
 
     private sealed record GitHubCollaboratorResponse(
         [property: JsonPropertyName("id")] long Id,

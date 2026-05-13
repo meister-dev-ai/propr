@@ -29,11 +29,16 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         this._repository = new ClientScmConnectionRepository(this._dbContext, CreateCodec());
     }
 
+    public void Dispose()
+    {
+        this._dbContext.Dispose();
+    }
+
     [Fact]
     public async Task AddAsync_GitHubAppInstallation_PersistsGitHubAppMetadataAndProtectedSecret()
     {
         var client = await this.SeedClientAsync();
-        var privateKeyPem = GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true);
+        var privateKeyPem = GitHubAppTestHelpers.CreatePrivateKeyPem(true);
 
         var created = await this._repository.AddAsync(
             client.Id,
@@ -45,9 +50,9 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             "GitHub App",
             privateKeyPem,
             true,
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012,
-            ct: CancellationToken.None);
+            123456,
+            789012,
+            CancellationToken.None);
 
         Assert.NotNull(created);
         Assert.Equal(123456, created!.GitHubAppId);
@@ -63,7 +68,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
     public async Task UpdateAsync_GitHubAppRotation_ReprotectsSecretAndResetsVerification()
     {
         var client = await this.SeedClientAsync();
-        var originalSecret = GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true);
+        var originalSecret = GitHubAppTestHelpers.CreatePrivateKeyPem(true);
         var created = await this._repository.AddAsync(
             client.Id,
             ScmProvider.GitHub,
@@ -74,9 +79,9 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             "GitHub App",
             originalSecret,
             true,
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012,
-            ct: CancellationToken.None);
+            123456,
+            789012,
+            CancellationToken.None);
         Assert.NotNull(created);
 
         await this._repository.UpdateVerificationAsync(
@@ -87,7 +92,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             null,
             CancellationToken.None);
 
-        var rotatedSecret = GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true);
+        var rotatedSecret = GitHubAppTestHelpers.CreatePrivateKeyPem(true);
         var updated = await this._repository.UpdateAsync(
             client.Id,
             created.Id,
@@ -98,9 +103,9 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             "GitHub App",
             rotatedSecret,
             true,
-            gitHubAppId: 456123,
-            gitHubAppInstallationId: 654321,
-            ct: CancellationToken.None);
+            456123,
+            654321,
+            CancellationToken.None);
 
         Assert.NotNull(updated);
         Assert.Equal("unknown", updated!.VerificationStatus);
@@ -128,11 +133,11 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             null,
             null,
             "GitHub App",
-            GitHubAppTestHelpers.CreatePrivateKeyPem(unique: true),
+            GitHubAppTestHelpers.CreatePrivateKeyPem(true),
             true,
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012,
-            ct: CancellationToken.None);
+            123456,
+            789012,
+            CancellationToken.None);
         Assert.NotNull(created);
 
         var updated = await this._repository.UpdateAsync(
@@ -145,9 +150,9 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             "GitHub PAT",
             "ghp_rotated_secret",
             true,
-            gitHubAppId: null,
-            gitHubAppInstallationId: null,
-            ct: CancellationToken.None);
+            null,
+            null,
+            CancellationToken.None);
 
         Assert.NotNull(updated);
         Assert.Null(updated!.GitHubAppId);
@@ -157,11 +162,6 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         Assert.Null(record.GitHubAppId);
         Assert.Null(record.GitHubAppInstallationId);
         Assert.Equal(ScmAuthenticationKind.PersonalAccessToken, record.AuthenticationKind);
-    }
-
-    public void Dispose()
-    {
-        this._dbContext.Dispose();
     }
 
     private async Task<ClientRecord> SeedClientAsync()

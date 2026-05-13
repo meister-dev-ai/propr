@@ -629,7 +629,7 @@ public sealed partial class ReviewOrchestrationService(
                             [],
                             ExistingThreads: pr?.ExistingThreads),
                         partial,
-                        compareToIterationId: null,
+                        null,
                         ct);
                     return;
                 }

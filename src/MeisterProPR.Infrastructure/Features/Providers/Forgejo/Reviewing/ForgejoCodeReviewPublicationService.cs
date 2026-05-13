@@ -130,13 +130,13 @@ internal sealed class ForgejoCodeReviewPublicationService(
     {
         return review.User is not null
                && ((review.User.Id.HasValue && string.Equals(
-                        review.User.Id.Value.ToString(),
-                        author.ExternalUserId,
-                        StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrWhiteSpace(review.User.Login) && string.Equals(
-                        review.User.Login,
-                        author.Login,
-                        StringComparison.OrdinalIgnoreCase)));
+                       review.User.Id.Value.ToString(),
+                       author.ExternalUserId,
+                       StringComparison.OrdinalIgnoreCase))
+                   || (!string.IsNullOrWhiteSpace(review.User.Login) && string.Equals(
+                       review.User.Login,
+                       author.Login,
+                       StringComparison.OrdinalIgnoreCase)));
     }
 
     private static ForgejoCreatePullReviewRequest BuildPayload(

@@ -150,8 +150,8 @@ public sealed class ProviderReadinessEvaluatorTests
             "verified",
             DateTimeOffset.UtcNow,
             ScmAuthenticationKind.AppInstallation,
-            gitHubAppId: 123456,
-            gitHubAppInstallationId: 789012);
+            123456,
+            789012);
         this._providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
         this._scopeRepository.GetByConnectionIdAsync(this._clientId, this._connectionId, Arg.Any<CancellationToken>())
             .Returns(

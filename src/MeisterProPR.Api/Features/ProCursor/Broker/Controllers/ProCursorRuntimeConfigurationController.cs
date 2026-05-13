@@ -3,6 +3,7 @@
 
 using MeisterProPR.Api.Features.ProCursor.Broker.Services;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,9 +13,8 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Controllers;
 ///     Internal runtime-configuration endpoints used by the extracted ProCursor runtime.
 /// </summary>
 [ApiController]
-[Authorize(AuthenticationSchemes = MeisterProPR.Infrastructure.Features.ProCursor.Remote.ProCursorSharedKeyAuthenticationDefaults.Scheme)]
-public sealed class ProCursorRuntimeConfigurationController(
-    ProCursorRuntimeConfigurationProjectionService projectionService) : ControllerBase
+[Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+public sealed class ProCursorRuntimeConfigurationController(ProCursorRuntimeConfigurationProjectionService projectionService) : ControllerBase
 {
     /// <summary>
     ///     Lists runtime-configuration projections that are enabled for ProCursor.

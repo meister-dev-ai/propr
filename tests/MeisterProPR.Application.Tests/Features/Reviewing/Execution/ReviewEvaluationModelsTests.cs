@@ -27,8 +27,8 @@ public sealed class ReviewEvaluationModelsTests
         var fixture = CreateFixture();
         var configuration = new EvaluationConfiguration(
             "baseline",
-            ModelSelection: new EvaluationModelSelection(["gpt-4o"]),
-            Output: new EvaluationOutputOptions("artifacts/run.json", "full"));
+            new EvaluationModelSelection(["gpt-4o"]),
+            new EvaluationOutputOptions("artifacts/run.json", "full"));
 
         var request = new ReviewWorkflowRequest(job, chatClient, "gpt-4o", fixture, configuration);
 

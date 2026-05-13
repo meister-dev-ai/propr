@@ -2,11 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
-using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.ProCursor.Service.Tests.Support;
@@ -22,7 +20,8 @@ public sealed class InternalProCursorEndpointsTests(ProCursorServiceFactory fact
     {
         var clientId = Guid.NewGuid();
         factory.Gateway.ListSourcesAsync(clientId, Arg.Any<CancellationToken>())
-            .Returns([
+            .Returns(
+            [
                 new ProCursorKnowledgeSourceDto(
                     Guid.NewGuid(),
                     clientId,
@@ -76,7 +75,7 @@ public sealed class InternalProCursorEndpointsTests(ProCursorServiceFactory fact
         var client = this.CreateAuthenticatedClient();
         var response = await client.PostAsJsonAsync(
             "/internal/procursor/queries/knowledge",
-            new ProCursorKnowledgeQueryRequest(Guid.NewGuid(), "Where is caching handled?", null, null));
+            new ProCursorKnowledgeQueryRequest(Guid.NewGuid(), "Where is caching handled?"));
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }

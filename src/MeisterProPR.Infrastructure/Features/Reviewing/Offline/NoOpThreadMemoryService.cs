@@ -14,9 +14,15 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpThreadMemoryService : IThreadMemoryService
 {
-    public Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default) => Task.CompletedTask;
+    public Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
-    public Task HandleThreadReopenedAsync(ThreadReopenedDomainEvent evt, CancellationToken ct = default) => Task.CompletedTask;
+    public Task HandleThreadReopenedAsync(ThreadReopenedDomainEvent evt, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
     public Task RecordNoOpAsync(
         Guid clientId,
@@ -26,7 +32,10 @@ public sealed class NoOpThreadMemoryService : IThreadMemoryService
         string? previousStatus,
         string currentStatus,
         string reason,
-        CancellationToken ct = default) => Task.CompletedTask;
+        CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
     public Task<ReviewResult> RetrieveAndReconsiderAsync(
         Guid clientId,
@@ -36,7 +45,10 @@ public sealed class NoOpThreadMemoryService : IThreadMemoryService
         ReviewResult draftResult,
         Guid? protocolId,
         CancellationToken ct = default,
-        float? temperature = null) => Task.FromResult(draftResult);
+        float? temperature = null)
+    {
+        return Task.FromResult(draftResult);
+    }
 
     public Task<ThreadMemoryRecord> DismissFindingAsync(
         Guid clientId,
@@ -45,20 +57,21 @@ public sealed class NoOpThreadMemoryService : IThreadMemoryService
         string? label,
         CancellationToken ct = default)
     {
-        return Task.FromResult(new ThreadMemoryRecord
-        {
-            Id = Guid.NewGuid(),
-            ClientId = clientId,
-            ThreadId = 1,
-            RepositoryId = string.Empty,
-            PullRequestId = 1,
-            FilePath = filePath,
-            CommentHistoryDigest = label ?? findingMessage,
-            ResolutionSummary = findingMessage,
-            EmbeddingVector = [1f],
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-        });
+        return Task.FromResult(
+            new ThreadMemoryRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                ThreadId = 1,
+                RepositoryId = string.Empty,
+                PullRequestId = 1,
+                FilePath = filePath,
+                CommentHistoryDigest = label ?? findingMessage,
+                ResolutionSummary = findingMessage,
+                EmbeddingVector = [1f],
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
     }
 
     public Task<HistoricalDuplicateSuppressionMatchDto> FindDuplicateSuppressionMatchAsync(

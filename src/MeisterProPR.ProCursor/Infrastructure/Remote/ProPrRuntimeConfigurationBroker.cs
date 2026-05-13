@@ -23,14 +23,15 @@ public sealed class ProPrRuntimeConfigurationBroker(
 {
     public async Task<IReadOnlyList<ProCursorRuntimeConfigurationProjectionDto>> ListEnabledAsync(CancellationToken ct = default)
     {
-        using var response = await this.SendCoreAsync(new HttpRequestMessage(
-            HttpMethod.Get,
-            ProPrBrokerRequestUri.Create(hostOptions, "internal/propr/procursor/runtime-config/enabled")), ct);
+        using var response = await this.SendCoreAsync(
+            new HttpRequestMessage(
+                HttpMethod.Get,
+                ProPrBrokerRequestUri.Create(hostOptions, "internal/propr/procursor/runtime-config/enabled")), ct);
 
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<IReadOnlyList<ProCursorRuntimeConfigurationProjectionDto>>(
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ProCursorRuntimeConfigurationProjectionDto>>(
                    ProCursorRemoteJson.SerializerOptions,
-                   ct))
+                   ct)
                ?? [];
     }
 
@@ -58,9 +59,9 @@ public sealed class ProPrRuntimeConfigurationBroker(
         }
 
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<ProCursorRuntimeConfigurationProjectionDto>(
+        return await response.Content.ReadFromJsonAsync<ProCursorRuntimeConfigurationProjectionDto>(
                    ProCursorRemoteJson.SerializerOptions,
-                   ct))
+                   ct)
                ?? throw new InvalidOperationException("ProPR runtime configuration broker returned an empty payload.");
     }
 
@@ -96,13 +97,13 @@ public sealed class ProPrRuntimeConfigurationBroker(
 
         if ((int)response.StatusCode >= 500)
         {
-            throw new ProCursorDependencyUnavailableException(
-                $"The configured ProPR broker returned upstream status {(int)response.StatusCode}.");
+            throw new ProCursorDependencyUnavailableException($"The configured ProPR broker returned upstream status {(int)response.StatusCode}.");
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-            ? $"ProPR broker request failed with status {(int)response.StatusCode}."
-            : body);
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(body)
+                ? $"ProPR broker request failed with status {(int)response.StatusCode}."
+                : body);
     }
 }

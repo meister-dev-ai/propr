@@ -42,9 +42,7 @@ public sealed record ClientScmConnectionCredentialDto(
             null,
             displayName,
             secret,
-            isActive,
-            GitHubAppId: null,
-            GitHubAppInstallationId: null)
+            isActive)
     {
     }
 }

@@ -31,7 +31,7 @@ public sealed class RemoteProCursorTokenUsageRebuildService(
 
         using var response = await this.SendCoreAsync(message, ct);
         await EnsureSuccessAsync(response, ct);
-        return (await response.Content.ReadFromJsonAsync<ProCursorTokenUsageRebuildResponse>(cancellationToken: ct))
+        return await response.Content.ReadFromJsonAsync<ProCursorTokenUsageRebuildResponse>(ct)
                ?? throw new InvalidOperationException("Remote ProCursor rebuild endpoint returned an empty payload.");
     }
 
@@ -67,13 +67,13 @@ public sealed class RemoteProCursorTokenUsageRebuildService(
 
         if ((int)response.StatusCode >= 500)
         {
-            throw new ProCursorDependencyUnavailableException(
-                $"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
+            throw new ProCursorDependencyUnavailableException($"The configured ProCursor service returned upstream status {(int)response.StatusCode}.");
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new InvalidOperationException(string.IsNullOrWhiteSpace(body)
-            ? $"Remote ProCursor rebuild request failed with status {(int)response.StatusCode}."
-            : body);
+        throw new InvalidOperationException(
+            string.IsNullOrWhiteSpace(body)
+                ? $"Remote ProCursor rebuild request failed with status {(int)response.StatusCode}."
+                : body);
     }
 }

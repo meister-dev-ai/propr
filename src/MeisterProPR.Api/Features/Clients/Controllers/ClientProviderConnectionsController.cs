@@ -121,25 +121,28 @@ public sealed partial class ClientProviderConnectionsController(
                 providerFamily,
                 authenticationKind))
         {
-            errors.Add((
-                nameof(CreateClientProviderConnectionRequest.AuthenticationKind),
-                CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(providerFamily)));
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.AuthenticationKind),
+                    CreateClientProviderConnectionRequestValidator.GetUnsupportedAuthenticationKindMessage(providerFamily)));
         }
 
         if (CreateClientProviderConnectionRequestValidator.RequiresOAuthMetadata(providerFamily, authenticationKind))
         {
             if (string.IsNullOrWhiteSpace(oAuthTenantId))
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
-                    "OAuthTenantId is required for Azure DevOps OAuth client-credentials connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
+                        "OAuthTenantId is required for Azure DevOps OAuth client-credentials connections."));
             }
 
             if (string.IsNullOrWhiteSpace(oAuthClientId))
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.OAuthClientId),
-                    "OAuthClientId is required for Azure DevOps OAuth client-credentials connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.OAuthClientId),
+                        "OAuthClientId is required for Azure DevOps OAuth client-credentials connections."));
             }
         }
 
@@ -147,16 +150,18 @@ public sealed partial class ClientProviderConnectionsController(
         {
             if (gitHubAppId.HasValue)
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                    "GitHubAppId is only valid for GitHub provider connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                        "GitHubAppId is only valid for GitHub provider connections."));
             }
 
             if (gitHubAppInstallationId.HasValue)
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                    "GitHubAppInstallationId is only valid for GitHub provider connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                        "GitHubAppInstallationId is only valid for GitHub provider connections."));
             }
 
             return errors;
@@ -166,23 +171,26 @@ public sealed partial class ClientProviderConnectionsController(
         {
             if (!gitHubAppId.HasValue)
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                    "GitHubAppId is required for GitHub App connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                        "GitHubAppId is required for GitHub App connections."));
             }
 
             if (!gitHubAppInstallationId.HasValue)
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                    "GitHubAppInstallationId is required for GitHub App connections."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                        "GitHubAppInstallationId is required for GitHub App connections."));
             }
 
             if (!hasCompatibleSecretMaterial)
             {
-                errors.Add((
-                    nameof(CreateClientProviderConnectionRequest.Secret),
-                    "A GitHub App private key is required when switching to GitHub App authentication."));
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.Secret),
+                        "A GitHub App private key is required when switching to GitHub App authentication."));
             }
 
             return errors;
@@ -190,25 +198,28 @@ public sealed partial class ClientProviderConnectionsController(
 
         if (gitHubAppId.HasValue)
         {
-            errors.Add((
-                nameof(CreateClientProviderConnectionRequest.GitHubAppId),
-                "GitHubAppId is only valid when AuthenticationKind is appInstallation."));
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppId),
+                    "GitHubAppId is only valid when AuthenticationKind is appInstallation."));
         }
 
         if (gitHubAppInstallationId.HasValue)
         {
-            errors.Add((
-                nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
-                "GitHubAppInstallationId is only valid when AuthenticationKind is appInstallation."));
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.GitHubAppInstallationId),
+                    "GitHubAppInstallationId is only valid when AuthenticationKind is appInstallation."));
         }
 
         if (providerFamily == ScmProvider.GitHub
             && authenticationKind == ScmAuthenticationKind.PersonalAccessToken
             && !hasCompatibleSecretMaterial)
         {
-            errors.Add((
-                nameof(CreateClientProviderConnectionRequest.Secret),
-                "A personal access token is required when switching away from GitHub App authentication."));
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.Secret),
+                    "A personal access token is required when switching away from GitHub App authentication."));
         }
 
         return errors;
@@ -463,8 +474,7 @@ public sealed partial class ClientProviderConnectionsController(
             request.OAuthTenantId,
             request.OAuthClientId,
             request.GitHubAppId,
-            request.GitHubAppInstallationId,
-            hasCompatibleSecretMaterial: true);
+            request.GitHubAppInstallationId);
         if (supportedAuthenticationValidation is not null)
         {
             return supportedAuthenticationValidation;
@@ -694,8 +704,7 @@ public sealed partial class ClientProviderConnectionsController(
                 connection.OAuthTenantId,
                 connection.OAuthClientId,
                 connection.GitHubAppId,
-                connection.GitHubAppInstallationId,
-                hasCompatibleSecretMaterial: true);
+                connection.GitHubAppInstallationId);
 
             if (connection.ProviderFamily == ScmProvider.AzureDevOps)
             {

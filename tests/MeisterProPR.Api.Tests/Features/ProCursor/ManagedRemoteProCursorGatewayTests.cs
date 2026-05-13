@@ -38,7 +38,7 @@ public sealed class ManagedRemoteProCursorGatewayTests
         Uri? requestUri = null;
         using var httpClient = new HttpClient(new StubHandler(request => requestUri = request.RequestUri))
         {
-            BaseAddress = new Uri("http://procursor.internal/")
+            BaseAddress = new Uri("http://procursor.internal/"),
         };
         var remoteGateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
 
@@ -55,7 +55,7 @@ public sealed class ManagedRemoteProCursorGatewayTests
                 "main",
                 null,
                 "auto",
-                [new ProCursorTrackedBranchCreateRequest("main", ProCursorRefreshTriggerMode.BranchUpdate, true)],
+                [new ProCursorTrackedBranchCreateRequest("main", ProCursorRefreshTriggerMode.BranchUpdate)],
                 null,
                 null,
                 "repo-a"),
@@ -72,10 +72,11 @@ public sealed class ManagedRemoteProCursorGatewayTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             onRequest(request);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = JsonContent.Create(new { })
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new { }),
+                });
         }
     }
 }

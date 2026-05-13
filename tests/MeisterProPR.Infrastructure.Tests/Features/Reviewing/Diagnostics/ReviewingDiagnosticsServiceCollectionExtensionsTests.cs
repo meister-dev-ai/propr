@@ -22,7 +22,7 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
     public void AddReviewingModule_WithoutDatabaseConnectionString_ResolvesInMemoryDiagnosticsReader()
     {
         var services = new ServiceCollection();
-        var configuration = CreateConfiguration(withDatabaseConnectionString: false);
+        var configuration = CreateConfiguration(false);
 
         services.AddInfrastructureSupport(configuration);
         services.AddReviewingModule(configuration);
@@ -69,26 +69,40 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
 
     private sealed class FakeJobRepository : IJobRepository
     {
-        public Task AddAsync(ReviewJob job, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AddAsync(ReviewJob job, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
         public Task<TryAddReviewJobResult> TryAddIfNoActiveDuplicateAsync(ReviewJob job, CancellationToken ct = default)
-            => Task.FromResult(new TryAddReviewJobResult(true, null, 0));
+        {
+            return Task.FromResult(new TryAddReviewJobResult(true, null, 0));
+        }
 
         public ReviewJob? FindActiveJob(
             string organizationUrl,
             string projectId,
             string repositoryId,
             int pullRequestId,
-            int iterationId) => null;
+            int iterationId)
+        {
+            return null;
+        }
 
         public ReviewJob? FindCompletedJob(
             string organizationUrl,
             string projectId,
             string repositoryId,
             int pullRequestId,
-            int iterationId) => null;
+            int iterationId)
+        {
+            return null;
+        }
 
-        public IReadOnlyList<ReviewJob> GetAllForClient(Guid clientId) => [];
+        public IReadOnlyList<ReviewJob> GetAllForClient(Guid clientId)
+        {
+            return [];
+        }
 
         public Task<(int total, IReadOnlyList<ReviewJob> items)> GetAllJobsAsync(
             int limit,
@@ -97,45 +111,97 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             Guid? clientId = null,
             int? pullRequestId = null,
             CancellationToken ct = default)
-            => Task.FromResult((0, (IReadOnlyList<ReviewJob>)[]));
+        {
+            return Task.FromResult((0, (IReadOnlyList<ReviewJob>)[]));
+        }
 
-        public ReviewJob? GetById(Guid id) => null;
+        public ReviewJob? GetById(Guid id)
+        {
+            return null;
+        }
 
-        public IReadOnlyList<ReviewJob> GetPendingJobs() => [];
+        public IReadOnlyList<ReviewJob> GetPendingJobs()
+        {
+            return [];
+        }
 
-        public Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        public Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        }
 
-        public Task<int> CountProcessingJobsAsync(CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(0);
+        }
 
-        public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        }
 
-        public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default) => Task.CompletedTask;
+        public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task DeleteAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeleteAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
+        {
+            return Task.FromResult(false);
+        }
 
-        public Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default) => Task.FromResult<ReviewJob?>(null);
+        public Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
 
-        public Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default) => Task.CompletedTask;
+        public Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default) => Task.FromResult<ReviewJob?>(null);
+        public Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
 
-        public Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default) => Task.FromResult<ReviewJob?>(null);
+        public Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
 
-        public Task SetCancelledAsync(Guid id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
             string organizationUrl,
             string projectId,
             CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        {
+            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        }
 
         public Task<IReadOnlyList<ReviewJob>> GetByPrAsync(
             Guid clientId,
@@ -146,7 +212,9 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             int page,
             int pageSize,
             CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        {
+            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        }
 
         public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
             string organizationUrl,
@@ -155,7 +223,9 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             int pullRequestId,
             int iterationId,
             CancellationToken ct = default)
-            => Task.FromResult<ReviewJob?>(null);
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
 
         public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
             string organizationUrl,
@@ -164,10 +234,14 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             int pullRequestId,
             string storedRevisionKey,
             CancellationToken ct = default)
-            => Task.FromResult<ReviewJob?>(null);
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
 
         public Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null)
-            => Task.CompletedTask;
+        {
+            return Task.CompletedTask;
+        }
 
         public Task UpdatePrContextAsync(
             Guid id,
@@ -176,6 +250,8 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             string? prSourceBranch,
             string? prTargetBranch,
             CancellationToken ct = default)
-            => Task.CompletedTask;
+        {
+            return Task.CompletedTask;
+        }
     }
 }

@@ -1,10 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.ProCursor.Persistence;
-using MeisterProPR.ProCursor.Service.Auth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +53,7 @@ public sealed class ProCursorServiceFactory : WebApplicationFactory<Program>
     {
         services.RemoveAll<ProCursorOperationalDbContext>();
         services.RemoveAll<DbContextOptions<ProCursorOperationalDbContext>>();
-        services.RemoveAll<Microsoft.EntityFrameworkCore.IDbContextFactory<ProCursorOperationalDbContext>>();
+        services.RemoveAll<IDbContextFactory<ProCursorOperationalDbContext>>();
 
         var options = new DbContextOptionsBuilder<ProCursorOperationalDbContext>()
             .UseInMemoryDatabase($"procursor-service-{Guid.NewGuid():N}")
@@ -64,12 +61,11 @@ public sealed class ProCursorServiceFactory : WebApplicationFactory<Program>
 
         services.AddSingleton(options);
         services.AddScoped(_ => new ProCursorOperationalDbContext(options));
-        services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<ProCursorOperationalDbContext>>(
-            _ => new TestDbContextFactory(options));
+        services.AddSingleton<IDbContextFactory<ProCursorOperationalDbContext>>(_ => new TestDbContextFactory(options));
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ProCursorOperationalDbContext> options)
-        : Microsoft.EntityFrameworkCore.IDbContextFactory<ProCursorOperationalDbContext>
+        : IDbContextFactory<ProCursorOperationalDbContext>
     {
         public ProCursorOperationalDbContext CreateDbContext()
         {

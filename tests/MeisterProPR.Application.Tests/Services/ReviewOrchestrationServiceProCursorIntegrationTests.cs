@@ -14,7 +14,6 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.ProCursor.Core;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -277,7 +276,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, "gpt-4o", baseUrl: "https://ai.test.local"));
+            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, baseUrl: "https://ai.test.local"));
 
         var chatClientFactory = Substitute.For<IAiChatClientFactory>();
         chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())
@@ -348,7 +347,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
         await publicationService.DidNotReceiveWithAnyArgs()
-            .PublishReviewAsync(default, default!, default!, default!, default!, default, default);
+            .PublishReviewAsync(default, default!, default!, default!, default!);
     }
 
     private static ReviewOrchestrationService CreateService(
@@ -431,7 +430,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
         var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepository.GetActiveForClientAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, "gpt-4o", baseUrl: "https://ai.test.local"));
+            .Returns(AiConnectionTestFactory.CreateChatConnection(job.ClientId, baseUrl: "https://ai.test.local"));
 
         var chatClientFactory = Substitute.For<IAiChatClientFactory>();
         chatClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>())

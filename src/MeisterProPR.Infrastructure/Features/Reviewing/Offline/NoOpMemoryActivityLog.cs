@@ -12,11 +12,16 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class NoOpMemoryActivityLog : IMemoryActivityLog
 {
-    public Task AppendAsync(MemoryActivityLogEntry entry, CancellationToken ct = default) => Task.CompletedTask;
+    public Task AppendAsync(MemoryActivityLogEntry entry, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
+    }
 
     public Task<PagedResult<MemoryActivityLogEntry>> QueryAsync(
         Guid clientId,
         MemoryActivityLogQuery query,
         CancellationToken ct = default)
-        => Task.FromResult(new PagedResult<MemoryActivityLogEntry>([], 0, query.Page, query.PageSize));
+    {
+        return Task.FromResult(new PagedResult<MemoryActivityLogEntry>([], 0, query.Page, query.PageSize));
+    }
 }

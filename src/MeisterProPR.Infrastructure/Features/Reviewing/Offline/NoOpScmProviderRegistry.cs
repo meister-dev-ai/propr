@@ -21,29 +21,58 @@ public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
         return [];
     }
 
-    public IRepositoryDiscoveryProvider GetRepositoryDiscoveryProvider(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IRepositoryDiscoveryProvider GetRepositoryDiscoveryProvider(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IReviewerIdentityService GetReviewerIdentityService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IReviewerIdentityService GetReviewerIdentityService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IReviewAssignmentService GetReviewAssignmentService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IReviewAssignmentService GetReviewAssignmentService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IReviewThreadStatusWriter GetReviewThreadStatusWriter(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IReviewThreadStatusWriter GetReviewThreadStatusWriter(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IReviewThreadReplyPublisher GetReviewThreadReplyPublisher(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IReviewThreadReplyPublisher GetReviewThreadReplyPublisher(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IProviderAdminDiscoveryService GetProviderAdminDiscoveryService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IProviderAdminDiscoveryService GetProviderAdminDiscoveryService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
-    public IWebhookIngressService GetWebhookIngressService(ScmProvider provider) => throw CreateUnavailableException(provider);
+    public IWebhookIngressService GetWebhookIngressService(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
 
     private static InvalidOperationException CreateUnavailableException(ScmProvider provider)
     {
-        return new InvalidOperationException(
-            $"Provider registry access for '{provider}' is unavailable in offline review-evaluation mode.");
+        return new InvalidOperationException($"Provider registry access for '{provider}' is unavailable in offline review-evaluation mode.");
     }
 }

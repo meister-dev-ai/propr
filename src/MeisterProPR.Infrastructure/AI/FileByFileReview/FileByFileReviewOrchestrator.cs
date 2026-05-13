@@ -15,7 +15,6 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -42,6 +41,30 @@ internal sealed partial class FileByFileReviewOrchestrator(
     ISummaryReconciliationService? summaryReconciliationService = null) : IFileByFileReviewOrchestrator
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
+    ///     A comment containing any of these is speculative and must be discarded.
+    /// </summary>
+    private static readonly ImmutableArray<string> HedgePhrases =
+    [
+        "if your ", "if the file", "if [", "please verify", "validate that",
+        "consider whether", "this may be", "this could be", "you may want to",
+        "worth checking", "it appears", "it seems", "i cannot confirm",
+        "unclear whether", "worth verifying", "if applicable",
+    ];
+
+    /// <summary>
+    ///     Vague action phrases applied only to <see cref="CommentSeverity.Suggestion" /> entries.
+    ///     A suggestion containing any of these does not name a specific, actionable alternative.
+    /// </summary>
+    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
+    [
+        "consider refactoring", "consider adding", "you could also", "you might also",
+        "you might want to", "it would be worth", "would also be good",
+        "could be strengthened", "could be made", "could also verify",
+    ];
+
     private readonly AiReviewOptions _opts = options.Value;
 
     public FileByFileReviewOrchestrator(
@@ -74,14 +97,14 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 jobRepository,
                 options.Value,
                 logger,
-            aiConnectionRepository,
-            aiClientFactory,
-            memoryService,
-            aiRuntimeResolver,
-            new CommentRelevanceFilterExecutor(commentRelevanceFilterRegistry, protocolRecorder),
-            reviewInvariantFactProviders,
-            reviewClaimExtractor,
-            reviewFindingVerifier),
+                aiConnectionRepository,
+                aiClientFactory,
+                memoryService,
+                aiRuntimeResolver,
+                new CommentRelevanceFilterExecutor(commentRelevanceFilterRegistry, protocolRecorder),
+                reviewInvariantFactProviders,
+                reviewClaimExtractor,
+                reviewFindingVerifier),
             aiConnectionRepository,
             aiClientFactory,
             aiRuntimeResolver,
@@ -92,29 +115,6 @@ internal sealed partial class FileByFileReviewOrchestrator(
             summaryReconciliationService)
     {
     }
-
-    /// <summary>
-    ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
-    ///     A comment containing any of these is speculative and must be discarded.
-    /// </summary>
-    private static readonly ImmutableArray<string> HedgePhrases =
-    [
-        "if your ", "if the file", "if [", "please verify", "validate that",
-        "consider whether", "this may be", "this could be", "you may want to",
-        "worth checking", "it appears", "it seems", "i cannot confirm",
-        "unclear whether", "worth verifying", "if applicable",
-    ];
-
-    /// <summary>
-    ///     Vague action phrases applied only to <see cref="CommentSeverity.Suggestion" /> entries.
-    ///     A suggestion containing any of these does not name a specific, actionable alternative.
-    /// </summary>
-    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
-    [
-        "consider refactoring", "consider adding", "you could also", "you might also",
-        "you might want to", "it would be worth", "would also be good",
-        "could be strengthened", "could be made", "could also verify",
-    ];
 
     public async Task<ReviewResult> ReviewAsync(
         ReviewJob job,
@@ -1327,9 +1327,11 @@ internal sealed partial class FileByFileReviewOrchestrator(
                     claim.FindingId,
                     VerificationOutcome.UnresolvedKind,
                     FinalGateDecision.SummaryOnlyDisposition,
-                    [updatedEvidence.HasResolvedMultiFileEvidence
-                        ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
-                        : ReviewFindingGateReasonCodes.MissingMultiFileEvidence],
+                    [
+                        updatedEvidence.HasResolvedMultiFileEvidence
+                            ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
+                            : ReviewFindingGateReasonCodes.MissingMultiFileEvidence,
+                    ],
                     [],
                     VerificationOutcome.WeakEvidence,
                     "Retrieved context is treated as a verification hint until a bounded claim outcome supports publication.",
@@ -1782,5 +1784,4 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ? result
             : result with { Comments = adjusted };
     }
-
 }

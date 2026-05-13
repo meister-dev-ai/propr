@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -418,7 +417,7 @@ public sealed class AdoProCursorMaterializerTests
                            || string.Equals(candidate.Name, canonicalWikiId, StringComparison.OrdinalIgnoreCase)
                            || string.Equals(candidate.Name, source.DisplayName, StringComparison.OrdinalIgnoreCase)
                            || (!string.IsNullOrWhiteSpace(source.SourceDisplayName)
-                                && string.Equals(candidate.Name, source.SourceDisplayName, StringComparison.OrdinalIgnoreCase)))
+                               && string.Equals(candidate.Name, source.SourceDisplayName, StringComparison.OrdinalIgnoreCase)))
                        ?? throw new InvalidOperationException($"Unable to resolve the backing repository for wiki source {source.Id}.");
 
             return Task.FromResult(wiki.RepositoryId.ToString());

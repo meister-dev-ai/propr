@@ -40,8 +40,8 @@ internal static class GitHubAppTestHelpers
             "GitHub App",
             privateKeyPem ?? CreatePrivateKeyPem(),
             true,
-            GitHubAppId: appId,
-            GitHubAppInstallationId: installationId);
+            appId,
+            installationId);
     }
 
     public static IClientScmConnectionRepository CreateAppInstallationConnectionRepository(

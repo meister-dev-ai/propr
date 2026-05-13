@@ -9,7 +9,6 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -224,8 +223,8 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
                 ReviewProtocolEventNames.VerificationPrDecision,
                 Arg.Is<string?>(details => details != null && details.Contains("verifierFamilies", StringComparison.Ordinal)),
                 Arg.Is<string?>(output => output != null &&
-                    output.Contains("\"recommendedDisposition\":\"Publish\"", StringComparison.Ordinal) &&
-                    output.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, StringComparison.Ordinal)),
+                                          output.Contains("\"recommendedDisposition\":\"Publish\"", StringComparison.Ordinal) &&
+                                          output.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, StringComparison.Ordinal)),
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
         await protocolRecorder.Received()

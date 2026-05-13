@@ -103,6 +103,7 @@ public sealed class FixtureReviewContextToolsTests
                         "src/Example.cs",
                         ChangeType.Add,
                         "+++ b/src/Example.cs\n@@ -0,0 +1,7 @@\n+public class Example\n+{\n+    public string Greet(string name)\n+    {\n+        return \"Hello, \" + name + \"!\";\n+    }\n+}",
-                        "public class Example\n{\n    public string Greet(string name)\n    {\n        return \"Hello, \" + name + \"!\";\n    }\n}")]));
+                        "public class Example\n{\n    public string Greet(string name)\n    {\n        return \"Hello, \" + name + \"!\";\n    }\n}"),
+                ]));
     }
 }

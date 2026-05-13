@@ -215,7 +215,7 @@ public sealed class ProCursorEmbeddingService(
 
         var resolvedPromptTokens = promptTokens
                                    ?? totalTokens
-                                    ?? estimatedPromptTokenCount;
+                                   ?? estimatedPromptTokenCount;
         var resolvedCompletionTokens = completionTokens ?? 0;
         var resolvedTotalTokens = totalTokens ?? resolvedPromptTokens + resolvedCompletionTokens;
 

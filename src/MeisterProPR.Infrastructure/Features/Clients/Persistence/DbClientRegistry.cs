@@ -23,6 +23,7 @@ public sealed class DbClientRegistry(
 {
     private readonly Func<ProviderHostRef, ClientScmConnectionCredentialDto, CancellationToken, Task<ReviewerIdentity?>>?
         _deriveReviewerIdentityAsync = deriveReviewerIdentityAsync;
+
     private readonly ILogger<DbClientRegistry> _logger = logger ?? NullLogger<DbClientRegistry>.Instance;
 
     /// <inheritdoc />
@@ -116,9 +117,9 @@ public sealed class DbClientRegistry(
     public async Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients
-            .Where(c => c.Id == clientId)
-            .Select(c => (bool?)c.ScmCommentPostingEnabled)
-            .FirstOrDefaultAsync(ct)
-            ?? true;
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.ScmCommentPostingEnabled)
+                   .FirstOrDefaultAsync(ct)
+               ?? true;
     }
 }

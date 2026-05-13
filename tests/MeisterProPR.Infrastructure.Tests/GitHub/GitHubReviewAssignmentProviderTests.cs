@@ -145,8 +145,7 @@ public sealed class GitHubReviewAssignmentProviderTests
 
                         return request.RequestUri!.AbsoluteUri switch
                         {
-                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                                new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                             "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
                                 new
                                 {
@@ -187,22 +186,22 @@ public sealed class GitHubReviewAssignmentProviderTests
         httpClientFactory.CreateClient("GitHubProvider")
             .Returns(
                 new HttpClient(
-                    new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-                    {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "acme-platform" } }),
-                        "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
-                            new
-                            {
-                                token = "installation-token",
-                                expires_at = DateTimeOffset.UtcNow.AddHours(1),
-                            }),
-                        "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Get =>
-                            CreateJsonResponse(new { users = Array.Empty<object>() }),
-                        "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Post =>
-                            CapturePost(),
-                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
-                    }))));
+                    new StubHttpMessageHandler(request => Task.FromResult(
+                        request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
+                            "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                                new
+                                {
+                                    token = "installation-token",
+                                    expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                                }),
+                            "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Get =>
+                                CreateJsonResponse(new { users = Array.Empty<object>() }),
+                            "https://api.github.com/repos/acme/propr/pulls/42/requested_reviewers" when request.Method == HttpMethod.Post =>
+                                CapturePost(),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        }))));
 
         var sut = new GitHubReviewAssignmentProvider(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),

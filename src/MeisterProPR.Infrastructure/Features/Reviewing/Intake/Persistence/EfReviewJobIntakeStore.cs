@@ -36,26 +36,26 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
             if (request.ReviewRevision is not null)
             {
                 var revision = request.ReviewRevision;
-                return Task.FromResult(reviewJobs.FirstOrDefault(
-                    job => job.RevisionHeadSha == revision.HeadSha
-                           && job.RevisionBaseSha == revision.BaseSha
-                           && job.RevisionStartSha == revision.StartSha
-                           && job.ProviderRevisionId == revision.ProviderRevisionId
-                           && job.ReviewPatchIdentity == revision.PatchIdentity));
+                return Task.FromResult(
+                    reviewJobs.FirstOrDefault(job => job.RevisionHeadSha == revision.HeadSha
+                                                     && job.RevisionBaseSha == revision.BaseSha
+                                                     && job.RevisionStartSha == revision.StartSha
+                                                     && job.ProviderRevisionId == revision.ProviderRevisionId
+                                                     && job.ReviewPatchIdentity == revision.PatchIdentity));
             }
 
             var compatibilityIterationId = ResolveCompatibilityIterationId(request);
-            return Task.FromResult(reviewJobs.FirstOrDefault(
-                job => job.IterationId == compatibilityIterationId));
+            return Task.FromResult(reviewJobs.FirstOrDefault(job => job.IterationId == compatibilityIterationId));
         }
 
-        return Task.FromResult(activeJobs
-            .AsEnumerable()
-            .FirstOrDefault(job => job.OrganizationUrl == request.ProviderScopePath
-                                   && job.ProjectId == request.ProviderProjectKey
-                                   && RepositoryMatches(job, request.RepositoryId, request.ProviderProjectKey)
-                                   && job.PullRequestId == request.PullRequestId
-                                   && job.IterationId == request.IterationId));
+        return Task.FromResult(
+            activeJobs
+                .AsEnumerable()
+                .FirstOrDefault(job => job.OrganizationUrl == request.ProviderScopePath
+                                       && job.ProjectId == request.ProviderProjectKey
+                                       && RepositoryMatches(job, request.RepositoryId, request.ProviderProjectKey)
+                                       && job.PullRequestId == request.PullRequestId
+                                       && job.IterationId == request.IterationId));
     }
 
     /// <inheritdoc />

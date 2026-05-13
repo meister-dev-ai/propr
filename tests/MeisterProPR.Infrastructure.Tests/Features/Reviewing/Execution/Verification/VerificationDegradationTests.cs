@@ -21,7 +21,7 @@ public sealed class VerificationDegradationTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: ClaimDescriptor.CodeContractFamily);
+            ClaimDescriptor.CodeContractFamily);
 
         var outcomes = await sut.VerifyAsync(
             [
@@ -52,7 +52,7 @@ public sealed class VerificationDegradationTests
             "Cross-file claim.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily,
+            ClaimDescriptor.CrossFileConsistencyFamily,
             requiresCrossFileEvidence: true);
 
         var outcome = VerificationOutcome.DegradedUnresolved(
@@ -101,7 +101,7 @@ public sealed class VerificationDegradationTests
             "The helper method isCommentRelevanceEvent is missing and will fail at runtime.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.ApiOrSymbolUsageFamily,
+            ClaimDescriptor.ApiOrSymbolUsageFamily,
             requiresSymbolEvidence: true);
 
         var outcomes = await sut.VerifyAsync(

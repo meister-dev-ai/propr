@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
@@ -108,7 +109,7 @@ public class AdoCommentPosterDeduplicationTests
                 }.AsReadOnly()),
         };
         var publicationIdentity = new ReviewerIdentity(
-            new ProviderHostRef(Domain.Enums.ScmProvider.AzureDevOps, "https://dev.azure.com/org"),
+            new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org"),
             "meister-bot",
             "meister-bot",
             "Meister Bot",

@@ -8,7 +8,6 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -95,7 +94,8 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 new ReviewResult(
                     "Summary mentions missing helper isCommentRelevanceEvent and a confirmed null dereference.",
                     [
-                        new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, "The helper method isCommentRelevanceEvent is missing and will fail at runtime."),
+                        new ReviewComment(
+                            "src/Foo.cs", 10, CommentSeverity.Warning, "The helper method isCommentRelevanceEvent is missing and will fail at runtime."),
                         new ReviewComment("src/Foo.cs", 18, CommentSeverity.Warning, "Confirmed null dereference in ExecuteAsync."),
                     ]));
 
@@ -139,8 +139,8 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 Arg.Is<string>(name => name == ReviewProtocolEventNames.VerificationLocalDecision),
                 Arg.Any<string?>(),
                 Arg.Is<string?>(output => output != null &&
-                    output.Contains("\"outcomeKind\":\"NonVerifiable\"", StringComparison.Ordinal) &&
-                    output.Contains("\"recommendedDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
+                                          output.Contains("\"outcomeKind\":\"NonVerifiable\"", StringComparison.Ordinal) &&
+                                          output.Contains("\"recommendedDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
     }

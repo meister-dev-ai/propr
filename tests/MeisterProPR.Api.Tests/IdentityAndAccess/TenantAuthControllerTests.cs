@@ -29,7 +29,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         factory.SetSsoCapabilityAvailability(false);
 
         var tenantSlug = $"acme-{Guid.NewGuid():N}";
-        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp", true);
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
         await factory.SeedSsoProviderAsync(tenantId, "Acme Entra");
 
         var response = await factory.CreateClient().GetAsync($"/auth/tenants/{tenantSlug}/providers");
@@ -278,8 +278,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
 
         using var client = CreateNonRedirectingClient(factory);
         const string returnUrl = "http://localhost:5173/auth/callback";
-        var challengeResponse = await client.GetAsync(
-            $"/auth/external/challenge/{tenantSlug}/{providerId}?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        var challengeResponse = await client.GetAsync($"/auth/external/challenge/{tenantSlug}/{providerId}?returnUrl={Uri.EscapeDataString(returnUrl)}");
 
         Assert.Equal(HttpStatusCode.Found, challengeResponse.StatusCode);
         var challengeLocation = challengeResponse.Headers.Location;
@@ -309,8 +308,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 });
         });
 
-        var callbackResponse = await client.GetAsync(
-            $"/auth/external/callback/{tenantSlug}?code=entra-code-return-url&state={Uri.EscapeDataString(state)}");
+        var callbackResponse = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-return-url&state={Uri.EscapeDataString(state)}");
 
         Assert.Equal(HttpStatusCode.Found, callbackResponse.StatusCode);
         var location = callbackResponse.Headers.Location;

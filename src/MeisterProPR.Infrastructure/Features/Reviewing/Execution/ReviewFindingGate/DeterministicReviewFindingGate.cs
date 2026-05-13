@@ -84,9 +84,11 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
             return new FinalGateDecision(
                 finding.FindingId,
                 FinalGateDecision.SummaryOnlyDisposition,
-                [finding.Evidence?.HasResolvedMultiFileEvidence == true
-                    ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
-                    : ReviewFindingGateReasonCodes.MissingMultiFileEvidence],
+                [
+                    finding.Evidence?.HasResolvedMultiFileEvidence == true
+                        ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
+                        : ReviewFindingGateReasonCodes.MissingMultiFileEvidence,
+                ],
                 finding.Evidence?.HasResolvedMultiFileEvidence == true
                     ? "cross_cutting_claim_support_rules"
                     : "cross_cutting_evidence_rules",

@@ -39,8 +39,7 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
 
             if (!snapshotPaths.Contains(changedFile.Path))
             {
-                throw new InvalidOperationException(
-                    $"Fixture changed file '{changedFile.Path}' was not found in the repository snapshot.");
+                throw new InvalidOperationException($"Fixture changed file '{changedFile.Path}' was not found in the repository snapshot.");
             }
         }
 

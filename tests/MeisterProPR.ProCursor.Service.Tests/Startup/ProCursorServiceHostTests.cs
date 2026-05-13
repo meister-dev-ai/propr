@@ -1,9 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.ProCursor.Contracts.ProCursor;
 using MeisterProPR.ProCursor.Options;
-using MeisterProPR.ProCursor.Persistence;
 using MeisterProPR.ProCursor.Service.Tests.Support;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -67,7 +67,7 @@ public sealed class ProCursorServiceHostTests
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ProCursorOperationalDbContext>();
-        Assert.NotNull(db.Model.FindEntityType(typeof(MeisterProPR.Domain.Entities.ProCursorIndexJob)));
+        Assert.NotNull(db.Model.FindEntityType(typeof(ProCursorIndexJob)));
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class ProCursorServiceHostTests
     private static string FlattenExceptionMessages(Exception exception)
     {
         var messages = new List<string>();
-        Exception? current = exception;
+        var current = exception;
         while (current is not null)
         {
             messages.Add(current.ToString());
@@ -259,5 +259,4 @@ public sealed class ProCursorServiceHostTests
             }
         }
     }
-
 }

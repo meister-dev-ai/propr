@@ -30,9 +30,11 @@ public sealed class AiMicroReviewFindingVerifier : IReviewFindingVerifier
                         workItem.Claim.FindingId,
                         VerificationOutcome.UnresolvedKind,
                         FinalGateDecision.SummaryOnlyDisposition,
-                        [workItem.ExistingEvidence?.HasResolvedMultiFileEvidence == true
-                            ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
-                            : ReviewFindingGateReasonCodes.MissingMultiFileEvidence],
+                        [
+                            workItem.ExistingEvidence?.HasResolvedMultiFileEvidence == true
+                                ? ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport
+                                : ReviewFindingGateReasonCodes.MissingMultiFileEvidence,
+                        ],
                         [],
                         VerificationOutcome.WeakEvidence,
                         "Retrieved context is treated as a verification hint until a bounded claim outcome supports publication.",

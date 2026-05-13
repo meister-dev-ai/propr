@@ -21,7 +21,7 @@ public sealed class VerificationModelsTests
                 "ReviewComment.Message may be null.",
                 CommentSeverity.Warning,
                 ClaimDescriptor.DeterministicOnlyMode,
-                claimFamily: ClaimDescriptor.CodeContractFamily),
+                ClaimDescriptor.CodeContractFamily),
         };
 
         var context = CandidateReviewFinding.CreateInvariantCheckContext(claims);
@@ -42,7 +42,7 @@ public sealed class VerificationModelsTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: ClaimDescriptor.CodeContractFamily);
+            ClaimDescriptor.CodeContractFamily);
 
         Assert.Throws<ArgumentException>(() => new VerificationWorkItem(
             claim,
@@ -63,7 +63,7 @@ public sealed class VerificationModelsTests
             "Cross-file claim.",
             CommentSeverity.Warning,
             ClaimDescriptor.NeedsEvidenceMode,
-            claimFamily: ClaimDescriptor.CrossFileConsistencyFamily);
+            ClaimDescriptor.CrossFileConsistencyFamily);
 
         var workItem = new VerificationWorkItem(
             claim,
@@ -89,7 +89,7 @@ public sealed class VerificationModelsTests
             "ReviewComment.Message may be null.",
             CommentSeverity.Warning,
             ClaimDescriptor.DeterministicOnlyMode,
-            claimFamily: ClaimDescriptor.CodeContractFamily);
+            ClaimDescriptor.CodeContractFamily);
 
         var outcome = VerificationOutcome.Contradicted(
             claim,

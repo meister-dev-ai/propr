@@ -93,8 +93,7 @@ public sealed class GitHubConnectionVerifierTests
                 new HttpClient(
                     new StubHttpMessageHandler(request => request.RequestUri!.AbsoluteUri switch
                     {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                         "https://api.github.com/app/installations/789012/access_tokens" =>
                             CreateAccessTokenResponse(++installationTokenRequests),
                         _ => new HttpResponseMessage(HttpStatusCode.NotFound),
@@ -118,7 +117,7 @@ public sealed class GitHubConnectionVerifierTests
         var repository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(
             clientId,
             host,
-            privateKeyPem: "not-a-private-key");
+            "not-a-private-key");
 
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         httpClientFactory.CreateClient("GitHubProvider")
@@ -164,8 +163,7 @@ public sealed class GitHubConnectionVerifierTests
         var tokenRequests = 0;
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
-            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                new { account = new { login = "acme-platform" } }),
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
             "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
                 new
                 {

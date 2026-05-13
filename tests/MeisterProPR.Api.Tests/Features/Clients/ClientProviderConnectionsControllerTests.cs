@@ -465,7 +465,6 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         var created = await factory.CreateConnectionAsync(
             ScmProvider.GitHub,
             "https://github.enterprise.example.com/acme/platform",
-            ScmAuthenticationKind.PersonalAccessToken,
             displayName: "GitHub PAT",
             secret: "ghp_test_secret_value");
 
@@ -538,7 +537,6 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         var created = await factory.CreateConnectionAsync(
             ScmProvider.GitHub,
             "https://github.enterprise.example.com/acme/platform",
-            ScmAuthenticationKind.PersonalAccessToken,
             displayName: "GitHub PAT",
             secret: "ghp_test_secret_value");
 

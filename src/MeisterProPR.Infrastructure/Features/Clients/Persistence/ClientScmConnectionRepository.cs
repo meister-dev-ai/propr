@@ -198,21 +198,21 @@ public sealed class ClientScmConnectionRepository(
                                           record.OAuthTenantId,
                                           NormalizeOptional(oAuthTenantId),
                                           StringComparison.Ordinal)
-                                       || !string.Equals(
-                                           record.OAuthClientId,
-                                           NormalizeOptional(oAuthClientId),
-                                           StringComparison.Ordinal)
-                                       || record.GitHubAppId != NormalizeGitHubAppIdentifier(
-                                           record.Provider,
-                                           authenticationKind,
-                                           gitHubAppId,
-                                           nameof(gitHubAppId))
-                                       || record.GitHubAppInstallationId != NormalizeGitHubAppIdentifier(
-                                           record.Provider,
-                                           authenticationKind,
-                                           gitHubAppInstallationId,
-                                           nameof(gitHubAppInstallationId))
-                                       || !string.IsNullOrWhiteSpace(secret);
+                                      || !string.Equals(
+                                          record.OAuthClientId,
+                                          NormalizeOptional(oAuthClientId),
+                                          StringComparison.Ordinal)
+                                      || record.GitHubAppId != NormalizeGitHubAppIdentifier(
+                                          record.Provider,
+                                          authenticationKind,
+                                          gitHubAppId,
+                                          nameof(gitHubAppId))
+                                      || record.GitHubAppInstallationId != NormalizeGitHubAppIdentifier(
+                                          record.Provider,
+                                          authenticationKind,
+                                          gitHubAppInstallationId,
+                                          nameof(gitHubAppInstallationId))
+                                      || !string.IsNullOrWhiteSpace(secret);
         var wasActive = record.IsActive;
         var secretRotated = !string.IsNullOrWhiteSpace(secret);
 
@@ -357,8 +357,8 @@ public sealed class ClientScmConnectionRepository(
             record.DisplayName,
             secretProtectionCodec.Unprotect(record.EncryptedSecretMaterial, SecretPurpose),
             record.IsActive,
-            GitHubAppId: record.GitHubAppId,
-            GitHubAppInstallationId: record.GitHubAppInstallationId);
+            record.GitHubAppId,
+            record.GitHubAppInstallationId);
     }
 
     public async Task<ClientScmConnectionDto?> AddAsync(

@@ -16,33 +16,43 @@ public sealed class DisabledProCursorGateway : IProCursorGateway
         "ProCursor is not configured for this environment. Configure PROCURSOR_SERVICE_BASE_URL and PROCURSOR_SHARED_KEY to enable the extracted service.";
 
     public Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<ProCursorKnowledgeSourceDto> CreateSourceAsync(
         Guid clientId,
         ProCursorKnowledgeSourceRegistrationRequest request,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<ProCursorIndexJobDto> QueueRefreshAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorRefreshRequest request,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<IReadOnlyList<ProCursorTrackedBranchDto>> ListTrackedBranchesAsync(
         Guid clientId,
         Guid sourceId,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<ProCursorTrackedBranchDto> AddTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorTrackedBranchCreateRequest request,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<ProCursorTrackedBranchDto?> UpdateTrackedBranchAsync(
         Guid clientId,
@@ -50,22 +60,30 @@ public sealed class DisabledProCursorGateway : IProCursorGateway
         Guid trackedBranchId,
         ProCursorTrackedBranchUpdateRequest request,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<bool> RemoveTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
         Guid trackedBranchId,
         CancellationToken ct = default)
-        => throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    {
+        throw new ProCursorDependencyUnavailableException(DisabledMessage);
+    }
 
     public Task<ProCursorKnowledgeAnswerDto> AskKnowledgeAsync(
         ProCursorKnowledgeQueryRequest request,
         CancellationToken ct = default)
-        => Task.FromResult(new ProCursorKnowledgeAnswerDto("unavailable", [], DisabledMessage));
+    {
+        return Task.FromResult(new ProCursorKnowledgeAnswerDto("unavailable", [], DisabledMessage));
+    }
 
     public Task<ProCursorSymbolInsightDto> GetSymbolInsightAsync(
         ProCursorSymbolQueryRequest request,
         CancellationToken ct = default)
-        => Task.FromResult(new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []));
+    {
+        return Task.FromResult(new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []));
+    }
 }

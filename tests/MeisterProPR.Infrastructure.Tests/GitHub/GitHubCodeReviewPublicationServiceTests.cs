@@ -231,12 +231,13 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         using var httpClient = new HttpClient(
-            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-            {
-                "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 1 }),
-                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
-            })));
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 1 }),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
         httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
@@ -277,14 +278,15 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         using var httpClient = new HttpClient(
-            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-            {
-                "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
-                    new { message = "Review comments is invalid and Review threads is invalid" },
-                    (HttpStatusCode)422),
-                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
-            })));
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
+                        new { message = "Review comments is invalid and Review threads is invalid" },
+                        (HttpStatusCode)422),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
         httpClientFactory.CreateClient("GitHubProvider")
             .Returns(httpClient);
 
@@ -292,8 +294,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
 
         Assert.Contains("422", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Review comments is invalid", exception.Message, StringComparison.Ordinal);
@@ -314,19 +315,19 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         string? reviewAuthorization = null;
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         using var httpClient = new HttpClient(
-            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-            {
-                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                    new { account = new { login = "acme-platform" } }),
-                "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
-                    new
-                    {
-                        token = "installation-token",
-                        expires_at = DateTimeOffset.UtcNow.AddHours(1),
-                    }),
-                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CaptureAndReturnReviewResponse(request),
-                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
-            })));
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
+                    "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                        new
+                        {
+                            token = "installation-token",
+                            expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                        }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CaptureAndReturnReviewResponse(request),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
         httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
@@ -359,29 +360,28 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
         var httpClientFactory = Substitute.For<IHttpClientFactory>();
         using var httpClient = new HttpClient(
-            new StubHttpMessageHandler(request => Task.FromResult(request.RequestUri!.AbsoluteUri switch
-            {
-                "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                    new { account = new { login = "acme-platform" } }),
-                "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
-                    new
-                    {
-                        token = "installation-token",
-                        expires_at = DateTimeOffset.UtcNow.AddHours(1),
-                    }),
-                "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
-                    new { message = "Resource not accessible by integration" },
-                    HttpStatusCode.Forbidden),
-                _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
-            })));
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
+                    "https://api.github.com/app/installations/789012/access_tokens" => CreateJsonResponse(
+                        new
+                        {
+                            token = "installation-token",
+                            expires_at = DateTimeOffset.UtcNow.AddHours(1),
+                        }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(
+                        new { message = "Resource not accessible by integration" },
+                        HttpStatusCode.Forbidden),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
         httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
 
         var sut = new GitHubCodeReviewPublicationService(
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
 
         Assert.Contains("no longer has permission", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Resource not accessible by integration", ex.Message, StringComparison.OrdinalIgnoreCase);

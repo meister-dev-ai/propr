@@ -86,8 +86,7 @@ public sealed class GitHubReviewDiscoveryProviderTests
         string? pullsAuthorization = null;
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
-            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                new { account = new { login = "acme-platform" } }),
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
             "https://api.github.com/app/installations/789012/access_tokens" => CreateAccessTokenResponse(),
             "https://api.github.com/repos/acme/propr/pulls?state=open&per_page=100" => CapturePulls(request),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
@@ -96,7 +95,7 @@ public sealed class GitHubReviewDiscoveryProviderTests
             new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var result = await sut.ListOpenReviewsAsync(clientId, repository, reviewer: null);
+        var result = await sut.ListOpenReviewsAsync(clientId, repository, null);
 
         var item = Assert.Single(result);
         Assert.Equal(42, item.CodeReview.Number);

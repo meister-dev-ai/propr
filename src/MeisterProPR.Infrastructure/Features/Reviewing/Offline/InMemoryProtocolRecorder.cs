@@ -56,20 +56,21 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
             return Task.CompletedTask;
         }
 
-        protocol.Events.Add(new ProtocolEvent
-        {
-            Id = Guid.NewGuid(),
-            ProtocolId = protocolId,
-            Kind = ProtocolEventKind.AiCall,
-            Name = name ?? $"ai_call_iter_{iteration}",
-            OccurredAt = DateTimeOffset.UtcNow,
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens,
-            InputTextSample = Sanitize(inputTextSample),
-            SystemPrompt = Sanitize(systemPrompt),
-            OutputSummary = Sanitize(outputTextSample),
-            Error = Sanitize(error),
-        });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocolId,
+                Kind = ProtocolEventKind.AiCall,
+                Name = name ?? $"ai_call_iter_{iteration}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens,
+                InputTextSample = Sanitize(inputTextSample),
+                SystemPrompt = Sanitize(systemPrompt),
+                OutputSummary = Sanitize(outputTextSample),
+                Error = Sanitize(error),
+            });
 
         return Task.CompletedTask;
     }
@@ -88,16 +89,17 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
             return Task.CompletedTask;
         }
 
-        protocol.Events.Add(new ProtocolEvent
-        {
-            Id = Guid.NewGuid(),
-            ProtocolId = protocolId,
-            Kind = ProtocolEventKind.ToolCall,
-            Name = toolName,
-            OccurredAt = DateTimeOffset.UtcNow,
-            InputTextSample = Sanitize($"args={arguments}"),
-            OutputSummary = Sanitize(result),
-        });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocolId,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = toolName,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = Sanitize($"args={arguments}"),
+                OutputSummary = Sanitize(result),
+            });
 
         return Task.CompletedTask;
     }
@@ -236,17 +238,18 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
             return Task.CompletedTask;
         }
 
-        protocol.Events.Add(new ProtocolEvent
-        {
-            Id = Guid.NewGuid(),
-            ProtocolId = protocolId,
-            Kind = kind,
-            Name = eventName,
-            OccurredAt = DateTimeOffset.UtcNow,
-            InputTextSample = Sanitize(details),
-            OutputSummary = Sanitize(output),
-            Error = Sanitize(error),
-        });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocolId,
+                Kind = kind,
+                Name = eventName,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = Sanitize(details),
+                OutputSummary = Sanitize(output),
+                Error = Sanitize(error),
+            });
 
         return Task.CompletedTask;
     }

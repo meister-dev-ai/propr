@@ -45,8 +45,7 @@ internal sealed class GitHubAuthenticationService
         {
             ScmAuthenticationKind.PersonalAccessToken => Task.FromResult(connection.Secret),
             ScmAuthenticationKind.AppInstallation => this.GetInstallationAccessTokenAsync(host, connection, ct),
-            _ => Task.FromException<string>(
-                new InvalidOperationException("GitHub connection authentication kind is not supported.")),
+            _ => Task.FromException<string>(new InvalidOperationException("GitHub connection authentication kind is not supported.")),
         };
     }
 
@@ -103,18 +102,15 @@ internal sealed class GitHubAuthenticationService
                 connection.Id,
                 safeHostBaseUrl,
                 (int)response.StatusCode);
-            throw new InvalidOperationException(
-                await BuildStatusMessageAsync("GitHub App installation lookup failed", response, ct));
+            throw new InvalidOperationException(await BuildStatusMessageAsync("GitHub App installation lookup failed", response, ct));
         }
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubInstallationResponse>(ct)
-                      ?? throw new InvalidOperationException(
-                          "GitHub App installation lookup returned an empty payload.");
+                      ?? throw new InvalidOperationException("GitHub App installation lookup returned an empty payload.");
 
         if (string.IsNullOrWhiteSpace(payload.Account?.Login))
         {
-            throw new InvalidOperationException(
-                "GitHub App installation lookup did not return an installation account login.");
+            throw new InvalidOperationException("GitHub App installation lookup did not return an installation account login.");
         }
 
         this._logger.LogDebug(
@@ -142,8 +138,7 @@ internal sealed class GitHubAuthenticationService
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
-                await BuildStatusMessageAsync("GitHub App metadata lookup failed", response, ct));
+            throw new InvalidOperationException(await BuildStatusMessageAsync("GitHub App metadata lookup failed", response, ct));
         }
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubAppResponse>(ct)
@@ -217,18 +212,15 @@ internal sealed class GitHubAuthenticationService
                 connection.Id,
                 safeHostBaseUrl,
                 (int)response.StatusCode);
-            throw new InvalidOperationException(
-                await BuildStatusMessageAsync("GitHub App installation token request failed", response, ct));
+            throw new InvalidOperationException(await BuildStatusMessageAsync("GitHub App installation token request failed", response, ct));
         }
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubInstallationAccessTokenResponse>(ct)
-                      ?? throw new InvalidOperationException(
-                          "GitHub App installation token request returned an empty payload.");
+                      ?? throw new InvalidOperationException("GitHub App installation token request returned an empty payload.");
 
         if (string.IsNullOrWhiteSpace(payload.Token) || payload.ExpiresAt is null)
         {
-            throw new InvalidOperationException(
-                "GitHub App installation token request did not return a valid access token.");
+            throw new InvalidOperationException("GitHub App installation token request did not return a valid access token.");
         }
 
         this._installationTokenCache.Set(cacheKey, payload.Token.Trim(), payload.ExpiresAt.Value);
@@ -358,16 +350,13 @@ internal sealed class GitHubAuthenticationService
         string? AppSlug);
 
     private sealed record GitHubAppResponse(
-        [property: JsonPropertyName("slug")]
-        string? Slug,
-        [property: JsonPropertyName("name")]
-        string? Name);
+        [property: JsonPropertyName("slug")] string? Slug,
+        [property: JsonPropertyName("name")] string? Name);
 
     private sealed record GitHubInstallationAccountResponse([property: JsonPropertyName("login")] string? Login);
 
     private sealed record GitHubInstallationAccessTokenResponse(
-        [property: JsonPropertyName("token")]
-        string? Token,
+        [property: JsonPropertyName("token")] string? Token,
         [property: JsonPropertyName("expires_at")]
         DateTimeOffset? ExpiresAt);
 }

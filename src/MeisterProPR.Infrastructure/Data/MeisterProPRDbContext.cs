@@ -174,7 +174,6 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
                 .HasConversion(
                     v => new Vector(v),
                     v => v.ToArray());
-
         }
     }
 
@@ -184,5 +183,4 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     {
         return 1536;
     }
-
 }

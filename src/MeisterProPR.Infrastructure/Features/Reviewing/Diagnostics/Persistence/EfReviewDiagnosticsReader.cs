@@ -5,6 +5,8 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
@@ -61,7 +63,7 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
         return new GetReviewJobProtocolResult(job.ClientId, protocols);
     }
 
-    private static string? ResolveFinalSummary(Domain.Entities.ReviewJob job, Domain.Entities.ReviewJobProtocol protocol)
+    private static string? ResolveFinalSummary(ReviewJob job, ReviewJobProtocol protocol)
     {
         if (protocol.FileResultId.HasValue)
         {
@@ -77,8 +79,8 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
     }
 
     private static IReadOnlyList<ProtocolReviewCommentDto>? ResolveFinalComments(
-        Domain.Entities.ReviewJob job,
-        Domain.Entities.ReviewJobProtocol protocol)
+        ReviewJob job,
+        ReviewJobProtocol protocol)
     {
         if (protocol.FileResultId.HasValue)
         {
@@ -101,7 +103,7 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
         return null;
     }
 
-    private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(Domain.ValueObjects.ReviewComment comment)
+    private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(ReviewComment comment)
     {
         return new ProtocolReviewCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message);
     }

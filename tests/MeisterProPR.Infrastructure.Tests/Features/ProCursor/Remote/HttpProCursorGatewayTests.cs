@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.ProCursor.Remote;
 
@@ -15,21 +16,22 @@ public sealed class HttpProCursorGatewayTests
     public async Task ListSourcesAsync_MapsRouteAndPayload()
     {
         var clientId = Guid.NewGuid();
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(async request =>
-        {
-            Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal($"http://procursor.internal/internal/procursor/clients/{clientId:D}/sources", request.RequestUri!.ToString());
-
-            return new HttpResponseMessage(HttpStatusCode.OK)
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
             {
-                Content = JsonContent.Create<IReadOnlyList<ProCursorKnowledgeSourceDto>>([]),
-            };
-        }))
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal($"http://procursor.internal/internal/procursor/clients/{clientId:D}/sources", request.RequestUri!.ToString());
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create<IReadOnlyList<ProCursorKnowledgeSourceDto>>([]),
+                };
+            }))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
-        var gateway = new HttpProCursorGateway(httpClient, Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpProCursorGateway>.Instance);
+        var gateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
         var result = await gateway.ListSourcesAsync(clientId, CancellationToken.None);
 
         Assert.Empty(result);
@@ -43,10 +45,10 @@ public sealed class HttpProCursorGatewayTests
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
-        var gateway = new HttpProCursorGateway(httpClient, Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpProCursorGateway>.Instance);
+        var gateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
 
         var ex = await Assert.ThrowsAsync<ProCursorDependencyUnavailableException>(() =>
-            gateway.AskKnowledgeAsync(new ProCursorKnowledgeQueryRequest(Guid.NewGuid(), "where", null, null), CancellationToken.None));
+            gateway.AskKnowledgeAsync(new ProCursorKnowledgeQueryRequest(Guid.NewGuid(), "where"), CancellationToken.None));
 
         Assert.Contains("shared access credential", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -54,15 +56,17 @@ public sealed class HttpProCursorGatewayTests
     [Fact]
     public async Task QueueRefreshAsync_WhenUpstreamReturnsConflict_ThrowsInvalidOperation()
     {
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
-        {
-            Content = new StringContent("refresh conflict"),
-        })))
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(_ => Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.Conflict)
+                {
+                    Content = new StringContent("refresh conflict"),
+                })))
         {
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
-        var gateway = new HttpProCursorGateway(httpClient, Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpProCursorGateway>.Instance);
+        var gateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.QueueRefreshAsync(Guid.NewGuid(), Guid.NewGuid(), new ProCursorRefreshRequest(), CancellationToken.None));
@@ -78,7 +82,7 @@ public sealed class HttpProCursorGatewayTests
             BaseAddress = new Uri("http://procursor.internal/"),
         };
 
-        var gateway = new HttpProCursorGateway(httpClient, Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpProCursorGateway>.Instance);
+        var gateway = new HttpProCursorGateway(httpClient, NullLogger<HttpProCursorGateway>.Instance);
 
         await Assert.ThrowsAsync<ProCursorDependencyUnavailableException>(() =>
             gateway.GetSymbolInsightAsync(

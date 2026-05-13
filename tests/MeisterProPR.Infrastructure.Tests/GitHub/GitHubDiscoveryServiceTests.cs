@@ -80,8 +80,7 @@ public sealed class GitHubDiscoveryServiceTests
         var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
-            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                new { account = new { login = "acme-platform" } }),
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
             "https://api.github.com/app/installations/789012/access_tokens" => CreateAccessTokenResponse(),
             "https://api.github.com/installation/repositories?per_page=100&page=1" => CreateJsonResponse(
                 new
@@ -112,8 +111,7 @@ public sealed class GitHubDiscoveryServiceTests
         var connectionRepository = GitHubAppTestHelpers.CreateAppInstallationConnectionRepository(clientId, host);
         var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
         {
-            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                new { account = new { login = "acme-platform" } }),
+            "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
             "https://api.github.com/app/installations/789012/access_tokens" => CreateAccessTokenResponse(),
             "https://api.github.com/installation/repositories?per_page=100&page=1" => CreateJsonResponse(
                 new

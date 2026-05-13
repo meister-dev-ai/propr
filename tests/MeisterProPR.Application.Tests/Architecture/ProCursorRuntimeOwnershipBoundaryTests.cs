@@ -35,7 +35,8 @@ public sealed class ProCursorRuntimeOwnershipBoundaryTests
     {
         Types().That()
             .ResideInAssembly("MeisterProPR.ProCursor")
-            .And().HaveNameMatching(".*(Gateway|Coordinator|QueryService|MiniIndexBuilder|FreshnessEvaluator|RefreshScheduler|IndexWorker|RollupWorker|HealthCheck|Options)$")
+            .And().HaveNameMatching(
+                ".*(Gateway|Coordinator|QueryService|MiniIndexBuilder|FreshnessEvaluator|RefreshScheduler|IndexWorker|RollupWorker|HealthCheck|Options)$")
             .Should()
             .NotResideInNamespace("MeisterProPR.Application")
             .AndShould().NotResideInNamespace("MeisterProPR.Api")

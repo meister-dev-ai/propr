@@ -78,8 +78,7 @@ public sealed class GitHubReviewerIdentityServiceTests
                 new HttpClient(
                     new StubHttpMessageHandler(request => request.RequestUri!.AbsoluteUri switch
                     {
-                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(
-                            new { account = new { login = "acme-platform" } }),
+                        "https://api.github.com/app/installations/789012" => CreateJsonResponse(new { account = new { login = "acme-platform" } }),
                         "https://api.github.com/app/installations/789012/access_tokens" => CreateAccessTokenResponse(),
                         "https://api.github.com/installation/repositories?per_page=100&page=1" => CreateJsonResponse(
                             new
