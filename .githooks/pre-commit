@@ -22,13 +22,6 @@ if ! dotnet format ./MeisterProPR.slnx --verify-no-changes 2>&1; then
     exit 1
 fi
 
-if ! dotnet format ./MeisterProPR.ProCursor.slnx --verify-no-changes 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- code style violations detected."
-    echo "Run 'dotnet format' to fix them, re-stage the changed files, and commit again."
-    exit 1
-fi
-
 echo "pre-commit: format check passed."
 
 # ── 2. Build ─────────────────────────────────────────────────────────────────
@@ -36,13 +29,6 @@ echo "pre-commit: format check passed."
 echo "pre-commit: running dotnet build..."
 
 if ! dotnet build ./MeisterProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- build errors detected."
-    echo "Fix the compilation errors and commit again."
-    exit 1
-fi
-
-if ! dotnet build ./MeisterProPR.ProCursor.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
     echo ""
     echo "pre-commit: FAILED -- build errors detected."
     echo "Fix the compilation errors and commit again."
@@ -62,12 +48,4 @@ if ! dotnet test ./MeisterProPR.slnx --no-build --no-restore --configuration Rel
     exit 1
 fi
 
-if ! dotnet test ./MeisterProPR.ProCursor.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- one or more tests failed."
-    echo "Fix the failing tests and commit again."
-    exit 1
-fi
-
 echo "pre-commit: all tests passed."
-

@@ -2,11 +2,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 
-COPY MeisterProPR.ProCursor.slnx .
 COPY src/ src/
 COPY tests/ tests/
 
-RUN dotnet restore MeisterProPR.ProCursor.slnx
+RUN dotnet restore src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj
 
 RUN dotnet publish src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj \
     -c Release -o /app --no-restore

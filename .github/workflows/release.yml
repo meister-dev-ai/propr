@@ -23,10 +23,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
+        run: dotnet restore MeisterProPR.slnx
 
       - name: Build
-        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release && dotnet build MeisterProPR.ProCursor.slnx --no-restore --configuration Release
+        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release
 
   test:
     name: Test
@@ -43,7 +43,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx && dotnet restore MeisterProPR.ProCursor.slnx
+        run: dotnet restore MeisterProPR.slnx
 
       - name: Run domain tests
         run: dotnet test tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal

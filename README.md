@@ -130,9 +130,11 @@ versioned tag.
 The `curl -k` examples in this repository are intended for local development against the
 self-signed `https://localhost:5443` endpoint only.
 
-For ProCursor-only build and test validation, use `MeisterProPR.ProCursor.slnx`. That focused
-solution contains only ProCursor-owned projects plus the shared `MeisterProPR.ProCursor.Contracts`
-boundary and its dedicated service tests.
+For targeted ProCursor build and test validation, use the ProCursor service project and its dedicated
+test project directly:
+
+- `dotnet build src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj`
+- `dotnet test tests/MeisterProPR.ProCursor.Service.Tests/MeisterProPR.ProCursor.Service.Tests.csproj`
 
 The default compose stack mounts a shared named volume for the ASP.NET Core Data Protection key ring
 at `/app/.data-protection-keys` on both `meisterpropr` and `procursor`. That shared mount is a

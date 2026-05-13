@@ -132,9 +132,8 @@ ProPR does not require `PROCURSOR_DB_CONNECTION_STRING` and reaches
 ProCursor-owned reporting and maintenance data only through authenticated internal ProCursor APIs.
 
 Compile-time ownership is enforced through the dedicated `MeisterProPR.ProCursor.Contracts`
-assembly for shared wire contracts and broker abstractions, plus the focused
-`MeisterProPR.ProCursor.slnx` solution that contains only ProCursor-owned projects, the shared
-contracts boundary, and the ProCursor service tests.
+assembly for shared wire contracts and broker abstractions. Targeted ProCursor validation uses the
+ProCursor service project and its dedicated service tests directly rather than a separate solution.
 
 ## Reading Order
 
