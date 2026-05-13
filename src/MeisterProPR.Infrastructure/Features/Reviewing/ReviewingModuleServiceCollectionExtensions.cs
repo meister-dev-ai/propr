@@ -6,6 +6,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.AI.FileByFileReview;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
@@ -78,22 +79,33 @@ public static class ReviewingModuleServiceCollectionExtensions
             null,
             sp.GetRequiredService<IOptions<AiReviewOptions>>(),
             sp.GetRequiredService<ILogger<ToolAwareAiReviewCore>>()));
-        services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
+        services.AddScoped<FileReviewer>(sp => new FileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),
-            null,
-            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<IOptions<AiReviewOptions>>().Value,
             sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
             sp.GetService<IAiConnectionRepository>(),
             sp.GetService<IAiChatClientFactory>(),
             sp.GetService<IThreadMemoryService>(),
             sp.GetService<IAiRuntimeResolver>(),
-            sp.GetService<CommentRelevanceFilterRegistry>(),
+            sp.GetService<CommentRelevanceFilterExecutor>(),
+            sp.GetServices<IReviewInvariantFactProvider>(),
+            sp.GetService<IReviewClaimExtractor>(),
+            sp.GetService<IReviewFindingVerifier>()));
+        services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
+            sp.GetRequiredService<IProtocolRecorder>(),
+            sp.GetRequiredService<IJobRepository>(),
+            null,
+            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
+            sp.GetRequiredService<FileReviewer>(),
+            sp.GetService<IAiConnectionRepository>(),
+            sp.GetService<IAiChatClientFactory>(),
+            sp.GetService<IAiRuntimeResolver>(),
             sp.GetService<IDeterministicReviewFindingGate>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
             sp.GetService<IReviewClaimExtractor>(),
-            sp.GetService<IReviewFindingVerifier>(),
             sp.GetService<IReviewEvidenceCollector>(),
             sp.GetService<ISummaryReconciliationService>()));
         if (!hasDatabase)

@@ -3,7 +3,6 @@
 
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
@@ -16,6 +15,7 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -23,29 +23,75 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace MeisterProPR.Infrastructure.AI;
+namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
 
-public sealed partial class FileByFileReviewOrchestrator(
-    IAiReviewCore aiCore,
+internal sealed partial class FileByFileReviewOrchestrator(
     IProtocolRecorder protocolRecorder,
     IJobRepository jobRepository,
     IChatClient? chatClient,
     IOptions<AiReviewOptions> options,
     ILogger<FileByFileReviewOrchestrator> logger,
+    FileReviewer fileReviewer,
     IAiConnectionRepository? aiConnectionRepository = null,
     IAiChatClientFactory? aiClientFactory = null,
-    IThreadMemoryService? memoryService = null,
     IAiRuntimeResolver? aiRuntimeResolver = null,
-    CommentRelevanceFilterRegistry? commentRelevanceFilterRegistry = null,
     IDeterministicReviewFindingGate? deterministicReviewFindingGate = null,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders = null,
     IReviewClaimExtractor? reviewClaimExtractor = null,
-    IReviewFindingVerifier? reviewFindingVerifier = null,
     IReviewEvidenceCollector? reviewEvidenceCollector = null,
     ISummaryReconciliationService? summaryReconciliationService = null) : IFileByFileReviewOrchestrator
 {
-    private static readonly JsonSerializerOptions CommentRelevanceJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly AiReviewOptions _opts = options.Value;
+
+    public FileByFileReviewOrchestrator(
+        IAiReviewCore aiCore,
+        IProtocolRecorder protocolRecorder,
+        IJobRepository jobRepository,
+        IChatClient? chatClient,
+        IOptions<AiReviewOptions> options,
+        ILogger<FileByFileReviewOrchestrator> logger,
+        IAiConnectionRepository? aiConnectionRepository = null,
+        IAiChatClientFactory? aiClientFactory = null,
+        IThreadMemoryService? memoryService = null,
+        IAiRuntimeResolver? aiRuntimeResolver = null,
+        CommentRelevanceFilterRegistry? commentRelevanceFilterRegistry = null,
+        IDeterministicReviewFindingGate? deterministicReviewFindingGate = null,
+        IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders = null,
+        IReviewClaimExtractor? reviewClaimExtractor = null,
+        IReviewFindingVerifier? reviewFindingVerifier = null,
+        IReviewEvidenceCollector? reviewEvidenceCollector = null,
+        ISummaryReconciliationService? summaryReconciliationService = null)
+        : this(
+            protocolRecorder,
+            jobRepository,
+            chatClient,
+            options,
+            logger,
+            new FileReviewer(
+                aiCore,
+                protocolRecorder,
+                jobRepository,
+                options.Value,
+                logger,
+            aiConnectionRepository,
+            aiClientFactory,
+            memoryService,
+            aiRuntimeResolver,
+            new CommentRelevanceFilterExecutor(commentRelevanceFilterRegistry, protocolRecorder),
+            reviewInvariantFactProviders,
+            reviewClaimExtractor,
+            reviewFindingVerifier),
+            aiConnectionRepository,
+            aiClientFactory,
+            aiRuntimeResolver,
+            deterministicReviewFindingGate,
+            reviewInvariantFactProviders,
+            reviewClaimExtractor,
+            reviewEvidenceCollector,
+            summaryReconciliationService)
+    {
+    }
 
     /// <summary>
     ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
@@ -70,8 +116,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         "could be strengthened", "could be made", "could also verify",
     ];
 
-    private readonly AiReviewOptions _opts = options.Value;
-
     public async Task<ReviewResult> ReviewAsync(
         ReviewJob job,
         PullRequest pr,
@@ -93,7 +137,7 @@ public sealed partial class FileByFileReviewOrchestrator(
 
         var filesToReview = pr.ChangedFiles.Where(f => !completedFiles.Contains(f.Path)).ToList();
 
-        // US2: Exclude files matching repository exclusion rules before parallel dispatch.
+        // Exclude files matching repository exclusion rules before parallel dispatch.
         if (baseContext.ExclusionRules.HasPatterns)
         {
             var excluded = filesToReview.Where(f => baseContext.ExclusionRules.Matches(f.Path)).ToList();
@@ -137,7 +181,7 @@ public sealed partial class FileByFileReviewOrchestrator(
                 {
                     var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
                     var existingResult = existingResults.GetValueOrDefault(file.Path);
-                    await this.ReviewSingleFileAsync(
+                    await fileReviewer.ReviewAsync(
                         job,
                         pr,
                         file,
@@ -238,297 +282,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
     }
 
-    private async Task ReviewSingleFileAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext baseContext,
-        ReviewFileResult? existingResult,
-        IChatClient effectiveClient,
-        CancellationToken ct)
-    {
-        LogFileReviewStarted(logger, file.Path, fileIndex, totalFiles, job.Id);
-
-        ReviewFileResult fileResult;
-        if (existingResult is { IsComplete: false })
-        {
-            // Reuse the existing row — covers both jobs killed mid-flight (interrupted)
-            // and previously failed rows (IsFailed=true, IsComplete=false).
-            // Reset it so MarkCompleted / MarkFailed work correctly.
-            existingResult.ResetForRetry();
-            await jobRepository.UpdateFileResultAsync(existingResult, ct);
-            fileResult = existingResult;
-        }
-        else
-        {
-            fileResult = new ReviewFileResult(job.Id, file.Path);
-            await jobRepository.AddFileResultAsync(fileResult, ct);
-        }
-
-        // Classify file complexity early so we can record tier in the protocol
-        var tier = ClassifyTier(file);
-        var tierCategory = tier switch
-        {
-            FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
-            FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
-            FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
-            _ => AiConnectionModelCategory.MediumEffort,
-        };
-
-        var tierPurpose = tier switch
-        {
-            FileComplexityTier.Low => AiPurpose.ReviewLowEffort,
-            FileComplexityTier.Medium => AiPurpose.ReviewMediumEffort,
-            FileComplexityTier.High => AiPurpose.ReviewHighEffort,
-            _ => AiPurpose.ReviewMediumEffort,
-        };
-
-        // Resolve tier-specific IChatClient if configured
-        IChatClient? tierClient = null;
-        AiConnectionDto? tierDto = null;
-        string? tierModelId = null;
-        if (aiRuntimeResolver is not null)
-        {
-            try
-            {
-                var tierRuntime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, tierPurpose, ct);
-                tierDto = tierRuntime.Connection;
-                tierClient = tierRuntime.ChatClient;
-                tierModelId = tierRuntime.Model.RemoteModelId;
-            }
-            catch
-            {
-                tierDto = null;
-                tierClient = null;
-                tierModelId = null;
-            }
-        }
-        else if (aiConnectionRepository is not null && aiClientFactory is not null)
-        {
-            tierDto = await aiConnectionRepository.GetForTierAsync(job.ClientId, tierCategory, ct);
-            if (tierDto is not null)
-            {
-                tierClient = aiClientFactory.CreateClient(tierDto.BaseUrl, tierDto.Secret);
-                tierModelId = tierDto.GetBoundModelId(tierPurpose)
-                              ?? tierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
-            }
-        }
-
-        Guid? protocolId = null;
-        try
-        {
-            protocolId = await protocolRecorder.BeginAsync(
-                job.Id,
-                job.RetryCount + 1,
-                file.Path,
-                fileResult.Id,
-                tierCategory,
-                tierModelId,
-                ct);
-        }
-        catch (Exception ex)
-        {
-            LogProtocolBeginFailed(logger, file.Path, job.Id, ex);
-        }
-
-        ReviewSystemContext? fileContext = null;
-        try
-        {
-            // Filter threads for this file
-            var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
-
-            var filePr = new PullRequest(
-                pr.OrganizationUrl,
-                pr.ProjectId,
-                pr.RepositoryId,
-                pr.RepositoryName,
-                pr.PullRequestId,
-                pr.IterationId,
-                pr.Title,
-                pr.Description,
-                pr.SourceBranch,
-                pr.TargetBranch,
-                [file],
-                pr.Status,
-                relevantThreads);
-
-            var changedLinesCount = CountChangedLines(file.UnifiedDiff);
-
-            LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
-
-            var maxIterationsOverride = tier switch
-            {
-                FileComplexityTier.Low => this._opts.MaxIterationsLow,
-                FileComplexityTier.Medium => this._opts.MaxIterationsMedium,
-                FileComplexityTier.High => this._opts.MaxIterationsHigh,
-                _ => this._opts.MaxIterations,
-            };
-
-            if (maxIterationsOverride != this._opts.MaxIterations)
-            {
-                LogMaxIterationsOverrideApplied(logger, maxIterationsOverride, file.Path, job.Id);
-            }
-
-            fileContext = new ReviewSystemContext(
-                baseContext.ClientSystemMessage,
-                baseContext.RepositoryInstructions,
-                baseContext.ReviewTools)
-            {
-                ActiveProtocolId = protocolId,
-                DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
-                DefaultReviewModelId = baseContext.DefaultReviewModelId,
-                ProtocolRecorder = protocolId.HasValue ? protocolRecorder : null,
-                // Set per-file hint so ToolAwareAiReviewCore uses per-file prompts
-                PerFileHint = new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries)
-                {
-                    ComplexityTier = tier,
-                    MaxIterationsOverride = maxIterationsOverride,
-                },
-                ExclusionRules = baseContext.ExclusionRules,
-                DismissedPatterns = baseContext.DismissedPatterns,
-                ModelId = tierModelId ?? baseContext.ModelId,
-                // Tier-specific client wins; fall back to per-client active connection so the
-                // global default chatClient is never used when a per-client connection is configured.
-                TierChatClient = tierClient ?? effectiveClient,
-            };
-
-            LogDismissalsInjected(logger, fileContext.DismissedPatterns?.Count ?? 0, file.Path, job.Id);
-
-            // Custom prompts — driven by PerFileHint set above
-            var result = await aiCore.ReviewAsync(filePr, fileContext, ct);
-
-            // Apply confidence-gated severity floor first, so that downgraded
-            // severities are visible to the SUGGESTION-specific vague-phrase filter below.
-            var commentsBeforeConfidenceFloor = result.Comments;
-            result = ApplyConfidenceFloor(result, fileContext.LoopMetrics?.FinalConfidence, this._opts);
-            var confidenceDroppedCount = CountSeverityDowngrades(commentsBeforeConfidenceFloor, result.Comments);
-            if (confidenceDroppedCount > 0)
-            {
-                LogSeverityDowngraded(logger, confidenceDroppedCount, file.Path, job.Id);
-            }
-
-            // Discard speculative/hedge-phrase comments.
-            var beforeHedge = result.Comments.Count;
-            result = FilterSpeculativeComments(result);
-            var hedgeDropped = beforeHedge - result.Comments.Count;
-            if (hedgeDropped > 0)
-            {
-                LogSpeculativeCommentsDropped(logger, hedgeDropped, file.Path, job.Id);
-            }
-
-            // Strip INFO-severity comments — they belong in the summary only.
-            var beforeInfo = result.Comments.Count;
-            result = StripInfoComments(result);
-            var infoDropped = beforeInfo - result.Comments.Count;
-            if (infoDropped > 0)
-            {
-                LogInfoCommentsDropped(logger, infoDropped, file.Path, job.Id);
-            }
-
-            // Discard vague SUGGESTION comments that lack a concrete alternative.
-            var beforeVague = result.Comments.Count;
-            result = FilterVagueSuggestions(result);
-            var vagueDropped = beforeVague - result.Comments.Count;
-            if (vagueDropped > 0)
-            {
-                LogVagueSuggestionsDropped(logger, vagueDropped, file.Path, job.Id);
-            }
-
-            var preFilterComments = result.Comments;
-            var filterResult = await this.ApplyCommentRelevanceFilterAsync(
-                job,
-                file,
-                filePr,
-                fileResult,
-                fileContext,
-                preFilterComments,
-                protocolId,
-                ct);
-
-            if (filterResult is not null)
-            {
-                result = result with { Comments = filterResult.GetKeptComments() };
-            }
-
-            // Memory-augmented reconsideration — query historical thread embeddings and
-            // reconsider findings in light of past resolutions. Falls through unchanged on any failure.
-            if (memoryService is not null)
-            {
-                result = await memoryService.RetrieveAndReconsiderAsync(
-                    job.ClientId,
-                    job,
-                    file.Path,
-                    file.UnifiedDiff,
-                    result,
-                    protocolId,
-                    ct,
-                    fileContext.Temperature);
-            }
-
-            result = NormalizeCommentAnchors(result);
-
-            result = await this.ApplyLocalVerificationAsync(
-                result,
-                fileResult,
-                protocolId,
-                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? [],
-                ct);
-
-            fileResult.MarkCompleted(result.Summary, result.Comments);
-            await jobRepository.UpdateFileResultAsync(fileResult, ct);
-
-            if (protocolId.HasValue && fileContext.LoopMetrics is not null)
-            {
-                var m = fileContext.LoopMetrics;
-                await protocolRecorder.SetCompletedAsync(
-                    protocolId.Value,
-                    "Completed",
-                    m.TotalInputTokens,
-                    m.TotalOutputTokens,
-                    m.Iterations,
-                    m.ToolCallCount,
-                    m.FinalConfidence,
-                    ct);
-            }
-
-            LogFileReviewCompleted(logger, file.Path, job.Id);
-        }
-        catch (Exception ex)
-        {
-            fileResult.MarkFailed(ex.Message);
-            await jobRepository.UpdateFileResultAsync(fileResult, ct);
-
-            if (protocolId.HasValue)
-            {
-                var m = fileContext?.LoopMetrics;
-                await protocolRecorder.RecordAiCallAsync(
-                    protocolId.Value,
-                    m?.Iterations ?? 1,
-                    0,
-                    0,
-                    null,
-                    null,
-                    null,
-                    ct,
-                    "ai_call_failure",
-                    ex.Message);
-
-                await protocolRecorder.SetCompletedAsync(
-                    protocolId.Value,
-                    "Failed",
-                    m?.TotalInputTokens ?? 0,
-                    m?.TotalOutputTokens ?? 0,
-                    m?.Iterations ?? 0,
-                    m?.ToolCallCount ?? 0,
-                    null,
-                    ct);
-            }
-
-            throw;
-        }
-    }
 
     private async Task<ReviewResult> SynthesizeResultsAsync(
         ReviewJob job,
@@ -815,181 +568,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         };
     }
 
-    private async Task<CommentRelevanceFilterResult?> ApplyCommentRelevanceFilterAsync(
-        ReviewJob job,
-        ChangedFile file,
-        PullRequest filePr,
-        ReviewFileResult fileResult,
-        ReviewSystemContext fileContext,
-        IReadOnlyList<ReviewComment> comments,
-        Guid? protocolId,
-        CancellationToken ct)
-    {
-        if (commentRelevanceFilterRegistry is null || !commentRelevanceFilterRegistry.HasSelection)
-        {
-            return null;
-        }
-
-        var request = new CommentRelevanceFilterRequest(
-            job.Id,
-            fileResult.Id,
-            commentRelevanceFilterRegistry.Selection.SelectedImplementationId,
-            file.Path,
-            file,
-            filePr,
-            comments,
-            fileContext,
-            protocolId);
-
-        if (!commentRelevanceFilterRegistry.TryResolveSelected(out var selectedFilter) || selectedFilter is null)
-        {
-            var fallback = BuildSelectionFallbackResult(request, comments);
-            await this.RecordCommentRelevanceProtocolAsync(protocolId, fallback, ReviewProtocolEventNames.CommentRelevanceFilterSelectionFallback, ct);
-            return fallback;
-        }
-
-        try
-        {
-            var result = await selectedFilter.FilterAsync(request, ct);
-            var eventName = result.DegradedComponents.Contains("comment_relevance_evaluator", StringComparer.Ordinal)
-                ? ReviewProtocolEventNames.CommentRelevanceEvaluatorDegraded
-                : result.DegradedComponents.Count > 0
-                    ? ReviewProtocolEventNames.CommentRelevanceFilterDegraded
-                    : ReviewProtocolEventNames.CommentRelevanceFilterOutput;
-            await this.RecordCommentRelevanceProtocolAsync(protocolId, result, eventName, ct);
-            await this.RecordCommentRelevanceAiUsageAsync(protocolId, result, ct);
-            return result;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            var fallback = BuildFailureFallbackResult(request, comments, ex.Message);
-            await this.RecordCommentRelevanceProtocolAsync(protocolId, fallback, ReviewProtocolEventNames.CommentRelevanceFilterDegraded, ct);
-            return fallback;
-        }
-    }
-
-    private static CommentRelevanceFilterResult BuildSelectionFallbackResult(
-        CommentRelevanceFilterRequest request,
-        IReadOnlyList<ReviewComment> comments)
-    {
-        return BuildFallbackResult(
-            request,
-            comments,
-            "comment_relevance_registry",
-            "pre_filter_comments_retained",
-            $"Selected comment relevance filter '{request.SelectedImplementationId}' was not registered.");
-    }
-
-    private static CommentRelevanceFilterResult BuildFailureFallbackResult(
-        CommentRelevanceFilterRequest request,
-        IReadOnlyList<ReviewComment> comments,
-        string? error)
-    {
-        return BuildFallbackResult(
-            request,
-            comments,
-            request.SelectedImplementationId ?? "comment_relevance_filter",
-            "pre_filter_comments_retained",
-            string.IsNullOrWhiteSpace(error)
-                ? "Comment relevance filter failed; pre-filter comments were retained unchanged."
-                : $"Comment relevance filter failed; pre-filter comments were retained unchanged. Cause: {error}");
-    }
-
-    private static CommentRelevanceFilterResult BuildFallbackResult(
-        CommentRelevanceFilterRequest request,
-        IReadOnlyList<ReviewComment> comments,
-        string degradedComponent,
-        string fallbackCheck,
-        string degradedCause)
-    {
-        var decisions = comments
-            .Select(comment => new CommentRelevanceFilterDecision(
-                CommentRelevanceFilterDecision.KeepDecision,
-                comment,
-                [],
-                CommentRelevanceFilterDecision.FallbackModeSource))
-            .ToList()
-            .AsReadOnly();
-
-        return new CommentRelevanceFilterResult(
-            request.SelectedImplementationId ?? "unknown",
-            "fallback",
-            request.FilePath,
-            comments.Count,
-            decisions,
-            [degradedComponent],
-            [fallbackCheck],
-            degradedCause);
-    }
-
-    private async Task RecordCommentRelevanceProtocolAsync(
-        Guid? protocolId,
-        CommentRelevanceFilterResult result,
-        string eventName,
-        CancellationToken ct)
-    {
-        if (!protocolId.HasValue)
-        {
-            return;
-        }
-
-        var output = result.ToRecordedOutput();
-        var details = JsonSerializer.Serialize(
-            new
-            {
-                implementationId = result.ImplementationId,
-                implementationVersion = result.ImplementationVersion,
-                filePath = result.FilePath,
-                originalCommentCount = result.OriginalCommentCount,
-                keptCount = result.KeptCount,
-                discardedCount = result.DiscardedCount,
-                degradedComponents = result.DegradedComponents,
-                fallbackChecks = result.FallbackChecks,
-                degradedCause = result.DegradedCause,
-            });
-
-        await protocolRecorder.RecordCommentRelevanceEventAsync(
-            protocolId.Value,
-            eventName,
-            details,
-            JsonSerializer.Serialize(output, CommentRelevanceJsonOptions),
-            null,
-            ct);
-    }
-
-    private async Task RecordCommentRelevanceAiUsageAsync(
-        Guid? protocolId,
-        CommentRelevanceFilterResult result,
-        CancellationToken ct)
-    {
-        if (!protocolId.HasValue || result.AiTokenUsage is null)
-        {
-            return;
-        }
-
-        await protocolRecorder.RecordAiCallAsync(
-            protocolId.Value,
-            0,
-            result.AiTokenUsage.InputTokens,
-            result.AiTokenUsage.OutputTokens,
-            JsonSerializer.Serialize(new { filePath = result.FilePath, implementationId = result.ImplementationId }),
-            JsonSerializer.Serialize(new { implementationId = result.ImplementationId, result = "completed" }),
-            null,
-            ct,
-            ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall);
-
-        await protocolRecorder.AddTokensAsync(
-            protocolId.Value,
-            result.AiTokenUsage.InputTokens,
-            result.AiTokenUsage.OutputTokens,
-            result.AiTokenUsage.ModelCategory,
-            result.AiTokenUsage.ModelId,
-            ct);
-    }
 
     private static IReadOnlyList<CandidateReviewFinding> ParseCrossCuttingConcerns(string? responseText)
     {
@@ -1474,12 +1052,12 @@ public sealed partial class FileByFileReviewOrchestrator(
         return assigned;
     }
 
-    private static string BuildPerFileFindingId(ReviewFileResult fileResult, int ordinal)
+    internal static string BuildPerFileFindingId(ReviewFileResult fileResult, int ordinal)
     {
         return $"finding-pf-{fileResult.Id:N}-{ordinal:D3}";
     }
 
-    private static string DetermineCategory(ReviewComment comment)
+    internal static string DetermineCategory(ReviewComment comment)
     {
         if (comment.Message.StartsWith("consider ", StringComparison.OrdinalIgnoreCase) ||
             comment.Message.Contains("you could also", StringComparison.OrdinalIgnoreCase) ||
@@ -1503,41 +1081,14 @@ public sealed partial class FileByFileReviewOrchestrator(
             .ToList();
     }
 
-    private static ReviewResult NormalizeCommentAnchors(ReviewResult result)
+    internal static ReviewComment CreateReviewComment(string? filePath, int? lineNumber, CommentSeverity severity, string message)
     {
-        var normalizedComments = NormalizeCommentAnchors(result.Comments);
-        return ReferenceEquals(normalizedComments, result.Comments)
-            ? result
-            : result with { Comments = normalizedComments };
+        return new ReviewComment(filePath, NormalizeLineNumber(lineNumber), severity, message);
     }
 
-    private static IReadOnlyList<ReviewComment> NormalizeCommentAnchors(IReadOnlyList<ReviewComment> comments)
+    internal static int? NormalizeLineNumber(int? lineNumber)
     {
-        List<ReviewComment>? normalizedComments = null;
-
-        for (var index = 0; index < comments.Count; index++)
-        {
-            var comment = comments[index];
-            var normalizedComment = NormalizeCommentAnchor(comment);
-
-            if (normalizedComments is null)
-            {
-                if (ReferenceEquals(normalizedComment, comment))
-                {
-                    continue;
-                }
-
-                normalizedComments = new List<ReviewComment>(comments.Count);
-                for (var preservedIndex = 0; preservedIndex < index; preservedIndex++)
-                {
-                    normalizedComments.Add(comments[preservedIndex]);
-                }
-            }
-
-            normalizedComments.Add(normalizedComment);
-        }
-
-        return normalizedComments is null ? comments : normalizedComments.AsReadOnly();
+        return lineNumber is > 0 ? lineNumber : null;
     }
 
     private static ReviewComment NormalizeCommentAnchor(ReviewComment comment)
@@ -1546,16 +1097,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         return normalizedLineNumber == comment.LineNumber
             ? comment
             : CreateReviewComment(comment.FilePath, normalizedLineNumber, comment.Severity, comment.Message);
-    }
-
-    private static ReviewComment CreateReviewComment(string? filePath, int? lineNumber, CommentSeverity severity, string message)
-    {
-        return new ReviewComment(filePath, NormalizeLineNumber(lineNumber), severity, message);
-    }
-
-    private static int? NormalizeLineNumber(int? lineNumber)
-    {
-        return lineNumber is > 0 ? lineNumber : null;
     }
 
     private async Task RecordFinalGateProtocolAsync(
@@ -1608,233 +1149,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         }
     }
 
-    private async Task<ReviewResult> ApplyLocalVerificationAsync(
-        ReviewResult result,
-        ReviewFileResult fileResult,
-        Guid? protocolId,
-        IReadOnlyList<InvariantFact> invariantFacts,
-        CancellationToken ct)
-    {
-        if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var candidateFindings = result.Comments
-            .Select((comment, index) => new CandidateReviewFinding(
-                BuildPerFileFindingId(fileResult, index + 1),
-                new CandidateFindingProvenance(
-                    CandidateFindingProvenance.PerFileCommentOrigin,
-                    "per_file_review",
-                    fileResult.FilePath,
-                    fileResult.Id,
-                    index + 1),
-                comment.Severity,
-                comment.Message,
-                DetermineCategory(comment),
-                comment.FilePath,
-                NormalizeLineNumber(comment.LineNumber)))
-            .ToList();
-
-        var claimsByFindingId = new Dictionary<string, IReadOnlyList<ClaimDescriptor>>(StringComparer.Ordinal);
-        foreach (var finding in candidateFindings)
-        {
-            try
-            {
-                claimsByFindingId[finding.FindingId] = reviewClaimExtractor.ExtractClaims(finding);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                claimsByFindingId[finding.FindingId] = [];
-                if (protocolId.HasValue)
-                {
-                    await protocolRecorder.RecordVerificationEventAsync(
-                        protocolId.Value,
-                        ReviewProtocolEventNames.VerificationDegraded,
-                        JsonSerializer.Serialize(
-                            new
-                            {
-                                findingId = finding.FindingId,
-                                stage = ClaimDescriptor.LocalStage,
-                                degradedComponent = "claim_extraction",
-                            }),
-                        null,
-                        ex.Message,
-                        ct);
-                }
-            }
-        }
-
-        var workItems = candidateFindings
-            .SelectMany(finding => claimsByFindingId[finding.FindingId]
-                .Select(claim => new VerificationWorkItem(
-                    claim,
-                    finding.Provenance,
-                    claim.Stage,
-                    VerificationWorkItem.AnchorOnlyScope,
-                    false)))
-            .ToList();
-
-        if (protocolId.HasValue)
-        {
-            foreach (var finding in candidateFindings)
-            {
-                var claims = claimsByFindingId[finding.FindingId];
-                if (claims.Count == 0)
-                {
-                    continue;
-                }
-
-                await protocolRecorder.RecordVerificationEventAsync(
-                    protocolId.Value,
-                    ReviewProtocolEventNames.VerificationClaimsExtracted,
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            findingId = finding.FindingId,
-                            filePath = finding.FilePath,
-                            claimCount = claims.Count,
-                        }),
-                    JsonSerializer.Serialize(claims, FinalGateJsonOptions),
-                    null,
-                    ct);
-            }
-        }
-
-        if (workItems.Count == 0)
-        {
-            return result;
-        }
-
-        var outcomes = await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, ct);
-        var outcomesByFindingId = outcomes
-            .GroupBy(outcome => outcome.FindingId, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => (IReadOnlyList<VerificationOutcome>)group.ToList(),
-                StringComparer.Ordinal);
-
-        if (protocolId.HasValue)
-        {
-            foreach (var outcome in outcomes)
-            {
-                await protocolRecorder.RecordVerificationEventAsync(
-                    protocolId.Value,
-                    ReviewProtocolEventNames.VerificationLocalDecision,
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            findingId = outcome.FindingId,
-                            claimId = outcome.ClaimId,
-                        }),
-                    JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
-                    null,
-                ct);
-            }
-        }
-
-        var withheldFindingIds = outcomesByFindingId
-            .Where(entry => !AreLocalOutcomesPublishable(entry.Value))
-            .Select(entry => entry.Key)
-            .ToHashSet(StringComparer.Ordinal);
-        if (withheldFindingIds.Count == 0)
-        {
-            return result;
-        }
-
-        var verifiedFindings = candidateFindings
-            .Where(finding => !outcomesByFindingId.TryGetValue(finding.FindingId, out var findingOutcomes) || AreLocalOutcomesPublishable(findingOutcomes))
-            .ToList();
-        var verifiedComments = verifiedFindings
-            .Select(finding => CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
-            .ToList();
-        var verifiedSummary = RewriteLocalVerificationSummary(candidateFindings, verifiedFindings, outcomesByFindingId);
-
-        return result with
-        {
-            Summary = verifiedSummary,
-            Comments = verifiedComments,
-        };
-    }
-
-    private static bool AreLocalOutcomesPublishable(IReadOnlyList<VerificationOutcome> outcomes)
-    {
-        return outcomes.Count == 0 || outcomes.All(outcome =>
-            string.Equals(outcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal));
-    }
-
-    private static string RewriteLocalVerificationSummary(
-        IReadOnlyList<CandidateReviewFinding> originalFindings,
-        IReadOnlyList<CandidateReviewFinding> verifiedFindings,
-        IReadOnlyDictionary<string, IReadOnlyList<VerificationOutcome>> outcomesByFindingId)
-    {
-        var summaryOnlyCount = 0;
-        var dropCount = 0;
-
-        foreach (var finding in originalFindings)
-        {
-            if (!outcomesByFindingId.TryGetValue(finding.FindingId, out var outcomes) || AreLocalOutcomesPublishable(outcomes))
-            {
-                continue;
-            }
-
-            if (outcomes.Any(outcome => string.Equals(outcome.RecommendedDisposition, FinalGateDecision.DropDisposition, StringComparison.Ordinal)))
-            {
-                dropCount++;
-                continue;
-            }
-
-            summaryOnlyCount++;
-        }
-
-        if (verifiedFindings.Count == 0)
-        {
-            var noFindingsBuilder = new StringBuilder("No actionable local findings remained after verification.");
-            AppendLocalVerificationSuppressionSummary(noFindingsBuilder, summaryOnlyCount, dropCount);
-            return noFindingsBuilder.ToString();
-        }
-
-        var builder = new StringBuilder();
-        builder.Append($"Local verification retained {verifiedFindings.Count} actionable finding");
-        builder.Append(verifiedFindings.Count == 1 ? "." : "s.");
-        AppendLocalVerificationSuppressionSummary(builder, summaryOnlyCount, dropCount);
-
-        builder.AppendLine();
-        builder.AppendLine();
-        builder.AppendLine("Verified local findings:");
-
-        foreach (var message in verifiedFindings
-                     .Select(finding => finding.Message)
-                     .Distinct(StringComparer.Ordinal)
-                     .Take(5))
-        {
-            builder.Append("- ");
-            builder.AppendLine(message);
-        }
-
-        return builder.ToString().TrimEnd();
-    }
-
-    private static void AppendLocalVerificationSuppressionSummary(StringBuilder builder, int summaryOnlyCount, int dropCount)
-    {
-        if (summaryOnlyCount > 0)
-        {
-            builder.Append(' ');
-            builder.Append(summaryOnlyCount);
-            builder.Append(summaryOnlyCount == 1
-                ? " candidate finding was withheld pending stronger evidence."
-                : " candidate findings were withheld pending stronger evidence.");
-        }
-
-        if (dropCount > 0)
-        {
-            builder.Append(' ');
-            builder.Append(dropCount);
-            builder.Append(dropCount == 1
-                ? " candidate finding was dropped by deterministic verification."
-                : " candidate findings were dropped by deterministic verification.");
-        }
-    }
 
     private async Task<IReadOnlyList<CandidateReviewFinding>> VerifyPrLevelFindingsAsync(
         IReadOnlyList<CandidateReviewFinding> synthesizedFindings,
@@ -2185,18 +1499,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         return trimmed.Trim();
     }
 
-    private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(
-        IReadOnlyList<PrCommentThread>? allThreads,
-        string filePath)
-    {
-        if (allThreads is null)
-        {
-            return [];
-        }
-
-        return allThreads.Where(t => t.FilePath == filePath || t.FilePath == null).ToList();
-    }
-
     /// <summary>
     ///     Parses the JSON response from the cross-file quality-filter AI call.
     ///     Returns an empty list on any parse failure (fallback: keep original comments).
@@ -2350,126 +1652,6 @@ public sealed partial class FileByFileReviewOrchestrator(
         return count;
     }
 
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Starting review for file {FilePath} ({Index}/{Total}) in job {JobId}")]
-    private static partial void LogFileReviewStarted(ILogger logger, string filePath, int index, int total, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Completed review for file {FilePath} in job {JobId}")]
-    private static partial void LogFileReviewCompleted(ILogger logger, string filePath, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed review for file {FilePath} in job {JobId}")]
-    private static partial void LogFileReviewFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Starting synthesis for job {JobId}")]
-    private static partial void LogSynthesisStarted(ILogger logger, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Completed synthesis for job {JobId}")]
-    private static partial void LogSynthesisCompleted(ILogger logger, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Synthesis failed for job {JobId} — using fallback concatenation")]
-    private static partial void LogSynthesisFailed(ILogger logger, Guid jobId, Exception ex);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Synthesis for job {JobId} returned invalid JSON — requesting one repair pass")]
-    private static partial void LogSynthesisJsonRepairStarted(ILogger logger, Guid jobId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Synthesis JSON repair succeeded for job {JobId}")]
-    private static partial void LogSynthesisJsonRepairSucceeded(ILogger logger, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Synthesis JSON repair failed for job {JobId} — using fallback concatenation")]
-    private static partial void LogSynthesisJsonRepairFailed(ILogger logger, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Failed to begin protocol recording for file {FilePath} in job {JobId}")]
-    private static partial void LogProtocolBeginFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Excluded file {FilePath} from review in job {JobId} (matched pattern: {Pattern})")]
-    private static partial void LogFileExcluded(ILogger logger, string filePath, string pattern, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "File {FilePath} classified as tier {Tier} ({ChangedLines} changed lines) in job {JobId}")]
-    private static partial void LogTierAssigned(
-        ILogger logger,
-        string filePath,
-        FileComplexityTier tier,
-        int changedLines,
-        Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "MaxIterationsOverride={MaxIterationsOverride} applied for file {FilePath} in job {JobId}")]
-    private static partial void LogMaxIterationsOverrideApplied(
-        ILogger logger,
-        int maxIterationsOverride,
-        string filePath,
-        Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "{CrossCuttingCount} cross-cutting concern(s) identified in synthesis for job {JobId}")]
-    private static partial void LogCrossCuttingConcernsFound(ILogger logger, int crossCuttingCount, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "{DismissalCount} dismissal pattern(s) injected into context for file {FilePath} in job {JobId}")]
-    private static partial void LogDismissalsInjected(ILogger logger, int dismissalCount, string filePath, Guid jobId);
-
-    // ── Post-processing filter log messages (feature 023) ────────────────────────
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Dropped {DroppedCount} speculative comment(s) from {FilePath} for job {JobId}")]
-    private static partial void LogSpeculativeCommentsDropped(
-        ILogger logger,
-        int droppedCount,
-        string filePath,
-        Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Dropped {DroppedCount} INFO comment(s) from {FilePath} for job {JobId}")]
-    private static partial void LogInfoCommentsDropped(ILogger logger, int droppedCount, string filePath, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Dropped {DroppedCount} vague suggestion(s) from {FilePath} for job {JobId}")]
-    private static partial void LogVagueSuggestionsDropped(
-        ILogger logger,
-        int droppedCount,
-        string filePath,
-        Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message =
-            "Downgraded {DowngradedCount} comment severity(ies) in {FilePath} for job {JobId} (confidence floor applied)")]
-    private static partial void LogSeverityDowngraded(ILogger logger, int downgradedCount, string filePath, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Quality filter started for job {JobId}: {CommentCount} comments before filter")]
-    private static partial void LogQualityFilterStarted(ILogger logger, Guid jobId, int commentCount);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Quality filter completed for job {JobId}: {Before} → {After} comments")]
-    private static partial void LogQualityFilterCompleted(ILogger logger, Guid jobId, int before, int after);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Quality filter failed for job {JobId} — using pre-filter comment list")]
-    private static partial void LogQualityFilterFailed(ILogger logger, Guid jobId, Exception ex);
-
     /// <summary>
     ///     Discards any <see cref="ReviewComment" /> whose message contains a hedge phrase,
     ///     indicating the reviewer is speculating rather than confirming a finding (IMP-01, US1).
@@ -2601,20 +1783,4 @@ public sealed partial class FileByFileReviewOrchestrator(
             : result with { Comments = adjusted };
     }
 
-    private static int CountSeverityDowngrades(
-        IReadOnlyList<ReviewComment> before,
-        IReadOnlyList<ReviewComment> after)
-    {
-        var downgradedCount = 0;
-
-        for (var i = 0; i < before.Count && i < after.Count; i++)
-        {
-            if (before[i].Severity != after[i].Severity)
-            {
-                downgradedCount++;
-            }
-        }
-
-        return downgradedCount;
-    }
 }

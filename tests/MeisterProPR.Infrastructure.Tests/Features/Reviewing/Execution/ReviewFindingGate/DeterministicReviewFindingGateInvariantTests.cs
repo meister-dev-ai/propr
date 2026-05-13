@@ -54,11 +54,11 @@ public sealed class DeterministicReviewFindingGateInvariantTests
             new CandidateFindingProvenance(
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 "per_file_review",
-                "src/MeisterProPR.Infrastructure/AI/FileByFileReviewOrchestrator.cs"),
+                "src/MeisterProPR.Infrastructure/AI/FileByFileReview/FileReviewer.cs"),
             CommentSeverity.Warning,
             "Duplicate review_file_results rows for the same job and file path are expected during retry.",
             CandidateReviewFinding.PerFileCommentCategory,
-            "src/MeisterProPR.Infrastructure/AI/FileByFileReviewOrchestrator.cs",
+            "src/MeisterProPR.Infrastructure/AI/FileByFileReview/FileReviewer.cs",
             200,
             invariantCheckContext: new Dictionary<string, string>
             {

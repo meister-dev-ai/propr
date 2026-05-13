@@ -24,6 +24,7 @@ internal static class CommentRelevanceServiceCollectionExtensions
         services.AddSingleton<ICommentRelevanceFilter>(sp => sp.GetRequiredService<HeuristicCommentRelevanceFilter>());
         services.AddSingleton<ICommentRelevanceFilter>(sp => sp.GetRequiredService<HybridCommentRelevanceFilter>());
         services.AddSingleton<CommentRelevanceFilterRegistry>();
+        services.AddSingleton<CommentRelevanceFilterExecutor>();
 
         return services;
     }
