@@ -35,8 +35,7 @@ public sealed class PrLevelReviewVerificationExecutorTests
                     EvidenceBundle.CompleteCoverage));
 
         var sut = new PrLevelReviewVerificationExecutor(extractor, collector, CreateProtocolRecorder(), new AiReviewOptions { ModelId = "fallback-model" });
-        var finding = CreateSynthesizedFinding(
-            evidence: new EvidenceReference([], ["src/Seed.cs"], EvidenceReference.MissingState, "synthesis_payload"));
+        var finding = CreateSynthesizedFinding(evidence: new EvidenceReference([], ["src/Seed.cs"], EvidenceReference.MissingState, "synthesis_payload"));
 
         var result = await sut.ApplyAsync([finding], new ReviewSystemContext(null, [], null), "feature/x", null, null, CancellationToken.None);
 
@@ -132,7 +131,8 @@ public sealed class PrLevelReviewVerificationExecutorTests
         var protocolRecorder = CreateProtocolRecorder();
         var sut = new PrLevelReviewVerificationExecutor(extractor, collector, protocolRecorder, new AiReviewOptions { ModelId = "fallback-model" });
 
-        var result = await sut.ApplyAsync([CreateSynthesizedFinding()], new ReviewSystemContext(null, [], null), "feature/x", protocolId, null, CancellationToken.None);
+        var result = await sut.ApplyAsync(
+            [CreateSynthesizedFinding()], new ReviewSystemContext(null, [], null), "feature/x", protocolId, null, CancellationToken.None);
 
         var verifiedFinding = Assert.Single(result);
         Assert.NotNull(verifiedFinding.VerificationOutcome);

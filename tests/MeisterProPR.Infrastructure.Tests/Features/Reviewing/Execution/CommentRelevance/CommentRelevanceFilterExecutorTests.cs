@@ -75,7 +75,10 @@ public sealed class CommentRelevanceFilterExecutorTests
                     "1.2.3",
                     incomingRequest.FilePath,
                     incomingRequest.Comments.Count,
-                    [new CommentRelevanceFilterDecision(CommentRelevanceFilterDecision.KeepDecision, incomingRequest.Comments[0], [], CommentRelevanceFilterDecision.AiAdjudicationSource)],
+                    [
+                        new CommentRelevanceFilterDecision(
+                            CommentRelevanceFilterDecision.KeepDecision, incomingRequest.Comments[0], [], CommentRelevanceFilterDecision.AiAdjudicationSource)
+                    ],
                     ["comment_relevance_evaluator"],
                     [],
                     null,

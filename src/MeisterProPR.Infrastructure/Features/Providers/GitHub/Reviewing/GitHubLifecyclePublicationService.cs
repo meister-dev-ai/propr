@@ -83,9 +83,9 @@ internal sealed class GitHubLifecyclePublicationService(
         return ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
-        {
-            PostedCount = result.Comments.Count,
-        };
+            {
+                PostedCount = result.Comments.Count,
+            };
     }
 
     internal static GitHubReviewRequest BuildPayload(

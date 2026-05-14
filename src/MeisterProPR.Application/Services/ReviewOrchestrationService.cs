@@ -48,7 +48,7 @@ public sealed partial class ReviewOrchestrationService(
     private readonly AiReviewOptions _opts = options.Value;
 
     private readonly IReviewStrategyDispatcher _reviewStrategyDispatcher = reviewStrategyDispatcher
-        ?? new InlineReviewStrategyDispatcher(fileByFileOrchestrator);
+                                                                           ?? new InlineReviewStrategyDispatcher(fileByFileOrchestrator);
 
     /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)

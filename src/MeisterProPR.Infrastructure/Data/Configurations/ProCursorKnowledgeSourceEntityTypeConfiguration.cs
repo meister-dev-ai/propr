@@ -94,14 +94,14 @@ internal sealed class
             .IsRequired();
 
         builder.HasIndex(source => new
-        {
-            source.ClientId,
-            source.SourceKind,
-            source.ProviderScopePath,
-            source.ProviderProjectKey,
-            source.RepositoryId,
-            source.RootPath,
-        })
+            {
+                source.ClientId,
+                source.SourceKind,
+                source.ProviderScopePath,
+                source.ProviderProjectKey,
+                source.RepositoryId,
+                source.RootPath,
+            })
             .HasDatabaseName("ix_procursor_knowledge_sources_coordinates");
 
         builder.HasIndex(source => new { source.ClientId, source.IsEnabled })

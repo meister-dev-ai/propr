@@ -251,13 +251,13 @@ public sealed class GitLabPullRequestFetcherTests
                         }),
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FNewProvider.cs/raw?ref=head-sha"
                     => new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class NewProvider {}") },
+                        { Content = new StringContent("public class NewProvider {}") },
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FOldProvider.cs/raw?ref=base-sha"
                     => new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class OldProvider {}") },
+                        { Content = new StringContent("public class OldProvider {}") },
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=head-sha" =>
                     new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class Fetcher {}") },
+                        { Content = new StringContent("public class Fetcher {}") },
                 "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
                     GitLabTestHelpers.CreateJsonResponse(
                         new object[]
@@ -378,13 +378,13 @@ public sealed class GitLabPullRequestFetcherTests
                         }),
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FNewProvider.cs/raw?ref=new-head"
                     => new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class NewProvider {}") },
+                        { Content = new StringContent("public class NewProvider {}") },
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FLegacyProvider.cs/raw?ref=base-sha"
                     => new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class LegacyProvider {}") },
+                        { Content = new StringContent("public class LegacyProvider {}") },
                 "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=new-head" =>
                     new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = new StringContent("public class Fetcher {}") },
+                        { Content = new StringContent("public class Fetcher {}") },
                 "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
                     GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),

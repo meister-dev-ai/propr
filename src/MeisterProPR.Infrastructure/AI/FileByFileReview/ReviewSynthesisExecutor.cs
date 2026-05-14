@@ -99,7 +99,8 @@ internal sealed class ReviewSynthesisExecutor(
         {
             var combinedComments = synthesisOutcome.SynthesizedFindings.Count > 0
                 ? CandidateFindingFactory.AssignSynthesisFindingIds(synthesisOutcome.SynthesizedFindings)
-                    .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
+                    .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(
+                        finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
                     .Concat(deduped)
                     .ToList()
                 : (IReadOnlyList<ReviewComment>)deduped;

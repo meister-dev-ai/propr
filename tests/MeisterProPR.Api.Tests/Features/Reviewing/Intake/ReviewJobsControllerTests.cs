@@ -315,7 +315,7 @@ public sealed class ReviewJobsControllerTests
         if (clientId.HasValue && role.HasValue)
         {
             controller.HttpContext.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>
-            { [clientId.Value] = role.Value };
+                { [clientId.Value] = role.Value };
         }
 
         return controller;

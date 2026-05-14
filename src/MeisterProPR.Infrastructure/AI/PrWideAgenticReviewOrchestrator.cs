@@ -47,10 +47,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     private readonly IReviewClaimExtractor? _reviewClaimExtractor = reviewClaimExtractor;
     private readonly IReviewEvidenceCollector? _reviewEvidenceCollector = reviewEvidenceCollector;
     private readonly IReviewFindingVerifier _reviewFindingVerifier = reviewFindingVerifier ?? new DeterministicLocalReviewVerifier();
+
     private readonly IReadOnlyList<InvariantFact> _reviewInvariantFacts = reviewInvariantFactProviders?
-        .SelectMany(provider => provider.GetFacts())
-        .ToList()
-        ?? [];
+                                                                              .SelectMany(provider => provider.GetFacts())
+                                                                              .ToList()
+                                                                          ?? [];
+
     private readonly ISummaryReconciliationService? _summaryReconciliationService = summaryReconciliationService;
 
     /// <inheritdoc />
@@ -220,13 +222,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         return (await this.RecordPlanAsync(job, baseContext, plan, ct), 0, 0, 0);
     }
 
-    private async Task<(IReadOnlyList<PrWideInvestigationResult> Results, long InputTokens, long OutputTokens, int AiCalls, int ToolCalls)> RunInvestigationsAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ReviewSystemContext baseContext,
-        PrWideReviewPlan plan,
-        IChatClient? overrideClient,
-        CancellationToken ct)
+    private async Task<(IReadOnlyList<PrWideInvestigationResult> Results, long InputTokens, long OutputTokens, int AiCalls, int ToolCalls)>
+        RunInvestigationsAsync(
+            ReviewJob job,
+            PullRequest pr,
+            ReviewSystemContext baseContext,
+            PrWideReviewPlan plan,
+            IChatClient? overrideClient,
+            CancellationToken ct)
     {
         if (plan.InvestigationTasks.Count == 0)
         {
@@ -241,24 +244,24 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         foreach (var task in plan.InvestigationTasks)
         {
             await this.RecordStageEventAsync(
-                    baseContext,
-                    ReviewProtocolEventNames.PrWideInvestigationLaunched,
-                    new
-                    {
-                        strategy = "pr_wide_agentic",
-                        stage = "investigation",
-                        jobId = job.Id,
-                        taskId = task.Id,
-                        taskType = task.TaskType,
-                        concern = task.Concern,
-                    },
-                    new
-                    {
-                        allowedTools = task.AllowedTools,
-                        budget = new { maxToolCalls = task.MaxToolCalls },
-                        scope = task.SeedFilePaths,
-                    },
-                    ct);
+                baseContext,
+                ReviewProtocolEventNames.PrWideInvestigationLaunched,
+                new
+                {
+                    strategy = "pr_wide_agentic",
+                    stage = "investigation",
+                    jobId = job.Id,
+                    taskId = task.Id,
+                    taskType = task.TaskType,
+                    concern = task.Concern,
+                },
+                new
+                {
+                    allowedTools = task.AllowedTools,
+                    budget = new { maxToolCalls = task.MaxToolCalls },
+                    scope = task.SeedFilePaths,
+                },
+                ct);
 
             var (investigation, inputTokens, outputTokens, aiCalls) =
                 await this.RunSingleInvestigationAsync(pr, baseContext, plan, task, overrideClient, ct);
@@ -266,7 +269,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             totalInputTokens += inputTokens;
             totalOutputTokens += outputTokens;
             totalAiCalls += aiCalls;
-            totalToolCalls += investigation.ToolUsage.Count(usage => string.Equals(usage.Status, BoundedReviewContextTools.SuccessStatus, StringComparison.Ordinal));
+            totalToolCalls += investigation.ToolUsage.Count(usage => string.Equals(
+                usage.Status, BoundedReviewContextTools.SuccessStatus, StringComparison.Ordinal));
 
             await this.RecordStageEventAsync(
                 baseContext,
@@ -446,15 +450,15 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 mergedDuplicateCount = Math.Max(0, investigations.Sum(result => result.CandidateFindings.Count) - synthesis.CandidateFindings.Count),
                 conflictCount = 0,
                 rankedCandidateIds = synthesis.CandidateFindings
-                        .Select(candidate => candidate.Id)
-                        .ToList(),
+                    .Select(candidate => candidate.Id)
+                    .ToList(),
                 stageMetrics = new
                 {
                     investigationCount = investigations.Count,
                     degradedCount = investigations.Count(result => result.Degraded),
                 },
             },
-                ct);
+            ct);
 
         LogArtifactsRecorded(this._logger, job.Id);
         return (synthesis, inputTokens, outputTokens, aiCalls);
@@ -642,7 +646,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var publishableCommentCount = result.Comments.Count;
         var inlineCommentCount = result.Comments.Count(IsInlineComment);
         var prLevelCommentCount = publishableCommentCount - inlineCommentCount;
-        var summaryOnlyCount = gateDecisions.Count(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal));
+        var summaryOnlyCount = gateDecisions.Count(decision => string.Equals(
+            decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal));
         var droppedCount = gateDecisions.Count(decision => string.Equals(decision.Disposition, FinalGateDecision.DropDisposition, StringComparison.Ordinal));
 
         await this.RecordStageEventAsync(
@@ -758,7 +763,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
     private static string? GetSystemPrompt(IReadOnlyList<ChatMessage> messages)
     {
-        var prompt = string.Join("\n\n", messages.Where(message => message.Role == ChatRole.System).SelectMany(message => message.Contents).Select(RenderContent).Where(text => !string.IsNullOrWhiteSpace(text)));
+        var prompt = string.Join(
+            "\n\n",
+            messages.Where(message => message.Role == ChatRole.System).SelectMany(message => message.Contents).Select(RenderContent)
+                .Where(text => !string.IsNullOrWhiteSpace(text)));
         return prompt.Length == 0 ? null : prompt.Length <= 4000 ? prompt : prompt[..4000];
     }
 
@@ -880,32 +888,35 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                         baseContext.ActiveProtocolId.Value,
                         ReviewProtocolEventNames.VerificationDegraded,
-                        JsonSerializer.Serialize(new
-                        {
-                            findingId = finding.FindingId,
-                            stage = DetermineVerificationStage(finding),
-                            degradedComponent = "claim_extraction",
-                        }),
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                findingId = finding.FindingId,
+                                stage = DetermineVerificationStage(finding),
+                                degradedComponent = "claim_extraction",
+                            }),
                         null,
                         ex.Message,
                         ct);
                 }
 
-                verified.Add(WithVerificationOutcome(
-                    finding,
-                    VerificationOutcome.DegradedUnresolved(
-                        finding.FindingId,
-                        VerificationOutcome.DeterministicRulesEvaluator,
-                        ReviewFindingGateReasonCodes.VerificationDegraded,
-                        $"PR-wide claim extraction degraded: {ex.Message}")));
+                verified.Add(
+                    WithVerificationOutcome(
+                        finding,
+                        VerificationOutcome.DegradedUnresolved(
+                            finding.FindingId,
+                            VerificationOutcome.DeterministicRulesEvaluator,
+                            ReviewFindingGateReasonCodes.VerificationDegraded,
+                            $"PR-wide claim extraction degraded: {ex.Message}")));
                 continue;
             }
 
             if (claims.Count == 0)
             {
-                verified.Add(WithVerificationOutcome(
-                    finding,
-                    CreateNoClaimsVerificationOutcome(finding)));
+                verified.Add(
+                    WithVerificationOutcome(
+                        finding,
+                        CreateNoClaimsVerificationOutcome(finding)));
                 continue;
             }
 
@@ -914,12 +925,13 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                     baseContext.ActiveProtocolId.Value,
                     ReviewProtocolEventNames.VerificationClaimsExtracted,
-                    JsonSerializer.Serialize(new
-                    {
-                        findingId = finding.FindingId,
-                        filePath = finding.FilePath,
-                        claimCount = claims.Count,
-                    }),
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            findingId = finding.FindingId,
+                            filePath = finding.FilePath,
+                            claimCount = claims.Count,
+                        }),
                     JsonSerializer.Serialize(claims, FinalGateJsonOptions),
                     null,
                     ct);
@@ -950,25 +962,27 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                         await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                             baseContext.ActiveProtocolId.Value,
                             ReviewProtocolEventNames.VerificationDegraded,
-                            JsonSerializer.Serialize(new
-                            {
-                                findingId = finding.FindingId,
-                                stage = ClaimDescriptor.LocalStage,
-                                degradedComponent = "local_verification",
-                            }),
+                            JsonSerializer.Serialize(
+                                new
+                                {
+                                    findingId = finding.FindingId,
+                                    stage = ClaimDescriptor.LocalStage,
+                                    degradedComponent = "local_verification",
+                                }),
                             null,
                             ex.Message,
                             ct);
                     }
 
-                    verified.Add(WithVerificationOutcome(
-                        finding,
-                        VerificationOutcome.DegradedUnresolved(
-                            finding.FindingId,
-                            VerificationOutcome.DeterministicRulesEvaluator,
-                            ReviewFindingGateReasonCodes.VerificationDegraded,
-                            $"PR-wide local verification degraded: {ex.Message}",
-                            claim.ClaimId)));
+                    verified.Add(
+                        WithVerificationOutcome(
+                            finding,
+                            VerificationOutcome.DegradedUnresolved(
+                                finding.FindingId,
+                                VerificationOutcome.DeterministicRulesEvaluator,
+                                ReviewFindingGateReasonCodes.VerificationDegraded,
+                                $"PR-wide local verification degraded: {ex.Message}",
+                                claim.ClaimId)));
                     continue;
                 }
 
@@ -979,11 +993,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                         await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                             baseContext.ActiveProtocolId.Value,
                             ReviewProtocolEventNames.VerificationLocalDecision,
-                            JsonSerializer.Serialize(new
-                            {
-                                findingId = localOutcome.FindingId,
-                                claimId = localOutcome.ClaimId,
-                            }),
+                            JsonSerializer.Serialize(
+                                new
+                                {
+                                    findingId = localOutcome.FindingId,
+                                    claimId = localOutcome.ClaimId,
+                                }),
                             JsonSerializer.Serialize(localOutcome, FinalGateJsonOptions),
                             null,
                             ct);
@@ -1020,25 +1035,27 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                         baseContext.ActiveProtocolId.Value,
                         ReviewProtocolEventNames.VerificationDegraded,
-                        JsonSerializer.Serialize(new
-                        {
-                            findingId = finding.FindingId,
-                            claimId = claim.ClaimId,
-                            stage = ClaimDescriptor.PrLevelStage,
-                            degradedComponent = "evidence_collection",
-                        }),
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                findingId = finding.FindingId,
+                                claimId = claim.ClaimId,
+                                stage = ClaimDescriptor.PrLevelStage,
+                                degradedComponent = "evidence_collection",
+                            }),
                         null,
                         ex.Message,
                         ct);
                 }
 
-                verified.Add(WithVerificationOutcome(
-                    finding,
-                    VerificationOutcome.DegradedUnresolved(
-                        claim,
-                        VerificationOutcome.AiMicroVerifierEvaluator,
-                        ReviewFindingGateReasonCodes.VerificationDegraded,
-                        $"PR-wide evidence collection degraded: {ex.Message}")));
+                verified.Add(
+                    WithVerificationOutcome(
+                        finding,
+                        VerificationOutcome.DegradedUnresolved(
+                            claim,
+                            VerificationOutcome.AiMicroVerifierEvaluator,
+                            ReviewFindingGateReasonCodes.VerificationDegraded,
+                            $"PR-wide evidence collection degraded: {ex.Message}")));
                 continue;
             }
 
@@ -1047,12 +1064,13 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                     baseContext.ActiveProtocolId.Value,
                     ReviewProtocolEventNames.VerificationEvidenceCollected,
-                    JsonSerializer.Serialize(new
-                    {
-                        findingId = finding.FindingId,
-                        claimId = claim.ClaimId,
-                        coverageState = evidence.CoverageState,
-                    }),
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            findingId = finding.FindingId,
+                            claimId = claim.ClaimId,
+                            coverageState = evidence.CoverageState,
+                        }),
                     JsonSerializer.Serialize(evidence, FinalGateJsonOptions),
                     null,
                     ct);
@@ -1093,28 +1111,30 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                     baseContext.ActiveProtocolId.Value,
                     ReviewProtocolEventNames.VerificationPrDecision,
-                    JsonSerializer.Serialize(new
-                    {
-                        findingId = outcome.FindingId,
-                        claimId = outcome.ClaimId,
-                    }),
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            findingId = outcome.FindingId,
+                            claimId = outcome.ClaimId,
+                        }),
                     JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
                     null,
                     ct);
             }
 
-            verified.Add(new CandidateReviewFinding(
-                finding.FindingId,
-                finding.Provenance,
-                finding.Severity,
-                finding.Message,
-                finding.Category,
-                finding.FilePath,
-                finding.LineNumber,
-                updatedEvidence,
-                finding.CandidateSummaryText,
-                finding.InvariantCheckContext,
-                outcome));
+            verified.Add(
+                new CandidateReviewFinding(
+                    finding.FindingId,
+                    finding.Provenance,
+                    finding.Severity,
+                    finding.Message,
+                    finding.Category,
+                    finding.FilePath,
+                    finding.LineNumber,
+                    updatedEvidence,
+                    finding.CandidateSummaryText,
+                    finding.InvariantCheckContext,
+                    outcome));
         }
 
         return verified;
@@ -1134,7 +1154,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             .Select(finding => NormalizePublicationAnchor(finding, pr))
             .ToList();
         var fallbackFile = pr.ChangedFiles.FirstOrDefault()
-            ?? new ChangedFile("__pr_wide__", ChangeType.Edit, string.Empty, string.Empty);
+                           ?? new ChangedFile("__pr_wide__", ChangeType.Edit, string.Empty, string.Empty);
         var decisions = new List<CommentRelevanceFilterDecision>(normalizedFindings.Count);
 
         foreach (var finding in normalizedFindings)
@@ -1192,21 +1212,22 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 ? FinalGateDecision.SummaryOnlyDisposition
                 : FinalGateDecision.DropDisposition;
 
-            screenedFindings.Add(WithVerificationOutcome(
-                finding,
-                new VerificationOutcome(
-                    $"{finding.FindingId}:claim:screening",
-                    finding.FindingId,
-                    VerificationOutcome.NotApplicableKind,
-                    recommendedDisposition,
-                    decision.ReasonCodes,
-                    [],
-                    VerificationOutcome.NoEvidence,
-                    recommendedDisposition == FinalGateDecision.SummaryOnlyDisposition
-                        ? "Candidate was retained only as summary context after deterministic PR-wide screening."
-                        : "Candidate was dropped by deterministic PR-wide screening before deeper verification.",
-                    VerificationOutcome.DeterministicRulesEvaluator,
-                    degraded: false)));
+            screenedFindings.Add(
+                WithVerificationOutcome(
+                    finding,
+                    new VerificationOutcome(
+                        $"{finding.FindingId}:claim:screening",
+                        finding.FindingId,
+                        VerificationOutcome.NotApplicableKind,
+                        recommendedDisposition,
+                        decision.ReasonCodes,
+                        [],
+                        VerificationOutcome.NoEvidence,
+                        recommendedDisposition == FinalGateDecision.SummaryOnlyDisposition
+                            ? "Candidate was retained only as summary context after deterministic PR-wide screening."
+                            : "Candidate was dropped by deterministic PR-wide screening before deeper verification.",
+                        VerificationOutcome.DeterministicRulesEvaluator,
+                        degraded: false)));
         }
 
         return screenedFindings;
@@ -1400,7 +1421,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         ArgumentNullException.ThrowIfNull(outcomes);
 
         return outcomes.FirstOrDefault(outcome => outcome.BlocksPublication)
-               ?? outcomes.FirstOrDefault(outcome => string.Equals(outcome.RecommendedDisposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
+               ?? outcomes.FirstOrDefault(outcome => string.Equals(
+                   outcome.RecommendedDisposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
                ?? outcomes.FirstOrDefault()
                ?? VerificationOutcome.DegradedUnresolved(
                    findingId,

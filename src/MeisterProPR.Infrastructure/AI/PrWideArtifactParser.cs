@@ -42,13 +42,14 @@ internal static class PrWideArtifactParser
                         continue;
                     }
 
-                    tasks.Add(new PrWideInvestigationTask(
-                        id,
-                        GetString(item, "task_type") ?? "concern",
-                        concern,
-                        GetStringArray(item, "seed_file_paths"),
-                        GetStringArray(item, "allowed_tools"),
-                        GetInt(item, "max_tool_calls") ?? 1));
+                    tasks.Add(
+                        new PrWideInvestigationTask(
+                            id,
+                            GetString(item, "task_type") ?? "concern",
+                            concern,
+                            GetStringArray(item, "seed_file_paths"),
+                            GetStringArray(item, "allowed_tools"),
+                            GetInt(item, "max_tool_calls") ?? 1));
                 }
             }
 
@@ -90,10 +91,11 @@ internal static class PrWideArtifactParser
                         continue;
                     }
 
-                    evidence.Add(new EvidenceItem(
-                        kind,
-                        summary,
-                        GetString(item, "source_id")));
+                    evidence.Add(
+                        new EvidenceItem(
+                            kind,
+                            summary,
+                            GetString(item, "source_id")));
                 }
             }
 
@@ -111,13 +113,16 @@ internal static class PrWideArtifactParser
 
                     var confidence = ParseConfidence(item.TryGetProperty("confidence", out var confEl) ? confEl : default);
                     var supportingFiles = GetStringArray(item, "supporting_files");
-                    candidates.Add(new PrWideCandidateFinding(
-                        id,
-                        message,
-                        GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
-                        confidence,
-                        new EvidenceReference([], supportingFiles, supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState, "pr_wide_investigation"),
-                        supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths));
+                    candidates.Add(
+                        new PrWideCandidateFinding(
+                            id,
+                            message,
+                            GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
+                            confidence,
+                            new EvidenceReference(
+                                [], supportingFiles, supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
+                                "pr_wide_investigation"),
+                            supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths));
                 }
             }
 
@@ -188,22 +193,23 @@ internal static class PrWideArtifactParser
                 var evidenceSource = GetString(item, "evidence_source")
                                      ?? GetString(item, "evidenceSource")
                                      ?? "pr_wide_synthesis";
-                results.Add(new PrWideCandidateFinding(
-                    id,
-                    message,
-                    GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
-                    ParseConfidence(item.TryGetProperty("confidence", out var confEl) ? confEl : default),
-                    new EvidenceReference(
-                        GetStringArray(item, "supporting_finding_ids"),
+                results.Add(
+                    new PrWideCandidateFinding(
+                        id,
+                        message,
+                        GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
+                        ParseConfidence(item.TryGetProperty("confidence", out var confEl) ? confEl : default),
+                        new EvidenceReference(
+                            GetStringArray(item, "supporting_finding_ids"),
+                            supportingFiles,
+                            evidenceResolutionState,
+                            evidenceSource),
                         supportingFiles,
-                        evidenceResolutionState,
-                        evidenceSource),
-                    supportingFiles,
-                    ParseSeverity(item),
-                    GetString(item, "file_path") ?? GetString(item, "anchor_file_path"),
-                    GetInt(item, "line_number") ?? GetInt(item, "anchor_line_number"),
-                    GetString(item, "candidate_summary_text"),
-                    null));
+                        ParseSeverity(item),
+                        GetString(item, "file_path") ?? GetString(item, "anchor_file_path"),
+                        GetInt(item, "line_number") ?? GetInt(item, "anchor_line_number"),
+                        GetString(item, "candidate_summary_text"),
+                        null));
             }
 
             synthesis = new PrWideSynthesisResult(

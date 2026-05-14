@@ -49,15 +49,15 @@ internal sealed class ProCursorSymbolEdgeEntityTypeConfiguration : IEntityTypeCo
             .IsRequired(false);
 
         builder.HasIndex(edge => new
-        {
-            edge.SnapshotId,
-            edge.FromSymbolKey,
-            edge.ToSymbolKey,
-            edge.EdgeKind,
-            edge.FilePath,
-            edge.LineStart,
-            edge.LineEnd,
-        })
+            {
+                edge.SnapshotId,
+                edge.FromSymbolKey,
+                edge.ToSymbolKey,
+                edge.EdgeKind,
+                edge.FilePath,
+                edge.LineStart,
+                edge.LineEnd,
+            })
             .HasDatabaseName("ix_procursor_symbol_edges_snapshot_relation");
 
         builder.HasIndex(edge => new { edge.SnapshotId, edge.FromSymbolKey })

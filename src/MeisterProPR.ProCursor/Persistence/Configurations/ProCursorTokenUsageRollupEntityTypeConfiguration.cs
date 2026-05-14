@@ -73,13 +73,13 @@ internal sealed class ProCursorTokenUsageRollupEntityTypeConfiguration : IEntity
             .IsRequired();
 
         builder.HasIndex(x => new
-        {
-            x.ClientId,
-            x.ProCursorSourceId,
-            x.BucketStartDate,
-            x.Granularity,
-            x.ModelName,
-        })
+            {
+                x.ClientId,
+                x.ProCursorSourceId,
+                x.BucketStartDate,
+                x.Granularity,
+                x.ModelName,
+            })
             .HasDatabaseName("ux_procursor_token_usage_rollups_scope")
             .IsUnique();
 

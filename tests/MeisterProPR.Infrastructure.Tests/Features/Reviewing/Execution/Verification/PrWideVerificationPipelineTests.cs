@@ -32,31 +32,35 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Verify cross-file registration ordering."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR may have a cross-file registration ordering issue.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "Cross-file registration ordering can still publish stale results.",
-                          "severity": "warning",
-                          "category": "cross_cutting",
-                          "candidate_summary_text": "Potential cross-file ordering issue noted.",
-                          "confidence": { "concern": "cross_file_reasoning", "score": 78 },
-                          "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Verify cross-file registration ordering."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR may have a cross-file registration ordering issue.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "Cross-file registration ordering can still publish stale results.",
+                                                  "severity": "warning",
+                                                  "category": "cross_cutting",
+                                                  "candidate_summary_text": "Potential cross-file ordering issue noted.",
+                                                  "confidence": { "concern": "cross_file_reasoning", "score": 78 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -120,31 +124,35 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Verify cross-file registration ordering."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR introduces a cross-file publication ordering risk.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "Cross-file registration ordering can still publish stale results.",
-                          "severity": "warning",
-                          "category": "cross_cutting",
-                          "candidate_summary_text": "Potential cross-file ordering issue noted.",
-                          "confidence": { "concern": "cross_file_reasoning", "score": 86 },
-                          "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Verify cross-file registration ordering."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR introduces a cross-file publication ordering risk.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "Cross-file registration ordering can still publish stale results.",
+                                                  "severity": "warning",
+                                                  "category": "cross_cutting",
+                                                  "candidate_summary_text": "Potential cross-file ordering issue noted.",
+                                                  "confidence": { "concern": "cross_file_reasoning", "score": 86 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -200,33 +208,37 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Validate anchored local findings."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR may introduce a local nullability issue.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "ReviewComment.Message may be null when the model omits a message.",
-                          "severity": "warning",
-                          "category": "per_file_comment",
-                          "candidate_summary_text": "Potential local nullability concern noted.",
-                          "confidence": { "concern": "local_reasoning", "score": 88 },
-                          "supporting_files": ["src/Core/Aggregator.cs"],
-                          "file_path": "src/Core/Aggregator.cs",
-                          "line_number": 1
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Validate anchored local findings."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR may introduce a local nullability issue.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "ReviewComment.Message may be null when the model omits a message.",
+                                                  "severity": "warning",
+                                                  "category": "per_file_comment",
+                                                  "candidate_summary_text": "Potential local nullability concern noted.",
+                                                  "confidence": { "concern": "local_reasoning", "score": 88 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs"],
+                                                  "file_path": "src/Core/Aggregator.cs",
+                                                  "line_number": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -294,31 +306,35 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Filter speculative candidates."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR may have a speculative concern.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "This may be a bug in the registration flow.",
-                          "severity": "warning",
-                          "category": "cross_cutting",
-                          "candidate_summary_text": "Potential speculative concern noted.",
-                          "confidence": { "concern": "cross_file_reasoning", "score": 70 },
-                          "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Filter speculative candidates."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR may have a speculative concern.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "This may be a bug in the registration flow.",
+                                                  "severity": "warning",
+                                                  "category": "cross_cutting",
+                                                  "candidate_summary_text": "Potential speculative concern noted.",
+                                                  "confidence": { "concern": "cross_file_reasoning", "score": 70 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"]
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -361,33 +377,37 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Check robustness concerns."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR may mishandle completion timestamps.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "Completion timestamps can move backward.",
-                          "severity": "warning",
-                          "category": "robustness",
-                          "candidate_summary_text": "Potential timestamp ordering issue noted.",
-                          "confidence": { "concern": "runtime_state", "score": 84 },
-                          "supporting_files": ["src/Core/Aggregator.cs"],
-                          "file_path": "src/Core/Aggregator.cs",
-                          "line_number": 1
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Check robustness concerns."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR may mishandle completion timestamps.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "Completion timestamps can move backward.",
+                                                  "severity": "warning",
+                                                  "category": "robustness",
+                                                  "candidate_summary_text": "Potential timestamp ordering issue noted.",
+                                                  "confidence": { "concern": "runtime_state", "score": 84 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs"],
+                                                  "file_path": "src/Core/Aggregator.cs",
+                                                  "line_number": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -434,33 +454,37 @@ public sealed class PrWideVerificationPipelineTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-001",
-                      "concerns": ["Check anchored local findings."],
-                      "changed_areas": ["src"],
-                      "investigation_tasks": [],
-                      "no_investigation_reason": "Central synthesis can verify directly."
-                    }
-                    """)),
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "summary": "The PR can publish a null review comment message.",
-                      "candidate_findings": [
-                        {
-                          "id": "candidate-001",
-                          "message": "ReviewComment.Message may be null when the model omits a message.",
-                          "severity": " Error ",
-                          "category": "per_file_comment",
-                          "candidate_summary_text": "Potential local nullability concern noted.",
-                          "confidence": { "concern": "local_reasoning", "score": 88 },
-                          "supporting_files": ["src/Core/Aggregator.cs"],
-                          "file_path": "src/Core/Aggregator.cs",
-                          "line_number": 1
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Check anchored local findings."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR can publish a null review comment message.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "ReviewComment.Message may be null when the model omits a message.",
+                                                  "severity": " Error ",
+                                                  "category": "per_file_comment",
+                                                  "candidate_summary_text": "Potential local nullability concern noted.",
+                                                  "confidence": { "concern": "local_reasoning", "score": 88 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs"],
+                                                  "file_path": "src/Core/Aggregator.cs",
+                                                  "line_number": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -521,7 +545,8 @@ public sealed class PrWideVerificationPipelineTests
     {
         var reviewTools = Substitute.For<IReviewContextTools>();
         reviewTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
-            .Returns([
+            .Returns(
+            [
                 new ChangedFileSummary("src/Core/Aggregator.cs", ChangeType.Edit),
                 new ChangedFileSummary("src/Api/PublishController.cs", ChangeType.Edit),
             ]);

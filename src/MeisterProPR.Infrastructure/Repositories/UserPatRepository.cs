@@ -71,16 +71,16 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
             .ToListAsync(ct);
 
         return records.Select(p => new UserPat
-        {
-            Id = p.Id,
-            UserId = p.UserId,
-            TokenHash = string.Empty, // never expose
-            Label = p.Label,
-            ExpiresAt = p.ExpiresAt,
-            CreatedAt = p.CreatedAt,
-            LastUsedAt = p.LastUsedAt,
-            IsRevoked = p.IsRevoked,
-        })
+            {
+                Id = p.Id,
+                UserId = p.UserId,
+                TokenHash = string.Empty, // never expose
+                Label = p.Label,
+                ExpiresAt = p.ExpiresAt,
+                CreatedAt = p.CreatedAt,
+                LastUsedAt = p.LastUsedAt,
+                IsRevoked = p.IsRevoked,
+            })
             .ToList()
             .AsReadOnly();
     }

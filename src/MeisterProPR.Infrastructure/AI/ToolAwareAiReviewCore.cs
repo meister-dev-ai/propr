@@ -244,7 +244,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
                         "The response must start with '{' and end with '}'."));
                 var finalOptions = new ChatOptions
-                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
+                    { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
                 var finalResponse = await effectiveClient.GetResponseAsync(
                     state.Messages,
                     finalOptions,
@@ -281,7 +281,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         "\"loop_complete\": true. " +
                         "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
                 var correctionOptions = new ChatOptions
-                { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
+                    { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
                 var correctionResponse = await effectiveClient.GetResponseAsync(
                     state.Messages,
                     correctionOptions,

@@ -408,13 +408,13 @@ public sealed partial class ThreadMemoryService(
                         retrievalMode,
                         similarityScores,
                         matchSources = matches.Select(m => new
-                        {
-                            m.MemoryRecordId,
-                            m.ThreadId,
-                            m.FilePath,
-                            m.SimilarityScore,
-                            m.MatchSource,
-                        })
+                            {
+                                m.MemoryRecordId,
+                                m.ThreadId,
+                                m.FilePath,
+                                m.SimilarityScore,
+                                m.MatchSource,
+                            })
                             .ToList(),
                     });
                 await protocolRecorder.RecordMemoryEventAsync(

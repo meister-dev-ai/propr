@@ -39,9 +39,9 @@ public sealed partial class NoOpAdoCommentPoster(ILogger<NoOpAdoCommentPoster> l
             ReviewCommentPostingDiagnosticsDto.Empty(
                     result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                     result.CarriedForwardCandidatesSkipped) with
-            {
-                PostedCount = result.Comments.Count,
-            });
+                {
+                    PostedCount = result.Comments.Count,
+                });
     }
 
     [LoggerMessage(

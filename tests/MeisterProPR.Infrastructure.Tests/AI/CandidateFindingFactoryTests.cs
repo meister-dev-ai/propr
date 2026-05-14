@@ -34,11 +34,13 @@ public sealed class CandidateFindingFactoryTests
 
         var findings = sut.Build(
             [],
-            [new ReviewComment(
-                null,
-                null,
-                CommentSeverity.Warning,
-                "[Cross-file] Shared issue across services. Affected files: src/Foo.cs, src/Bar.cs, src/Foo.cs")]);
+            [
+                new ReviewComment(
+                    null,
+                    null,
+                    CommentSeverity.Warning,
+                    "[Cross-file] Shared issue across services. Affected files: src/Foo.cs, src/Bar.cs, src/Foo.cs")
+            ]);
 
         var finding = Assert.Single(findings);
         Assert.Equal("finding-dedup-001", finding.FindingId);

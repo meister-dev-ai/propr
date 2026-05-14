@@ -138,16 +138,16 @@ public sealed class AiConnectionRepositoryTests
         };
 
         profile.PurposeBindings = resolvedPurposes.Select(purpose => new AiPurposeBindingRecord
-        {
-            Id = Guid.NewGuid(),
-            ConnectionProfileId = profileId,
-            ConfiguredModelId = purpose == AiPurpose.EmbeddingDefault ? embeddingModelId : chatModelId,
-            Purpose = purpose.ToString(),
-            ProtocolMode = (purpose == AiPurpose.EmbeddingDefault ? AiProtocolMode.Embeddings : AiProtocolMode.Auto).ToString(),
-            IsEnabled = true,
-            CreatedAt = createdAt,
-            UpdatedAt = createdAt,
-        })
+            {
+                Id = Guid.NewGuid(),
+                ConnectionProfileId = profileId,
+                ConfiguredModelId = purpose == AiPurpose.EmbeddingDefault ? embeddingModelId : chatModelId,
+                Purpose = purpose.ToString(),
+                ProtocolMode = (purpose == AiPurpose.EmbeddingDefault ? AiProtocolMode.Embeddings : AiProtocolMode.Auto).ToString(),
+                IsEnabled = true,
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+            })
             .ToList();
 
         return profile;

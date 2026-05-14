@@ -46,7 +46,8 @@ public sealed class PrWideAgenticReviewOrchestratorTests
 
         var reviewTools = Substitute.For<IReviewContextTools>();
         reviewTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
-            .Returns([
+            .Returns(
+            [
                 new ChangedFileSummary("src/Web/Program.cs", ChangeType.Edit),
                 new ChangedFileSummary("src/Application/Registration.cs", ChangeType.Edit),
                 new ChangedFileSummary("tests/RegistrationTests.cs", ChangeType.Edit),
@@ -148,9 +149,10 @@ public sealed class PrWideAgenticReviewOrchestratorTests
 
         var reviewTools = Substitute.For<IReviewContextTools>();
         reviewTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
-            .Returns(Enumerable.Range(1, 10)
-                .Select(index => new ChangedFileSummary($"src/File{index}.cs", ChangeType.Edit))
-                .ToArray());
+            .Returns(
+                Enumerable.Range(1, 10)
+                    .Select(index => new ChangedFileSummary($"src/File{index}.cs", ChangeType.Edit))
+                    .ToArray());
         reviewTools.GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(string.Empty);
         reviewTools.GetFileTreeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -312,23 +314,25 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(
-                new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-                    {
-                      "plan_id": "plan-ai-001",
-                      "concerns": ["Check dependency registration changes."],
-                      "changed_areas": ["src/Web", "tests"],
-                      "investigation_tasks": [
-                        {
-                          "id": "task-ai-001",
-                          "task_type": "concern",
-                          "concern": "Check dependency registration changes.",
-                          "seed_file_paths": ["src/Web/Program.cs"],
-                          "allowed_tools": ["get_file_content", "get_file_tree"],
-                          "max_tool_calls": 1
-                        }
-                      ]
-                    }
-                    """)));
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-ai-001",
+                                              "concerns": ["Check dependency registration changes."],
+                                              "changed_areas": ["src/Web", "tests"],
+                                              "investigation_tasks": [
+                                                {
+                                                  "id": "task-ai-001",
+                                                  "task_type": "concern",
+                                                  "concern": "Check dependency registration changes.",
+                                                  "seed_file_paths": ["src/Web/Program.cs"],
+                                                  "allowed_tools": ["get_file_content", "get_file_tree"],
+                                                  "max_tool_calls": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
 
         var context = new ReviewSystemContext(null, [], reviewTools)
         {
@@ -398,63 +402,69 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             .Returns(call => $"content:{call.ArgAt<string>(0)}");
 
         var chatClient = Substitute.For<IChatClient>();
-        var planningResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-            {
-              "plan_id": "plan-ai-001",
-              "concerns": ["Check dependency registration changes."],
-              "changed_areas": ["src/Web"],
-              "investigation_tasks": [
-                {
-                  "id": "task-ai-001",
-                  "task_type": "concern",
-                  "concern": "Check dependency registration changes.",
-                  "seed_file_paths": ["src/Web/Program.cs"],
-                  "allowed_tools": ["get_file_content"],
-                  "max_tool_calls": 1
-                }
-              ]
-            }
-            """))
+        var planningResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant, """
+                                    {
+                                      "plan_id": "plan-ai-001",
+                                      "concerns": ["Check dependency registration changes."],
+                                      "changed_areas": ["src/Web"],
+                                      "investigation_tasks": [
+                                        {
+                                          "id": "task-ai-001",
+                                          "task_type": "concern",
+                                          "concern": "Check dependency registration changes.",
+                                          "seed_file_paths": ["src/Web/Program.cs"],
+                                          "allowed_tools": ["get_file_content"],
+                                          "max_tool_calls": 1
+                                        }
+                                      ]
+                                    }
+                                    """))
         {
             Usage = new UsageDetails { InputTokenCount = 11, OutputTokenCount = 3 },
         };
-        var investigationResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-            {
-              "task_id": "task-ai-001",
-              "status": "completed",
-              "evidence": [{ "kind": "file_content", "summary": "Captured content", "source_id": "src/Web/Program.cs" }],
-              "candidate_findings": [
-                {
-                  "id": "candidate-task-ai-001",
-                  "message": "Dependency registration might be incomplete.",
-                  "category": "cross_cutting",
-                  "confidence": { "concern": "registration", "score": 82 },
-                  "evidence_reference": { "excerpts": [], "supporting_files": ["src/Web/Program.cs"], "resolution_state": "resolved", "retrieval_mode": "pr_wide_investigation" },
-                  "related_file_paths": ["src/Web/Program.cs"]
-                }
-              ],
-              "tool_usage": [{ "tool_name": "get_file_content", "status": "success", "target": "src/Web/Program.cs" }],
-              "degraded": false
-            }
-            """))
+        var investigationResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant, """
+                                    {
+                                      "task_id": "task-ai-001",
+                                      "status": "completed",
+                                      "evidence": [{ "kind": "file_content", "summary": "Captured content", "source_id": "src/Web/Program.cs" }],
+                                      "candidate_findings": [
+                                        {
+                                          "id": "candidate-task-ai-001",
+                                          "message": "Dependency registration might be incomplete.",
+                                          "category": "cross_cutting",
+                                          "confidence": { "concern": "registration", "score": 82 },
+                                          "evidence_reference": { "excerpts": [], "supporting_files": ["src/Web/Program.cs"], "resolution_state": "resolved", "retrieval_mode": "pr_wide_investigation" },
+                                          "related_file_paths": ["src/Web/Program.cs"]
+                                        }
+                                      ],
+                                      "tool_usage": [{ "tool_name": "get_file_content", "status": "success", "target": "src/Web/Program.cs" }],
+                                      "degraded": false
+                                    }
+                                    """))
         {
             Usage = new UsageDetails { InputTokenCount = 13, OutputTokenCount = 5 },
         };
-        var synthesisResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, """
-            {
-              "summary": "PR-wide synthesis produced one candidate finding.",
-              "candidate_findings": [
-                {
-                  "id": "candidate-task-ai-001",
-                  "message": "Dependency registration might be incomplete.",
-                  "category": "cross_cutting",
-                  "confidence": { "concern": "registration", "score": 88 },
-                  "evidence_reference": { "excerpts": [], "supporting_files": ["src/Web/Program.cs"], "resolution_state": "resolved", "retrieval_mode": "pr_wide_synthesis" },
-                  "related_file_paths": ["src/Web/Program.cs"]
-                }
-              ]
-            }
-            """))
+        var synthesisResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant, """
+                                    {
+                                      "summary": "PR-wide synthesis produced one candidate finding.",
+                                      "candidate_findings": [
+                                        {
+                                          "id": "candidate-task-ai-001",
+                                          "message": "Dependency registration might be incomplete.",
+                                          "category": "cross_cutting",
+                                          "confidence": { "concern": "registration", "score": 88 },
+                                          "evidence_reference": { "excerpts": [], "supporting_files": ["src/Web/Program.cs"], "resolution_state": "resolved", "retrieval_mode": "pr_wide_synthesis" },
+                                          "related_file_paths": ["src/Web/Program.cs"]
+                                        }
+                                      ]
+                                    }
+                                    """))
         {
             Usage = new UsageDetails { InputTokenCount = 17, OutputTokenCount = 7 },
         };
@@ -528,12 +538,13 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>())
-            .Returns(new ReviewResult(
-                "fallback summary",
-                [
-                    new ReviewComment("src/Web/Program.cs", 12, CommentSeverity.Warning, "Inline issue."),
-                    new ReviewComment(null, null, CommentSeverity.Error, "PR-level issue."),
-                ]));
+            .Returns(
+                new ReviewResult(
+                    "fallback summary",
+                    [
+                        new ReviewComment("src/Web/Program.cs", 12, CommentSeverity.Warning, "Inline issue."),
+                        new ReviewComment(null, null, CommentSeverity.Error, "PR-level issue."),
+                    ]));
 
         var protocolRecorder = Substitute.For<IProtocolRecorder>();
         var prWideProtocolId = Guid.NewGuid();

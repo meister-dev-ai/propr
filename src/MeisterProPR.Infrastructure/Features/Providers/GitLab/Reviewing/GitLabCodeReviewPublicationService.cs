@@ -98,9 +98,9 @@ internal sealed class GitLabCodeReviewPublicationService(
         return ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
-        {
-            PostedCount = result.Comments.Count,
-        };
+            {
+                PostedCount = result.Comments.Count,
+            };
     }
 
     private static async Task PostDiscussionAsync(

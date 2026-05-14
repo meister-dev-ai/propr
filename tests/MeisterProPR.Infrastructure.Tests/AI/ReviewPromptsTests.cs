@@ -144,24 +144,25 @@ public class ReviewPromptsTests
             ]);
         var investigations =
             new List<PrWideInvestigationResult>
-            {
-                new(
-                    "task-001",
-                    "completed",
-                    [new EvidenceItem("file_content", "Captured Program.cs context.", "src/Web/Program.cs")],
-                    [
-                        new PrWideCandidateFinding(
-                            "candidate-001",
-                            "Dependency registration changes are not covered by tests.",
-                            CandidateReviewFinding.CrossCuttingCategory,
-                            new ConfidenceScore("test_coverage", 82),
-                            new EvidenceReference([], ["src/Web/Program.cs", "tests/RegistrationTests.cs"], EvidenceReference.ResolvedState, "pr_wide_investigation"),
-                            ["src/Web/Program.cs", "tests/RegistrationTests.cs"]),
-                    ],
-                    [],
-                    false),
-            }
-            .AsReadOnly();
+                {
+                    new(
+                        "task-001",
+                        "completed",
+                        [new EvidenceItem("file_content", "Captured Program.cs context.", "src/Web/Program.cs")],
+                        [
+                            new PrWideCandidateFinding(
+                                "candidate-001",
+                                "Dependency registration changes are not covered by tests.",
+                                CandidateReviewFinding.CrossCuttingCategory,
+                                new ConfidenceScore("test_coverage", 82),
+                                new EvidenceReference(
+                                    [], ["src/Web/Program.cs", "tests/RegistrationTests.cs"], EvidenceReference.ResolvedState, "pr_wide_investigation"),
+                                ["src/Web/Program.cs", "tests/RegistrationTests.cs"]),
+                        ],
+                        [],
+                        false),
+                }
+                .AsReadOnly();
 
         var message = ReviewPrompts.BuildPrWideSynthesisUserMessage(plan, investigations);
 
