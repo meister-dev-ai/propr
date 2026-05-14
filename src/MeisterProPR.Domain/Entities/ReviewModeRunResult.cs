@@ -69,7 +69,7 @@ public sealed class ReviewModeRunResult
     public void MarkCompleted(ReviewResult result, DateTimeOffset completedAt)
     {
         ArgumentNullException.ThrowIfNull(result);
-        EnsureCompletionTimestampIsValid(completedAt);
+        this.EnsureCompletionTimestampIsValid(completedAt);
         this.Result = result;
         this.CompletedAt = completedAt;
         this.Status = JobStatus.Completed;
@@ -77,7 +77,7 @@ public sealed class ReviewModeRunResult
 
     public void MarkFailed(DateTimeOffset completedAt)
     {
-        EnsureCompletionTimestampIsValid(completedAt);
+        this.EnsureCompletionTimestampIsValid(completedAt);
         this.CompletedAt = completedAt;
         this.Status = JobStatus.Failed;
     }

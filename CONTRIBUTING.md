@@ -20,7 +20,7 @@ Use the `-s` flag when committing:
 
 1. Fork the repository and create a new branch for your changes.
 2. Make your changes and commit them with clear and descriptive messages.
-3. Make sure to use the style and conventions used in the existing codebase. We recommend running `dotnet format` on the solution to ensure consistent formatting based on the checked-in `.editorconfig` rules.
+3. Make sure to use the style and conventions used in the existing codebase. We recommend running `jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code"` after installing `JetBrains.ReSharper.GlobalTools` with `dotnet tool install --global JetBrains.ReSharper.GlobalTools`.
 4. Push your changes to your fork and submit a pull request to the main repository.
 
 Note: We recommend using the pre-commit hook we provide via `scripts/setup-hooks.[ps1|sh]`.

@@ -24,8 +24,20 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore MeisterProPR.slnx
 
-      - name: Check formatting
-        run: dotnet format MeisterProPR.slnx --verify-no-changes --verbosity diagnostic
+      - name: Install JetBrains cleanupcode
+        run: dotnet tool install --global JetBrains.ReSharper.GlobalTools
+
+      - name: Add .NET tools to PATH
+        run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build solution for cleanupcode
+        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release
+
+      - name: Run cleanupcode
+        run: jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
+
+      - name: Verify formatting
+        run: git diff --exit-code
 
   build:
     name: Build
