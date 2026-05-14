@@ -34,7 +34,8 @@ jobs:
         run: dotnet build MeisterProPR.slnx --no-restore --configuration Release
 
       - name: Run cleanupcode
-        run: jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
+        run: |
+          jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
 
       - name: Verify formatting
         run: git diff --exit-code
