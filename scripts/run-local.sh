@@ -412,6 +412,7 @@ wait_for_http_ready() {
   local port="$2"
   local pid="$3"
   local timeout_seconds="$4"
+  local readiness_path="${5:-/healthz}"
   local waited=0
 
   if ! command -v curl >/dev/null 2>&1; then
@@ -419,10 +420,10 @@ wait_for_http_ready() {
     return 0
   fi
 
-  write_status "Waiting for $name readiness at http://localhost:$port/healthz"
+  write_status "Waiting for $name readiness at http://localhost:$port$readiness_path"
 
   while [ "$waited" -lt "$timeout_seconds" ]; do
-    if curl -s --max-time 2 -o /dev/null "http://localhost:$port/healthz" 2>/dev/null; then
+    if curl -s --max-time 2 -o /dev/null "http://localhost:$port$readiness_path" 2>/dev/null; then
       write_status "$name is ready on http://localhost:$port"
       return 0
     fi
@@ -504,7 +505,7 @@ write_status "Shared ProCursor key generated for this run"
 ( env "${api_env_assign[@]}" dotnet run --project "$ApiProject" --no-build --no-launch-profile ) > "$API_OUT" 2> "$API_ERR" &
 API_PID=$!
 
-if ! wait_for_http_ready "API" "$BACKEND_PORT" "$API_PID" "${RUN_LOCAL_BACKEND_READY_TIMEOUT_SECONDS:-60}"; then
+if ! wait_for_http_ready "API" "$BACKEND_PORT" "$API_PID" "${RUN_LOCAL_BACKEND_READY_TIMEOUT_SECONDS:-60}" "/livez"; then
   [ -n "${API_PID:-}" ] && kill "$API_PID" 2>/dev/null || true
   wait "$API_PID" 2>/dev/null || true
   wait_for_log_readers "${API_OUT_READER:-}" "${API_ERR_READER:-}"

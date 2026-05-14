@@ -40,7 +40,7 @@ internal sealed class ReviewSynthesisExecutor(
     IAiConnectionRepository? aiConnectionRepository,
     IAiChatClientFactory? aiClientFactory,
     IAiRuntimeResolver? aiRuntimeResolver,
-    IChatClient? defaultChatClient)
+    IChatClient? defaultChatClient = null)
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 

@@ -24,6 +24,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.DependencyInjection;
 
@@ -190,6 +191,10 @@ public static class InfrastructureServiceExtensions
                     opts.MemoryEmbeddingDimensions = memDims;
                 }
             });
+
+        // Some singleton review executors consume a snapshot of the configured values directly
+        // instead of the options wrapper, so expose the bound instance as a concrete service too.
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiReviewOptions>>().Value);
 
         // WorkerOptions — bound from individual env vars
         services.AddOptions<WorkerOptions>()

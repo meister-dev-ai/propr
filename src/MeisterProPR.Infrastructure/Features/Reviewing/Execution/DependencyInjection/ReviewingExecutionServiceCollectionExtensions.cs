@@ -38,8 +38,8 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<PrLevelReviewVerificationExecutor>();
         services.AddSingleton<CandidateFindingFactory>();
         services.AddSingleton<QualityFilterExecutor>();
-        services.AddSingleton<FileReviewDispatchPlanner>();
-        services.AddSingleton<ReviewSynthesisExecutor>();
+        services.AddScoped<FileReviewDispatchPlanner>();
+        services.AddScoped<ReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
 
         return services;
