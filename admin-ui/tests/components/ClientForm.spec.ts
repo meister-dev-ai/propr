@@ -37,6 +37,7 @@ describe('ClientForm', () => {
 
     expect(wrapper.find('[data-testid="client-tenant-select"]').exists()).toBe(true)
     expect(wrapper.find('input[name="displayName"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="client-review-strategy-select"]').exists()).toBe(true)
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
   })
 
@@ -74,6 +75,7 @@ describe('ClientForm', () => {
 
     await wrapper.get('[data-testid="client-tenant-select"]').setValue('tenant-1')
     await wrapper.find('input[name="displayName"]').setValue('Acme')
+    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('prWideAgentic')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 
@@ -81,6 +83,7 @@ describe('ClientForm', () => {
       body: {
         displayName: 'Acme',
         tenantId: 'tenant-1',
+        defaultReviewStrategy: 'prWideAgentic',
       },
     })
     expect(wrapper.emitted('client-created')?.[0]).toEqual([created])

@@ -42,4 +42,9 @@ public sealed class NoOpClientRegistry : IClientRegistry
     {
         return Task.FromResult(true);
     }
+
+    public Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<ReviewStrategy?>(null);
+    }
 }

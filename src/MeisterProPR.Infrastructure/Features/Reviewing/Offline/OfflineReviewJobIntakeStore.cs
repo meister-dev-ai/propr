@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 
@@ -39,6 +40,8 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
             request.RepositoryId,
             request.PullRequestId,
             request.IterationId);
+
+        job.SelectReviewStrategy(request.ResolvedReviewStrategySelection ?? ReviewStrategySelection.Default);
 
         if (request.ReviewTemperature.HasValue)
         {

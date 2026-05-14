@@ -24,6 +24,13 @@ public interface IClientAdminService
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default);
 
+    /// <summary>Creates a new active client and returns its data.</summary>
+    Task<ClientDto> CreateAsync(
+        Guid tenantId,
+        string displayName,
+        ReviewStrategy defaultReviewStrategy,
+        CancellationToken ct = default);
+
     /// <summary>
     ///     Applies partial updates to a client.
     ///     Returns the updated client, or <c>null</c> if not found.
@@ -37,6 +44,7 @@ public interface IClientAdminService
     ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
     /// </param>
     /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
+    /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -45,6 +53,7 @@ public interface IClientAdminService
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
         bool? scmCommentPostingEnabled = null,
+        ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default);
 
     /// <summary>

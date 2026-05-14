@@ -204,4 +204,26 @@ public interface IProtocolRecorder
         string? output,
         string? error,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records review-strategy selection, dispatch, and comparison events on the existing protocol path. Never throws.
+    /// </summary>
+    Task RecordReviewStrategyEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records PR-wide staged review events and stage metrics on the existing protocol path. Never throws.
+    /// </summary>
+    Task RecordPrWideStageEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
 }

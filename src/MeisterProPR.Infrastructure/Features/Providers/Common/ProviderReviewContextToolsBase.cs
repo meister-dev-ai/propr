@@ -46,7 +46,7 @@ internal abstract class ProviderReviewContextToolsBase(
     private readonly RepositoryRef _repository = review.Repository;
     private readonly string _sourceBranch = sourceBranch;
 
-    public bool SupportsProCursorTools => proCursorGateway is not DisabledProCursorGateway;
+    public bool SupportsProCursorTools => this._proCursorGateway is not DisabledProCursorGateway;
 
     public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {

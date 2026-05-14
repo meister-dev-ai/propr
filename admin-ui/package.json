@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "vue-tsc --noEmit",
     "mock": "cross-env VITE_MOCK=true vite --mode mock",
-    "generate:api": "openapi-typescript ../openapi.json -o src/services/generated/openapi.ts",
+    "generate:api": "openapi-typescript ../openapi.json -o src/types/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

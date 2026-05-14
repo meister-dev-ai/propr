@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 type PremiumCapabilityDto = components['schemas']['PremiumCapabilityDto']
 

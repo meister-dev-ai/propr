@@ -141,6 +141,7 @@ const sampleClient = {
   displayName: 'Acme Corp',
   isActive: true,
   createdAt: '2024-01-01T00:00:00Z',
+  defaultReviewStrategy: 'fileByFile',
   scmCommentPostingEnabled: true,
 }
 
@@ -242,7 +243,10 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({ params: { path: { clientId: 'client-1' } }, body: { scmCommentPostingEnabled: false } })
+      expect.objectContaining({
+        params: { path: { clientId: 'client-1' } },
+        body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false },
+      })
     )
   })
 
@@ -263,7 +267,35 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({ params: { path: { clientId: 'client-1' } }, body: { scmCommentPostingEnabled: true } })
+      expect.objectContaining({
+        params: { path: { clientId: 'client-1' } },
+        body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true },
+      })
+    )
+  })
+
+  it('loads and saves the default review strategy from advanced settings', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic' }, response: { ok: true } })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const strategySelect = wrapper.find('select[name="defaultReviewStrategy"]')
+    expect(strategySelect.exists()).toBe(true)
+    expect((strategySelect.element as HTMLSelectElement).value).toBe('fileByFile')
+
+    await strategySelect.setValue('prWideAgentic')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/clients/{clientId}',
+      expect.objectContaining({
+        params: { path: { clientId: 'client-1' } },
+        body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true },
+      })
     )
   })
 

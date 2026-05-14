@@ -48,7 +48,20 @@ public sealed class SubmitReviewJobHandlerGitHubTests
         var intakeStore = Substitute.For<IReviewJobIntakeStore>();
         var queue = Substitute.For<IReviewExecutionQueue>();
         intakeStore.FindActiveJobAsync(clientId, request, Arg.Any<CancellationToken>()).Returns((ReviewJob?)null);
-        intakeStore.CreatePendingJobAsync(clientId, request, Arg.Any<CancellationToken>()).Returns(createdJob);
+        intakeStore.CreatePendingJobAsync(
+                clientId,
+                Arg.Is<SubmitReviewJobRequestDto>(candidate =>
+                    candidate.Provider == request.Provider
+                    && candidate.ProviderScopePath == request.ProviderScopePath
+                    && candidate.ProviderProjectKey == request.ProviderProjectKey
+                    && candidate.RepositoryId == request.RepositoryId
+                    && candidate.PullRequestId == request.PullRequestId
+                    && candidate.IterationId == request.IterationId
+                    && candidate.CodeReview == request.CodeReview
+                    && candidate.ReviewRevision == request.ReviewRevision
+                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                Arg.Any<CancellationToken>())
+            .Returns(createdJob);
 
         var sut = new SubmitReviewJobHandler(intakeStore, queue, NullLogger<SubmitReviewJobHandler>.Instance);
 

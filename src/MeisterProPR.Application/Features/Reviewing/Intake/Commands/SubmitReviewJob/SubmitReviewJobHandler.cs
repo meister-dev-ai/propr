@@ -4,8 +4,12 @@
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
@@ -16,7 +20,8 @@ public sealed partial class SubmitReviewJobHandler(
     IReviewExecutionQueue executionQueue,
     ILogger<SubmitReviewJobHandler> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
-    ILicensingCapabilityService? licensingCapabilityService = null)
+    ILicensingCapabilityService? licensingCapabilityService = null,
+    IClientRegistry? clientRegistry = null)
 {
     /// <summary>Creates a new review job unless an active job already exists for the requested PR iteration.</summary>
     public async Task<SubmitReviewJobResult> HandleAsync(
@@ -32,8 +37,11 @@ public sealed partial class SubmitReviewJobHandler(
 
         if (existing is not null)
         {
-            return new SubmitReviewJobResult(existing.Id, existing.Status, true);
+            return ToResult(existing, true);
         }
+
+        var selection = await this.ResolveStrategySelectionAsync(command.ClientId, request, cancellationToken);
+        request = request with { ResolvedReviewStrategySelection = selection };
 
         if (licensingCapabilityService is not null)
         {
@@ -56,7 +64,7 @@ public sealed partial class SubmitReviewJobHandler(
 
         if (pullRequestFetcher is null)
         {
-            return new SubmitReviewJobResult(job.Id, job.Status, false);
+            return ToResult(job, false);
         }
 
         try
@@ -72,7 +80,7 @@ public sealed partial class SubmitReviewJobHandler(
 
             if (pr is null)
             {
-                return new SubmitReviewJobResult(job.Id, job.Status, false);
+                return ToResult(job, false);
             }
 
             await intakeStore.UpdatePrContextAsync(
@@ -88,7 +96,57 @@ public sealed partial class SubmitReviewJobHandler(
             LogPrContextFetchFailed(logger, job.Id, ex);
         }
 
-        return new SubmitReviewJobResult(job.Id, job.Status, false);
+        return ToResult(job, false);
+    }
+
+    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(
+        Guid clientId,
+        SubmitReviewJobRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request.ReviewStrategy.HasValue)
+        {
+            return new ReviewStrategySelection(
+                request.ReviewStrategy.Value,
+                ReviewStrategySelectionSource.JobOverride,
+                request.ComparisonMode,
+                request.PublicationMode,
+                null);
+        }
+
+        if (clientRegistry is not null)
+        {
+            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, cancellationToken);
+            if (clientDefault.HasValue)
+            {
+                return new ReviewStrategySelection(
+                    clientDefault.Value,
+                    ReviewStrategySelectionSource.ClientDefault,
+                    request.ComparisonMode,
+                    request.PublicationMode,
+                    null);
+            }
+        }
+
+        return new ReviewStrategySelection(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.FallbackDefault,
+            request.ComparisonMode,
+            request.PublicationMode,
+            null);
+    }
+
+    private static SubmitReviewJobResult ToResult(ReviewJob job, bool isDuplicate)
+    {
+        return new SubmitReviewJobResult(
+            job.Id,
+            job.Status,
+            isDuplicate,
+            job.ReviewStrategy,
+            job.ReviewStrategySelectionSource,
+            job.ReviewComparisonMode,
+            job.ReviewPublicationMode,
+            job.ComparisonGroupId);
     }
 
     [LoggerMessage(

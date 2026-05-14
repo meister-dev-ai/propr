@@ -40,12 +40,23 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default)
     {
+        return await this.CreateAsync(tenantId, displayName, ReviewStrategy.FileByFile, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<ClientDto> CreateAsync(
+        Guid tenantId,
+        string displayName,
+        ReviewStrategy defaultReviewStrategy,
+        CancellationToken ct = default)
+    {
         var client = new ClientRecord
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             DisplayName = displayName,
             IsActive = true,
+            DefaultReviewStrategy = defaultReviewStrategy,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         dbContext.Clients.Add(client);
@@ -63,6 +74,7 @@ public sealed class ClientAdminService(
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
         bool? scmCommentPostingEnabled = null,
+        ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -90,6 +102,11 @@ public sealed class ClientAdminService(
         if (commentResolutionBehavior.HasValue)
         {
             client.CommentResolutionBehavior = commentResolutionBehavior.Value;
+        }
+
+        if (defaultReviewStrategy.HasValue)
+        {
+            client.DefaultReviewStrategy = defaultReviewStrategy.Value;
         }
 
         if (customSystemMessage is not null)
@@ -253,6 +270,7 @@ public sealed class ClientAdminService(
             client.IsActive,
             client.CreatedAt,
             client.CommentResolutionBehavior,
+            client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
             tenantId,

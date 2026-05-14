@@ -257,6 +257,34 @@ public sealed class PrCrawlServiceTests
     }
 
     [Fact]
+    public async Task CrawlAsync_WhenClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    {
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(142);
+        this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.PrWideAgentic);
+
+        await this._sut.CrawlAsync();
+
+        await this._jobs.Received(1)
+            .AddAsync(
+                Arg.Is<ReviewJob>(job =>
+                    job.PullRequestId == pr.CodeReview.Number &&
+                    job.ReviewStrategy == ReviewStrategy.PrWideAgentic &&
+                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
+                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
+                    job.ReviewPublicationMode == ReviewPublicationMode.Publish));
+    }
+
+    [Fact]
     public async Task CrawlAsync_SelectedSourceScope_SnapshotsSelectedProCursorSourcesOnQueuedJob()
     {
         var sourceId = Guid.NewGuid();

@@ -96,7 +96,16 @@ public sealed class SubmitReviewJobHandlerTests
 
         store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns((ReviewJob?)null);
-        store.CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>())
+        store.CreatePendingJobAsync(
+                ClientId,
+                Arg.Is<SubmitReviewJobRequestDto>(candidate =>
+                    candidate.ProviderScopePath == request.ProviderScopePath
+                    && candidate.ProviderProjectKey == request.ProviderProjectKey
+                    && candidate.RepositoryId == request.RepositoryId
+                    && candidate.PullRequestId == request.PullRequestId
+                    && candidate.IterationId == request.IterationId
+                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                Arg.Any<CancellationToken>())
             .Returns(createdJob);
         pullRequestFetcher.FetchAsync(
                 request.ProviderScopePath,
@@ -131,7 +140,16 @@ public sealed class SubmitReviewJobHandlerTests
 
         Assert.False(result.IsDuplicate);
         Assert.Equal(createdJob.Id, result.JobId);
-        await store.Received(1).CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>());
+        await store.Received(1).CreatePendingJobAsync(
+            ClientId,
+            Arg.Is<SubmitReviewJobRequestDto>(candidate =>
+                candidate.ProviderScopePath == request.ProviderScopePath
+                && candidate.ProviderProjectKey == request.ProviderProjectKey
+                && candidate.RepositoryId == request.RepositoryId
+                && candidate.PullRequestId == request.PullRequestId
+                && candidate.IterationId == request.IterationId
+                && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+            Arg.Any<CancellationToken>());
         await queue.Received(1).EnqueueAsync(createdJob.Id, Arg.Any<CancellationToken>());
         await store.Received(1)
             .UpdatePrContextAsync(
@@ -161,7 +179,16 @@ public sealed class SubmitReviewJobHandlerTests
 
         store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
             .Returns((ReviewJob?)null);
-        store.CreatePendingJobAsync(ClientId, request, Arg.Any<CancellationToken>())
+        store.CreatePendingJobAsync(
+                ClientId,
+                Arg.Is<SubmitReviewJobRequestDto>(candidate =>
+                    candidate.ProviderScopePath == request.ProviderScopePath
+                    && candidate.ProviderProjectKey == request.ProviderProjectKey
+                    && candidate.RepositoryId == request.RepositoryId
+                    && candidate.PullRequestId == request.PullRequestId
+                    && candidate.IterationId == request.IterationId
+                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                Arg.Any<CancellationToken>())
             .Returns(createdJob);
         pullRequestFetcher.FetchAsync(
                 Arg.Any<string>(),

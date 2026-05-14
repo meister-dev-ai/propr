@@ -136,6 +136,8 @@ public sealed class PullRequestSynchronizationService(
                 request.PullRequestId,
                 iterationId.Value);
 
+            job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(request, ct));
+
             if (request.ReviewTemperature.HasValue)
             {
                 job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);
@@ -739,6 +741,42 @@ public sealed class PullRequestSynchronizationService(
                string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (request.ReviewStrategy.HasValue)
+        {
+            return new ReviewStrategySelection(
+                request.ReviewStrategy.Value,
+                ReviewStrategySelectionSource.JobOverride,
+                request.ComparisonMode,
+                request.PublicationMode,
+                null);
+        }
+
+        if (clientRegistry is not null)
+        {
+            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(request.ClientId, ct);
+            if (clientDefault.HasValue)
+            {
+                return new ReviewStrategySelection(
+                    clientDefault.Value,
+                    ReviewStrategySelectionSource.ClientDefault,
+                    request.ComparisonMode,
+                    request.PublicationMode,
+                    null);
+            }
+        }
+
+        return new ReviewStrategySelection(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.FallbackDefault,
+            request.ComparisonMode,
+            request.PublicationMode,
+            null);
     }
 
     private sealed record ActiveJobReconciliationResult(

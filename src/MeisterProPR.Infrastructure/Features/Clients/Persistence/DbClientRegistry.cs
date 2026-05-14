@@ -122,4 +122,13 @@ public sealed class DbClientRegistry(
                    .FirstOrDefaultAsync(ct)
                ?? true;
     }
+
+    /// <inheritdoc />
+    public async Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => (ReviewStrategy?)c.DefaultReviewStrategy)
+            .FirstOrDefaultAsync(ct);
+    }
 }

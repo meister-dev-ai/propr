@@ -53,6 +53,46 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     }
 
     [Fact]
+    public async Task CreatePendingJobAsync_PersistsReviewStrategySnapshot()
+    {
+        var comparisonGroupId = Guid.NewGuid();
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1)
+        {
+            ResolvedReviewStrategySelection = new ReviewStrategySelection(
+                ReviewStrategy.PrWideAgentic,
+                ReviewStrategySelectionSource.ClientDefault,
+                ReviewComparisonMode.Single,
+                ReviewPublicationMode.InternalOnly,
+                comparisonGroupId),
+        };
+
+        var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
+
+        var persisted = await this._dbContext.ReviewJobs.FirstOrDefaultAsync(candidate => candidate.Id == job.Id);
+        Assert.NotNull(persisted);
+        Assert.Equal(ReviewStrategy.PrWideAgentic, persisted!.ReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, persisted.ReviewStrategySelectionSource);
+        Assert.Equal(ReviewPublicationMode.InternalOnly, persisted.ReviewPublicationMode);
+        Assert.Equal(comparisonGroupId, persisted.ComparisonGroupId);
+    }
+
+    [Fact]
+    public async Task CreatePendingJobAsync_WithoutResolvedStrategy_PersistsFallbackDefaults()
+    {
+        var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1);
+
+        var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
+
+        var persisted = await this._dbContext.ReviewJobs.FirstOrDefaultAsync(candidate => candidate.Id == job.Id);
+        Assert.NotNull(persisted);
+        Assert.Equal(ReviewStrategy.FileByFile, persisted!.ReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.FallbackDefault, persisted.ReviewStrategySelectionSource);
+        Assert.Equal(ReviewComparisonMode.Single, persisted.ReviewComparisonMode);
+        Assert.Equal(ReviewPublicationMode.Publish, persisted.ReviewPublicationMode);
+        Assert.Null(persisted.ComparisonGroupId);
+    }
+
+    [Fact]
     public async Task FindActiveJobAsync_CompletedJobIsNotReturned()
     {
         var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 11, 1);

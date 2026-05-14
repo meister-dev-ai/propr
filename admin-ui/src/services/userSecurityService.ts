@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { createAdminClient } from '@/services/api'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest']
 

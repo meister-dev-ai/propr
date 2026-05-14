@@ -32,6 +32,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
 
+    /// <summary>Durable per-strategy review run results.</summary>
+    public DbSet<ReviewModeRunResult> ReviewModeRunResults => this.Set<ReviewModeRunResult>();
+
     /// <summary>Per-file results of a review job.</summary>
     public DbSet<ReviewFileResult> ReviewFileResults => this.Set<ReviewFileResult>();
 

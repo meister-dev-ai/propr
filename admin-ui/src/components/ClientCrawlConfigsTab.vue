@@ -122,7 +122,7 @@ import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useSession } from '@/composables/useSession'
 import { useNotification } from '@/composables/useNotification'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 type ScmProvider = components['schemas']['ScmProvider']
 type CrawlConfigResponse = components['schemas']['CrawlConfigResponse'] & { provider?: ScmProvider }

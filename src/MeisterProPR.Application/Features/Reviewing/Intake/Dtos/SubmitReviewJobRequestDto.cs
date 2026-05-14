@@ -32,4 +32,16 @@ public sealed record SubmitReviewJobRequestDto(
 
     /// <summary>Normalized reviewer-trigger identity when the caller can supply trigger context.</summary>
     public ReviewerIdentity? RequestedReviewerIdentity { get; init; }
+
+    /// <summary>Optional per-job review strategy override.</summary>
+    public ReviewStrategy? ReviewStrategy { get; init; }
+
+    /// <summary>Requested comparison mode. Defaults to single-strategy execution.</summary>
+    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
+
+    /// <summary>Requested publication mode. Defaults to publishing the selected strategy.</summary>
+    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
+
+    /// <summary>Resolved immutable strategy selection snapshot assigned before persistence.</summary>
+    public ReviewStrategySelection? ResolvedReviewStrategySelection { get; init; }
 }

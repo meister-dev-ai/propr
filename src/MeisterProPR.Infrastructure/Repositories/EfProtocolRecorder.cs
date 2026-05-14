@@ -280,6 +280,30 @@ public sealed class EfProtocolRecorder(
         await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "verification");
     }
 
+    /// <inheritdoc />
+    public async Task RecordReviewStrategyEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "review-strategy");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordPrWideStageEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "pr-wide-review");
+    }
+
     private async Task RecordEventAsync(
         Guid protocolId,
         ProtocolEventKind kind,

@@ -69,7 +69,7 @@ import { listAiConnections } from '@/services/aiConnectionsService'
 import { getClientTokenUsage } from '@/services/clientTokenUsageService'
 import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 type JobListItem = components['schemas']['JobListItem']
 

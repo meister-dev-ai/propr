@@ -142,6 +142,23 @@
                         <div class="section-card-body section-card-body--compact">
                             <div class="inline-field-row review-publication-row">
                                 <div class="form-field flex-1 review-publication-field">
+                                    <label for="defaultReviewStrategy">Default Review Strategy</label>
+                                    <select
+                                        id="defaultReviewStrategy"
+                                        v-model="editedDefaultReviewStrategy"
+                                        name="defaultReviewStrategy"
+                                    >
+                                        <option value="fileByFile">File by File</option>
+                                        <option value="prWideAgentic">PR-wide Agentic</option>
+                                    </select>
+                                    <p class="muted review-publication-copy">
+                                        Choose whether new reviews for this client use the classic file-by-file flow
+                                        or the PR-wide agentic review flow by default.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="inline-field-row review-publication-row">
+                                <div class="form-field flex-1 review-publication-field">
                                     <label class="checkbox-field" for="scmCommentPostingEnabled">
                                         <input id="scmCommentPostingEnabled" v-model="editedScmCommentPostingEnabled"
                                             name="scmCommentPostingEnabled" type="checkbox" />
@@ -427,6 +444,7 @@ interface Client {
     displayName: string;
     isActive: boolean;
     createdAt: string;
+    defaultReviewStrategy?: "fileByFile" | "prWideAgentic";
     scmCommentPostingEnabled: boolean;
 }
 
@@ -444,6 +462,7 @@ const saving = ref(false);
 const saveError = ref("");
 const showDeleteDialog = ref(false);
 const editedDisplayName = ref("");
+const editedDefaultReviewStrategy = ref<"fileByFile" | "prWideAgentic">("fileByFile");
 const editedScmCommentPostingEnabled = ref(true);
 const canManageClient = computed(() => hasClientRole(clientId, 1));
 const canViewClient = computed(() => hasClientRole(clientId, 0));
@@ -539,6 +558,8 @@ onMounted(async () => {
         }
         client.value = data as Client;
         editedDisplayName.value = (data as Client).displayName;
+        editedDefaultReviewStrategy.value =
+            (data as Client).defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value = Boolean(
             (data as Client).scmCommentPostingEnabled
         );
@@ -632,6 +653,8 @@ async function saveDisplayName() {
             body: { displayName: editedDisplayName.value },
         });
         client.value = data as Client;
+        editedDefaultReviewStrategy.value =
+            client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
     } catch {
@@ -651,6 +674,8 @@ async function toggleStatus() {
             body: { isActive: !client.value.isActive },
         });
         client.value = data as Client;
+        editedDefaultReviewStrategy.value =
+            client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
     } catch {
@@ -668,9 +693,14 @@ async function saveAdvancedSettings() {
     try {
         const { data } = await createAdminClient().PATCH("/clients/{clientId}", {
             params: { path: { clientId } },
-            body: { scmCommentPostingEnabled: editedScmCommentPostingEnabled.value },
+            body: {
+                defaultReviewStrategy: editedDefaultReviewStrategy.value,
+                scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
+            },
         });
         client.value = data as Client;
+        editedDefaultReviewStrategy.value =
+            client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
     } catch {
@@ -684,8 +714,12 @@ function isAdvancedSettingsButtonEnabled(): boolean {
     return (
         !saving.value &&
         client.value !== null &&
-        editedScmCommentPostingEnabled.value !==
-        Boolean(client.value.scmCommentPostingEnabled)
+        (
+            editedScmCommentPostingEnabled.value !==
+                Boolean(client.value.scmCommentPostingEnabled) ||
+            editedDefaultReviewStrategy.value !==
+                (client.value.defaultReviewStrategy ?? "fileByFile")
+        )
     );
 }
 

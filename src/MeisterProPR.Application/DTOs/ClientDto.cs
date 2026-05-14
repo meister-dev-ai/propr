@@ -15,6 +15,7 @@ public sealed record ClientDto(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
+    ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
     Guid? TenantId = null,

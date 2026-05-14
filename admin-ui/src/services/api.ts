@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import createClient from 'openapi-fetch'
-import type { paths } from './generated/openapi'
+import type { paths } from '@/types'
 import { useSession } from '@/composables/useSession'
 import { API_BASE_URL } from '@/services/apiBase'
 
@@ -123,4 +123,3 @@ export function createAdminClient(opts?: { overrideKey?: string }) {
 
   return client
 }
-

@@ -3,7 +3,7 @@
 
 import { computed, ref } from 'vue'
 import { API_BASE_URL } from '@/services/apiBase'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
 const REFRESH_TOKEN_KEY = 'meisterpropr_refresh_token'

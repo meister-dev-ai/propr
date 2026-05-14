@@ -342,7 +342,7 @@ import {
   type MemoryActivityLogEntryDto,
 } from '@/services/threadMemoryService'
 import { useNotification } from '@/composables/useNotification'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 type ClientDto = components['schemas']['ClientDto']
 

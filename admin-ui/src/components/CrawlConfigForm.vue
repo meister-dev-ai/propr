@@ -478,7 +478,7 @@ import { useSession } from '@/composables/useSession'
 import { createOverride, deleteOverride, listOverrides } from '@/services/promptOverridesService'
 import { listProCursorSources } from '@/services/proCursorService'
 import type { ProCursorKnowledgeSourceDto } from '@/services/proCursorService'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 
 type ScmProvider = components['schemas']['ScmProvider']
 type CrawlConfigResponse = components['schemas']['CrawlConfigResponse'] & { provider?: ScmProvider }

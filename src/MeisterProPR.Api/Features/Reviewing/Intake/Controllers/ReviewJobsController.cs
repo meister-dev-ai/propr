@@ -139,6 +139,11 @@ public sealed partial class ReviewJobsController(
             Repository = MapRepository(status.Repository),
             CodeReview = MapCodeReview(status.CodeReview),
             ReviewRevision = MapReviewRevision(status.ReviewRevision),
+            ResolvedReviewStrategy = status.ResolvedReviewStrategy,
+            StrategySelectionSource = status.StrategySelectionSource,
+            ComparisonMode = status.ComparisonMode,
+            PublicationMode = status.PublicationMode,
+            ComparisonGroupId = status.ComparisonGroupId,
         };
     }
 
@@ -153,7 +158,14 @@ public sealed partial class ReviewJobsController(
             request.Host?.HostBaseUrl,
             MapRepository(request.Repository),
             MapCodeReview(request.CodeReview),
-            MapReviewRevision(request.ReviewRevision));
+            MapReviewRevision(request.ReviewRevision))
+        {
+            ResolvedReviewStrategy = result.ResolvedReviewStrategy,
+            StrategySelectionSource = result.StrategySelectionSource,
+            ComparisonMode = result.ComparisonMode,
+            PublicationMode = result.PublicationMode,
+            ComparisonGroupId = result.ComparisonGroupId,
+        };
     }
 
     private static bool TryMapRequest(
@@ -279,6 +291,9 @@ public sealed partial class ReviewJobsController(
             CodeReview = codeReview,
             ReviewRevision = reviewRevision,
             RequestedReviewerIdentity = requestedReviewerIdentity,
+            ReviewStrategy = request.ReviewStrategy,
+            ComparisonMode = request.ComparisonMode,
+            PublicationMode = request.PublicationMode,
         };
 
         return true;

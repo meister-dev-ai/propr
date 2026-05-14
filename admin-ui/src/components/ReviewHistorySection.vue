@@ -156,7 +156,7 @@ import ModalDialog from '@/components/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useSession } from '@/composables/useSession'
 import { createAdminClient } from '@/services/api'
-import type { components } from '@/services/generated/openapi'
+import type { components } from '@/types'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 

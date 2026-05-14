@@ -176,6 +176,7 @@ describe('ClientsView', () => {
     expect((tenantSelect.element as HTMLSelectElement).value).toBe('tenant-2')
 
     await wrapper.get('#displayName').setValue('Acme Review Team')
+    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('prWideAgentic')
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
@@ -183,6 +184,7 @@ describe('ClientsView', () => {
       body: {
         displayName: 'Acme Review Team',
         tenantId: 'tenant-2',
+        defaultReviewStrategy: 'prWideAgentic',
       },
     })
     expect(replaceMock).toHaveBeenCalledWith({ name: 'clients', query: {} })

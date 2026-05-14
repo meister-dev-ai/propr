@@ -4,10 +4,22 @@
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
 /// <summary>
-///     Reviewing-owned protocol event names used by the comment relevance filter workflow.
+///     Reviewing-owned protocol event names used by strategy selection, PR-wide orchestration,
+///     comment relevance, verification, and final-gate workflows.
 /// </summary>
 public static class ReviewProtocolEventNames
 {
+    public const string ReviewStrategySelected = "review_strategy_selected";
+    public const string PrWidePlanCreated = "pr_wide_plan_created";
+    public const string PrWideInvestigationLaunched = "pr_wide_investigation_launched";
+    public const string PrWideInvestigationResult = "pr_wide_investigation_result";
+    public const string PrWideEvidenceCollected = "pr_wide_evidence_collected";
+    public const string PrWideSynthesisCompleted = "pr_wide_synthesis_completed";
+    public const string PrWideCandidateMerged = "pr_wide_candidate_merged";
+    public const string PrWideVerificationCompleted = "pr_wide_verification_completed";
+    public const string PrWideFinalGateDecision = "pr_wide_final_gate_decision";
+    public const string PrWideSummaryReconciled = "pr_wide_summary_reconciled";
+    public const string PrWidePublicationPrepared = "pr_wide_publication_prepared";
     public const string CommentRelevanceFilterOutput = "comment_relevance_filter_output";
     public const string CommentRelevanceFilterDegraded = "comment_relevance_filter_degraded";
     public const string CommentRelevanceEvaluatorDegraded = "comment_relevance_evaluator_degraded";

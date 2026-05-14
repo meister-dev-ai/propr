@@ -96,6 +96,38 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasDefaultValue(ProCursorSourceScopeMode.AllClientSources)
             .IsRequired();
 
+        builder.Property(j => j.ReviewStrategy)
+            .HasColumnName("review_strategy")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewStrategy.FileByFile)
+            .HasSentinel(ReviewStrategy.FileByFile)
+            .IsRequired();
+
+        builder.Property(j => j.ReviewStrategySelectionSource)
+            .HasColumnName("review_strategy_selection_source")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewStrategySelectionSource.FallbackDefault)
+            .HasSentinel(ReviewStrategySelectionSource.FallbackDefault)
+            .IsRequired();
+
+        builder.Property(j => j.ReviewComparisonMode)
+            .HasColumnName("review_comparison_mode")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewComparisonMode.Single)
+            .HasSentinel(ReviewComparisonMode.Single)
+            .IsRequired();
+
+        builder.Property(j => j.ReviewPublicationMode)
+            .HasColumnName("review_publication_mode")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewPublicationMode.Publish)
+            .HasSentinel(ReviewPublicationMode.Publish)
+            .IsRequired();
+
+        builder.Property(j => j.ComparisonGroupId)
+            .HasColumnName("comparison_group_id")
+            .IsRequired(false);
+
         builder.Property(j => j.RepositoryId)
             .HasColumnName("repository_id")
             .IsRequired();
@@ -192,6 +224,11 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasForeignKey(r => r.JobId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(j => j.ModeRunResults)
+            .WithOne()
+            .HasForeignKey(r => r.ReviewJobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(j => j.Status).HasDatabaseName("ix_review_jobs_status");
         builder.HasIndex(j => j.ClientId).HasDatabaseName("ix_review_jobs_client_id");
         builder.HasIndex(j => new { j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId, j.IterationId })
@@ -201,6 +238,9 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
 
         builder.HasIndex(j => new { j.ClientId, j.Provider, j.RepositoryId, j.ExternalCodeReviewId })
             .HasDatabaseName("ix_review_jobs_client_provider_review");
+
+        builder.HasIndex(j => j.ComparisonGroupId)
+            .HasDatabaseName("ix_review_jobs_comparison_group_id");
 
         builder.Ignore(j => j.ProCursorSourceIds);
         builder.Ignore(j => j.ProviderHost);

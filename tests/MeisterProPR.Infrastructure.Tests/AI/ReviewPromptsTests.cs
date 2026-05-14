@@ -115,6 +115,62 @@ public class ReviewPromptsTests
         Assert.Contains("plain text", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void BuildPrWidePlanningSystemPrompt_ContainsBoundedPlanningRules()
+    {
+        var prompt = ReviewPrompts.BuildPrWidePlanningSystemPrompt(null);
+
+        Assert.Contains("Stage A", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("do not write final review comments", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("investigation_tasks", prompt, StringComparison.Ordinal);
+        Assert.Contains("raw JSON object", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildPrWideSynthesisUserMessage_ContainsInvestigationCandidatesAndTaskIds()
+    {
+        var plan = new PrWideReviewPlan(
+            "plan-001",
+            ["Check dependency registration coverage."],
+            ["src/Web", "tests"],
+            [
+                new PrWideInvestigationTask(
+                    "task-001",
+                    "concern",
+                    "Check dependency registration coverage.",
+                    ["src/Web/Program.cs"],
+                    ["get_file_content"],
+                    1),
+            ]);
+        var investigations =
+            new List<PrWideInvestigationResult>
+            {
+                new(
+                    "task-001",
+                    "completed",
+                    [new EvidenceItem("file_content", "Captured Program.cs context.", "src/Web/Program.cs")],
+                    [
+                        new PrWideCandidateFinding(
+                            "candidate-001",
+                            "Dependency registration changes are not covered by tests.",
+                            CandidateReviewFinding.CrossCuttingCategory,
+                            new ConfidenceScore("test_coverage", 82),
+                            new EvidenceReference([], ["src/Web/Program.cs", "tests/RegistrationTests.cs"], EvidenceReference.ResolvedState, "pr_wide_investigation"),
+                            ["src/Web/Program.cs", "tests/RegistrationTests.cs"]),
+                    ],
+                    [],
+                    false),
+            }
+            .AsReadOnly();
+
+        var message = ReviewPrompts.BuildPrWideSynthesisUserMessage(plan, investigations);
+
+        Assert.Contains("plan-001", message, StringComparison.Ordinal);
+        Assert.Contains("task-001", message, StringComparison.Ordinal);
+        Assert.Contains("candidate-001", message, StringComparison.Ordinal);
+        Assert.Contains("Dependency registration changes are not covered by tests.", message, StringComparison.Ordinal);
+    }
+
     // T035 — Synthesis user message contains all file summary headers
     [Fact]
     public void BuildSynthesisUserMessage_ContainsAllFileSummaryHeaders()

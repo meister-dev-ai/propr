@@ -85,6 +85,8 @@ public sealed class EfReviewJobIntakeStore(MeisterProPRDbContext dbContext) : IR
             job.SetReviewRevision(request.ReviewRevision);
         }
 
+        job.SelectReviewStrategy(request.ResolvedReviewStrategySelection ?? ReviewStrategySelection.Default);
+
         if (request.ReviewTemperature.HasValue)
         {
             job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);

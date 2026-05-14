@@ -112,6 +112,8 @@ public sealed partial class PrCrawlService(
                     pr.CodeReview.Number,
                     pr.RevisionId);
 
+                job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(config.ClientId, cancellationToken));
+
                 if (config.ReviewTemperature.HasValue)
                 {
                     job.SetAiConfig(job.AiConnectionId, job.AiModel, config.ReviewTemperature);
@@ -417,6 +419,25 @@ public sealed partial class PrCrawlService(
                                 ?? await clientRegistry.GetEffectiveReviewerIdentityAsync(config.ClientId, host, ct);
 
         return new ResolvedReviewer(configuredTriggerReviewer, ResolveReviewerId(effectiveReviewer));
+    }
+
+    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(Guid clientId, CancellationToken ct)
+    {
+        if (clientRegistry is not null)
+        {
+            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, ct);
+            if (clientDefault.HasValue)
+            {
+                return new ReviewStrategySelection(
+                    clientDefault.Value,
+                    ReviewStrategySelectionSource.ClientDefault,
+                    ReviewComparisonMode.Single,
+                    ReviewPublicationMode.Publish,
+                    null);
+            }
+        }
+
+        return ReviewStrategySelection.Default;
     }
 
     private static Guid? ResolveReviewerId(ReviewerIdentity? reviewer)

@@ -9151,6 +9151,7 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
+            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
             /** Format: uuid */
@@ -9398,6 +9399,7 @@ export interface components {
             displayName?: string | null;
             /** Format: uuid */
             tenantId?: string;
+            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Create-PAT request. */
         CreatePatRequest: {
@@ -9705,6 +9707,7 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
+            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"] | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -10429,6 +10432,11 @@ export interface components {
             summary?: string | null;
             comments?: components["schemas"]["ReviewCommentDto"][] | null;
         };
+        /**
+         * @description Review strategy used to execute a review job.
+         * @enum {string}
+         */
+        ReviewStrategy: "fileByFile" | "prWideAgentic";
         /** @description Provider-neutral reviewer identity supplied by review intake clients as trigger context. */
         ReviewReviewerIdentityDto: {
             externalUserId?: string | null;

@@ -126,6 +126,106 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
+    public async Task SubmitReview_WithStrategyOverride_ReturnsResolvedStrategyFields()
+    {
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var request = CreateAzureDevOpsRequest() with
+        {
+            ReviewStrategy = ReviewStrategy.PrWideAgentic,
+            ComparisonMode = ReviewComparisonMode.Single,
+            PublicationMode = ReviewPublicationMode.DryRun,
+        };
+
+        store.FindActiveJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns((ReviewJob?)null);
+        store.CreatePendingJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var dto = call.Arg<SubmitReviewJobRequestDto>();
+                var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
+                job.SelectReviewStrategy(dto.ResolvedReviewStrategySelection!);
+                return job;
+            });
+
+        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
+
+        var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
+
+        var accepted = Assert.IsType<AcceptedResult>(result);
+        var payload = Assert.IsType<ReviewJobAcceptedResponse>(accepted.Value);
+        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.JobOverride, payload.StrategySelectionSource);
+        Assert.Equal(ReviewComparisonMode.Single, payload.ComparisonMode);
+        Assert.Equal(ReviewPublicationMode.DryRun, payload.PublicationMode);
+    }
+
+    [Fact]
+    public async Task GetReview_ReturnsStrategySnapshotFields()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var comparisonGroupId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.PrWideAgentic,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.InternalOnly,
+            comparisonGroupId);
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
+
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.GetReview(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
+        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, payload.StrategySelectionSource);
+        Assert.Equal(ReviewPublicationMode.InternalOnly, payload.PublicationMode);
+        Assert.Equal(comparisonGroupId, payload.ComparisonGroupId);
+    }
+
+    [Fact]
+    public async Task GetReview_WithPrLevelPublishableFinding_PreservesNullAnchorInStatusResponse()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+        {
+            Status = JobStatus.Completed,
+            CompletedAt = DateTimeOffset.UtcNow,
+            Result = new ReviewResult(
+                "PR-wide review identified one publishable cross-file finding.",
+                [new ReviewComment(null, null, CommentSeverity.Warning, "Cross-file registration ordering can still publish stale results.")]),
+        };
+        job.SelectReviewStrategy(
+            ReviewStrategy.PrWideAgentic,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
+
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.GetReview(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
+        var comment = Assert.Single(payload.Result!.Comments);
+        Assert.Null(comment.FilePath);
+        Assert.Null(comment.LineNumber);
+        Assert.Equal(CommentSeverity.Warning, comment.Severity);
+        Assert.Equal("Cross-file registration ordering can still publish stale results.", comment.Message);
+        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
+    }
+
+    [Fact]
     public async Task SubmitReview_LegacyAzureDevOpsRequestShape_ReturnsBadRequest()
     {
         var clientId = Guid.NewGuid();

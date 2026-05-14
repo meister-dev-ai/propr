@@ -83,4 +83,13 @@ public sealed record PullRequestSynchronizationRequest
 
     /// <summary>Snapshotted review temperature to apply to any queued review job.</summary>
     public float? ReviewTemperature { get; init; }
+
+    /// <summary>Optional per-job review strategy override for shared synchronization.</summary>
+    public ReviewStrategy? ReviewStrategy { get; init; }
+
+    /// <summary>Requested comparison mode. Defaults to single-strategy execution.</summary>
+    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
+
+    /// <summary>Requested publication mode. Defaults to publishing the selected strategy.</summary>
+    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
 }

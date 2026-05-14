@@ -42,9 +42,13 @@ public sealed partial class ReviewOrchestrationService(
     IAiChatClientFactory aiChatClientFactory,
     IPromptOverrideService? promptOverrideService = null,
     IProviderActivationService? providerActivationService = null,
-    IAiRuntimeResolver? aiRuntimeResolver = null) : IReviewJobProcessor
+    IAiRuntimeResolver? aiRuntimeResolver = null,
+    IReviewStrategyDispatcher? reviewStrategyDispatcher = null) : IReviewJobProcessor
 {
     private readonly AiReviewOptions _opts = options.Value;
+
+    private readonly IReviewStrategyDispatcher _reviewStrategyDispatcher = reviewStrategyDispatcher
+        ?? new InlineReviewStrategyDispatcher(fileByFileOrchestrator);
 
     /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
@@ -574,6 +578,7 @@ public sealed partial class ReviewOrchestrationService(
             DefaultReviewModelId = job.AiModel,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
+            ProtocolRecorder = protocolRecorder,
             Temperature = job.ReviewTemperature,
             PromptOverrides = await LoadPromptOverridesAsync(job.ClientId, promptOverrideService, logger, ct),
         };
@@ -589,7 +594,21 @@ public sealed partial class ReviewOrchestrationService(
         IChatClient chatClient,
         CancellationToken ct)
     {
-        return await fileByFileOrchestrator.ReviewAsync(job, pr, systemContext, ct, chatClient);
+        return await this._reviewStrategyDispatcher.ReviewAsync(job, pr, systemContext, ct, chatClient);
+    }
+
+    private sealed class InlineReviewStrategyDispatcher(IFileByFileReviewOrchestrator fallbackOrchestrator)
+        : IReviewStrategyDispatcher
+    {
+        public Task<ReviewResult> ReviewAsync(
+            ReviewJob job,
+            PullRequest pr,
+            ReviewSystemContext baseContext,
+            CancellationToken ct,
+            IChatClient? overrideClient = null)
+        {
+            return fallbackOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient);
+        }
     }
 
     private async Task HandlePartialReviewFailureAsync(
@@ -1204,7 +1223,7 @@ public sealed partial class ReviewOrchestrationService(
             providerSpecificContext);
     }
 
-    private static bool IsReviewerOwnedAuthor(Guid? authorId, string authorName, Guid? reviewerId, Guid? authorizedIdentityId, string? authorizedIdentityName)
+    private static bool IsReviewerOwnedAuthor(Guid? authorId, string? authorName, Guid? reviewerId, Guid? authorizedIdentityId, string? authorizedIdentityName)
     {
         if (authorId.HasValue)
         {

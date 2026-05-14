@@ -14,6 +14,11 @@ public static class CommentRelevanceReasonCodes
     public const string HedgingLanguage = "hedging_language";
 
     /// <summary>
+    ///     Reason code used when an informational comment is non-actionable.
+    /// </summary>
+    public const string InfoSeverityNonActionable = "info_severity_non_actionable";
+
+    /// <summary>
     ///     Reason code used when a comment suggests a non-actionable change.
     /// </summary>
     public const string NonActionableSuggestion = "non_actionable_suggestion";

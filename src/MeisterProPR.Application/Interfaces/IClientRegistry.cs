@@ -58,4 +58,9 @@ public interface IClientRegistry
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.
+    /// </summary>
+    Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default);
 }

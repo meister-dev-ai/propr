@@ -27,6 +27,7 @@ public sealed partial class ClientsController(
             client.IsActive,
             client.CreatedAt,
             client.CommentResolutionBehavior,
+            client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
             client.TenantId,
@@ -117,7 +118,11 @@ public sealed partial class ClientsController(
 
         try
         {
-            var client = await clientAdminService.CreateAsync(request.TenantId, request.DisplayName, ct);
+            var client = await clientAdminService.CreateAsync(
+                request.TenantId,
+                request.DisplayName,
+                request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile,
+                ct);
 
             return this.CreatedAtAction(
                 nameof(this.GetClient),
@@ -269,6 +274,7 @@ public sealed partial class ClientsController(
             request.CommentResolutionBehavior,
             request.CustomSystemMessage,
             request.ScmCommentPostingEnabled,
+            request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -281,6 +287,7 @@ public sealed record ClientResponse(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
+    ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
     Guid? TenantId,
@@ -313,7 +320,11 @@ public sealed record CrawlRepoFilterResponse(
     string? DisplayName = null);
 
 /// <summary>Request body for creating a client.</summary>
-public sealed record CreateClientRequest(string DisplayName, Guid TenantId);
+public sealed record CreateClientRequest(string DisplayName, Guid TenantId)
+{
+    /// <summary>Optional initial default review strategy. Missing defaults to file_by_file.</summary>
+    public ReviewStrategy? DefaultReviewStrategy { get; init; }
+}
 
 /// <summary>
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
@@ -324,4 +335,5 @@ public sealed record PatchClientRequest(
     string? DisplayName = null,
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null,
-    bool? ScmCommentPostingEnabled = null);
+    bool? ScmCommentPostingEnabled = null,
+    ReviewStrategy? DefaultReviewStrategy = null);
