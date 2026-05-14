@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
+using MeisterProPR.Infrastructure.AI.FileByFileReview;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -32,7 +33,13 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();
         services.AddSingleton<IReviewClaimExtractor, DeterministicReviewClaimExtractor>();
         services.AddSingleton<IReviewFindingVerifier, DeterministicLocalReviewVerifier>();
+        services.AddSingleton<LocalReviewVerificationExecutor>();
         services.AddSingleton<IReviewEvidenceCollector, ReviewContextEvidenceCollector>();
+        services.AddSingleton<PrLevelReviewVerificationExecutor>();
+        services.AddSingleton<CandidateFindingFactory>();
+        services.AddSingleton<QualityFilterExecutor>();
+        services.AddSingleton<FileReviewDispatchPlanner>();
+        services.AddSingleton<ReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
 
         return services;

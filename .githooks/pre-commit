@@ -11,15 +11,30 @@ if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '\.cs$'; then
     exit 0
 fi
 
-# ── 1. Format ────────────────────────────────────────────────────────────────
+# --- 1. JetBrains Cleanup Block ---
+if command -v jb &> /dev/null; then
 
-echo "pre-commit: running dotnet format check..."
+    # 1. Get the list of changed files (newline separated)
+    # This format is safer for piping into other commands
+    FILES_LIST=$(git diff --name-only --diff-filter=ACMR | grep '\.cs$')
 
-if ! dotnet format ./MeisterProPR.slnx --verify-no-changes 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- code style violations detected."
-    echo "Run 'dotnet format' to fix them, re-stage the changed files, and commit again."
-    exit 1
+    # 2. Convert to semicolon-separated for jb cleanupcode
+    JB_FILES=$(echo "$FILES_LIST" | tr '\n' ';')
+
+    if [ -n "$FILES_LIST" ]; then
+        echo "Running 'jb cleanupcode'..."
+
+        # Run cleanup
+        jb cleanupcode "MeisterProPR.slnx" --include="$JB_FILES"
+
+        # 3. Stage ONLY the files that were in our list
+        # xargs passes the list of files to git add
+        echo "$FILES_LIST" | xargs git add
+
+        echo "Cleanup complete and specific files staged."
+    fi
+else
+    echo "JetBrains 'jb' not found. Skipping cleanup."
 fi
 
 echo "pre-commit: format check passed."

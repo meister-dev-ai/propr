@@ -16,6 +16,7 @@ using MeisterProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
@@ -91,8 +92,7 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IAiRuntimeResolver>(),
             sp.GetService<CommentRelevanceFilterExecutor>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
-            sp.GetService<IReviewClaimExtractor>(),
-            sp.GetService<IReviewFindingVerifier>()));
+            sp.GetService<LocalReviewVerificationExecutor>()));
         services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),
@@ -100,13 +100,17 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetRequiredService<IOptions<AiReviewOptions>>(),
             sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
             sp.GetRequiredService<FileReviewer>(),
+            sp.GetService<FileReviewDispatchPlanner>(),
+            sp.GetService<ReviewSynthesisExecutor>(),
+            sp.GetService<CandidateFindingFactory>(),
+            sp.GetService<QualityFilterExecutor>(),
+            sp.GetService<PrLevelReviewVerificationExecutor>(),
             sp.GetService<IAiConnectionRepository>(),
             sp.GetService<IAiChatClientFactory>(),
             sp.GetService<IAiRuntimeResolver>(),
             sp.GetService<IDeterministicReviewFindingGate>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
             sp.GetService<IReviewClaimExtractor>(),
-            sp.GetService<IReviewEvidenceCollector>(),
             sp.GetService<ISummaryReconciliationService>()));
         if (!hasDatabase)
         {
