@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -14,7 +15,7 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 internal sealed partial class FileReviewer(
     IAiReviewCore aiCore,
@@ -22,6 +23,7 @@ internal sealed partial class FileReviewer(
     IJobRepository jobRepository,
     AiReviewOptions options,
     ILogger<FileByFileReviewOrchestrator> logger,
+    IReviewPipeline<PerFileReviewContext>? perFilePipeline,
     IAiConnectionRepository? aiConnectionRepository,
     IAiChatClientFactory? aiClientFactory,
     IThreadMemoryService? memoryService,
@@ -46,7 +48,7 @@ internal sealed partial class FileReviewer(
         var fileResult = await this.InitializeFileResultAsync(job, file, existingResult, ct);
 
         // Classify file complexity early so we can record tier in the protocol.
-        var tier = FileByFileReviewOrchestrator.ClassifyTier(file);
+        var tier = ReviewDiffProcessor.ClassifyTier(file);
 
         var tierCategory = tier switch
         {
@@ -157,7 +159,7 @@ internal sealed partial class FileReviewer(
         IChatClient? tierClient,
         IChatClient effectiveClient)
     {
-        var changedLinesCount = FileByFileReviewOrchestrator.CountChangedLines(file.UnifiedDiff);
+        var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
 
         var maxIterationsOverride = tier switch
@@ -212,7 +214,25 @@ internal sealed partial class FileReviewer(
         ReviewResult result,
         CancellationToken ct)
     {
-        result = this.ApplyReviewFilters(state.Job, state.File, result, state.FileContext);
+        if (perFilePipeline is not null)
+        {
+            var pipelineContext = await perFilePipeline.ExecuteAsync(
+                new PerFileReviewContext(
+                    state.Job,
+                    state.File,
+                    state.FileResult,
+                    state.FileContext,
+                    state.ProtocolId,
+                    null,
+                    result),
+                ct);
+            result = pipelineContext.ReviewResult ?? result;
+        }
+        else
+        {
+            result = this.ApplyReviewFilters(state.Job, state.File, result, state.FileContext);
+        }
+
         result = await this.ApplyCommentRelevanceFilterStageAsync(state, result, ct);
         result = await this.ApplyMemoryReconsiderationStageAsync(state, result, ct);
         result = NormalizeCommentAnchors(result);
@@ -290,7 +310,7 @@ internal sealed partial class FileReviewer(
         ReviewSystemContext fileContext)
     {
         var commentsBeforeConfidenceFloor = result.Comments;
-        result = FileByFileReviewOrchestrator.ApplyConfidenceFloor(result, fileContext.LoopMetrics?.FinalConfidence, options);
+        result = ReviewCommentProcessing.ApplyConfidenceFloor(result, fileContext.LoopMetrics?.FinalConfidence, options);
         var confidenceDroppedCount = CountSeverityDowngrades(commentsBeforeConfidenceFloor, result.Comments);
         if (confidenceDroppedCount > 0)
         {
@@ -298,7 +318,7 @@ internal sealed partial class FileReviewer(
         }
 
         var beforeHedge = result.Comments.Count;
-        result = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
+        result = ReviewCommentProcessing.FilterSpeculativeComments(result);
         var hedgeDropped = beforeHedge - result.Comments.Count;
         if (hedgeDropped > 0)
         {
@@ -306,7 +326,7 @@ internal sealed partial class FileReviewer(
         }
 
         var beforeInfo = result.Comments.Count;
-        result = FileByFileReviewOrchestrator.StripInfoComments(result);
+        result = ReviewCommentProcessing.StripInfoComments(result);
         var infoDropped = beforeInfo - result.Comments.Count;
         if (infoDropped > 0)
         {
@@ -314,7 +334,7 @@ internal sealed partial class FileReviewer(
         }
 
         var beforeVague = result.Comments.Count;
-        result = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
+        result = ReviewCommentProcessing.FilterVagueSuggestions(result);
         var vagueDropped = beforeVague - result.Comments.Count;
         if (vagueDropped > 0)
         {

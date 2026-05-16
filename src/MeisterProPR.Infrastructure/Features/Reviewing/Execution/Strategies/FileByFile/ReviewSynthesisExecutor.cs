@@ -12,13 +12,13 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 /// <summary>
 ///     Synthesizes the final PR-level review result from completed per-file results. This executor gathers fresh

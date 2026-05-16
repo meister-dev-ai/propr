@@ -7352,7 +7352,9 @@
         "tags": [
           "ProCursorBroker"
         ],
+        "summary": "Materializes repository content for a tracked ProCursor branch.",
         "requestBody": {
+          "description": "SCM materialization request payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7373,7 +7375,16 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The repository content was materialized."
+          },
+          "404": {
+            "description": "The source or branch was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current source state."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
           }
         }
       }
@@ -7383,7 +7394,9 @@
         "tags": [
           "ProCursorBroker"
         ],
+        "summary": "Resolves the latest commit SHA for a tracked ProCursor branch.",
         "requestBody": {
+          "description": "Tracked-branch head request payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7404,7 +7417,16 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The latest branch head was resolved."
+          },
+          "404": {
+            "description": "The source or branch was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current source state."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
           }
         }
       }
@@ -7414,7 +7436,9 @@
         "tags": [
           "ProCursorBroker"
         ],
+        "summary": "Resolves the embedding deployment configuration for a client.",
         "requestBody": {
+          "description": "Embedding deployment request payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7435,7 +7459,16 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The deployment configuration was resolved."
+          },
+          "404": {
+            "description": "The client or deployment was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current embedding configuration."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
           }
         }
       }
@@ -7445,7 +7478,9 @@
         "tags": [
           "ProCursorBroker"
         ],
+        "summary": "Generates embeddings for a batch of inputs through the ProPR broker.",
         "requestBody": {
+          "description": "Embedding batch request payload.",
           "content": {
             "application/json": {
               "schema": {
@@ -7466,7 +7501,16 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Embeddings were generated successfully."
+          },
+          "404": {
+            "description": "The client or deployment was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current embedding configuration."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
           }
         }
       }
@@ -8449,6 +8493,70 @@
           },
           "503": {
             "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/runtime-config/enabled": {
+      "get": {
+        "tags": [
+          "ProCursorRuntimeConfiguration"
+        ],
+        "summary": "Lists runtime-configuration projections that are enabled for ProCursor.",
+        "responses": {
+          "200": {
+            "description": "Enabled projections were returned."
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/runtime-config/sources/{sourceId}/refresh": {
+      "post": {
+        "tags": [
+          "ProCursorRuntimeConfiguration"
+        ],
+        "summary": "Refreshes the runtime-configuration projection for a single source.",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "path",
+            "description": "ProCursor source identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Refresh request payload.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorRuntimeConfigurationRefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorRuntimeConfigurationRefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorRuntimeConfigurationRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The projection was refreshed."
+          },
+          "404": {
+            "description": "The source was not found."
+          },
+          "409": {
+            "description": "The source cannot currently be refreshed."
           }
         }
       }
@@ -14273,6 +14381,9 @@
           "commentResolutionBehavior": {
             "$ref": "#/components/schemas/CommentResolutionBehavior"
           },
+          "defaultReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
+          },
           "customSystemMessage": {
             "type": "string",
             "nullable": true
@@ -14979,6 +15090,9 @@
           "tenantId": {
             "type": "string",
             "format": "uuid"
+          },
+          "defaultReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -15342,6 +15456,9 @@
           "aiModel": {
             "type": "string",
             "nullable": true
+          },
+          "resolvedReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -15697,6 +15814,9 @@
           "scmCommentPostingEnabled": {
             "type": "boolean",
             "nullable": true
+          },
+          "defaultReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -15756,6 +15876,9 @@
               "$ref": "#/components/schemas/TokenBreakdownEntry"
             },
             "nullable": true
+          },
+          "resolvedReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -16219,6 +16342,21 @@
         ],
         "type": "string",
         "description": "Trigger behavior for tracked-branch refresh scheduling."
+      },
+      "ProCursorRuntimeConfigurationRefreshRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "knownProjectionVersion": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Refresh request used when ProCursor rehydrates runtime configuration from ProPR."
       },
       "ProCursorScmMaterializationRequest": {
         "type": "object",
@@ -17077,6 +17215,90 @@
         "type": "string",
         "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
       },
+      "ProtocolFileOutcomeDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "nullable": true
+          },
+          "isComplete": {
+            "type": "boolean"
+          },
+          "isFailed": {
+            "type": "boolean"
+          },
+          "isExcluded": {
+            "type": "boolean"
+          },
+          "isCarriedForward": {
+            "type": "boolean"
+          },
+          "exclusionReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDegraded": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Terminal outcome metadata for one file-linked protocol pass."
+      },
+      "ProtocolFollowUpDto": {
+        "type": "object",
+        "properties": {
+          "used": {
+            "type": "boolean"
+          },
+          "triggerFamily": {
+            "type": "string",
+            "nullable": true
+          },
+          "completedSuccessfully": {
+            "type": "boolean"
+          },
+          "dependencyRecorded": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Follow-up visibility metadata for one file-linked protocol pass."
+      },
+      "ProtocolRepeatedJudgmentDto": {
+        "type": "object",
+        "properties": {
+          "findingId": {
+            "type": "string"
+          },
+          "evidenceSetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "agreementState": {
+            "type": "string"
+          },
+          "recommendedDisposition": {
+            "type": "string"
+          },
+          "usedSameEvidenceSet": {
+            "type": "boolean"
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Repeated-judgment visibility metadata for one protocol pass."
+      },
       "ProtocolReviewCommentDto": {
         "type": "object",
         "properties": {
@@ -17457,6 +17679,16 @@
         "additionalProperties": false,
         "description": "DTO for a single review comment."
       },
+      "ReviewComparisonMode": {
+        "enum": [
+          "single",
+          "sideBySideInternal",
+          "shadow",
+          "replay"
+        ],
+        "type": "string",
+        "description": "Controls whether one or more review strategies execute against a PR snapshot."
+      },
       "ReviewJobAcceptedResponse": {
         "type": "object",
         "properties": {
@@ -17483,6 +17715,24 @@
           },
           "reviewRevision": {
             "$ref": "#/components/schemas/ReviewRevisionRefDto"
+          },
+          "resolvedReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
+          },
+          "strategySelectionSource": {
+            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
+          },
+          "comparisonMode": {
+            "$ref": "#/components/schemas/ReviewComparisonMode"
+          },
+          "publicationMode": {
+            "$ref": "#/components/schemas/ReviewPublicationMode"
+          },
+          "comparisonGroupId": {
+            "type": "string",
+            "description": "Comparison group identifier when this job participates in one.",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17591,6 +17841,44 @@
             },
             "description": "Ordered list of events captured during the loop.",
             "nullable": true
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "description": "Normalized provider scope path for the parent review job.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Normalized provider project, owner, or namespace key for the parent review job.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository identifier for the parent review job.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number for the parent review job.",
+            "format": "int32"
+          },
+          "resolvedReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
+          },
+          "strategySelectionSource": {
+            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
+          },
+          "fileOutcome": {
+            "$ref": "#/components/schemas/ProtocolFileOutcomeDto"
+          },
+          "followUp": {
+            "$ref": "#/components/schemas/ProtocolFollowUpDto"
+          },
+          "repeatedJudgment": {
+            "$ref": "#/components/schemas/ProtocolRepeatedJudgmentDto"
           }
         },
         "additionalProperties": false,
@@ -17686,6 +17974,15 @@
         "additionalProperties": false,
         "description": "List item for a review job."
       },
+      "ReviewPublicationMode": {
+        "enum": [
+          "publish",
+          "dryRun",
+          "internalOnly"
+        ],
+        "type": "string",
+        "description": "Controls whether a strategy run is allowed to publish review findings."
+      },
       "ReviewRepositoryRefDto": {
         "type": "object",
         "properties": {
@@ -17743,7 +18040,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Provider-neutral reviewer identity supplied by review intake clients as trigger context."
+        "description": "Provider-neutral reviewer identity supplied by review intake clients."
       },
       "ReviewRevisionRefDto": {
         "type": "object",
@@ -17834,10 +18131,47 @@
           },
           "reviewRevision": {
             "$ref": "#/components/schemas/ReviewRevisionRefDto"
+          },
+          "resolvedReviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
+          },
+          "strategySelectionSource": {
+            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
+          },
+          "comparisonMode": {
+            "$ref": "#/components/schemas/ReviewComparisonMode"
+          },
+          "publicationMode": {
+            "$ref": "#/components/schemas/ReviewPublicationMode"
+          },
+          "comparisonGroupId": {
+            "type": "string",
+            "description": "Comparison group identifier when this job participates in one.",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false,
         "description": "Detailed status response for a review job."
+      },
+      "ReviewStrategy": {
+        "enum": [
+          "fileByFile",
+          "prWideAgentic",
+          "agenticFileByFile"
+        ],
+        "type": "string",
+        "description": "Selectable strategy used to generate review findings for a job."
+      },
+      "ReviewStrategySelectionSource": {
+        "enum": [
+          "fallbackDefault",
+          "clientDefault",
+          "jobOverride",
+          "fallback"
+        ],
+        "type": "string",
+        "description": "Explains why a review job selected its final review strategy."
       },
       "ScmAuthenticationKind": {
         "enum": [
@@ -17901,6 +18235,15 @@
           },
           "requestedReviewerIdentity": {
             "$ref": "#/components/schemas/ReviewReviewerIdentityDto"
+          },
+          "reviewStrategy": {
+            "$ref": "#/components/schemas/ReviewStrategy"
+          },
+          "comparisonMode": {
+            "$ref": "#/components/schemas/ReviewComparisonMode"
+          },
+          "publicationMode": {
+            "$ref": "#/components/schemas/ReviewPublicationMode"
           }
         },
         "additionalProperties": false,
@@ -18708,6 +19051,9 @@
     },
     {
       "name": "ProCursorKnowledgeSources"
+    },
+    {
+      "name": "ProCursorRuntimeConfiguration"
     },
     {
       "name": "ProCursorTokenUsage"

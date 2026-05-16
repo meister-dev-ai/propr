@@ -63,7 +63,7 @@ public sealed class ReviewEvaluationModelsTests
                 "completed",
                 "resolved"),
             new EvaluationFixtureMetadata("fixture-sample", "1.0", "synthetic"),
-            new EvaluationConfigurationMetadata("baseline", "gpt-4o", "full"),
+            new EvaluationConfigurationMetadata("baseline", "gpt-4o", "full", ReviewStrategy.PrWideAgentic),
             new ReviewResult(
                 "Sample summary",
                 [
@@ -109,6 +109,7 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("completed", artifact.Run.Outcome);
         Assert.Equal("fixture-sample", artifact.Fixture.FixtureId);
         Assert.Equal("baseline", artifact.Configuration.ConfigurationId);
+        Assert.Equal(ReviewStrategy.PrWideAgentic, artifact.Configuration.Strategy);
         Assert.Single(artifact.FinalResult.Comments);
         Assert.Single(artifact.Stages);
         Assert.Equal(20, artifact.TokenUsage.TotalInputTokens);

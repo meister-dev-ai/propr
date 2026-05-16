@@ -112,7 +112,10 @@ public sealed class JobsController(
                         j.PrSourceBranch,
                         j.PrTargetBranch,
                         j.PrRepositoryName,
-                        j.AiModel))
+                        j.AiModel)
+                    {
+                        ResolvedReviewStrategy = j.ReviewStrategy,
+                    })
                     .ToList()));
     }
 
@@ -468,7 +471,10 @@ public sealed class JobsController(
                 j.Result?.Comments.Count,
                 j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
                 j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
-                j.TokenBreakdown))
+                j.TokenBreakdown)
+            {
+                ResolvedReviewStrategy = j.ReviewStrategy,
+            })
             .ToList()
             .AsReadOnly();
 
@@ -512,7 +518,11 @@ public sealed class JobsController(
         string? PrSourceBranch = null,
         string? PrTargetBranch = null,
         string? PrRepositoryName = null,
-        string? AiModel = null);
+        string? AiModel = null)
+    {
+        /// <summary>Resolved review strategy snapshotted on the review job.</summary>
+        public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
+    }
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);

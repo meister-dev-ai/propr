@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
@@ -56,5 +57,25 @@ public sealed class ReviewingModuleIntegrationTests(JobsControllerProtocolTests.
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public void ServiceProvider_ResolvesMovedReviewStrategyImplementations()
+    {
+        using var scope = factory.Services.CreateScope();
+        var services = scope.ServiceProvider;
+
+        Assert.NotNull(services.GetRequiredService<IFileByFileReviewOrchestrator>());
+        Assert.NotNull(services.GetRequiredService<IAgenticFileByFileReviewOrchestrator>());
+        Assert.NotNull(services.GetRequiredService<IPrWideAgenticReviewOrchestrator>());
+    }
+
+    [Fact]
+    public void ServiceProvider_ResolvesSharedReviewStrategyDispatcher()
+    {
+        using var scope = factory.Services.CreateScope();
+        var services = scope.ServiceProvider;
+
+        Assert.NotNull(services.GetRequiredService<IReviewStrategyDispatcher>());
     }
 }

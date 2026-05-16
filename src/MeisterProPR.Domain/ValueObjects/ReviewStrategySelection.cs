@@ -11,7 +11,8 @@ public sealed record ReviewStrategySelection(
     ReviewStrategySelectionSource Source,
     ReviewComparisonMode ComparisonMode,
     ReviewPublicationMode PublicationMode,
-    Guid? ComparisonGroupId)
+    Guid? ComparisonGroupId,
+    string? PipelineProfileId = null)
 {
     /// <summary>Default selection that preserves existing review behavior.</summary>
     public static ReviewStrategySelection Default { get; } = new(

@@ -22,66 +22,177 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
         "\\b(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)\\b\\s+(?:is|are)\\s+missing\\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex[] SubjectIdentifierRegexes =
+    [
+        IdentifierInBackticksRegex,
+        NamedProgramElementRegex,
+        MissingIdentifierRegex,
+    ];
+
+    private static readonly string[] ApiOrSymbolUsageIndicators =
+    [
+        "symbol",
+        "API",
+        "method",
+        "function",
+        "helper",
+        "using ",
+        "namespace",
+    ];
+
+    private static readonly HashSet<string> FamiliesRequiringEvidence = new(StringComparer.Ordinal)
+    {
+        ClaimDescriptor.ApiOrSymbolUsageFamily,
+        ClaimDescriptor.ConfigurationOrWiringFamily,
+        ClaimDescriptor.CrossFileConsistencyFamily,
+        ClaimDescriptor.TestAdequacyFamily,
+        ClaimDescriptor.DocumentationAccuracyFamily,
+    };
+
+    private static readonly Dictionary<string, string> CategoryClaimFamilies = new(StringComparer.Ordinal)
+    {
+        ["architecture"] = ClaimDescriptor.CrossFileConsistencyFamily,
+        ["configuration"] = ClaimDescriptor.ConfigurationOrWiringFamily,
+        ["test"] = ClaimDescriptor.TestAdequacyFamily,
+        ["documentation"] = ClaimDescriptor.DocumentationAccuracyFamily,
+        ["robustness"] = ClaimDescriptor.OperationalRiskFamily,
+    };
+
+    private static readonly ClaimProfile CrossFileEvidenceRequiredProfile = new(
+        CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
+        ClaimDescriptor.CrossFileConsistencyFamily,
+        ClaimDescriptor.NeedsEvidenceMode);
+
+    private static readonly ClaimKindRule[] ClaimKindRules =
+    [
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.DockerFinalStageRootUserClaimKind,
+                ClaimDescriptor.OperationalRiskFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            "Dockerfile",
+            ["runs as root"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.GitHubActionsSecretEchoClaimKind,
+                ClaimDescriptor.OperationalRiskFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            RequiredPhrases: ["secret", "echo"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.TerraformPublicIngressClaimKind,
+                ClaimDescriptor.OperationalRiskFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            RequiredPhrases: ["public", "ingress"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.ManifestLockfileMisalignmentClaimKind,
+                ClaimDescriptor.ConfigurationOrWiringFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            RequiredAnyPhraseGroups: [["lockfile", "manifest"]]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.WiringMissingRegistrationClaimKind,
+                ClaimDescriptor.ConfigurationOrWiringFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            RequiredAnyPhraseGroups:
+            [
+                ["registration", "dispatch", "wiring"],
+                ["missing registration", "registration is missing", "dispatch registration", "handlers unregistered", "unregistered"],
+            ]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.ShellUnquotedVariableClaimKind,
+                ClaimDescriptor.OperationalRiskFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            true,
+            RequiredPhrases: ["unquoted", "variable"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.ReviewCommentMessageNullableClaimKind,
+                ClaimDescriptor.CodeContractFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            RequiredPhrases: ["ReviewComment.Message", "null"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.ReviewResultCommentsNullableClaimKind,
+                ClaimDescriptor.CodeContractFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            RequiredPhrases: ["result comments", "null"]),
+        new(
+            new ClaimProfile(
+                CandidateReviewFinding.ReviewFileResultsDuplicateExpectedClaimKind,
+                ClaimDescriptor.CodeContractFamily,
+                ClaimDescriptor.DeterministicOnlyMode),
+            RequiredAnyPhraseGroups: [["Duplicate review_file_results", "duplicate review file results"]]),
+    ];
+
     public IReadOnlyList<ClaimDescriptor> ExtractClaims(CandidateReviewFinding finding)
     {
         ArgumentNullException.ThrowIfNull(finding);
 
-        var claimKind = TryResolveClaimKind(finding);
-        if (claimKind is null)
+        var claimProfile = ResolveClaimProfile(finding);
+        if (claimProfile is null)
         {
             return [];
         }
 
-        var claimFamily = DetermineClaimFamily(claimKind, finding);
-        var subjectIdentifier = DetermineSubjectIdentifier(finding, claimFamily);
+        var stage = DetermineStage(finding);
+        var subjectIdentifier = DetermineSubjectIdentifier(finding, claimProfile.ClaimFamily);
+
+        var requiresCrossFileEvidence = string.Equals(
+                                            claimProfile.ClaimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal)
+                                        || (finding.Provenance.RequiresExplicitSupport &&
+                                            string.Equals(stage, ClaimDescriptor.PrLevelStage, StringComparison.Ordinal) &&
+                                            string.Equals(
+                                                claimProfile.ClaimKind, CandidateReviewFinding.GenericReviewAssertionClaimKind, StringComparison.Ordinal));
 
         return
         [
             new ClaimDescriptor(
                 $"{finding.FindingId}:claim:001",
                 finding.FindingId,
-                DetermineStage(finding),
-                claimKind,
+                stage,
+                claimProfile.ClaimKind,
                 finding.Message,
                 finding.Severity,
-                DetermineVerificationMode(claimKind, claimFamily),
-                claimFamily,
-                DetermineSubjectKind(claimFamily, subjectIdentifier),
+                claimProfile.VerificationMode,
+                claimProfile.ClaimFamily,
+                DetermineSubjectKind(claimProfile.ClaimFamily, subjectIdentifier),
                 subjectIdentifier,
                 finding.FilePath,
                 finding.LineNumber,
-                string.Equals(claimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal),
-                string.Equals(claimFamily, ClaimDescriptor.ApiOrSymbolUsageFamily, StringComparison.Ordinal) &&
+                requiresCrossFileEvidence,
+                string.Equals(claimProfile.ClaimFamily, ClaimDescriptor.ApiOrSymbolUsageFamily, StringComparison.Ordinal) &&
                 !string.IsNullOrWhiteSpace(subjectIdentifier)),
         ];
     }
 
-    private static string? TryResolveClaimKind(CandidateReviewFinding finding)
+    private static ClaimProfile ResolveClaimProfile(CandidateReviewFinding finding)
     {
-        if (finding.Message.Contains("ReviewComment.Message", StringComparison.Ordinal) &&
-            finding.Message.Contains("null", StringComparison.OrdinalIgnoreCase))
+        foreach (var rule in ClaimKindRules)
         {
-            return CandidateReviewFinding.ReviewCommentMessageNullableClaimKind;
-        }
-
-        if (finding.Message.Contains("result comments", StringComparison.OrdinalIgnoreCase) &&
-            finding.Message.Contains("null", StringComparison.OrdinalIgnoreCase))
-        {
-            return CandidateReviewFinding.ReviewResultCommentsNullableClaimKind;
-        }
-
-        if (finding.Message.Contains("Duplicate review_file_results", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("duplicate review file results", StringComparison.OrdinalIgnoreCase))
-        {
-            return CandidateReviewFinding.ReviewFileResultsDuplicateExpectedClaimKind;
+            if (rule.Matches(finding))
+            {
+                return rule.Profile;
+            }
         }
 
         if (string.Equals(finding.Category, CandidateReviewFinding.CrossCuttingCategory, StringComparison.Ordinal))
         {
-            return CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind;
+            return CrossFileEvidenceRequiredProfile;
         }
 
-        return CandidateReviewFinding.GenericReviewAssertionClaimKind;
+        var claimFamily = DetermineFallbackClaimFamily(finding);
+        return new ClaimProfile(
+            CandidateReviewFinding.GenericReviewAssertionClaimKind,
+            claimFamily,
+            DetermineFallbackVerificationMode(finding, claimFamily));
     }
 
     private static string DetermineStage(CandidateReviewFinding finding)
@@ -92,55 +203,32 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
             : ClaimDescriptor.LocalStage;
     }
 
-    private static string DetermineVerificationMode(string claimKind, string claimFamily)
+    private static string DetermineFallbackVerificationMode(CandidateReviewFinding finding, string claimFamily)
     {
-        return string.Equals(claimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal) ||
-               string.Equals(claimFamily, ClaimDescriptor.ApiOrSymbolUsageFamily, StringComparison.Ordinal) ||
-               string.Equals(claimFamily, ClaimDescriptor.ConfigurationOrWiringFamily, StringComparison.Ordinal) ||
-               string.Equals(claimFamily, ClaimDescriptor.CrossFileConsistencyFamily, StringComparison.Ordinal) ||
-               string.Equals(claimFamily, ClaimDescriptor.TestAdequacyFamily, StringComparison.Ordinal) ||
-               string.Equals(claimFamily, ClaimDescriptor.DocumentationAccuracyFamily, StringComparison.Ordinal)
+        if (finding.Provenance.RequiresExplicitSupport)
+        {
+            return ClaimDescriptor.NeedsEvidenceMode;
+        }
+
+        return FamiliesRequiringEvidence.Contains(claimFamily)
             ? ClaimDescriptor.NeedsEvidenceMode
             : ClaimDescriptor.DeterministicOnlyMode;
     }
 
-    private static string DetermineClaimFamily(string claimKind, CandidateReviewFinding finding)
+    private static string DetermineFallbackClaimFamily(CandidateReviewFinding finding)
     {
-        if (string.Equals(claimKind, CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind, StringComparison.Ordinal) ||
-            string.Equals(finding.Category, CandidateReviewFinding.CrossCuttingCategory, StringComparison.Ordinal) ||
-            string.Equals(finding.Category, "architecture", StringComparison.Ordinal) ||
+        if (string.Equals(finding.Category, CandidateReviewFinding.CrossCuttingCategory, StringComparison.Ordinal) ||
             finding.Evidence?.SupportingFiles.Count > 1)
         {
             return ClaimDescriptor.CrossFileConsistencyFamily;
         }
 
-        if (string.Equals(finding.Category, "configuration", StringComparison.Ordinal))
+        if (CategoryClaimFamilies.TryGetValue(finding.Category, out var claimFamily))
         {
-            return ClaimDescriptor.ConfigurationOrWiringFamily;
+            return claimFamily;
         }
 
-        if (string.Equals(finding.Category, "test", StringComparison.Ordinal))
-        {
-            return ClaimDescriptor.TestAdequacyFamily;
-        }
-
-        if (string.Equals(finding.Category, "documentation", StringComparison.Ordinal))
-        {
-            return ClaimDescriptor.DocumentationAccuracyFamily;
-        }
-
-        if (string.Equals(finding.Category, "robustness", StringComparison.Ordinal))
-        {
-            return ClaimDescriptor.OperationalRiskFamily;
-        }
-
-        if (finding.Message.Contains("symbol", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("API", StringComparison.Ordinal) ||
-            finding.Message.Contains("method", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("function", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("helper", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("using ", StringComparison.OrdinalIgnoreCase) ||
-            finding.Message.Contains("namespace", StringComparison.OrdinalIgnoreCase))
+        if (ContainsAnyPhrase(finding.Message, ApiOrSymbolUsageIndicators, StringComparison.OrdinalIgnoreCase))
         {
             return ClaimDescriptor.ApiOrSymbolUsageFamily;
         }
@@ -155,7 +243,7 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
             return null;
         }
 
-        foreach (var regex in new[] { IdentifierInBackticksRegex, NamedProgramElementRegex, MissingIdentifierRegex })
+        foreach (var regex in SubjectIdentifierRegexes)
         {
             var match = regex.Match(finding.Message);
             if (match.Success)
@@ -173,5 +261,53 @@ public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
                !string.IsNullOrWhiteSpace(subjectIdentifier)
             ? "symbol"
             : "file_review_finding";
+    }
+
+    private static bool ContainsAnyPhrase(string text, IReadOnlyList<string> phrases, StringComparison comparison)
+    {
+        return phrases.Any(phrase => text.Contains(phrase, comparison));
+    }
+
+    private static bool ContainsAllPhrases(string text, IReadOnlyList<string> phrases, StringComparison comparison)
+    {
+        return phrases.All(phrase => text.Contains(phrase, comparison));
+    }
+
+    private sealed record ClaimProfile(string ClaimKind, string ClaimFamily, string VerificationMode);
+
+    private sealed record ClaimKindRule(
+        ClaimProfile Profile,
+        bool RequiresExplicitSupport = false,
+        string? FilePathSuffix = null,
+        IReadOnlyList<string>? RequiredPhrases = null,
+        IReadOnlyList<IReadOnlyList<string>>? RequiredAnyPhraseGroups = null)
+    {
+        public bool Matches(CandidateReviewFinding finding)
+        {
+            if (this.RequiresExplicitSupport && !finding.Provenance.RequiresExplicitSupport)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(this.FilePathSuffix) &&
+                !(finding.FilePath?.EndsWith(this.FilePathSuffix, StringComparison.OrdinalIgnoreCase) ?? false))
+            {
+                return false;
+            }
+
+            if (this.RequiredPhrases is { Count: > 0 } &&
+                !ContainsAllPhrases(finding.Message, this.RequiredPhrases, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (this.RequiredAnyPhraseGroups is { Count: > 0 } &&
+                this.RequiredAnyPhraseGroups.Any(group => !ContainsAnyPhrase(finding.Message, group, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return true;
+        }
     }
 }

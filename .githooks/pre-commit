@@ -1,27 +1,23 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # pre-commit hook: enforces format, build, and test checks before every commit.
 #
 # Install once per clone:
 #   git config core.hooksPath .githooks
 # Or run: bash scripts/setup-hooks.sh / scripts/setup-hooks.ps1
-set -euo pipefail
+set -eu
+
+STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.cs$' || true)
 
 # Skip if no C# files are staged (avoids the overhead on docs-only commits).
-if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '\.cs$'; then
+if [ -z "$STAGED_CS_FILES" ]; then
     exit 0
 fi
 
 # --- 1. JetBrains Cleanup Block ---
-if command -v jb &> /dev/null; then
+if command -v jb > /dev/null 2>&1; then
+    JB_FILES=$(printf '%s\n' "$STAGED_CS_FILES" | tr '\n' ';')
 
-    # 1. Get the list of changed files (newline separated)
-    # This format is safer for piping into other commands
-    FILES_LIST=$(git diff --name-only --diff-filter=ACMR | grep '\.cs$')
-
-    # 2. Convert to semicolon-separated for jb cleanupcode
-    JB_FILES=$(echo "$FILES_LIST" | tr '\n' ';')
-
-    if [ -n "$FILES_LIST" ]; then
+    if [ -n "$STAGED_CS_FILES" ]; then
         echo "Running 'jb cleanupcode'..."
 
         # Run cleanup
@@ -29,7 +25,7 @@ if command -v jb &> /dev/null; then
 
         # 3. Stage ONLY the files that were in our list
         # xargs passes the list of files to git add
-        echo "$FILES_LIST" | xargs git add
+        printf '%s\n' "$STAGED_CS_FILES" | xargs git add
 
         echo "Cleanup complete and specific files staged."
     fi

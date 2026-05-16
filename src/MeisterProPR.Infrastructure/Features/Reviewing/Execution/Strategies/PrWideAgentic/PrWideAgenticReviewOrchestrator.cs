@@ -1,26 +1,25 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Linq;
 using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI.FileByFileReview;
+using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace MeisterProPR.Infrastructure.AI;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 
 /// <summary>
 ///     Runs the staged PR-wide review strategy. Stage A/B/C always execute natively. When the shared
@@ -40,10 +39,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     : IPrWideAgenticReviewOrchestrator
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
-
-    private readonly AiReviewOptions _options = options.Value;
     private readonly IDeterministicReviewFindingGate? _deterministicReviewFindingGate = deterministicReviewFindingGate;
     private readonly ILogger<PrWideAgenticReviewOrchestrator> _logger = logger;
+
+    private readonly AiReviewOptions _options = options.Value;
     private readonly IReviewClaimExtractor? _reviewClaimExtractor = reviewClaimExtractor;
     private readonly IReviewEvidenceCollector? _reviewEvidenceCollector = reviewEvidenceCollector;
     private readonly IReviewFindingVerifier _reviewFindingVerifier = reviewFindingVerifier ?? new DeterministicLocalReviewVerifier();
@@ -775,7 +774,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         return content switch
         {
             TextContent text => text.Text,
-            DataContent data => data.Uri?.ToString(),
+            DataContent data => data.Uri,
             _ => content.ToString(),
         };
     }
@@ -946,8 +945,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                         finding.Provenance,
                         currentClaim.Stage,
                         VerificationWorkItem.AnchorOnlyScope,
-                        supportsAiMicroVerification: false,
-                        existingEvidence: finding.Evidence))
+                        false,
+                        finding.Evidence))
                     .ToList();
 
                 IReadOnlyList<VerificationOutcome> outcomes;
@@ -1020,8 +1019,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 finding.Provenance,
                 claim.Stage,
                 VerificationWorkItem.CrossFileScope,
-                supportsAiMicroVerification: true,
-                existingEvidence: finding.Evidence);
+                true,
+                finding.Evidence);
 
             EvidenceBundle evidence;
             try
@@ -1102,8 +1101,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 finding.Provenance,
                 claim.Stage,
                 VerificationWorkItem.CrossFileScope,
-                supportsAiMicroVerification: true,
-                existingEvidence: updatedEvidence);
+                true,
+                updatedEvidence);
             var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], ct))[0];
 
             if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
@@ -1227,7 +1226,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                             ? "Candidate was retained only as summary context after deterministic PR-wide screening."
                             : "Candidate was dropped by deterministic PR-wide screening before deeper verification.",
                         VerificationOutcome.DeterministicRulesEvaluator,
-                        degraded: false)));
+                        false)));
         }
 
         return screenedFindings;
@@ -1236,7 +1235,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     private static CommentRelevanceFilterDecision? EvaluateDeterministicHardGuards(ReviewComment comment)
     {
         var result = new ReviewResult(string.Empty, [comment]);
-        if (FileByFileReviewOrchestrator.FilterSpeculativeComments(result).Comments.Count == 0)
+        if (ReviewCommentProcessing.FilterSpeculativeComments(result).Comments.Count == 0)
         {
             return new CommentRelevanceFilterDecision(
                 CommentRelevanceFilterDecision.DiscardDecision,
@@ -1245,7 +1244,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 CommentRelevanceFilterDecision.DeterministicScreeningSource);
         }
 
-        if (FileByFileReviewOrchestrator.StripInfoComments(result).Comments.Count == 0)
+        if (ReviewCommentProcessing.StripInfoComments(result).Comments.Count == 0)
         {
             return new CommentRelevanceFilterDecision(
                 CommentRelevanceFilterDecision.DiscardDecision,
@@ -1254,7 +1253,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 CommentRelevanceFilterDecision.DeterministicScreeningSource);
         }
 
-        if (FileByFileReviewOrchestrator.FilterVagueSuggestions(result).Comments.Count == 0)
+        if (ReviewCommentProcessing.FilterVagueSuggestions(result).Comments.Count == 0)
         {
             return new CommentRelevanceFilterDecision(
                 CommentRelevanceFilterDecision.DiscardDecision,
@@ -1272,7 +1271,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         ReviewComment comment,
         IReadOnlyList<ClaimDescriptor> claims)
     {
-        var decision = HeuristicCommentRelevanceFilter.EvaluateComment(request, comment, allowAmbiguous: false);
+        var decision = HeuristicCommentRelevanceFilter.EvaluateComment(request, comment, false);
         if (decision.IsKeep)
         {
             return decision;

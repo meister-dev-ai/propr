@@ -52,4 +52,24 @@ public static class ReviewFindingGateReasonCodes
     ///     Reason code used when verification completed in a degraded state.
     /// </summary>
     public const string VerificationDegraded = "verification_degraded";
+
+    /// <summary>
+    ///     Reason code used when an investigation-origin finding lacked explicit support.
+    /// </summary>
+    public const string InvestigationOriginMissingExplicitSupport = "investigation_origin_missing_explicit_support";
+
+    /// <summary>
+    ///     Reason code used when a degraded follow-up remained diagnostics-only.
+    /// </summary>
+    public const string DiagnosticsOnlyFollowUp = "diagnostics_only_follow_up";
+
+    /// <summary>
+    ///     Reason code used when deterministic objective verification explicitly supported a claim.
+    /// </summary>
+    public const string ObjectiveDeterministicSupport = "objective_deterministic_support";
+
+    /// <summary>
+    ///     Reason code used when repeated judgment did not agree on publication.
+    /// </summary>
+    public const string RepeatedJudgmentDisagreement = "repeated_judgment_disagreement";
 }

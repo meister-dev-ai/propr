@@ -202,4 +202,151 @@ public sealed class DeterministicReviewFindingGateTests
         Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, decisions[0].ReasonCodes);
         Assert.Equal("verification_outcome_rules", decisions[0].RuleSource);
     }
+
+    [Fact]
+    public async Task EvaluateAsync_InvestigationOriginWithoutSupport_AssignsDrop()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = new CandidateReviewFinding(
+            "finding-agentic-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.DeeperFollowUpOrigin,
+                "agentic_file_investigation",
+                "src/Foo.cs",
+                evidenceSetId: "evidence-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "task-001"),
+            CommentSeverity.Warning,
+            "Missing DI registration in multiple files.",
+            "architecture",
+            "src/Foo.cs",
+            12,
+            new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "agentic_file_investigation"),
+            "Potential DI registration gap spans multiple files.");
+
+        var decisions = await sut.EvaluateAsync([finding], []);
+
+        var decision = Assert.Single(decisions);
+        Assert.Equal(FinalGateDecision.DropDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.InvestigationOriginMissingExplicitSupport, decision.ReasonCodes);
+        Assert.Equal("investigation_missing_support_rules", decision.RuleSource);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_InvestigationOriginWithSupport_AssignsPublish()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var claim = new ClaimDescriptor(
+            "claim-agentic-001",
+            "finding-agentic-002",
+            ClaimDescriptor.LocalStage,
+            CandidateReviewFinding.DockerFinalStageRootUserClaimKind,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.DeterministicOnlyMode,
+            ClaimDescriptor.OperationalRiskFamily,
+            anchorFilePath: "Dockerfile",
+            anchorLineNumber: 8);
+
+        var outcome = new VerificationOutcome(
+            claim.ClaimId,
+            claim.FindingId,
+            VerificationOutcome.SupportedKind,
+            FinalGateDecision.PublishDisposition,
+            [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+            [],
+            VerificationOutcome.StrongEvidence,
+            "Deterministic verifier confirmed the objective follow-up claim.",
+            VerificationOutcome.DeterministicRulesEvaluator,
+            false);
+
+        var finding = new CandidateReviewFinding(
+            "finding-agentic-002",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.DeeperFollowUpOrigin,
+                "agentic_file_investigation",
+                "Dockerfile",
+                evidenceSetId: "evidence-002",
+                requiresExplicitSupport: true,
+                sourceOriginId: "task-002"),
+            CommentSeverity.Warning,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "Dockerfile",
+            8,
+            verificationOutcome: outcome);
+
+        var decisions = await sut.EvaluateAsync([finding], []);
+
+        var decision = Assert.Single(decisions);
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, decision.ReasonCodes);
+        Assert.Equal("investigation_verified_support_rules", decision.RuleSource);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_RepeatedJudgmentAgreementWithoutExplicitSupport_AssignsPublish()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = new CandidateReviewFinding(
+            "finding-rj-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.RepeatedJudgmentOrigin,
+                "repeated_judgment",
+                "src/Foo.cs",
+                evidenceSetId: "evidence-task-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "repeated-judgment-candidate-001"),
+            CommentSeverity.Warning,
+            "Missing DI registration in multiple files.",
+            "architecture",
+            "src/Foo.cs",
+            12,
+            new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "agentic_file_investigation"),
+            "Potential DI registration gap spans multiple files.",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["repeatedJudgmentAgreementState"] = "Agreed",
+                ["repeatedJudgmentUsedSameEvidenceSet"] = "true",
+            });
+
+        var decisions = await sut.EvaluateAsync([finding], []);
+
+        var decision = Assert.Single(decisions);
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_RepeatedJudgmentDisagreementWithoutExplicitSupport_AssignsDrop()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = new CandidateReviewFinding(
+            "finding-rj-002",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.RepeatedJudgmentOrigin,
+                "repeated_judgment",
+                "src/Foo.cs",
+                evidenceSetId: "evidence-task-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "repeated-judgment-candidate-002"),
+            CommentSeverity.Warning,
+            "Missing DI registration in multiple files.",
+            "architecture",
+            "src/Foo.cs",
+            12,
+            new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "agentic_file_investigation"),
+            "Potential DI registration gap spans multiple files.",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["repeatedJudgmentAgreementState"] = "Disagreed",
+                ["repeatedJudgmentUsedSameEvidenceSet"] = "true",
+            });
+
+        var decisions = await sut.EvaluateAsync([finding], []);
+
+        var decision = Assert.Single(decisions);
+        Assert.Equal(FinalGateDecision.DropDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.RepeatedJudgmentDisagreement, decision.ReasonCodes);
+    }
 }

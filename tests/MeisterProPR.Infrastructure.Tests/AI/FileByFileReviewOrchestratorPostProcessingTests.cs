@@ -1,9 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Application.ValueObjects;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 
@@ -30,6 +34,59 @@ public class FileByFileReviewOrchestratorPostProcessingTests
     private static ReviewComment MakeComment(CommentSeverity severity, string message, string? filePath = "src/Foo.cs")
     {
         return new ReviewComment(filePath, 1, severity, message);
+    }
+
+    [Fact]
+    public async Task ReviewPipelineRunner_BaselineFileByFileProfile_AppliesConfiguredStagesInOrder()
+    {
+        var original = MakeResult(
+            MakeComment(CommentSeverity.Error, "please verify this is safe"),
+            MakeComment(CommentSeverity.Info, "Nice use of dependency injection."),
+            MakeComment(CommentSeverity.Suggestion, "consider refactoring this service into smaller methods"),
+            MakeComment(CommentSeverity.Warning, "Confirmed null dereference at line 10."));
+        var context = new PerFileReviewContext(
+            CreateJob(),
+            new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff"),
+            null,
+            new ReviewSystemContext(null, [], null)
+            {
+                LoopMetrics = new ReviewLoopMetrics(0, null, null, 59, 0, 0, 0),
+            },
+            null,
+            null,
+            original);
+        var profile = new ReviewPipelineProfile(
+            ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
+            "File-by-file baseline",
+            ReviewStrategy.FileByFile,
+            [ReviewPipelineProfileProvider.DispatchStageFamilyId],
+            [
+                FileByFileConfidenceFloorStage.StageIdConstant,
+                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                FileByFileInfoCommentStripStage.StageIdConstant,
+                FileByFileVagueSuggestionFilterStage.StageIdConstant,
+            ],
+            [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+            true);
+        var runner = new ReviewPipelineRunner<PerFileReviewContext>(
+        [
+            new FileByFileConfidenceFloorStage(DefaultOpts()),
+            new FileByFileSpeculativeCommentFilterStage(),
+            new FileByFileInfoCommentStripStage(),
+            new FileByFileVagueSuggestionFilterStage(),
+        ]);
+
+        var result = await runner.ExecuteAsync(context, profile.PerFileStageIds, CancellationToken.None);
+
+        var finalResult = Assert.IsType<ReviewResult>(result.ReviewResult);
+        var surviving = Assert.Single(finalResult.Comments);
+        Assert.Equal(CommentSeverity.Suggestion, surviving.Severity);
+        Assert.Equal("Confirmed null dereference at line 10.", surviving.Message);
+    }
+
+    private static ReviewJob CreateJob()
+    {
+        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
     }
 
     // ── T006: FilterSpeculativeComments — hedge phrase detection ─────────────────

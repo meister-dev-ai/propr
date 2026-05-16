@@ -14,4 +14,5 @@ public sealed record ReviewWorkflowRequest(
     IChatClient ChatClient,
     string ModelId,
     ReviewEvaluationFixture? Fixture = null,
-    EvaluationConfiguration? Configuration = null);
+    EvaluationConfiguration? Configuration = null,
+    string? PipelineProfileId = null);

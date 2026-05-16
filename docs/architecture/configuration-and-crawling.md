@@ -194,9 +194,9 @@ The crawler operates against crawl configurations that may reference all client 
 or a selected subset. That selection is durable and does not depend on reading the latest admin
 configuration during review execution.
 
-Each crawl or webhook activation path can also snapshot an optional review temperature. Review
-execution uses the job-scoped value, so later admin edits do not retroactively change in-flight
-work.
+Each crawl or webhook activation path can also snapshot an optional review temperature and the
+resolved review strategy. Review execution uses those job-scoped values, so later admin edits do
+not retroactively change in-flight work.
 
 ## Shared Pull-Request Synchronization
 

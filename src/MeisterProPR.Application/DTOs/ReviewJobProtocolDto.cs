@@ -26,7 +26,7 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="FinalSummary">Final review summary attributable to this protocol pass, when available.</param>
 /// <param name="FinalComments">Final review comments attributable to this protocol pass, when available.</param>
 /// <param name="Events">Ordered list of events captured during the loop.</param>
-public sealed record ReviewJobProtocolDto(
+public sealed partial record ReviewJobProtocolDto(
     Guid Id,
     Guid JobId,
     int AttemptNumber,
@@ -45,6 +45,42 @@ public sealed record ReviewJobProtocolDto(
     string? FinalSummary,
     IReadOnlyList<ProtocolReviewCommentDto>? FinalComments,
     IReadOnlyList<ProtocolEventDto> Events);
+
+/// <summary>
+///     Additional review-job context projected alongside a protocol pass.
+/// </summary>
+public partial record ReviewJobProtocolDto
+{
+    /// <summary>Normalized SCM provider family for the parent review job.</summary>
+    public ScmProvider Provider { get; init; } = ScmProvider.AzureDevOps;
+
+    /// <summary>Normalized provider scope path for the parent review job.</summary>
+    public string? ProviderScopePath { get; init; }
+
+    /// <summary>Normalized provider project, owner, or namespace key for the parent review job.</summary>
+    public string? ProviderProjectKey { get; init; }
+
+    /// <summary>Repository identifier for the parent review job.</summary>
+    public string? RepositoryId { get; init; }
+
+    /// <summary>Pull request number for the parent review job.</summary>
+    public int PullRequestId { get; init; }
+
+    /// <summary>Resolved review strategy snapshotted on the parent review job.</summary>
+    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
+
+    /// <summary>How the parent review job selected its resolved review strategy.</summary>
+    public ReviewStrategySelectionSource StrategySelectionSource { get; init; } = ReviewStrategySelectionSource.FallbackDefault;
+
+    /// <summary>Terminal file outcome associated with this pass, when the protocol belongs to a file result.</summary>
+    public ProtocolFileOutcomeDto? FileOutcome { get; init; }
+
+    /// <summary>Follow-up usage and dependency visibility associated with this file-linked pass, when available.</summary>
+    public ProtocolFollowUpDto? FollowUp { get; init; }
+
+    /// <summary>Repeated-judgment decision details associated with this pass, when available.</summary>
+    public ProtocolRepeatedJudgmentDto? RepeatedJudgment { get; init; }
+}
 
 /// <summary>
 ///     Carries data for a single event in a review protocol.
@@ -83,3 +119,36 @@ public sealed record ProtocolReviewCommentDto(
     int? LineNumber,
     CommentSeverity Severity,
     string Message);
+
+/// <summary>
+///     Terminal outcome metadata for one file-linked protocol pass.
+/// </summary>
+public sealed record ProtocolFileOutcomeDto(
+    string FilePath,
+    bool IsComplete,
+    bool IsFailed,
+    bool IsExcluded,
+    bool IsCarriedForward,
+    string? ExclusionReason,
+    string? ErrorMessage,
+    bool IsDegraded);
+
+/// <summary>
+///     Follow-up visibility metadata for one file-linked protocol pass.
+/// </summary>
+public sealed record ProtocolFollowUpDto(
+    bool Used,
+    string? TriggerFamily,
+    bool CompletedSuccessfully,
+    bool DependencyRecorded);
+
+/// <summary>
+///     Repeated-judgment visibility metadata for one protocol pass.
+/// </summary>
+public sealed record ProtocolRepeatedJudgmentDto(
+    string FindingId,
+    string? EvidenceSetId,
+    string AgreementState,
+    string RecommendedDisposition,
+    bool UsedSameEvidenceSet,
+    IReadOnlyList<string> ReasonCodes);

@@ -246,7 +246,8 @@ public class ReviewOrchestrationServiceTests
         IReviewThreadStatusWriter? threadStatusWriter = null,
         IReviewThreadReplyPublisher? threadReplyPublisher = null,
         IProviderActivationService? providerActivationService = null,
-        IAiRuntimeResolver? aiRuntimeResolver = null)
+        IAiRuntimeResolver? aiRuntimeResolver = null,
+        IReviewStrategyDispatcher? reviewStrategyDispatcher = null)
     {
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
@@ -266,7 +267,6 @@ public class ReviewOrchestrationServiceTests
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
-            orchestrator,
             providerRegistry,
             clientRegistry,
             prScanRepository,
@@ -280,8 +280,28 @@ public class ReviewOrchestrationServiceTests
             logger,
             aiDependencies.aiRepo,
             aiDependencies.chatFactory,
+            reviewStrategyDispatcher ?? CreateDispatcher(orchestrator),
             providerActivationService: providerActivationService,
             aiRuntimeResolver: aiRuntimeResolver);
+    }
+
+    private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
+    {
+        var dispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        dispatcher.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>(),
+                Arg.Any<string?>())
+            .Returns(callInfo => orchestrator.ReviewAsync(
+                callInfo.ArgAt<ReviewJob>(0),
+                callInfo.ArgAt<PullRequest>(1),
+                callInfo.ArgAt<ReviewSystemContext>(2),
+                callInfo.ArgAt<CancellationToken>(3),
+                callInfo.ArgAt<IChatClient?>(4)));
+        return dispatcher;
     }
 
     private static Task AssertReviewPublishedAsync(

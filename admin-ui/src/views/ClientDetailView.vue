@@ -148,12 +148,13 @@
                                         v-model="editedDefaultReviewStrategy"
                                         name="defaultReviewStrategy"
                                     >
-                                        <option value="fileByFile">File by File</option>
-                                        <option value="prWideAgentic">PR-wide Agentic</option>
+                                        <option value="fileByFile">File-by-File</option>
+                                        <option value="agenticFileByFile">Agentic File-by-File (Experimental)</option>
+                                        <option value="prWideAgentic">PR-wide Agentic (Experimental)</option>
                                     </select>
                                     <p class="muted review-publication-copy">
-                                        Choose whether new reviews for this client use the classic file-by-file flow
-                                        or the PR-wide agentic review flow by default.
+                                        Choose whether new reviews for this client use the classic file-by-file flow,
+                                        the plan-driven agentic file-by-file flow, or the PR-wide agentic review flow.
                                     </p>
                                 </div>
                             </div>
@@ -438,13 +439,14 @@ const detailTabs = [
     "usage",
 ] as const;
 type DetailTab = (typeof detailTabs)[number];
+type ReviewStrategy = components["schemas"]["ReviewStrategy"];
 
 interface Client {
     id: string;
     displayName: string;
     isActive: boolean;
     createdAt: string;
-    defaultReviewStrategy?: "fileByFile" | "prWideAgentic";
+    defaultReviewStrategy?: ReviewStrategy;
     scmCommentPostingEnabled: boolean;
 }
 
@@ -462,7 +464,7 @@ const saving = ref(false);
 const saveError = ref("");
 const showDeleteDialog = ref(false);
 const editedDisplayName = ref("");
-const editedDefaultReviewStrategy = ref<"fileByFile" | "prWideAgentic">("fileByFile");
+const editedDefaultReviewStrategy = ref<ReviewStrategy>("fileByFile");
 const editedScmCommentPostingEnabled = ref(true);
 const canManageClient = computed(() => hasClientRole(clientId, 1));
 const canViewClient = computed(() => hasClientRole(clientId, 0));

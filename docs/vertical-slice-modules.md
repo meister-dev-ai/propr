@@ -41,3 +41,9 @@ These concerns remain shared support because they provide technical capabilities
 ## Review Checklist Alignment
 
 Use the wave-review checklist in `specs/034-vertical-slice-migration/checklists/wave-review.md` to confirm that each new slice follows this ownership map before a legacy seam is removed.
+
+## Reviewing Boundary Notes
+
+- Reviewing execution owns strategy ports, pipeline profile models, shared per-file stage composition, and concrete strategy implementations under `Application/Features/Reviewing/Execution` and `Infrastructure/Features/Reviewing/Execution`.
+- Cross-cutting AI runtime support remains in `MeisterProPR.Infrastructure/AI` by design and is not treated as a Reviewing-owned workflow boundary in this slice.
+- `ReviewOrchestrationService` and `ReviewWorkflowRunner` both resolve strategy and profile selection through the shared `IReviewStrategyDispatcher`.

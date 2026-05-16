@@ -72,7 +72,16 @@
                         <div class="list-iter-col iter-cell" v-else></div>
 
                         <div class="list-model-col">
-                            <span v-if="item.aiModel" class="model-badge" :title="item.aiModel">{{ item.aiModel }}</span>
+                            <div class="list-meta-stack">
+                                <span
+                                    v-if="item.resolvedReviewStrategy"
+                                    class="strategy-badge"
+                                    :title="formatReviewStrategy(item.resolvedReviewStrategy)"
+                                >
+                                    {{ formatReviewStrategy(item.resolvedReviewStrategy) }}
+                                </span>
+                                <span v-if="item.aiModel" class="model-badge" :title="item.aiModel">{{ item.aiModel }}</span>
+                            </div>
                         </div>
 
                         <div class="list-summary-col" :class="{ 'summary-truncate': item.status !== 'processing' }" @click="openSummaryModal(item)">
@@ -180,6 +189,7 @@ const ITEMS_PER_PAGE = 10
 type JobListItem = components['schemas']['JobListItem']
 type JobStatus = components['schemas']['JobStatus']
 type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
+type ReviewStrategy = components['schemas']['ReviewStrategy']
 
 interface PrGroup {
     key: string
@@ -409,6 +419,19 @@ function formatTokens(n: number | null | undefined): string {
     return n.toLocaleString()
 }
 
+function formatReviewStrategy(strategy: ReviewStrategy | null | undefined): string {
+    switch (strategy) {
+        case 'fileByFile':
+            return 'File-by-File'
+        case 'agenticFileByFile':
+            return 'Agentic File-by-File'
+        case 'prWideAgentic':
+            return 'PR-wide Agentic'
+        default:
+            return strategy ?? 'Unknown strategy'
+    }
+}
+
 function rowClass(item: JobListItem): string {
     if (item.status === 'failed') return 'row-failed'
     if (item.status === 'processing') return 'row-processing'
@@ -592,6 +615,28 @@ function prReviewLink(group: PrGroup): object {
     flex: 0 0 120px;
     min-width: 0;
     overflow: hidden;
+}
+
+.list-meta-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    align-items: flex-start;
+}
+
+.strategy-badge {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    background: rgba(34, 211, 238, 0.12);
+    border: 1px solid rgba(34, 211, 238, 0.25);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .list-summary-col {

@@ -105,6 +105,10 @@
                                         <span class="overview-metadata-value monospace-value">{{ reviewModelDisplay }}</span>
                                     </div>
                                     <div class="overview-metadata-item">
+                                        <span class="overview-metadata-label">Strategy</span>
+                                        <span class="overview-metadata-value">{{ reviewStrategyDisplay }}</span>
+                                    </div>
+                                    <div class="overview-metadata-item">
                                         <span class="overview-metadata-label">Temperature</span>
                                         <span class="overview-metadata-value">{{ reviewTemperatureDisplay }}</span>
                                     </div>
@@ -261,7 +265,56 @@
                             <div><dt>Tool Calls</dt><dd>{{ activePass.toolCallCount ?? '—' }}</dd></div>
                             <div><dt>In Tokens</dt><dd class="fat-tokens">{{ formatTokens(activePass.totalInputTokens) }}</dd></div>
                             <div><dt>Out Tokens</dt><dd class="fat-tokens">{{ formatTokens(activePass.totalOutputTokens) }}</dd></div>
+                            <div><dt>Strategy</dt><dd>{{ activePassReviewStrategyDisplay }}</dd></div>
                         </dl>
+
+                        <section v-if="activePassFileOutcome" class="pass-file-outcome-section">
+                            <div class="pass-final-result-header">
+                                <h4>File Outcome</h4>
+                                <span class="chip chip-muted">{{ formatFileOutcomeStatus(activePassFileOutcome) }}</span>
+                            </div>
+
+                            <dl class="summary-grid pass-summary pass-file-outcome-grid">
+                                <div><dt>Path</dt><dd>{{ activePassFileOutcome.filePath }}</dd></div>
+                                <div><dt>Status</dt><dd>{{ formatFileOutcomeStatus(activePassFileOutcome) }}</dd></div>
+                                <div v-if="activePassFileOutcome.exclusionReason"><dt>Exclusion</dt><dd>{{ activePassFileOutcome.exclusionReason }}</dd></div>
+                                <div v-if="activePassFileOutcome.errorMessage"><dt>Error</dt><dd>{{ activePassFileOutcome.errorMessage }}</dd></div>
+                            </dl>
+
+                            <p v-if="activePassFileOutcome.isDegraded" class="pass-file-outcome-note">
+                                Agentic file investigation recorded a degraded intermediate outcome for this pass. It remained non-validated unless later verification and final gate kept it.
+                            </p>
+                        </section>
+
+                        <section v-if="activePassFollowUp" class="pass-file-outcome-section">
+                            <div class="pass-final-result-header">
+                                <h4>Follow-up</h4>
+                                <span class="chip chip-muted">{{ formatFollowUpStatus(activePassFollowUp) }}</span>
+                            </div>
+
+                            <dl class="summary-grid pass-summary pass-file-outcome-grid">
+                                <div><dt>Used</dt><dd>{{ activePassFollowUp.used ? 'Yes' : 'No' }}</dd></div>
+                                <div v-if="activePassFollowUp.triggerFamily"><dt>Trigger</dt><dd>{{ activePassFollowUp.triggerFamily }}</dd></div>
+                                <div><dt>Completion</dt><dd>{{ activePassFollowUp.completedSuccessfully ? 'Completed successfully' : 'Not completed successfully' }}</dd></div>
+                                <div><dt>Dependency</dt><dd>{{ activePassFollowUp.dependencyRecorded ? 'Dependent finding recorded' : 'No surviving dependency recorded' }}</dd></div>
+                            </dl>
+                        </section>
+
+                        <section v-if="activePassRepeatedJudgment" class="pass-file-outcome-section">
+                            <div class="pass-final-result-header">
+                                <h4>Repeated Judgment</h4>
+                                <span class="chip chip-muted">{{ formatRepeatedJudgmentStatus(activePassRepeatedJudgment) }}</span>
+                            </div>
+
+                            <dl class="summary-grid pass-summary pass-file-outcome-grid">
+                                <div><dt>Finding</dt><dd>{{ activePassRepeatedJudgment.findingId }}</dd></div>
+                                <div v-if="activePassRepeatedJudgment.evidenceSetId"><dt>Evidence Set</dt><dd>{{ activePassRepeatedJudgment.evidenceSetId }}</dd></div>
+                                <div><dt>Agreement</dt><dd>{{ activePassRepeatedJudgment.agreementState ?? 'Not recorded' }}</dd></div>
+                                <div><dt>Disposition</dt><dd>{{ activePassRepeatedJudgment.recommendedDisposition ?? 'Not recorded' }}</dd></div>
+                                <div><dt>Evidence Reused</dt><dd>{{ activePassRepeatedJudgment.usedSameEvidenceSet ? 'Yes' : 'No' }}</dd></div>
+                                <div v-if="activePassRepeatedJudgment.reasonCodes?.length"><dt>Reason Codes</dt><dd>{{ activePassRepeatedJudgment.reasonCodes.join(', ') }}</dd></div>
+                            </dl>
+                        </section>
 
                         <section v-if="activePass.finalSummary || activePassFinalComments.length" class="pass-final-result-section">
                             <div class="pass-final-result-header">
@@ -646,6 +699,28 @@
                                         <pre class="json-content">{{ typeof val === 'string' ? val : JSON.stringify(val, null, 2) }}</pre>
                                     </div>
                                 </template>
+                                <template v-else-if="selectedAgenticInvestigationOutput">
+                                    <div class="json-field">
+                                        <span class="json-key">Stage B status:</span>
+                                        <pre class="json-content">{{ formatAgenticInvestigationStatus(selectedAgenticInvestigationOutput) }}</pre>
+                                    </div>
+                                    <div class="json-field">
+                                        <span class="json-key">Runtime tool attempts:</span>
+                                        <pre class="json-content">{{ formatAgenticToolUsage(selectedAgenticInvestigationOutput) }}</pre>
+                                    </div>
+                                    <div v-if="agenticInvestigationCandidateCount(selectedAgenticInvestigationOutput) !== null" class="json-field">
+                                        <span class="json-key">Candidate count:</span>
+                                        <pre class="json-content">{{ agenticInvestigationCandidateCount(selectedAgenticInvestigationOutput) }}</pre>
+                                    </div>
+                                    <div v-if="agenticInvestigationEvidenceCount(selectedAgenticInvestigationOutput) !== null" class="json-field">
+                                        <span class="json-key">Evidence count:</span>
+                                        <pre class="json-content">{{ agenticInvestigationEvidenceCount(selectedAgenticInvestigationOutput) }}</pre>
+                                    </div>
+                                    <div v-if="isAgenticDegradedEvent(selectedMergedEvent?.callDetails.name)" class="json-field">
+                                        <span class="json-key">Degraded outcome note:</span>
+                                        <pre class="json-content">This degraded Stage B result was a non-validated intermediate outcome. It only affected the final review if later verification and final gate kept supporting findings.</pre>
+                                    </div>
+                                </template>
                                 <template v-else>
                                     <div v-if="parsedOutputResult.summary" class="json-field">
                                         <span class="json-key">Summary:</span>
@@ -794,6 +869,34 @@ import type { components } from '@/services/generated/openapi'
 type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 type ProtocolEventDto = components['schemas']['ProtocolEventDto']
 type ReviewJobResultDto = components['schemas']['ReviewJobResultDto']
+type ReviewStrategy = components['schemas']['ReviewStrategy']
+
+interface ProtocolFileOutcome {
+    filePath: string
+    isComplete?: boolean
+    isFailed?: boolean
+    isExcluded?: boolean
+    isCarriedForward?: boolean
+    exclusionReason?: string | null
+    errorMessage?: string | null
+    isDegraded?: boolean
+}
+
+interface ProtocolFollowUp {
+    used?: boolean
+    triggerFamily?: string | null
+    completedSuccessfully?: boolean
+    dependencyRecorded?: boolean
+}
+
+interface ProtocolRepeatedJudgment {
+    findingId?: string | null
+    evidenceSetId?: string | null
+    agreementState?: string | null
+    recommendedDisposition?: string | null
+    usedSameEvidenceSet?: boolean
+    reasonCodes?: string[] | null
+}
 
 interface TokenBreakdownEntry {
     connectionCategory: number | null
@@ -931,6 +1034,28 @@ interface FinalGateDecisionRecord {
     includedInFinalSummary?: boolean | null
 }
 
+interface AgenticToolUsageRecord {
+    ToolName?: string
+    toolName?: string
+    Status?: string
+    status?: string
+    Target?: string | null
+    target?: string | null
+}
+
+interface AgenticInvestigationOutputRecord {
+    Status?: string
+    status?: string
+    ToolUsage?: AgenticToolUsageRecord[]
+    toolUsage?: AgenticToolUsageRecord[]
+    Degraded?: boolean
+    degraded?: boolean
+    candidateCount?: number | null
+    CandidateCount?: number | null
+    evidenceCount?: number | null
+    EvidenceCount?: number | null
+}
+
 type ReviewCommentRecord = {
     filePath?: string | null
     lineNumber?: number | null
@@ -951,6 +1076,11 @@ type ReviewProtocolPass = ReviewJobProtocolDto & {
     attemptNumber?: number
     label?: string | null
     outcome?: string | null
+    resolvedReviewStrategy?: ReviewStrategy | null
+    strategySelectionSource?: string | null
+    fileOutcome?: ProtocolFileOutcome | null
+    followUp?: ProtocolFollowUp | null
+    repeatedJudgment?: ProtocolRepeatedJudgment | null
     events?: ProtocolEventDto[]
     startedAt?: string
     completedAt?: string | null
@@ -1368,6 +1498,26 @@ const overallDuration = computed(() => {
 
 const reviewModelDisplay = computed(() => jobDetail.value?.aiModel?.trim() || 'Default')
 
+const reviewStrategyDisplay = computed(() =>
+    formatReviewStrategy(protocols.value[0]?.resolvedReviewStrategy),
+)
+
+const activePassReviewStrategyDisplay = computed(() =>
+    formatReviewStrategy(activePass.value?.resolvedReviewStrategy ?? protocols.value[0]?.resolvedReviewStrategy),
+)
+
+const activePassFileOutcome = computed<ProtocolFileOutcome | null>(() =>
+    activePass.value?.fileOutcome ?? null,
+)
+
+const activePassFollowUp = computed<ProtocolFollowUp | null>(() =>
+    activePass.value?.followUp ?? null,
+)
+
+const activePassRepeatedJudgment = computed<ProtocolRepeatedJudgment | null>(() =>
+    activePass.value?.repeatedJudgment ?? null,
+)
+
 const reviewTemperatureDisplay = computed(() => formatTemperature(jobDetail.value?.reviewTemperature))
 
 const parsedInputResult = computed(() => {
@@ -1434,6 +1584,12 @@ const verificationEventNames = new Set([
     'verification_pr_decision',
     'verification_degraded',
     'summary_reconciliation',
+])
+
+const agenticInvestigationEventNames = new Set([
+    'agentic_file_investigation_result',
+    'agentic_file_degraded',
+    'agentic_file_evidence_collected',
 ])
 
 const selectedCommentRelevanceInput = computed<CommentRelevanceEventDetails | null>(() => {
@@ -1516,6 +1672,16 @@ const selectedVerificationEvidenceOutput = computed<VerificationEvidenceOutputRe
         : null
 })
 
+const selectedAgenticInvestigationOutput = computed<AgenticInvestigationOutputRecord | null>(() => {
+    if (!isAgenticInvestigationEvent(selectedMergedEvent.value?.callDetails.name)) {
+        return null
+    }
+
+    return isPlainObject(parsedOutputResult.value)
+        ? parsedOutputResult.value as AgenticInvestigationOutputRecord
+        : null
+})
+
 function isCommentRelevanceEvent(name: string | null | undefined): boolean {
     return !!name && commentRelevanceEventNames.has(name)
 }
@@ -1526,6 +1692,14 @@ function isFinalGateEvent(name: string | null | undefined): boolean {
 
 function isVerificationEvent(name: string | null | undefined): boolean {
     return !!name && verificationEventNames.has(name)
+}
+
+function isAgenticInvestigationEvent(name: string | null | undefined): boolean {
+    return !!name && agenticInvestigationEventNames.has(name)
+}
+
+function isAgenticDegradedEvent(name: string | null | undefined): boolean {
+    return name === 'agentic_file_degraded'
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1699,6 +1873,68 @@ function formatEvidenceItems(items: VerificationEvidenceItemRecord[] | null | un
         .join('\n\n')
 }
 
+function normalizeAgenticToolUsage(output: AgenticInvestigationOutputRecord | null | undefined): AgenticToolUsageRecord[] {
+    if (!output) {
+        return []
+    }
+
+    return output.ToolUsage ?? output.toolUsage ?? []
+}
+
+function describeAgenticToolStatus(status: string | null | undefined): string {
+    switch ((status ?? '').toLowerCase()) {
+        case 'success':
+            return 'Runtime attempt succeeded.'
+        case 'blocked_not_allowed':
+            return 'Runtime blocked this attempt because the tool was not allowed for the investigation.'
+        case 'blocked_budget_exhausted':
+            return 'Runtime blocked this attempt because the investigation exhausted its tool budget.'
+        case 'blocked_scope_violation':
+            return 'Runtime blocked this attempt because the requested target was outside the approved file scope.'
+        case 'failed':
+            return 'Runtime attempted the lookup, but the repository/provider fetch failed.'
+        default:
+            return status || 'Unknown runtime status.'
+    }
+}
+
+function formatAgenticToolUsage(output: AgenticInvestigationOutputRecord | null | undefined): string {
+    const usage = normalizeAgenticToolUsage(output)
+    if (!usage.length) {
+        return 'No runtime tool attempts were recorded.'
+    }
+
+    return usage.map(item => {
+        const toolName = item.ToolName ?? item.toolName ?? 'unknown_tool'
+        const status = item.Status ?? item.status ?? 'unknown'
+        const target = item.Target ?? item.target
+        const lines = [
+            `${toolName} -> ${status}`,
+            describeAgenticToolStatus(status),
+        ]
+
+        if (target) {
+            lines.splice(1, 0, `Target: ${target}`)
+        }
+
+        return lines.join('\n')
+    }).join('\n\n')
+}
+
+function formatAgenticInvestigationStatus(output: AgenticInvestigationOutputRecord | null | undefined): string {
+    const status = output?.Status ?? output?.status ?? 'unknown'
+    const degraded = output?.Degraded ?? output?.degraded ?? false
+    return degraded ? `${status} (non-validated degraded intermediate outcome)` : status
+}
+
+function agenticInvestigationCandidateCount(output: AgenticInvestigationOutputRecord | null | undefined): number | null {
+    return output?.candidateCount ?? output?.CandidateCount ?? null
+}
+
+function agenticInvestigationEvidenceCount(output: AgenticInvestigationOutputRecord | null | undefined): number | null {
+    return output?.evidenceCount ?? output?.EvidenceCount ?? null
+}
+
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
 function resetProtocolState() {
@@ -1851,6 +2087,42 @@ function formatDate(iso: string | null | undefined): string {
     return new Date(iso).toLocaleString()
 }
 
+function formatReviewStrategy(strategy: ReviewStrategy | null | undefined): string {
+    switch (strategy) {
+        case 'fileByFile':
+            return 'File-by-File'
+        case 'agenticFileByFile':
+            return 'Agentic File-by-File'
+        case 'prWideAgentic':
+            return 'PR-wide Agentic'
+        default:
+            return strategy ?? 'Not recorded'
+    }
+}
+
+function formatFileOutcomeStatus(fileOutcome: ProtocolFileOutcome | null | undefined): string {
+    if (!fileOutcome) return 'Not recorded'
+    if (fileOutcome.isFailed) return 'Failed'
+    if (fileOutcome.isExcluded) return 'Excluded'
+    if (fileOutcome.isCarriedForward) return 'Carried Forward'
+    if (fileOutcome.isDegraded) return 'Degraded'
+    if (fileOutcome.isComplete) return 'Completed'
+    return 'In Progress'
+}
+
+function formatFollowUpStatus(followUp: ProtocolFollowUp | null | undefined): string {
+    if (!followUp?.used) return 'Not used'
+    if (followUp.completedSuccessfully) return 'Completed successfully'
+    return 'Used'
+}
+
+function formatRepeatedJudgmentStatus(repeatedJudgment: ProtocolRepeatedJudgment | null | undefined): string {
+    if (!repeatedJudgment) return 'Not used'
+    if (repeatedJudgment.agreementState === 'Agreed') return 'Agreement reached'
+    if (repeatedJudgment.agreementState === 'Disagreed') return 'Disagreed'
+    return repeatedJudgment.agreementState ?? 'Recorded'
+}
+
 function formatTokens(n: number | null | undefined): string {
     if (n == null) return '—'
     return n.toLocaleString()
@@ -1980,6 +2252,19 @@ function formatConfidence(val: number | string | null | undefined): string {
     background: rgba(34, 211, 238, 0.15);
     color: var(--color-accent);
     animation: flash 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.pass-file-outcome-section {
+    margin-top: 1.5rem;
+}
+
+.pass-file-outcome-grid {
+    margin-bottom: 0.75rem;
+}
+
+.pass-file-outcome-note {
+    margin: 0;
+    color: var(--color-text-muted);
 }
 
 .row-processing td {

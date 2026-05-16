@@ -289,8 +289,217 @@ internal static class ReviewPrompts
                 "No sibling-file investigation is required; you may set `investigation_complete` to `true` immediately.");
         }
 
+        if (context?.PerFileHint?.AgenticPlan is { } plan)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Agentic File Plan");
+            sb.AppendLine($"Plan ID: {plan.PlanId}");
+            sb.AppendLine($"Anchor file: {plan.AnchorFilePath}");
+
+            if (plan.Concerns.Count > 0)
+            {
+                sb.AppendLine("Concerns:");
+                foreach (var concern in plan.Concerns)
+                {
+                    sb.AppendLine($"- {concern}");
+                }
+            }
+
+            if (plan.InvestigationTasks.Count > 0)
+            {
+                sb.AppendLine("Investigation tasks:");
+                foreach (var task in plan.InvestigationTasks)
+                {
+                    sb.AppendLine(
+                        $"- {task.TaskId}: {task.Concern} [{task.TaskType}] (tools: {string.Join(", ", task.AllowedTools)}, budget: {task.MaxToolCalls})");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(plan.NoInvestigationReason))
+            {
+                sb.AppendLine($"No-investigation reason: {plan.NoInvestigationReason}");
+            }
+
+            if (context.PerFileHint.AgenticInvestigations.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("## Agentic Investigation Results");
+                foreach (var investigation in context.PerFileHint.AgenticInvestigations)
+                {
+                    sb.AppendLine($"### {investigation.TaskId} [{investigation.Status}]");
+
+                    if (investigation.Evidence.Count > 0)
+                    {
+                        sb.AppendLine("Evidence:");
+                        foreach (var evidence in investigation.Evidence)
+                        {
+                            sb.AppendLine($"- {evidence.Kind}: {evidence.Summary} ({evidence.SourceId ?? "no-source"})");
+                        }
+                    }
+
+                    if (investigation.CandidateFindings.Count > 0)
+                    {
+                        sb.AppendLine("Candidate findings:");
+                        foreach (var finding in investigation.CandidateFindings)
+                        {
+                            sb.AppendLine($"- {finding.Id}: {finding.Message}");
+                        }
+                    }
+                }
+            }
+        }
+
         sb.AppendLine();
         sb.AppendLine(OutputKeyReminder);
+
+        return sb.ToString().TrimEnd();
+    }
+
+    internal static string BuildAgenticFilePlanningSystemPrompt(ReviewSystemContext? context)
+    {
+        if (context?.PromptOverrides.TryGetValue("AgenticFilePlanningSystemPrompt", out var overrideText) == true)
+        {
+            return overrideText!;
+        }
+
+        return """
+               You are running Stage A of an agentic file-scoped review workflow.
+               Your job is to assess one anchor file, decide which concerns warrant bounded follow-up,
+               and produce only file-scoped planning artifacts for later steps.
+
+               Rules:
+               1. Keep the plan file-scoped. The anchor file remains the publication target.
+               2. Only start Stage B when an explicit trigger family justifies deeper follow-up.
+               3. Straightforward files with no explicit trigger must produce zero investigation tasks.
+               4. Only include sibling files when they are needed to validate a concern in the anchor file.
+               5. Prefer a small number of high-value investigations over exhaustive coverage.
+               6. Do not produce final review comments or publishable findings.
+
+               Allowed trigger families:
+               - configuration_or_wiring
+               - dispatch_or_registration
+               - bounded_cross_file_consistency
+               - explicit_local_evidence_gap
+               - symbol_or_api_context
+
+               Respond with a single raw JSON object only.
+               Schema:
+               {
+                 "plan_id": "<stable id>",
+                 "anchor_file_path": "<relative path>",
+                 "concerns": ["<concern>"],
+                 "changed_areas": ["<path or area>"],
+                 "investigation_tasks": [
+                    {
+                      "id": "task-001",
+                      "task_type": "concern"|"sibling_file"|"context_lookup",
+                      "trigger_family": "configuration_or_wiring"|"dispatch_or_registration"|"bounded_cross_file_consistency"|"explicit_local_evidence_gap"|"symbol_or_api_context",
+                      "concern": "<bounded hypothesis>",
+                      "seed_file_paths": ["<relative path>"],
+                      "allowed_tools": ["get_file_content","get_file_tree","get_changed_files"],
+                      "max_tool_calls": <positive integer>
+                   }
+                 ],
+                 "no_investigation_reason": "<nullable explanation>"
+               }
+               """;
+    }
+
+    internal static string BuildAgenticFilePlanningUserMessage(ChangedFile file, PullRequest pr)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(pr);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"PR: {pr.Title}");
+        sb.AppendLine($"Source branch: {pr.SourceBranch}");
+        sb.AppendLine($"Target branch: {pr.TargetBranch}");
+        sb.AppendLine($"Anchor file: {file.Path}");
+
+        if (!string.IsNullOrWhiteSpace(pr.Description))
+        {
+            sb.AppendLine($"Description: {pr.Description}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Changed file manifest:");
+        foreach (var changedFile in pr.ChangedFiles)
+        {
+            var marker = changedFile.Path == file.Path ? " [ANCHOR FILE]" : string.Empty;
+            sb.AppendLine($"- {changedFile.Path} [{changedFile.ChangeType}]{marker}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"Anchor file diff for {file.Path}:");
+        sb.AppendLine(file.IsBinary ? "[binary file omitted]" : file.UnifiedDiff);
+
+        return sb.ToString().TrimEnd();
+    }
+
+    internal static string BuildAgenticFileInvestigationSystemPrompt(ReviewSystemContext? context)
+    {
+        if (context?.PromptOverrides.TryGetValue("AgenticFileInvestigationSystemPrompt", out var overrideText) == true)
+        {
+            return overrideText!;
+        }
+
+        return """
+               You are running Stage B of an agentic file-scoped review workflow.
+               Your job is to test one bounded concern for the anchor file using only the provided scope,
+               tool budget, and allowed tools. Do not produce final review comments.
+
+               Respond with a single raw JSON object only.
+               Schema:
+               {
+                 "task_id": "task-001",
+                 "status": "completed"|"skipped"|"degraded",
+                 "evidence": [
+                   { "kind": "file_content", "summary": "<summary>", "source_id": "<nullable source>" }
+                 ],
+                 "candidate_findings": [
+                   {
+                     "id": "candidate-001",
+                     "message": "<candidate message>",
+                     "category": "per_file_comment|cross_cutting|configuration|robustness|test|documentation|non_actionable",
+                     "severity": "info|warning|error|suggestion",
+                     "confidence": { "concern": "<area>", "score": <0-100> },
+                     "supporting_files": ["<relative path>"],
+                     "file_path": "<relative path or null>",
+                     "line_number": <positive integer or null>,
+                     "candidate_summary_text": "<nullable summary wording>"
+                   }
+                 ],
+                 "tool_usage": [
+                   { "tool_name": "get_file_content", "status": "success|blocked_not_allowed|blocked_budget_exhausted|blocked_scope_violation|failed", "target": "<nullable target>" }
+                 ],
+                 "degraded": true|false
+               }
+               """;
+    }
+
+    internal static string BuildAgenticFileInvestigationUserMessage(
+        AgenticFileReviewPlan plan,
+        AgenticFileInvestigationTask task,
+        PullRequest pr)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(pr);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Plan ID: {plan.PlanId}");
+        sb.AppendLine($"Anchor file: {plan.AnchorFilePath}");
+        sb.AppendLine($"Task ID: {task.TaskId}");
+        sb.AppendLine($"Task type: {task.TaskType}");
+        sb.AppendLine($"Concern: {task.Concern}");
+        sb.AppendLine($"Source branch: {pr.SourceBranch}");
+        sb.AppendLine($"Allowed tools: {string.Join(", ", task.AllowedTools)}");
+        sb.AppendLine($"Max tool calls: {task.MaxToolCalls}");
+        sb.AppendLine();
+        sb.AppendLine("Seed files:");
+        foreach (var path in task.SeedFilePaths)
+        {
+            sb.AppendLine($"- {path}");
+        }
 
         return sb.ToString().TrimEnd();
     }

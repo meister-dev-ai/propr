@@ -13,4 +13,5 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 public sealed record ReviewWorkflowResult(
     ReviewJob Job,
     ReviewResult FinalResult,
-    IReadOnlyList<ReviewJobProtocolDto> Protocols);
+    IReadOnlyList<ReviewJobProtocolDto> Protocols,
+    IReadOnlyList<BoundaryIssueReport>? BoundaryIssues = null);

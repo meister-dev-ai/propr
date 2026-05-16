@@ -58,12 +58,28 @@ const sampleProtocols = [
     id: 'pass-1',
     jobId: 'job-abc',
     label: 'src/foo.ts',
+    providerScopePath: 'https://dev.azure.com/example',
+    providerProjectKey: 'proj',
+    repositoryId: 'repo',
+    pullRequestId: 42,
+    resolvedReviewStrategy: 'fileByFile',
+    strategySelectionSource: 'fallbackDefault',
     startedAt: '2024-01-01T00:00:00Z',
     completedAt: '2024-01-01T00:01:00Z',
     totalInputTokens: 100,
     totalOutputTokens: 50,
     finalSummary: null,
     finalComments: null,
+    fileOutcome: {
+      filePath: 'src/foo.ts',
+      isComplete: true,
+      isFailed: false,
+      isExcluded: false,
+      isCarriedForward: false,
+      exclusionReason: null,
+      errorMessage: null,
+      isDegraded: false,
+    },
     events: [],
   },
 ]
@@ -780,5 +796,204 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('Final File Result')
     expect(wrapper.text()).toContain('Final file summary from completed review.')
     expect(wrapper.text()).toContain('Final file-level finding')
+  })
+
+  it('renders agentic file strategy and degraded file outcome details', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            resolvedReviewStrategy: 'agenticFileByFile',
+            strategySelectionSource: 'clientDefault',
+            fileOutcome: {
+              filePath: 'src/foo.ts',
+              isComplete: true,
+              isFailed: false,
+              isExcluded: false,
+              isCarriedForward: false,
+              exclusionReason: null,
+              errorMessage: null,
+              isDegraded: true,
+            },
+            events: [
+              makeProtocolEvent({
+                name: 'review_strategy_selected',
+                inputTextSample: JSON.stringify({ strategy: 'agentic_file_by_file' }),
+                outputSummary: JSON.stringify({ strategy: 'AgenticFileByFile' }),
+              }),
+              makeProtocolEvent({
+                name: 'agentic_file_plan_created',
+                inputTextSample: JSON.stringify({ stage: 'planning', file: 'src/foo.ts' }),
+                outputSummary: JSON.stringify({ anchorFilePath: 'src/foo.ts', investigationTasks: [{ taskId: 'task-001' }] }),
+              }),
+              makeProtocolEvent({
+                name: 'agentic_file_degraded',
+                inputTextSample: JSON.stringify({ stage: 'investigation', taskId: 'task-001' }),
+                outputSummary: JSON.stringify({ reason: 'Tool budget exhausted.' }),
+              }),
+            ],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('Strategy')
+    expect(wrapper.text()).toContain('Agentic File-by-File')
+
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('File Outcome')
+    expect(wrapper.text()).toContain('Degraded')
+    expect(wrapper.text()).toContain('Agentic file investigation recorded a degraded intermediate outcome for this pass.')
+  })
+
+  it('renders authoritative runtime tool-attempt wording for agentic Stage B degraded traces', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            resolvedReviewStrategy: 'agenticFileByFile',
+            strategySelectionSource: 'clientDefault',
+            fileOutcome: {
+              filePath: 'src/foo.ts',
+              isComplete: true,
+              isFailed: false,
+              isExcluded: false,
+              isCarriedForward: false,
+              exclusionReason: null,
+              errorMessage: null,
+              isDegraded: true,
+            },
+            events: [makeProtocolEvent({
+              name: 'agentic_file_degraded',
+              inputTextSample: JSON.stringify({ stage: 'investigation', taskId: 'task-001' }),
+              outputSummary: JSON.stringify({
+                Status: 'degraded',
+                ToolUsage: [
+                  {
+                    ToolName: 'get_file_content',
+                    Status: 'blocked_scope_violation',
+                    Target: 'src/other.ts',
+                  },
+                  {
+                    ToolName: 'get_file_content',
+                    Status: 'failed',
+                    Target: 'src/foo.ts',
+                  },
+                ],
+                Degraded: true,
+                candidateCount: 0,
+              }),
+            })],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    await openTraceEventModal(wrapper)
+
+    expect(wrapper.text()).toContain('Runtime tool attempts:')
+    expect(wrapper.text()).toContain('blocked_scope_violation')
+    expect(wrapper.text()).toContain('Runtime blocked this attempt because the requested target was outside the approved file scope.')
+    expect(wrapper.text()).toContain('Runtime attempted the lookup, but the repository/provider fetch failed.')
+    expect(wrapper.text()).toContain('non-validated degraded intermediate outcome')
+  })
+
+  it('renders follow-up usage and dependency details for the selected file pass', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            resolvedReviewStrategy: 'agenticFileByFile',
+            followUp: {
+              used: true,
+              triggerFamily: 'dispatch_or_registration',
+              completedSuccessfully: true,
+              dependencyRecorded: true,
+            },
+            fileOutcome: {
+              filePath: 'src/foo.ts',
+              isComplete: true,
+              isFailed: false,
+              isExcluded: false,
+              isCarriedForward: false,
+              exclusionReason: null,
+              errorMessage: null,
+              isDegraded: false,
+            },
+            events: [],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Follow-up')
+    expect(wrapper.text()).toContain('Used')
+    expect(wrapper.text()).toContain('dispatch_or_registration')
+    expect(wrapper.text()).toContain('Completed successfully')
+    expect(wrapper.text()).toContain('Dependent finding recorded')
+  })
+
+  it('renders repeated-judgment decision details for the selected pass', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            resolvedReviewStrategy: 'agenticFileByFile',
+            repeatedJudgment: {
+              findingId: 'candidate-001',
+              evidenceSetId: 'evidence-task-001',
+              agreementState: 'Agreed',
+              recommendedDisposition: 'Publish',
+              usedSameEvidenceSet: true,
+              reasonCodes: ['verified_bounded_claim_support'],
+            },
+            events: [],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Repeated Judgment')
+    expect(wrapper.text()).toContain('candidate-001')
+    expect(wrapper.text()).toContain('evidence-task-001')
+    expect(wrapper.text()).toContain('Agreed')
+    expect(wrapper.text()).toContain('Publish')
+    expect(wrapper.text()).toContain('verified_bounded_claim_support')
   })
 })

@@ -8,8 +8,8 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI.FileByFileReview;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
@@ -20,6 +20,8 @@ internal sealed class LocalReviewVerificationExecutor(
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
+    public bool IsEnabled => reviewClaimExtractor is not null && reviewFindingVerifier is not null;
+
     public async Task<ReviewResult> ApplyAsync(
         ReviewResult result,
         ReviewFileResult fileResult,
@@ -27,26 +29,23 @@ internal sealed class LocalReviewVerificationExecutor(
         IReadOnlyList<InvariantFact> invariantFacts,
         CancellationToken ct)
     {
+        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, ct)).Result;
+    }
+
+    public async Task<LocalVerificationApplicationResult> ApplyDetailedAsync(
+        ReviewResult result,
+        ReviewFileResult fileResult,
+        Guid? protocolId,
+        IReadOnlyList<InvariantFact> invariantFacts,
+        IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings,
+        CancellationToken ct)
+    {
         if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
         {
-            return result;
+            return new LocalVerificationApplicationResult(result, []);
         }
 
-        var candidateFindings = result.Comments
-            .Select((comment, index) => new CandidateReviewFinding(
-                FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
-                new CandidateFindingProvenance(
-                    CandidateFindingProvenance.PerFileCommentOrigin,
-                    "per_file_review",
-                    fileResult.FilePath,
-                    fileResult.Id,
-                    index + 1),
-                comment.Severity,
-                comment.Message,
-                FileByFileReviewOrchestrator.DetermineCategory(comment),
-                comment.FilePath,
-                FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)))
-            .ToList();
+        var candidateFindings = BuildCandidateFindings(result, fileResult, enrichedCandidateFindings);
 
         var claimsByFindingId = await this.ExtractClaimsByFindingAsync(candidateFindings, protocolId, ct);
         var workItems = candidateFindings
@@ -63,7 +62,7 @@ internal sealed class LocalReviewVerificationExecutor(
 
         if (workItems.Count == 0)
         {
-            return result;
+            return new LocalVerificationApplicationResult(result, candidateFindings);
         }
 
         var outcomes = await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, ct);
@@ -82,22 +81,124 @@ internal sealed class LocalReviewVerificationExecutor(
             .ToHashSet(StringComparer.Ordinal);
         if (withheldFindingIds.Count == 0)
         {
-            return result;
+            return new LocalVerificationApplicationResult(
+                result,
+                candidateFindings.Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId)).ToList());
         }
 
         var verifiedFindings = candidateFindings
             .Where(finding => !outcomesByFindingId.TryGetValue(finding.FindingId, out var findingOutcomes) || AreLocalOutcomesPublishable(findingOutcomes))
+            .Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId))
             .ToList();
         var verifiedComments = verifiedFindings
             .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
             .ToList();
         var verifiedSummary = RewriteLocalVerificationSummary(candidateFindings, verifiedFindings, outcomesByFindingId);
 
-        return result with
+        return new LocalVerificationApplicationResult(
+            result with
+            {
+                Summary = verifiedSummary,
+                Comments = verifiedComments,
+            },
+            candidateFindings.Select(finding => AttachVerificationOutcome(finding, outcomesByFindingId)).ToList());
+    }
+
+    private static List<CandidateReviewFinding> BuildCandidateFindings(
+        ReviewResult result,
+        ReviewFileResult fileResult,
+        IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings)
+    {
+        if (enrichedCandidateFindings is not { Count: > 0 })
         {
-            Summary = verifiedSummary,
-            Comments = verifiedComments,
-        };
+            return result.Comments
+                .Select((comment, index) => new CandidateReviewFinding(
+                    FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.PerFileCommentOrigin,
+                        "per_file_review",
+                        fileResult.FilePath,
+                        fileResult.Id,
+                        index + 1),
+                    comment.Severity,
+                    comment.Message,
+                    FileByFileReviewOrchestrator.DetermineCategory(comment),
+                    comment.FilePath,
+                    FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)))
+                .ToList();
+        }
+
+        var enrichedBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
+        foreach (var finding in enrichedCandidateFindings)
+        {
+            var signature = CreateCommentSignature(finding);
+            if (!enrichedBySignature.TryGetValue(signature, out var queue))
+            {
+                queue = new Queue<CandidateReviewFinding>();
+                enrichedBySignature[signature] = queue;
+            }
+
+            queue.Enqueue(finding);
+        }
+
+        var candidateFindings = new List<CandidateReviewFinding>(result.Comments.Count);
+        foreach (var comment in result.Comments)
+        {
+            var signature = CreateCommentSignature(comment);
+            if (enrichedBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
+            {
+                candidateFindings.Add(queue.Dequeue());
+            }
+        }
+
+        return candidateFindings;
+    }
+
+    private static CandidateReviewFinding AttachVerificationOutcome(
+        CandidateReviewFinding finding,
+        IReadOnlyDictionary<string, IReadOnlyList<VerificationOutcome>> outcomesByFindingId)
+    {
+        if (!outcomesByFindingId.TryGetValue(finding.FindingId, out var outcomes) || outcomes.Count == 0)
+        {
+            return finding;
+        }
+
+        return new CandidateReviewFinding(
+            finding.FindingId,
+            finding.Provenance,
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber,
+            finding.Evidence,
+            finding.CandidateSummaryText,
+            finding.InvariantCheckContext,
+            outcomes[0]);
+    }
+
+    private static string CreateCommentSignature(ReviewComment comment)
+    {
+        return string.Concat(
+            comment.FilePath ?? string.Empty,
+            "|",
+            FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)?.ToString() ?? string.Empty,
+            "|",
+            comment.Severity,
+            "|",
+            comment.Message);
+    }
+
+    private static string CreateCommentSignature(CandidateReviewFinding finding)
+    {
+        return string.Concat(
+            finding.FilePath ?? string.Empty,
+            "|",
+            FileByFileReviewOrchestrator.NormalizeLineNumber(finding.LineNumber)?.ToString() ?? string.Empty,
+            "|",
+            finding.Severity,
+            "|",
+            finding.Message);
     }
 
     private async Task<Dictionary<string, IReadOnlyList<ClaimDescriptor>>> ExtractClaimsByFindingAsync(
@@ -279,4 +380,6 @@ internal sealed class LocalReviewVerificationExecutor(
                     : " candidate findings were dropped by deterministic verification.");
         }
     }
+
+    public sealed record LocalVerificationApplicationResult(ReviewResult Result, IReadOnlyList<CandidateReviewFinding> VerifiedCandidateFindings);
 }

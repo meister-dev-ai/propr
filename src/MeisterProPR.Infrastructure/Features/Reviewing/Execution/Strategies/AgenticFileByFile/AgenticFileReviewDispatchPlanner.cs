@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -10,19 +12,14 @@ using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 
-/// <summary>
-///     Plans and dispatches per-file review work for a PR. This planner owns retry-aware file-result reuse,
-///     exclusion handling, deterministic file ordering, concurrency limiting, and aggregation of per-file review
-///     failures so the orchestrator can reason in terms of successful dispatch vs. partial failure.
-/// </summary>
-internal sealed class FileReviewDispatchPlanner(
+internal sealed class AgenticFileReviewDispatchPlanner(
     IJobRepository jobRepository,
     IProtocolRecorder protocolRecorder,
-    FileReviewer fileReviewer,
+    AgenticFileReviewer fileReviewer,
     AiReviewOptions options,
-    ILogger<FileByFileReviewOrchestrator> logger)
+    ILogger<AgenticFileByFileReviewOrchestrator> logger)
 {
     public async Task<FileReviewDispatchResult> ExecuteAsync(
         ReviewJob job,
@@ -34,26 +31,13 @@ internal sealed class FileReviewDispatchPlanner(
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         var existingResults = jobWithResults.FileReviewResults.ToDictionary(r => r.FilePath);
-        var completedFiles = existingResults
-            .Where(kvp => kvp.Value.IsComplete)
-            .Select(kvp => kvp.Key)
-            .ToHashSet();
+        var selection = ReviewFileSelectionService.SelectFilesForReview(pr.ChangedFiles, existingResults, baseContext.ExclusionRules);
+        var filesToReview = selection.FilesToReview.ToList();
 
-        var filesToReview = pr.ChangedFiles.Where(f => !completedFiles.Contains(f.Path)).ToList();
-
-        if (baseContext.ExclusionRules.HasPatterns)
+        foreach (var excludedFile in selection.ExcludedFiles)
         {
-            var excluded = filesToReview.Where(f => baseContext.ExclusionRules.Matches(f.Path)).ToList();
-            if (excluded.Count > 0)
-            {
-                foreach (var excludedFile in excluded)
-                {
-                    var existingExcluded = existingResults.GetValueOrDefault(excludedFile.Path);
-                    await this.MarkFileExcludedAsync(job, excludedFile, baseContext, existingExcluded, ct);
-                }
-
-                filesToReview = filesToReview.Except(excluded).ToList();
-            }
+            var existingExcluded = existingResults.GetValueOrDefault(excludedFile.Path);
+            await this.MarkFileExcludedAsync(job, excludedFile, baseContext, existingExcluded, ct);
         }
 
         filesToReview =
@@ -65,9 +49,10 @@ internal sealed class FileReviewDispatchPlanner(
         ];
 
         var exceptions = new List<Exception>();
+        var survivingAgenticCandidateFindings = new List<CandidateReviewFinding>();
         if (filesToReview.Count == 0)
         {
-            return new FileReviewDispatchResult(existingResults, exceptions);
+            return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
         }
 
         using var semaphore = new SemaphoreSlim(options.MaxFileReviewConcurrency);
@@ -83,7 +68,7 @@ internal sealed class FileReviewDispatchPlanner(
             {
                 var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
                 var existingResult = existingResults.GetValueOrDefault(file.Path);
-                await fileReviewer.ReviewAsync(
+                var fileAgenticCandidateFindings = await fileReviewer.ReviewAsync(
                     job,
                     pr,
                     file,
@@ -93,6 +78,14 @@ internal sealed class FileReviewDispatchPlanner(
                     existingResult,
                     effectiveClient,
                     ct);
+
+                if (fileAgenticCandidateFindings.Count > 0)
+                {
+                    lock (survivingAgenticCandidateFindings)
+                    {
+                        survivingAgenticCandidateFindings.AddRange(fileAgenticCandidateFindings);
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
@@ -113,7 +106,7 @@ internal sealed class FileReviewDispatchPlanner(
         });
 
         await Task.WhenAll(tasks);
-        return new FileReviewDispatchResult(existingResults, exceptions);
+        return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
     }
 
     private async Task MarkFileExcludedAsync(
@@ -168,5 +161,6 @@ internal sealed class FileReviewDispatchPlanner(
 
     internal sealed record FileReviewDispatchResult(
         IReadOnlyDictionary<string, ReviewFileResult> ExistingResults,
-        IReadOnlyList<Exception> Exceptions);
+        IReadOnlyList<Exception> Exceptions,
+        IReadOnlyList<CandidateReviewFinding> AgenticCandidateFindings);
 }

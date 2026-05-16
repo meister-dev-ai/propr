@@ -62,6 +62,28 @@ public sealed class FixtureReviewContextToolsTests
         Assert.Contains("public string Greet", fileContent);
     }
 
+    [Fact]
+    public void AddReviewEvalHarness_RegistersSharedDispatcherSeamForOfflineExecution()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = "test-review-eval-jwt-secret-32!",
+                })
+            .Build();
+
+        services.AddLogging();
+        services.AddReviewEvalHarness(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IReviewStrategyDispatcher>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IReviewPipelineProfileProvider>());
+    }
+
     private static ReviewEvaluationFixture CreateFixture()
     {
         return new ReviewEvaluationFixture(

@@ -50,6 +50,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Per-automation temperature control** - crawl configurations and webhook configurations can override the review temperature with a value between `0.0` and `2.0`
 - **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
 - **Verification-backed publication control** — structured claim extraction, local contradiction checks, PR-level evidence attempt recording, bounded AI micro-verification, and deterministic final gating reduce false positives without replacing the existing staged review flow; support hints and fetched files do not publish broad findings without explicit supported claim outcomes
+- **Fixed-evidence repeated judgment for uncertain follow-up findings** — selected unresolved deeper-follow-up findings can get one extra bounded judgment over the same evidence set; disagreement stays non-publishable and is visible in diagnostics
 - **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the admin UI
 - **Per-client and per Crawl Config prompt overrides** - Override predefined prompts to improve the AI output towards specific use cases
 
@@ -71,6 +72,8 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Review history** - all reviews, protocols, comments, calls to AI, tools and more are store and can be checked from the management interface
 - **Filter decision diagnostics** — job protocol inspection shows per-file comment-relevance events, discarded-comment reasons, degraded fallback markers, implementation identity, and any hybrid evaluator token cost without reading raw logs
 - **Verification diagnostics** — job protocol inspection also shows claim extraction, local verification, evidence-source attempts, ProCursor result status, degraded verification states, final-gate decisions, and summary reconciliation for each review run
+- **Strategy and file-outcome diagnostics** — review history and job protocol views expose the resolved review strategy, strategy-selection source, and per-file terminal outcomes, including degraded `Agentic File-by-File` investigations
+- **Follow-up and repeated-judgment diagnostics** — job protocol views expose trigger family, follow-up completion/dependency, and repeated-judgment agreement or disagreement details so rollout reviews can distinguish diagnostics from actionable output
 - **Token usage dashboard** — per-client AI token consumption tracked by model and date
 
 ### Knowledge

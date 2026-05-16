@@ -127,6 +127,124 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildAgenticFilePlanningSystemPrompt_ContainsFileScopedPlanningRules()
+    {
+        var prompt = ReviewPrompts.BuildAgenticFilePlanningSystemPrompt(null);
+
+        Assert.Contains("Stage A", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("file-scoped", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("anchor_file_path", prompt, StringComparison.Ordinal);
+        Assert.Contains("investigation_tasks", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildAgenticFilePlanningSystemPrompt_ContainsExplicitTriggerFamilyRules()
+    {
+        var prompt = ReviewPrompts.BuildAgenticFilePlanningSystemPrompt(null);
+
+        Assert.Contains("explicit trigger", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trigger_family", prompt, StringComparison.Ordinal);
+        Assert.Contains("configuration_or_wiring", prompt, StringComparison.Ordinal);
+        Assert.Contains("straightforward files", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildAgenticFilePlanningUserMessage_ContainsAnchorFileAndManifest()
+    {
+        var currentFile = CreateFile("src/Foo.cs", diff: "+services.AddFoo();");
+        var siblingFile = CreateFile("src/Bar.cs");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            42,
+            7,
+            "Refactor registration",
+            "Touches startup and tests.",
+            "feature/foo",
+            "main",
+            [currentFile, siblingFile]);
+
+        var message = ReviewPrompts.BuildAgenticFilePlanningUserMessage(currentFile, pr);
+
+        Assert.Contains("Anchor file: src/Foo.cs", message, StringComparison.Ordinal);
+        Assert.Contains("Changed file manifest", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src/Bar.cs", message, StringComparison.Ordinal);
+        Assert.Contains("+services.AddFoo();", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildAgenticFileInvestigationSystemPrompt_ContainsBoundedInvestigationRules()
+    {
+        var prompt = ReviewPrompts.BuildAgenticFileInvestigationSystemPrompt(null);
+
+        Assert.Contains("Stage B", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bounded", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("candidate_findings", prompt, StringComparison.Ordinal);
+        Assert.Contains("tool_usage", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_WithAgenticPlanDetails_IncludesPlanAndInvestigationArtifacts()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint(
+                "src/Foo.cs",
+                1,
+                2,
+                [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit), new ChangedFileSummary("src/Bar.cs", ChangeType.Edit)])
+            {
+                AgenticPlan = new AgenticFileReviewPlan(
+                    "plan-001",
+                    "src/Foo.cs",
+                    ["Check DI registration changes."],
+                    ["src/Foo.cs", "src/Bar.cs"],
+                    [
+                        new AgenticFileInvestigationTask(
+                            "task-001",
+                            "concern",
+                            "bounded_sibling_context",
+                            "Check DI registration changes.",
+                            ["src/Foo.cs", "src/Bar.cs"],
+                            ["get_file_content", "get_file_tree"],
+                            2),
+                    ]),
+                AgenticInvestigations =
+                [
+                    new AgenticFileInvestigationResult(
+                        "task-001",
+                        "completed",
+                        [new EvidenceItem("file_content", "Captured sibling registration file.", "src/Bar.cs")],
+                        [
+                            new AgenticFileCandidateFinding(
+                                "candidate-001",
+                                "Registration updates in src/Foo.cs rely on sibling wiring in src/Bar.cs.",
+                                CandidateReviewFinding.PerFileCommentCategory,
+                                new ConfidenceScore("correctness", 84),
+                                new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "agentic_file_investigation"),
+                                ["src/Foo.cs", "src/Bar.cs"],
+                                CommentSeverity.Warning,
+                                "src/Foo.cs",
+                                12),
+                        ],
+                        [new AgenticFileToolUsage("get_file_content", "success", "src/Bar.cs")],
+                        false),
+                ],
+            },
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 2);
+
+        Assert.Contains("Agentic file plan", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("plan-001", prompt, StringComparison.Ordinal);
+        Assert.Contains("task-001", prompt, StringComparison.Ordinal);
+        Assert.Contains("Captured sibling registration file.", prompt, StringComparison.Ordinal);
+        Assert.Contains("Registration updates in src/Foo.cs rely on sibling wiring", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPrWideSynthesisUserMessage_ContainsInvestigationCandidatesAndTaskIds()
     {
         var plan = new PrWideReviewPlan(

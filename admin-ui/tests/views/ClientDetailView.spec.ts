@@ -299,6 +299,30 @@ describe('ClientDetailView', () => {
     )
   })
 
+  it('loads and saves the agentic file-by-file default review strategy from advanced settings', async () => {
+    mockGet.mockResolvedValue({ data: sampleClient })
+    mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'agenticFileByFile' }, response: { ok: true } })
+
+    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const strategySelect = wrapper.find('select[name="defaultReviewStrategy"]')
+    expect(strategySelect.exists()).toBe(true)
+
+    await strategySelect.setValue('agenticFileByFile')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(mockPatch).toHaveBeenCalledWith(
+      '/clients/{clientId}',
+      expect.objectContaining({
+        params: { path: { clientId: 'client-1' } },
+        body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true },
+      })
+    )
+  })
+
   it('shows not-found message and navigates home on 404', async () => {
     mockGet.mockResolvedValue({ data: null, response: { status: 404, ok: false } })
     const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')

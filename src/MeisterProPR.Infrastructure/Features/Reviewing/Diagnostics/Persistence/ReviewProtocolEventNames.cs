@@ -10,6 +10,13 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 public static class ReviewProtocolEventNames
 {
     public const string ReviewStrategySelected = "review_strategy_selected";
+    public const string AgenticFilePlanCreated = "agentic_file_plan_created";
+    public const string AgenticFileInvestigationLaunched = "agentic_file_investigation_launched";
+    public const string AgenticFileInvestigationResult = "agentic_file_investigation_result";
+    public const string AgenticFileEvidenceCollected = "agentic_file_evidence_collected";
+    public const string AgenticFileDegraded = "agentic_file_degraded";
+    public const string AgenticFileFollowUpDependencyRecorded = "agentic_file_follow_up_dependency_recorded";
+    public const string AgenticFileFollowUpDiagnosticsOnly = "agentic_file_follow_up_diagnostics_only";
     public const string PrWidePlanCreated = "pr_wide_plan_created";
     public const string PrWideInvestigationLaunched = "pr_wide_investigation_launched";
     public const string PrWideInvestigationResult = "pr_wide_investigation_result";
@@ -33,4 +40,5 @@ public static class ReviewProtocolEventNames
     public const string VerificationPrDecision = "verification_pr_decision";
     public const string SummaryReconciliation = "summary_reconciliation";
     public const string VerificationDegraded = "verification_degraded";
+    public const string RepeatedJudgmentDecision = "repeated_judgment_decision";
 }

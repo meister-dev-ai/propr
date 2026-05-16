@@ -4,7 +4,7 @@
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 internal sealed partial class FileReviewer
 {

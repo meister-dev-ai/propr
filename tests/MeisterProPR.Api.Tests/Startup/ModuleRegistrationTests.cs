@@ -93,6 +93,7 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
+        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IScmProviderRegistry>(services));
         Assert.NotNull(FindService<IRepositoryDiscoveryProvider>(services));
         Assert.NotNull(FindService<ICodeReviewQueryService>(services));
@@ -115,6 +116,20 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IProtocolRecorder>(services));
         Assert.NotNull(FindService<IReviewWorkflowRunner>(services));
         Assert.NotNull(FindService<IEvaluationArtifactWriter>(services));
+    }
+
+    [Fact]
+    public void ReviewingModule_RegistersReviewingOwnedStrategyPorts()
+    {
+        var services = new ServiceCollection();
+        var configuration = CreateConfiguration(true);
+
+        services.AddInfrastructureSupport(configuration);
+        services.AddReviewingModule(configuration);
+
+        Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
+        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
+        Assert.NotNull(FindService<IPrWideAgenticReviewOrchestrator>(services));
     }
 
     [Fact]
@@ -192,6 +207,7 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
+        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IProCursorGateway>(services));
         Assert.NotNull(FindService<IScmProviderRegistry>(services));
         Assert.NotNull(FindService<IRepositoryDiscoveryProvider>(services));

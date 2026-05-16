@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
-using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -14,7 +14,9 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 /// <summary>Routes review execution to the orchestrator selected by the job strategy snapshot.</summary>
 public sealed class ReviewStrategyDispatcher(
     IFileByFileReviewOrchestrator fileByFileOrchestrator,
-    IPrWideAgenticReviewOrchestrator? prWideAgenticReviewOrchestrator = null) : IReviewStrategyDispatcher
+    IAgenticFileByFileReviewOrchestrator? agenticFileByFileReviewOrchestrator = null,
+    IPrWideAgenticReviewOrchestrator? prWideAgenticReviewOrchestrator = null,
+    IReviewPipelineProfileProvider? pipelineProfileProvider = null) : IReviewStrategyDispatcher
 {
     /// <inheritdoc />
     public Task<ReviewResult> ReviewAsync(
@@ -22,10 +24,25 @@ public sealed class ReviewStrategyDispatcher(
         PullRequest pr,
         ReviewSystemContext baseContext,
         CancellationToken ct,
-        IChatClient? overrideClient = null)
+        IChatClient? overrideClient = null,
+        string? pipelineProfileId = null)
     {
+        if (!string.IsNullOrWhiteSpace(pipelineProfileId) && pipelineProfileProvider is not null)
+        {
+            var hasMatchingProfile = pipelineProfileProvider
+                .GetProfiles(job.ReviewStrategy)
+                .Any(profile => string.Equals(profile.ProfileId, pipelineProfileId, StringComparison.Ordinal));
+
+            if (!hasMatchingProfile)
+            {
+                throw new InvalidOperationException($"No Reviewing pipeline profile '{pipelineProfileId}' is registered for strategy '{job.ReviewStrategy}'.");
+            }
+        }
+
         return job.ReviewStrategy switch
         {
+            ReviewStrategy.AgenticFileByFile when agenticFileByFileReviewOrchestrator is not null =>
+                agenticFileByFileReviewOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),
             ReviewStrategy.PrWideAgentic when prWideAgenticReviewOrchestrator is not null =>
                 prWideAgenticReviewOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),
             _ => fileByFileOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),

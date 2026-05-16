@@ -41,7 +41,8 @@
         data-testid="client-review-strategy-select"
         name="defaultReviewStrategy"
       >
-        <option value="fileByFile">File by File</option>
+        <option value="fileByFile">File-by-File</option>
+        <option value="agenticFileByFile">Agentic File-by-File</option>
         <option value="prWideAgentic">PR-wide Agentic</option>
       </select>
       <span class="field-hint">Controls how new review jobs run by default for this client.</span>

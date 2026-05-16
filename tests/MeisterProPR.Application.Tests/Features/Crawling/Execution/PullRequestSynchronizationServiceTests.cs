@@ -376,6 +376,83 @@ public sealed class PullRequestSynchronizationServiceTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SynchronizeAsync_WhenAgenticFileByFileClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+        clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.AgenticFileByFile);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            clientRegistry: clientRegistry);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+            {
+                CandidateIterationId = 7,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job =>
+                    job.ReviewStrategy == ReviewStrategy.AgenticFileByFile &&
+                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
+                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
+                    job.ReviewPublicationMode == ReviewPublicationMode.Publish),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenAgenticFileByFileOverrideExists_PrefersOverrideOverClientDefault()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+        clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.FileByFile);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            clientRegistry: clientRegistry);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+            {
+                CandidateIterationId = 7,
+                ReviewStrategy = ReviewStrategy.AgenticFileByFile,
+                ComparisonMode = ReviewComparisonMode.Single,
+                PublicationMode = ReviewPublicationMode.Publish,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job =>
+                    job.ReviewStrategy == ReviewStrategy.AgenticFileByFile &&
+                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.JobOverride &&
+                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
+                    job.ReviewPublicationMode == ReviewPublicationMode.Publish),
+                Arg.Any<CancellationToken>());
+    }
+
     private static PullRequestSynchronizationRequest CreateRequest(
         PullRequestActivationSource activationSource,
         string summaryLabel)

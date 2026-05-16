@@ -4,6 +4,19 @@ This page covers the runtime path from provider-neutral review submission to pos
 comments, plus the filtering, verification, synthesis, final-gate, dedup, and token-control
 mechanics that keep the review loop safe and efficient.
 
+## Review Strategies
+
+The Reviewing module exposes three persisted `ReviewStrategy` values:
+
+- `FileByFile`: the baseline per-file review path.
+- `AgenticFileByFile`: the per-file mode that adds a bounded planning and investigation stage
+  ahead of the existing trust-preserving file pipeline.
+- `PrWideAgentic`: the PR-wide planning and investigation mode.
+
+`AgenticFileByFile` reuses the existing file-result ownership, local verification, PR-level
+verification, final finding gate, summary reconciliation, and publication flow. It does not replace
+the baseline `FileByFile` mode.
+
 ## Review Submission And Execution
 
 ```mermaid
@@ -45,6 +58,8 @@ accepts provider-neutral repository, review, and revision identities for Azure D
 GitLab, and Forgejo-family reviews. The worker claims the job, resolves the provider-specific query
 and publication adapters through the shared provider registry, runs the AI review, and posts
 comment threads back to the originating provider.
+
+Production execution enters through `ReviewOrchestrationService`, and offline evaluation enters through `ReviewWorkflowRunner`. Both flows resolve strategy and profile routing through `IReviewStrategyDispatcher`.
 
 Provider operational readiness is evaluated separately from onboarding verification. A provider
 connection can be verified and ready for onboarding while lacking workflow-complete proof, such as
@@ -101,40 +116,51 @@ flowchart TD
 ```
 
 1. `ReviewOrchestrationService.BuildReviewContextAsync(...)` creates `ReviewSystemContext` with
-   repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
-   runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
+    repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
+    runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
 2. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
-   `get_changed_files`, `get_file_tree`, `get_file_content`, `ask_procursor_knowledge`, and
-   `get_procursor_symbol_info` while investigating a finding.
-3. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
-   `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
-   thread-memory reconsideration before extracting structured claims and running local verification.
-   Deterministic contradiction checks use curated invariant facts, while evidence-needing local
-   generic claims are withheld conservatively until a bounded verifier can support them.
-4. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
-   Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
-   stored comment set, and the per-file summary is rewritten from the surviving verified findings so
-   synthesis input does not repeat unsupported local assertions.
-5. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
-   runtime, and asks the model for both a PR narrative summary and structured synthesized
-   cross-cutting findings.
-6. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
-   `supportingFindingIds`, `supportingFiles`, `evidenceResolutionState`, and `evidenceSource`.
-   These fields are retrieval hints only; fetched files or support metadata do not prove a claim.
-7. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
-   instances. PR-level findings then route through targeted verification work items, evidence
-   retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
-   Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
-   states in the evidence bundle.
-8. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
-   and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
-9. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
-   surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
-10. The protocol records machine-readable verification and final-gate events, including
-    `verification_claims_extracted`, `verification_local_decision`,
-    `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
-    `summary_reconciliation`, `review_finding_gate_summary`, and
-    `review_finding_gate_decision`.
+    `get_changed_files`, `get_file_tree`, `get_file_content`, `ask_procursor_knowledge`, and
+    `get_procursor_symbol_info` while investigating a finding.
+3. When the job strategy is `AgenticFileByFile`, `FileReviewer` first runs a file-scoped planning
+   step (`agentic_file_planning`) and then executes bounded investigation tasks before emitting the
+   same per-file result shape used by the baseline pipeline. Protocol events record
+   `review_strategy_selected`, `agentic_file_plan_created`, `agentic_file_investigation_launched`,
+   `agentic_file_investigation_result`, `agentic_file_evidence_collected`, and
+   `agentic_file_degraded` when investigation falls back.
+4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
+    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
+    thread-memory reconsideration before extracting structured claims and running local verification.
+    Deterministic contradiction checks use curated invariant facts, while evidence-needing local
+    generic claims are withheld conservatively until a bounded verifier can support them.
+5. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
+    Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
+    stored comment set, and the per-file summary is rewritten from the surviving verified findings so
+    synthesis input does not repeat unsupported local assertions.
+6. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
+    runtime, and asks the model for both a PR narrative summary and structured synthesized
+    cross-cutting findings.
+7. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
+    `supportingFindingIds`, `supportingFiles`, `evidenceResolutionState`, and `evidenceSource`.
+    These fields are retrieval hints only; fetched files or support metadata do not prove a claim.
+8. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
+    instances. PR-level findings then route through targeted verification work items, evidence
+    retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
+    Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
+    states in the evidence bundle.
+9. Eligible unresolved deeper-follow-up findings may enter one repeated-judgment pass. That pass
+    reuses the same bounded evidence set and claim identity from the prior PR-level verification path;
+    it does not widen search, re-run Stage B planning, or fetch broader repository context.
+10. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
+     and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
+11. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
+     surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
+12. The protocol records machine-readable verification and final-gate events, including
+      `verification_claims_extracted`, `verification_local_decision`,
+      `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
+      `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
+      `review_finding_gate_decision`.
+
+For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The baseline and experimental profiles differ by ordered stage composition rather than by introducing a new top-level orchestrator.
 
 ## Final Finding Gate Rules
 
@@ -144,6 +170,8 @@ flowchart TD
 - Findings with explicit contradiction-backed local verification outcomes are dropped by the gate.
 - Evidence-needing local generic findings that do not gain bounded support are withheld before
   persistence, so they do not re-enter the publish path through synthesis or final gating.
+- Repeated-judgment findings publish only when the repeated pass recorded agreement on the same
+  evidence set. Disagreement without explicit support is dropped.
 - Findings with degraded or unresolved verification outcomes are treated conservatively by
    preferring `SummaryOnly` over `Publish`.
 - Broad weak categories (`architecture`, `documentation`, `test`, `ui`, `configuration`, and

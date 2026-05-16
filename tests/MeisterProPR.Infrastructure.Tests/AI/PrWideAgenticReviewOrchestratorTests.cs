@@ -1,21 +1,17 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;

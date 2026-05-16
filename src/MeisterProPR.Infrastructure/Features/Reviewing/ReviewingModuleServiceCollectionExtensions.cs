@@ -1,12 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.AI;
-using MeisterProPR.Infrastructure.AI.FileByFileReview;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
@@ -16,6 +17,9 @@ using MeisterProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
@@ -86,6 +90,21 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetRequiredService<IJobRepository>(),
             sp.GetRequiredService<IOptions<AiReviewOptions>>().Value,
             sp.GetRequiredService<ILogger<FileByFileReviewOrchestrator>>(),
+            sp.GetService<IReviewPipeline<PerFileReviewContext>>(),
+            sp.GetService<IAiConnectionRepository>(),
+            sp.GetService<IAiChatClientFactory>(),
+            sp.GetService<IThreadMemoryService>(),
+            sp.GetService<IAiRuntimeResolver>(),
+            sp.GetService<CommentRelevanceFilterExecutor>(),
+            sp.GetServices<IReviewInvariantFactProvider>(),
+            sp.GetService<LocalReviewVerificationExecutor>()));
+        services.AddScoped<AgenticFileReviewer>(sp => new AgenticFileReviewer(
+            sp.GetRequiredService<ApplicationIAiReviewCore>(),
+            sp.GetRequiredService<IProtocolRecorder>(),
+            sp.GetRequiredService<IJobRepository>(),
+            sp.GetRequiredService<IOptions<AiReviewOptions>>().Value,
+            sp.GetRequiredService<ILogger<AgenticFileByFileReviewOrchestrator>>(),
+            sp.GetService<IReviewPipeline<PerFileReviewContext>>(),
             sp.GetService<IAiConnectionRepository>(),
             sp.GetService<IAiChatClientFactory>(),
             sp.GetService<IThreadMemoryService>(),
@@ -117,6 +136,25 @@ public static class ReviewingModuleServiceCollectionExtensions
             services.AddScoped<IReviewWorkflowRunner, ReviewWorkflowRunner>();
         }
 
+        services.AddScoped<IAgenticFileByFileReviewOrchestrator>(sp => new AgenticFileByFileReviewOrchestrator(
+            sp.GetRequiredService<IProtocolRecorder>(),
+            sp.GetRequiredService<IJobRepository>(),
+            null,
+            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
+            sp.GetRequiredService<ILogger<AgenticFileByFileReviewOrchestrator>>(),
+            sp.GetRequiredService<AgenticFileReviewer>(),
+            sp.GetService<AgenticFileReviewDispatchPlanner>(),
+            sp.GetService<AgenticReviewSynthesisExecutor>(),
+            sp.GetService<AgenticCandidateFindingFactory>(),
+            sp.GetService<QualityFilterExecutor>(),
+            sp.GetService<PrLevelReviewVerificationExecutor>(),
+            sp.GetService<IAiConnectionRepository>(),
+            sp.GetService<IAiChatClientFactory>(),
+            sp.GetService<IAiRuntimeResolver>(),
+            sp.GetService<IDeterministicReviewFindingGate>(),
+            sp.GetServices<IReviewInvariantFactProvider>(),
+            sp.GetService<IReviewClaimExtractor>(),
+            sp.GetService<ISummaryReconciliationService>()));
         services.AddScoped<IPrWideAgenticReviewOrchestrator, PrWideAgenticReviewOrchestrator>();
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
 

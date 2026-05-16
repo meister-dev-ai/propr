@@ -182,6 +182,51 @@ public sealed class FileByFileReviewOrchestratorFinalGateTests
         Assert.Null(publishedComment.LineNumber);
     }
 
+    [Fact]
+    public async Task ReviewAsync_DirectPerFileFinding_DoesNotRequireExplicitSupportToPublish()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("file summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Direct file finding remains publishable.")]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepository(job, storedResults);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var sut = new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" }),
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
+            deterministicReviewFindingGate: new DeterministicReviewFindingGate(),
+            reviewInvariantFactProviders: [new StubInvariantFactProvider([])]);
+
+        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+
+        var publishedComment = Assert.Single(result.Comments);
+        Assert.Equal("Direct file finding remains publishable.", publishedComment.Message);
+
+        await protocolRecorder.Received()
+            .RecordReviewFindingGateEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Is<string>(name => name == ReviewProtocolEventNames.ReviewFindingGateDecision),
+                Arg.Any<string?>(),
+                Arg.Is<string?>(output => output != null
+                                          && output.Contains("\"disposition\":\"Publish\"", StringComparison.Ordinal)
+                                          && output.Contains("default_publish", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
     private static ReviewJob CreateJob()
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);

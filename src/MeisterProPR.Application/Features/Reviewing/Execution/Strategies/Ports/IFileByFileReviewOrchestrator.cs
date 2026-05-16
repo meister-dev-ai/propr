@@ -7,7 +7,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 
-namespace MeisterProPR.Application.Interfaces;
+namespace MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 
 /// <summary>
 ///     Orchestrates a pull request review by iterating through each changed file independently.

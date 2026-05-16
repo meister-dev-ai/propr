@@ -16,5 +16,6 @@ public interface IReviewStrategyDispatcher
         PullRequest pr,
         ReviewSystemContext baseContext,
         CancellationToken ct,
-        IChatClient? overrideClient = null);
+        IChatClient? overrideClient = null,
+        string? pipelineProfileId = null);
 }

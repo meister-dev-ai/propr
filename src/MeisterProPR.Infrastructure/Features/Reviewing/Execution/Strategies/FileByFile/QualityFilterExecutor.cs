@@ -10,7 +10,7 @@ using MeisterProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 /// <summary>
 ///     Runs the cross-file quality-filter AI pass and parses its structured output. This executor is responsible

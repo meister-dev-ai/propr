@@ -35,7 +35,7 @@ public sealed class LocalReviewVerificationExecutorTests
         Assert.Same(result, actual);
         Assert.NotNull(capturedFinding);
         Assert.Null(capturedFinding!.LineNumber);
-        _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!, default);
+        _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class LocalReviewVerificationExecutorTests
         var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), protocolId, [], CancellationToken.None);
 
         Assert.Same(result, actual);
-        _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!, default);
+        _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
         await protocolRecorder.Received().RecordVerificationEventAsync(
             Arg.Is(protocolId),
             Arg.Is(ReviewProtocolEventNames.VerificationDegraded),
@@ -147,6 +147,90 @@ public sealed class LocalReviewVerificationExecutorTests
             Arg.Is<string?>(value => value == null),
             Arg.Is<string?>(value => value == "claim extraction failed"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyDetailedAsync_EnrichedAgenticFinding_PreservesProvenanceAndVerificationOutcome()
+    {
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>())
+            .Returns(callInfo =>
+            {
+                var finding = callInfo.Arg<CandidateReviewFinding>();
+                return
+                [
+                    new ClaimDescriptor(
+                        $"claim-{finding.FindingId}",
+                        finding.FindingId,
+                        ClaimDescriptor.LocalStage,
+                        CandidateReviewFinding.DockerFinalStageRootUserClaimKind,
+                        finding.Message,
+                        finding.Severity,
+                        ClaimDescriptor.DeterministicOnlyMode,
+                        ClaimDescriptor.OperationalRiskFamily,
+                        anchorFilePath: finding.FilePath,
+                        anchorLineNumber: finding.LineNumber),
+                ];
+            });
+
+        var verifier = Substitute.For<IReviewFindingVerifier>();
+        verifier.VerifyAsync(Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var workItems = callInfo.Arg<IReadOnlyList<VerificationWorkItem>>();
+                return Task.FromResult<IReadOnlyList<VerificationOutcome>>(
+                [
+                    new VerificationOutcome(
+                        $"claim-{workItems[0].Claim.FindingId}",
+                        workItems[0].Claim.FindingId,
+                        VerificationOutcome.SupportedKind,
+                        FinalGateDecision.PublishDisposition,
+                        [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+                        [],
+                        VerificationOutcome.StrongEvidence,
+                        "Deterministic verifier confirmed the objective follow-up claim.",
+                        VerificationOutcome.DeterministicRulesEvaluator,
+                        false),
+                ]);
+            });
+
+        var sut = new LocalReviewVerificationExecutor(extractor, verifier, CreateProtocolRecorder());
+        var fileResult = new ReviewFileResult(Guid.NewGuid(), "Dockerfile");
+        var enrichedFinding = new CandidateReviewFinding(
+            "candidate-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.DeeperFollowUpOrigin,
+                "agentic_file_investigation",
+                "Dockerfile",
+                evidenceSetId: "evidence-docker-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "task-001"),
+            CommentSeverity.Warning,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "Dockerfile",
+            8);
+
+        var verification = await sut.ApplyDetailedAsync(
+            new ReviewResult(
+                "Original summary should be rewritten.",
+                [
+                    new ReviewComment(
+                        "Dockerfile", 8, CommentSeverity.Warning, "The final Docker stage runs as root because a runtime USER directive is missing."),
+                ]),
+            fileResult,
+            Guid.NewGuid(),
+            [],
+            [enrichedFinding],
+            CancellationToken.None);
+
+        var verifiedFinding = Assert.Single(verification.VerifiedCandidateFindings);
+        Assert.Equal(CandidateFindingProvenance.DeeperFollowUpOrigin, verifiedFinding.Provenance.OriginKind);
+        Assert.True(verifiedFinding.Provenance.RequiresExplicitSupport);
+        Assert.Equal(VerificationOutcome.SupportedKind, verifiedFinding.VerificationOutcome?.OutcomeKind);
+
+        var publishedComment = Assert.Single(verification.Result.Comments);
+        Assert.Equal("The final Docker stage runs as root because a runtime USER directive is missing.", publishedComment.Message);
     }
 
     private static IProtocolRecorder CreateProtocolRecorder()

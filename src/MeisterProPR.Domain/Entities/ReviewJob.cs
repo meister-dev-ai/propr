@@ -237,6 +237,9 @@ public sealed class ReviewJob
     /// <summary>Comparison group shared by related strategy runs, when applicable.</summary>
     public Guid? ComparisonGroupId { get; private set; }
 
+    /// <summary>Optional internal pipeline profile selection captured with the strategy snapshot.</summary>
+    public string? ReviewPipelineProfileId { get; private set; }
+
     /// <summary>
     ///     Snapshotted ProCursor source-scope mode captured when this job was queued.
     /// </summary>
@@ -336,13 +339,15 @@ public sealed class ReviewJob
         ReviewStrategySelectionSource source,
         ReviewComparisonMode comparisonMode,
         ReviewPublicationMode publicationMode,
-        Guid? comparisonGroupId)
+        Guid? comparisonGroupId,
+        string? pipelineProfileId = null)
     {
         this.ReviewStrategy = strategy;
         this.ReviewStrategySelectionSource = source;
         this.ReviewComparisonMode = comparisonMode;
         this.ReviewPublicationMode = publicationMode;
         this.ComparisonGroupId = comparisonGroupId;
+        this.ReviewPipelineProfileId = string.IsNullOrWhiteSpace(pipelineProfileId) ? null : pipelineProfileId;
     }
 
     /// <summary>Stores the immutable strategy selection snapshot for this job.</summary>
@@ -354,7 +359,8 @@ public sealed class ReviewJob
             selection.Source,
             selection.ComparisonMode,
             selection.PublicationMode,
-            selection.ComparisonGroupId);
+            selection.ComparisonGroupId,
+            selection.PipelineProfileId);
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

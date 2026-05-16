@@ -11,4 +11,7 @@ public enum ReviewStrategy
 
     /// <summary>Planned PR-wide staged agentic review pipeline.</summary>
     PrWideAgentic,
+
+    /// <summary>Plan-driven per-file review pipeline with bounded file-scoped investigation.</summary>
+    AgenticFileByFile,
 }

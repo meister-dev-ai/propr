@@ -11,6 +11,7 @@ obj/
 out/
 analysis/
 .publish/
+*.lscache
 
 # Visual Studio
 *.user

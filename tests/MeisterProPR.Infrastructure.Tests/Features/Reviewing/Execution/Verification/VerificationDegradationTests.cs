@@ -123,6 +123,46 @@ public sealed class VerificationDegradationTests
         Assert.False(outcome.BlocksPublication);
     }
 
+    [Fact]
+    public async Task DeterministicLocalReviewVerifier_AgenticObjectiveClaim_ReturnsSupportedPublishOutcome()
+    {
+        var sut = new DeterministicLocalReviewVerifier();
+        var claim = new ClaimDescriptor(
+            "claim-obj-1",
+            "finding-obj-1",
+            ClaimDescriptor.LocalStage,
+            CandidateReviewFinding.DockerFinalStageRootUserClaimKind,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.DeterministicOnlyMode,
+            ClaimDescriptor.OperationalRiskFamily,
+            anchorFilePath: "Dockerfile",
+            anchorLineNumber: 8);
+
+        var outcomes = await sut.VerifyAsync(
+            [
+                new VerificationWorkItem(
+                    claim,
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.DeeperFollowUpOrigin,
+                        "agentic_file_investigation",
+                        "Dockerfile",
+                        evidenceSetId: "evidence-docker-001",
+                        requiresExplicitSupport: true,
+                        sourceOriginId: "task-001"),
+                    ClaimDescriptor.LocalStage,
+                    VerificationWorkItem.AnchorOnlyScope,
+                    false),
+            ],
+            [],
+            CancellationToken.None);
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(VerificationOutcome.SupportedKind, outcome.OutcomeKind);
+        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, outcome.ReasonCodes);
+    }
+
     private sealed class ThrowingInvariantFactList : List<InvariantFact>, IReadOnlyList<InvariantFact>
     {
         public new IEnumerator<InvariantFact> GetEnumerator()

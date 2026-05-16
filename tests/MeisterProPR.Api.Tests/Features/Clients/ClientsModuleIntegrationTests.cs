@@ -6,6 +6,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Api.Tests.Controllers;
+using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Data.Models;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Api.Tests.Features.Clients;
 
@@ -70,6 +73,56 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
         Assert.DoesNotContain("super-secret-value", payload, StringComparison.Ordinal);
         var body = JsonDocument.Parse(payload).RootElement;
         Assert.False(body.TryGetProperty("hasAdoCredentials", out _));
+    }
+
+    [Fact]
+    public async Task CreateClient_WithAgenticFileByFileDefaultStrategy_PersistsAndReturnsIt()
+    {
+        var http = factory.CreateClient();
+        var tenantId = Guid.NewGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = tenantId,
+                    Slug = $"tenant-{tenantId:N}",
+                    DisplayName = "Agentic Tenant",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/clients");
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        createRequest.Content = JsonContent.Create(
+            new
+            {
+                displayName = $"Agentic Client {Guid.NewGuid():N}",
+                tenantId,
+                defaultReviewStrategy = "agenticFileByFile",
+            });
+
+        var createResponse = await http.SendAsync(createRequest);
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("agenticFileByFile", created.GetProperty("defaultReviewStrategy").GetString());
+
+        var clientId = created.GetProperty("id").GetGuid();
+        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
+        getRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var getResponse = await http.SendAsync(getRequest);
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var body = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("agenticFileByFile", body.GetProperty("defaultReviewStrategy").GetString());
     }
 }
 

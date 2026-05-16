@@ -6,7 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
-namespace MeisterProPR.Infrastructure.AI;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 
 internal static class PrWideArtifactParser
 {
@@ -208,8 +208,7 @@ internal static class PrWideArtifactParser
                         ParseSeverity(item),
                         GetString(item, "file_path") ?? GetString(item, "anchor_file_path"),
                         GetInt(item, "line_number") ?? GetInt(item, "anchor_line_number"),
-                        GetString(item, "candidate_summary_text"),
-                        null));
+                        GetString(item, "candidate_summary_text")));
             }
 
             synthesis = new PrWideSynthesisResult(

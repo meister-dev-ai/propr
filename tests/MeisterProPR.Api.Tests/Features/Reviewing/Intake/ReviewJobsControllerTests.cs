@@ -162,6 +162,42 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
+    public async Task SubmitReview_WithAgenticFileByFileOverride_ReturnsResolvedStrategyFields()
+    {
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var request = CreateAzureDevOpsRequest() with
+        {
+            ReviewStrategy = ReviewStrategy.AgenticFileByFile,
+            ComparisonMode = ReviewComparisonMode.Single,
+            PublicationMode = ReviewPublicationMode.Publish,
+        };
+
+        store.FindActiveJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns((ReviewJob?)null);
+        store.CreatePendingJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var dto = call.Arg<SubmitReviewJobRequestDto>();
+                var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
+                job.SelectReviewStrategy(dto.ResolvedReviewStrategySelection!);
+                return job;
+            });
+
+        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
+
+        var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
+
+        var accepted = Assert.IsType<AcceptedResult>(result);
+        var payload = Assert.IsType<ReviewJobAcceptedResponse>(accepted.Value);
+        Assert.Equal(ReviewStrategy.AgenticFileByFile, payload.ResolvedReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.JobOverride, payload.StrategySelectionSource);
+        Assert.Equal(ReviewComparisonMode.Single, payload.ComparisonMode);
+        Assert.Equal(ReviewPublicationMode.Publish, payload.PublicationMode);
+    }
+
+    [Fact]
     public async Task GetReview_ReturnsStrategySnapshotFields()
     {
         var jobId = Guid.NewGuid();
@@ -187,6 +223,32 @@ public sealed class ReviewJobsControllerTests
         Assert.Equal(ReviewStrategySelectionSource.ClientDefault, payload.StrategySelectionSource);
         Assert.Equal(ReviewPublicationMode.InternalOnly, payload.PublicationMode);
         Assert.Equal(comparisonGroupId, payload.ComparisonGroupId);
+    }
+
+    [Fact]
+    public async Task GetReview_ReturnsAgenticFileByFileStrategySnapshotFields()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
+
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.GetReview(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
+        Assert.Equal(ReviewStrategy.AgenticFileByFile, payload.ResolvedReviewStrategy);
+        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, payload.StrategySelectionSource);
+        Assert.Equal(ReviewPublicationMode.Publish, payload.PublicationMode);
     }
 
     [Fact]

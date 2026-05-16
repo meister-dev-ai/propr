@@ -3499,11 +3499,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolves candidate reviewer identities for one client provider connection. */
+        /** Resolves candidate reviewer-trigger identities for one client provider connection. */
         get: {
             parameters: {
                 query?: {
-                    /** @description Search text used to find reviewer identities. */
+                    /** @description Search text used to find reviewer-trigger candidates. */
                     search?: string;
                 };
                 header?: never;
@@ -3517,7 +3517,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Reviewer identity candidates found. */
+                /** @description Reviewer-trigger identity candidates found. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -3600,7 +3600,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Gets the configured reviewer identity for one client provider connection. */
+        /** Gets the configured reviewer-trigger identity for one client provider connection. */
         get: {
             parameters: {
                 query?: never;
@@ -3615,7 +3615,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Configured reviewer identity found. */
+                /** @description Configured reviewer-trigger identity found. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -3648,7 +3648,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client provider connection or reviewer identity not found. */
+                /** @description Client provider connection or reviewer-trigger identity not found. */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -3661,7 +3661,7 @@ export interface paths {
                 };
             };
         };
-        /** Creates or replaces the configured reviewer identity for one client provider connection. */
+        /** Creates or replaces the configured reviewer-trigger identity for one client provider connection. */
         put: {
             parameters: {
                 query?: never;
@@ -3674,7 +3674,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Reviewer identity details. */
+            /** @description Reviewer-trigger identity details. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["SetClientReviewerIdentityRequest"];
@@ -3683,7 +3683,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Reviewer identity stored. */
+                /** @description Reviewer-trigger identity stored. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -3741,7 +3741,7 @@ export interface paths {
             };
         };
         post?: never;
-        /** Clears the configured reviewer identity for one client provider connection. */
+        /** Clears the configured reviewer-trigger identity for one client provider connection. */
         delete: {
             parameters: {
                 query?: never;
@@ -3756,7 +3756,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Reviewer identity cleared. */
+                /** @description Reviewer-trigger identity cleared. */
                 204: {
                     headers: {
                         [name: string]: unknown;
@@ -4949,6 +4949,254 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/propr/procursor/broker/scm/materialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Materializes repository content for a tracked ProCursor branch. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description SCM materialization request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                    "text/json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                    "application/*+json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                };
+            };
+            responses: {
+                /** @description The repository content was materialized. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source or branch was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current source state. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/broker/scm/branch-head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolves the latest commit SHA for a tracked ProCursor branch. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Tracked-branch head request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                    "text/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                    "application/*+json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                };
+            };
+            responses: {
+                /** @description The latest branch head was resolved. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source or branch was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current source state. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/broker/embeddings/deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolves the embedding deployment configuration for a client. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Embedding deployment request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorEmbeddingDeploymentRequest"];
+                    "text/json": components["schemas"]["ProCursorEmbeddingDeploymentRequest"];
+                    "application/*+json": components["schemas"]["ProCursorEmbeddingDeploymentRequest"];
+                };
+            };
+            responses: {
+                /** @description The deployment configuration was resolved. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The client or deployment was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current embedding configuration. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/broker/embeddings/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generates embeddings for a batch of inputs through the ProPR broker. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Embedding batch request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorEmbeddingBatchRequest"];
+                    "text/json": components["schemas"]["ProCursorEmbeddingBatchRequest"];
+                    "application/*+json": components["schemas"]["ProCursorEmbeddingBatchRequest"];
+                };
+            };
+            responses: {
+                /** @description Embeddings were generated successfully. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The client or deployment was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current embedding configuration. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/clients/{clientId}/procursor/sources": {
         parameters: {
             query?: never;
@@ -4962,14 +5210,13 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Configured ProCursor sources for the client. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -4980,7 +5227,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorKnowledgeSourceResponse"][];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -4991,7 +5238,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5002,7 +5249,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5012,6 +5259,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5022,12 +5276,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
                 };
                 cookie?: never;
             };
-            /** @description Knowledge source registration payload. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProCursorKnowledgeSourceRequest"];
@@ -5036,7 +5288,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Source created. */
+                /** @description Created */
                 201: {
                     headers: {
                         [name: string]: unknown;
@@ -5047,7 +5299,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorKnowledgeSourceResponse"];
                     };
                 };
-                /** @description Validation failure. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -5058,7 +5310,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5069,7 +5321,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have administrator access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5080,7 +5332,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5091,7 +5343,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description A duplicate source already exists. */
+                /** @description Conflict */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5101,6 +5353,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5125,14 +5384,11 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description Knowledge source identifier. */
                     sourceId: string;
                 };
                 cookie?: never;
             };
-            /** @description Optional refresh request overrides. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProCursorRefreshRequest"];
@@ -5141,7 +5397,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Refresh job queued. */
+                /** @description Accepted */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -5152,7 +5408,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorRefreshResponse"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5163,7 +5419,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have administrator access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5174,7 +5430,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client or source not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5185,7 +5441,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Embedding configuration is incomplete or incompatible for the client. */
+                /** @description Conflict */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5195,6 +5451,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5217,16 +5480,14 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description Knowledge source identifier. */
                     sourceId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Tracked branches returned. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -5237,7 +5498,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorTrackedBranchResponse"][];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5248,7 +5509,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5259,7 +5520,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client or source not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5269,6 +5530,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5279,14 +5547,11 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description Knowledge source identifier. */
                     sourceId: string;
                 };
                 cookie?: never;
             };
-            /** @description Tracked-branch creation payload. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProCursorTrackedBranchRequest"];
@@ -5295,7 +5560,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Tracked branch created. */
+                /** @description Created */
                 201: {
                     headers: {
                         [name: string]: unknown;
@@ -5306,7 +5571,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorTrackedBranchResponse"];
                     };
                 };
-                /** @description Validation failure. */
+                /** @description Bad Request */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -5317,7 +5582,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5328,7 +5593,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have administrator access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5339,7 +5604,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client or source not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5350,7 +5615,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description A duplicate tracked branch already exists. */
+                /** @description Conflict */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5360,6 +5625,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5383,16 +5655,12 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description Knowledge source identifier. */
                     sourceId: string;
-                    /** @description Tracked branch identifier. */
                     branchId: string;
                 };
                 cookie?: never;
             };
-            /** @description Tracked-branch update payload. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["ProCursorTrackedBranchPatchRequest"];
@@ -5401,7 +5669,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Tracked branch updated. */
+                /** @description OK */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -5412,7 +5680,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProCursorTrackedBranchResponse"];
                     };
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5423,7 +5691,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have administrator access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5434,7 +5702,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client, source, or branch not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5444,6 +5712,13 @@ export interface paths {
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -5454,25 +5729,22 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Client identifier. */
                     clientId: string;
-                    /** @description Knowledge source identifier. */
                     sourceId: string;
-                    /** @description Tracked branch identifier. */
                     branchId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Tracked branch removed. */
+                /** @description No Content */
                 204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description Missing or invalid credentials. */
+                /** @description Unauthorized */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -5483,7 +5755,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller does not have administrator access to the client. */
+                /** @description Forbidden */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -5494,7 +5766,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Client, source, or branch not found. */
+                /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -5505,7 +5777,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description The last tracked branch cannot be removed. */
+                /** @description Conflict */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5516,8 +5788,107 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/runtime-config/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists runtime-configuration projections that are enabled for ProCursor. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Enabled projections were returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/runtime-config/sources/{sourceId}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refreshes the runtime-configuration projection for a single source. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ProCursor source identifier. */
+                    sourceId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Refresh request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorRuntimeConfigurationRefreshRequest"];
+                    "text/json": components["schemas"]["ProCursorRuntimeConfigurationRefreshRequest"];
+                    "application/*+json": components["schemas"]["ProCursorRuntimeConfigurationRefreshRequest"];
+                };
+            };
+            responses: {
+                /** @description The projection was refreshed. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source cannot currently be refreshed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9536,6 +9907,7 @@ export interface components {
             prTargetBranch?: string | null;
             prRepositoryName?: string | null;
             aiModel?: string | null;
+            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {
@@ -9707,7 +10079,7 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
-            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"] | null;
+            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -9730,6 +10102,7 @@ export interface components {
             /** Format: int64 */
             totalOutputTokens?: number | null;
             tokenBreakdown?: components["schemas"]["TokenBreakdownEntry"][] | null;
+            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Aggregated view of all review activity for a specific pull request. */
         PrReviewViewDto: {
@@ -9774,6 +10147,43 @@ export interface components {
             error?: string | null;
             feature?: string | null;
             message?: string | null;
+        };
+        /** @description Request used to generate one embedding vector per input string. */
+        ProCursorEmbeddingBatchRequest: {
+            /** Format: uuid */
+            clientId?: string;
+            inputs?: string[] | null;
+            /** Format: int32 */
+            expectedDimensions?: number | null;
+        };
+        /** @description Request used to resolve the active embedding deployment for a client. */
+        ProCursorEmbeddingDeploymentRequest: {
+            /** Format: uuid */
+            clientId?: string;
+            /** Format: int32 */
+            expectedDimensions?: number | null;
+        };
+        /** @description Client-scoped ProCursor source descriptor returned by the module facade. */
+        ProCursorKnowledgeSourceDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            clientId?: string;
+            displayName?: string | null;
+            sourceKind?: components["schemas"]["ProCursorSourceKind"];
+            providerScopePath?: string | null;
+            providerProjectKey?: string | null;
+            repositoryId?: string | null;
+            defaultBranch?: string | null;
+            rootPath?: string | null;
+            isEnabled?: boolean;
+            symbolMode?: string | null;
+            latestSnapshot?: components["schemas"]["ProCursorSnapshotDto"];
+            trackedBranches?: components["schemas"]["ProCursorTrackedBranchDto"][] | null;
+            /** Format: uuid */
+            organizationScopeId?: string | null;
+            canonicalSourceRef?: components["schemas"]["CanonicalSourceReferenceDto"];
+            sourceDisplayName?: string | null;
         };
         /** @description API request body for creating a ProCursor knowledge source. */
         ProCursorKnowledgeSourceRequest: {
@@ -9848,6 +10258,42 @@ export interface components {
          * @enum {string}
          */
         ProCursorRefreshTriggerMode: "manual" | "branchUpdate";
+        /** @description Refresh request used when ProCursor rehydrates runtime configuration from ProPR. */
+        ProCursorRuntimeConfigurationRefreshRequest: {
+            reason?: string | null;
+            knownProjectionVersion?: string | null;
+        };
+        /** @description Request used by the extracted ProCursor host to ask ProPR for source materialization data. */
+        ProCursorScmMaterializationRequest: {
+            source?: components["schemas"]["ProCursorKnowledgeSourceDto"];
+            trackedBranch?: components["schemas"]["ProCursorTrackedBranchDto"];
+            requestedCommitSha?: string | null;
+        };
+        /** @description ProCursor snapshot metadata exposed through application contracts. */
+        ProCursorSnapshotDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            knowledgeSourceId?: string;
+            /** Format: uuid */
+            trackedBranchId?: string;
+            branchName?: string | null;
+            commitSha?: string | null;
+            status?: string | null;
+            supportsSymbolQueries?: boolean;
+            /** Format: int32 */
+            fileCount?: number;
+            /** Format: int32 */
+            chunkCount?: number;
+            /** Format: int32 */
+            symbolCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            completedAt?: string | null;
+            failureReason?: string | null;
+            freshnessStatus?: string | null;
+        };
         /**
          * @description Supported git-backed ProCursor knowledge-source kinds.
          * @enum {string}
@@ -10055,6 +10501,23 @@ export interface components {
             period?: string | null;
             items?: components["schemas"]["ProCursorTopSourceUsageDto"][] | null;
         };
+        /** @description One tracked branch configured for a ProCursor knowledge source. */
+        ProCursorTrackedBranchDto: {
+            /** Format: uuid */
+            id?: string;
+            branchName?: string | null;
+            refreshTriggerMode?: components["schemas"]["ProCursorRefreshTriggerMode"];
+            miniIndexEnabled?: boolean;
+            lastSeenCommitSha?: string | null;
+            lastIndexedCommitSha?: string | null;
+            isEnabled?: boolean;
+            freshnessStatus?: string | null;
+        };
+        /** @description Request used by the extracted ProCursor host to resolve the latest tracked-branch commit. */
+        ProCursorTrackedBranchHeadRequest: {
+            source?: components["schemas"]["ProCursorKnowledgeSourceDto"];
+            trackedBranch?: components["schemas"]["ProCursorTrackedBranchDto"];
+        };
         /** @description API request body for patching one tracked branch. */
         ProCursorTrackedBranchPatchRequest: {
             refreshTriggerMode?: components["schemas"]["ProCursorRefreshTriggerMode"];
@@ -10166,6 +10629,17 @@ export interface components {
          * @enum {string}
          */
         ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation" | "operational";
+        /** @description Terminal outcome metadata for one file-linked protocol pass. */
+        ProtocolFileOutcomeDto: {
+            filePath?: string | null;
+            isComplete?: boolean;
+            isFailed?: boolean;
+            isExcluded?: boolean;
+            isCarriedForward?: boolean;
+            exclusionReason?: string | null;
+            errorMessage?: string | null;
+            isDegraded?: boolean;
+        };
         /** @description Carries one final review comment attributable to a protocol pass. */
         ProtocolReviewCommentDto: {
             /** @description Repository-relative file path, when available. */
@@ -10276,7 +10750,7 @@ export interface components {
         RefreshRequest: {
             refreshToken?: string | null;
         };
-        /** @description Resolved reviewer identity candidate returned by provider onboarding APIs. */
+        /** @description Resolved reviewer-trigger identity candidate returned by provider onboarding APIs. */
         ResolvedReviewerIdentityResponse: {
             /** Format: uuid */
             clientId?: string;
@@ -10303,6 +10777,11 @@ export interface components {
             severity?: components["schemas"]["CommentSeverity"];
             message?: string | null;
         };
+        /**
+         * @description Controls whether one or more review strategies execute against a PR snapshot.
+         * @enum {string}
+         */
+        ReviewComparisonMode: "single" | "sideBySideInternal" | "shadow" | "replay";
         /** @description Response returned when a review job is accepted or a duplicate is found. */
         ReviewJobAcceptedResponse: {
             /** Format: uuid */
@@ -10313,6 +10792,15 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
+            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
+            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
+            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
+            publicationMode?: components["schemas"]["ReviewPublicationMode"];
+            /**
+             * Format: uuid
+             * @description Comparison group identifier when this job participates in one.
+             */
+            comparisonGroupId?: string | null;
         };
         /** @description Carries protocol data for a single review job execution attempt. */
         ReviewJobProtocolDto: {
@@ -10384,6 +10872,23 @@ export interface components {
             finalComments?: components["schemas"]["ProtocolReviewCommentDto"][] | null;
             /** @description Ordered list of events captured during the loop. */
             events?: components["schemas"]["ProtocolEventDto"][] | null;
+            provider?: components["schemas"]["ScmProvider"];
+            /** @description Normalized provider scope path for the parent review job. */
+            providerScopePath?: string | null;
+            /** @description Normalized provider project, owner, or namespace key for the parent review job. */
+            providerProjectKey?: string | null;
+            /** @description Repository identifier for the parent review job. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number for the parent review job.
+             */
+            pullRequestId?: number;
+            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
+            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
+            fileOutcome?: components["schemas"]["ProtocolFileOutcomeDto"];
+            followUp?: components["schemas"]["ProtocolFollowUpDto"];
+            repeatedJudgment?: components["schemas"]["ProtocolRepeatedJudgmentDto"];
         };
         /** @description Response for the job result endpoint, combining status metadata with the review result. */
         ReviewJobResultDto: {
@@ -10421,6 +10926,11 @@ export interface components {
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
         };
+        /**
+         * @description Controls whether a strategy run is allowed to publish review findings.
+         * @enum {string}
+         */
+        ReviewPublicationMode: "publish" | "dryRun" | "internalOnly";
         /** @description Provider-neutral repository identity supplied by review intake clients. */
         ReviewRepositoryRefDto: {
             externalRepositoryId?: string | null;
@@ -10432,12 +10942,7 @@ export interface components {
             summary?: string | null;
             comments?: components["schemas"]["ReviewCommentDto"][] | null;
         };
-        /**
-         * @description Review strategy used to execute a review job.
-         * @enum {string}
-         */
-        ReviewStrategy: "fileByFile" | "prWideAgentic";
-        /** @description Provider-neutral reviewer identity supplied by review intake clients as trigger context. */
+        /** @description Provider-neutral reviewer identity supplied by review intake clients. */
         ReviewReviewerIdentityDto: {
             externalUserId?: string | null;
             login?: string | null;
@@ -10476,7 +10981,26 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
+            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
+            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
+            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
+            publicationMode?: components["schemas"]["ReviewPublicationMode"];
+            /**
+             * Format: uuid
+             * @description Comparison group identifier when this job participates in one.
+             */
+            comparisonGroupId?: string | null;
         };
+        /**
+         * @description Selectable strategy used to generate review findings for a job.
+         * @enum {string}
+         */
+        ReviewStrategy: "fileByFile" | "prWideAgentic" | "agenticFileByFile";
+        /**
+         * @description Explains why a review job selected its final review strategy.
+         * @enum {string}
+         */
+        ReviewStrategySelectionSource: "fallbackDefault" | "clientDefault" | "jobOverride" | "fallback";
         /**
          * @description Credential models supported by SCM provider connections.
          * @enum {string}
@@ -10502,6 +11026,9 @@ export interface components {
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
             requestedReviewerIdentity?: components["schemas"]["ReviewReviewerIdentityDto"];
+            reviewStrategy?: components["schemas"]["ReviewStrategy"];
+            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
+            publicationMode?: components["schemas"]["ReviewPublicationMode"];
         };
         /** @description Tenant-authenticated session payload returned by tenant login endpoints. */
         TenantAuthSessionDto: {

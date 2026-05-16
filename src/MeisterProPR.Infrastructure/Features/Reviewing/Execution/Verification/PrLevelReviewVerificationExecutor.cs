@@ -7,13 +7,14 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
-using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.Extensions.AI;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
+
+internal sealed record RepeatedJudgmentOutcome(string SourceOriginId, VerificationOutcome VerificationOutcome);
 
 /// <summary>
 ///     Verifies synthesized PR-level findings against bounded repository evidence before they enter the
@@ -27,6 +28,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
     IProtocolRecorder protocolRecorder,
     AiReviewOptions options)
 {
+    private const string RepeatedJudgmentAgreementStateAgreed = "Agreed";
+    private const string RepeatedJudgmentAgreementStateDisagreed = "Disagreed";
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>
@@ -154,6 +157,75 @@ internal sealed class PrLevelReviewVerificationExecutor(
         }
 
         return verified;
+    }
+
+    public async Task<RepeatedJudgmentOutcome?> RunRepeatedJudgmentAsync(
+        CandidateReviewFinding finding,
+        ReviewSystemContext reviewContext,
+        string sourceBranch,
+        Guid? protocolId,
+        IChatClient? fallbackChatClient,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+
+        if (reviewClaimExtractor is null || reviewEvidenceCollector is null || finding.VerificationOutcome is null)
+        {
+            return null;
+        }
+
+        var claims = reviewClaimExtractor.ExtractClaims(finding);
+        if (claims.Count == 0)
+        {
+            return null;
+        }
+
+        var claim = claims[0];
+        var initialWorkItem = new VerificationWorkItem(
+            claim,
+            finding.Provenance,
+            claim.Stage,
+            VerificationWorkItem.CrossFileScope,
+            true,
+            finding.Evidence);
+
+        var evidence = await reviewEvidenceCollector.CollectEvidenceAsync(initialWorkItem, reviewContext.ReviewTools, sourceBranch, ct);
+        var updatedEvidence = BuildUpdatedEvidence(finding, evidence);
+        var client = reviewContext.DefaultReviewChatClient ?? reviewContext.TierChatClient ?? fallbackChatClient;
+        if (client is null)
+        {
+            return null;
+        }
+
+        var systemPrompt = ReviewPrompts.BuildPrVerificationSystemPrompt(reviewContext);
+        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
+        var response = await client.GetResponseAsync(
+            [
+                new ChatMessage(ChatRole.System, systemPrompt),
+                new ChatMessage(ChatRole.User, userMessage),
+            ],
+            new ChatOptions
+            {
+                ModelId = reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId, Temperature = reviewContext.Temperature,
+            },
+            ct);
+
+        var responseText = response.Text ?? string.Empty;
+        await this.RecordAiUsageAsync(
+            protocolId, response, userMessage, systemPrompt, responseText, reviewContext.DefaultReviewModelId ?? reviewContext.ModelId ?? options.ModelId, ct);
+        if (!TryParsePrVerificationResponse(responseText, claim, out var repeatedOutcome))
+        {
+            return null;
+        }
+
+        var agreementState = string.Equals(repeatedOutcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal)
+            ? RepeatedJudgmentAgreementStateAgreed
+            : RepeatedJudgmentAgreementStateDisagreed;
+        await this.RecordRepeatedJudgmentDecisionAsync(protocolId, finding, repeatedOutcome, agreementState, updatedEvidence, ct);
+
+        return new RepeatedJudgmentOutcome(
+            finding.Provenance.SourceOriginId ?? $"repeated-judgment-{finding.FindingId}",
+            repeatedOutcome);
     }
 
     private async Task<VerificationOutcome> VerifyClaimAsync(
@@ -299,6 +371,43 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     verifierFamilies = workItem.VerifierFamilies,
                 }),
             JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
+            null,
+            ct);
+    }
+
+    private async Task RecordRepeatedJudgmentDecisionAsync(
+        Guid? protocolId,
+        CandidateReviewFinding finding,
+        VerificationOutcome outcome,
+        string agreementState,
+        EvidenceReference updatedEvidence,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.RepeatedJudgmentDecision,
+            JsonSerializer.Serialize(
+                new
+                {
+                    findingId = finding.FindingId,
+                    evidenceSetId = finding.Provenance.EvidenceSetId,
+                    sourceOriginId = finding.Provenance.SourceOriginId,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    agreementState,
+                    outcome.RecommendedDisposition,
+                    usedSameEvidenceSet = true,
+                    reasonCodes = outcome.ReasonCodes,
+                    evidenceSource = updatedEvidence.EvidenceSource,
+                },
+                FinalGateJsonOptions),
             null,
             ct);
     }

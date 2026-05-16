@@ -128,6 +128,11 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("comparison_group_id")
             .IsRequired(false);
 
+        builder.Property(j => j.ReviewPipelineProfileId)
+            .HasColumnName("review_pipeline_profile_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
         builder.Property(j => j.RepositoryId)
             .HasColumnName("repository_id")
             .IsRequired();

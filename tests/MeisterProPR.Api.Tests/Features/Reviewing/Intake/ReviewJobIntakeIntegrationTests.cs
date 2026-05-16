@@ -71,6 +71,25 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
     }
 
     [Fact]
+    public async Task GetReview_AgenticFileByFileJob_ReturnsResolvedStrategySnapshotFields()
+    {
+        await factory.ClearJobsAsync();
+        var client = factory.CreateClient();
+        var jobId = await factory.InsertCompletedJobAsync(ReviewStrategy.AgenticFileByFile, ReviewStrategySelectionSource.ClientDefault);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{jobId}/status");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateUserToken(factory.ClientAdministratorUserId));
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("agenticFileByFile", body.GetProperty("resolvedReviewStrategy").GetString());
+        Assert.Equal("clientDefault", body.GetProperty("strategySelectionSource").GetString());
+    }
+
+    [Fact]
     public async Task SubmitReview_LegacyAzureDevOpsRequestShape_ReturnsBadRequest()
     {
         await factory.ClearJobsAsync();
@@ -156,7 +175,9 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
             return await repository.GetByIdWithFileResultsAsync(jobId);
         }
 
-        public async Task<Guid> InsertCompletedJobAsync()
+        public async Task<Guid> InsertCompletedJobAsync(
+            ReviewStrategy reviewStrategy = ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource selectionSource = ReviewStrategySelectionSource.FallbackDefault)
         {
             using var scope = this.Services.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
@@ -168,6 +189,12 @@ public sealed class ReviewJobIntakeIntegrationTests(ReviewJobIntakeIntegrationTe
                 "my-repo",
                 77,
                 1);
+            job.SelectReviewStrategy(
+                reviewStrategy,
+                selectionSource,
+                ReviewComparisonMode.Single,
+                ReviewPublicationMode.Publish,
+                null);
             await repository.AddAsync(job);
             await repository.SetResultAsync(job.Id, new ReviewResult("done", []));
             return job.Id;

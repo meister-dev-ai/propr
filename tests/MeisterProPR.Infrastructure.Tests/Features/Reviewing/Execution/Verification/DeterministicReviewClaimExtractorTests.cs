@@ -112,4 +112,57 @@ public sealed class DeterministicReviewClaimExtractorTests
         Assert.Equal(ClaimDescriptor.CrossFileConsistencyFamily, claim.ClaimFamily);
         Assert.Equal(ClaimDescriptor.PrLevelStage, claim.Stage);
     }
+
+    [Fact]
+    public void ExtractClaims_AgenticDockerRootFinding_AssignsObjectiveClaimKindAndDeterministicMode()
+    {
+        var sut = new DeterministicReviewClaimExtractor();
+        var finding = new CandidateReviewFinding(
+            "finding-agentic-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.DeeperFollowUpOrigin,
+                "agentic_file_investigation",
+                "Dockerfile",
+                evidenceSetId: "evidence-docker-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "task-001"),
+            CommentSeverity.Warning,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "Dockerfile",
+            8);
+
+        var claims = sut.ExtractClaims(finding);
+
+        var claim = Assert.Single(claims);
+        Assert.Equal(CandidateReviewFinding.DockerFinalStageRootUserClaimKind, claim.ClaimKind);
+        Assert.Equal(ClaimDescriptor.OperationalRiskFamily, claim.ClaimFamily);
+        Assert.Equal(ClaimDescriptor.DeterministicOnlyMode, claim.VerificationMode);
+    }
+
+    [Fact]
+    public void ExtractClaims_AgenticGenericFinding_RequiresEvidenceInsteadOfDefaultPublish()
+    {
+        var sut = new DeterministicReviewClaimExtractor();
+        var finding = new CandidateReviewFinding(
+            "finding-agentic-002",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.DeeperFollowUpOrigin,
+                "agentic_file_investigation",
+                "src/Foo.cs",
+                evidenceSetId: "evidence-generic-001",
+                requiresExplicitSupport: true,
+                sourceOriginId: "task-002"),
+            CommentSeverity.Warning,
+            "Investigate anchor-file concern: Check behavioral impact around src/Foo.cs.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+
+        var claims = sut.ExtractClaims(finding);
+
+        var claim = Assert.Single(claims);
+        Assert.Equal(CandidateReviewFinding.GenericReviewAssertionClaimKind, claim.ClaimKind);
+        Assert.Equal(ClaimDescriptor.NeedsEvidenceMode, claim.VerificationMode);
+    }
 }

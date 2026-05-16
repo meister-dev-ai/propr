@@ -5,7 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 /// <summary>
 ///     Parses structured synthesis responses returned by the cross-file synthesis model.

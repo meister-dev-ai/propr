@@ -13,6 +13,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -340,6 +341,226 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         var finalComment = protocolJson.GetProperty("finalComments").EnumerateArray().Single();
         Assert.Equal("Final comment from file pass", finalComment.GetProperty("message").GetString());
         Assert.Equal("src/Foo.cs", finalComment.GetProperty("filePath").GetString());
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_AgenticFileByFile_IncludesStrategyAndFileOutcomeMetadata()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 8, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var fileResult = new ReviewFileResult(job.Id, "src/Agentic.cs");
+        fileResult.MarkCompleted("Final file summary", []);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Agentic.cs",
+            FileResultId = fileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.AgenticFileDegraded,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                InputTextSample = "{\"stage\":\"investigation\"}",
+                OutputSummary = "{\"reason\":\"fallback\"}",
+            });
+
+        job.FileReviewResults.Add(fileResult);
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+
+        Assert.Equal("agenticFileByFile", protocolJson.GetProperty("resolvedReviewStrategy").GetString());
+        Assert.Equal("clientDefault", protocolJson.GetProperty("strategySelectionSource").GetString());
+        Assert.Equal("https://dev.azure.com/org", protocolJson.GetProperty("providerScopePath").GetString());
+        Assert.Equal("proj", protocolJson.GetProperty("providerProjectKey").GetString());
+        Assert.Equal("repo", protocolJson.GetProperty("repositoryId").GetString());
+        Assert.Equal(8, protocolJson.GetProperty("pullRequestId").GetInt32());
+
+        var fileOutcome = protocolJson.GetProperty("fileOutcome");
+        Assert.Equal("src/Agentic.cs", fileOutcome.GetProperty("filePath").GetString());
+        Assert.True(fileOutcome.GetProperty("isComplete").GetBoolean());
+        Assert.True(fileOutcome.GetProperty("isDegraded").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("blocked_scope_violation")]
+    [InlineData("blocked_budget_exhausted")]
+    [InlineData("failed")]
+    public async Task GetJobProtocol_AgenticStageBRuntimeTrace_PreservesAuthoritativeStatusPayload(string runtimeStatus)
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 9, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var fileResult = new ReviewFileResult(job.Id, "src/Agentic.cs");
+        fileResult.MarkCompleted("Final file summary", []);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Agentic.cs",
+            FileResultId = fileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.AgenticFileDegraded,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                InputTextSample = "{\"stage\":\"investigation\",\"taskId\":\"task-001\"}",
+                OutputSummary =
+                    $"{{\"Status\":\"degraded\",\"ToolUsage\":[{{\"ToolName\":\"get_file_content\",\"Status\":\"{runtimeStatus}\",\"Target\":\"src/Agentic.cs\"}}],\"Degraded\":true,\"candidateCount\":0}}",
+            });
+
+        job.FileReviewResults.Add(fileResult);
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+
+        var degradedEvent = protocolJson.GetProperty("events").EnumerateArray()
+            .Single(e => e.GetProperty("name").GetString() == ReviewProtocolEventNames.AgenticFileDegraded);
+        Assert.Contains(runtimeStatus, degradedEvent.GetProperty("outputSummary").GetString());
+        Assert.True(protocolJson.GetProperty("fileOutcome").GetProperty("isDegraded").GetBoolean());
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_AgenticFileProtocol_IncludesFollowUpVisibilityMetadata()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 10, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var fileResult = new ReviewFileResult(job.Id, "src/FollowUp.cs");
+        fileResult.MarkCompleted("Final file summary", []);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/FollowUp.cs",
+            FileResultId = fileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.AgenticFilePlanCreated,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-3),
+                InputTextSample = "{\"stage\":\"planning\"}",
+                OutputSummary =
+                    "{\"anchorFilePath\":\"src/FollowUp.cs\",\"investigationTasks\":[{\"taskId\":\"task-100\",\"triggerFamily\":\"dispatch_or_registration\"}]}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.AgenticFileInvestigationResult,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+                InputTextSample =
+                    "{\"stage\":\"investigation\",\"taskId\":\"task-100\",\"anchorFile\":\"src/FollowUp.cs\"}",
+                OutputSummary = "{\"status\":\"completed\",\"degraded\":false,\"diagnosticsOnly\":false}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                InputTextSample =
+                    "{\"anchorFile\":\"src/FollowUp.cs\",\"taskId\":\"task-100\",\"triggerFamily\":\"dispatch_or_registration\"}",
+                OutputSummary = "{\"dependencyRecorded\":true}",
+            });
+
+        job.FileReviewResults.Add(fileResult);
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+
+        var followUp = protocolJson.GetProperty("followUp");
+        Assert.True(followUp.GetProperty("used").GetBoolean());
+        Assert.Equal("dispatch_or_registration", followUp.GetProperty("triggerFamily").GetString());
+        Assert.True(followUp.GetProperty("completedSuccessfully").GetBoolean());
+        Assert.True(followUp.GetProperty("dependencyRecorded").GetBoolean());
     }
 
     public sealed class ProtocolApiFactory : WebApplicationFactory<Program>

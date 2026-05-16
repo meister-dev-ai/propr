@@ -7,22 +7,16 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 
-/// <summary>
-///     Builds canonical candidate findings from completed per-file review results and from post-processing
-///     comment sets such as deduped or quality-filtered comments. It preserves provenance for findings that
-///     originated from a file review pass and creates derived findings only when a post-processing step
-///     introduces comments that no longer map one-to-one to the original stored findings.
-/// </summary>
-internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaimExtractor)
+internal sealed class AgenticCandidateFindingFactory(IReviewClaimExtractor? reviewClaimExtractor)
 {
     public List<CandidateReviewFinding> Build(
         IReadOnlyList<ReviewFileResult> freshResults,
-        IReadOnlyList<ReviewComment>? commentsOverride = null)
+        IReadOnlyList<ReviewComment>? commentsOverride = null,
+        IReadOnlyList<CandidateReviewFinding>? enrichedPerFileFindings = null)
     {
         var originalFindings = new List<CandidateReviewFinding>();
-        var findingsBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
 
         foreach (var fileResult in freshResults.Where(result => result.IsComplete && result.Comments is not null))
         {
@@ -31,9 +25,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             for (var index = 0; index < comments.Count; index++)
             {
                 var comment = comments[index];
-                var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
+                var normalizedLineNumber = AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
                 var finding = new CandidateReviewFinding(
-                    FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
+                    AgenticFileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
                     new CandidateFindingProvenance(
                         CandidateFindingProvenance.PerFileCommentOrigin,
                         "per_file_review",
@@ -42,26 +36,32 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                         index + 1),
                     comment.Severity,
                     comment.Message,
-                    FileByFileReviewOrchestrator.DetermineCategory(comment),
+                    AgenticFileByFileReviewOrchestrator.DetermineCategory(comment),
                     comment.FilePath,
                     normalizedLineNumber,
                     invariantCheckContext: this.BuildInvariantCheckContext(fileResult, comment, index + 1));
                 originalFindings.Add(finding);
-
-                var signature = CreateCommentSignature(comment);
-                if (!findingsBySignature.TryGetValue(signature, out var queue))
-                {
-                    queue = new Queue<CandidateReviewFinding>();
-                    findingsBySignature[signature] = queue;
-                }
-
-                queue.Enqueue(finding);
             }
         }
 
+        var resolvedOriginalFindings = ReplaceWithEnrichedPerFileFindings(originalFindings, enrichedPerFileFindings);
+
         if (commentsOverride is null)
         {
-            return originalFindings;
+            return resolvedOriginalFindings;
+        }
+
+        var findingsBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
+        foreach (var finding in resolvedOriginalFindings)
+        {
+            var signature = CreateCommentSignature(finding);
+            if (!findingsBySignature.TryGetValue(signature, out var queue))
+            {
+                queue = new Queue<CandidateReviewFinding>();
+                findingsBySignature[signature] = queue;
+            }
+
+            queue.Enqueue(finding);
         }
 
         var finalFindings = new List<CandidateReviewFinding>(commentsOverride.Count);
@@ -76,6 +76,11 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             }
 
             finalFindings.Add(this.CreateDerivedCandidateFinding(comment, derivedOrdinal++));
+        }
+
+        if (commentsOverride.Count == 0 && enrichedPerFileFindings is { Count: > 0 })
+        {
+            return resolvedOriginalFindings;
         }
 
         return finalFindings;
@@ -114,7 +119,60 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
     {
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{comment.FilePath}|{FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)}|{comment.Severity}|{comment.Message}");
+            $"{comment.FilePath}|{AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)}|{comment.Severity}|{comment.Message}");
+    }
+
+    private static string CreateCommentSignature(CandidateReviewFinding finding)
+    {
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{finding.FilePath}|{AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(finding.LineNumber)}|{finding.Severity}|{finding.Message}");
+    }
+
+    private static List<CandidateReviewFinding> ReplaceWithEnrichedPerFileFindings(
+        IReadOnlyList<CandidateReviewFinding> originalFindings,
+        IReadOnlyList<CandidateReviewFinding>? enrichedPerFileFindings)
+    {
+        if (enrichedPerFileFindings is not { Count: > 0 })
+        {
+            return originalFindings.ToList();
+        }
+
+        var enrichedBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
+        foreach (var finding in enrichedPerFileFindings)
+        {
+            var signature = CreateCommentSignature(finding);
+            if (!enrichedBySignature.TryGetValue(signature, out var queue))
+            {
+                queue = new Queue<CandidateReviewFinding>();
+                enrichedBySignature[signature] = queue;
+            }
+
+            queue.Enqueue(finding);
+        }
+
+        var resolved = new List<CandidateReviewFinding>(Math.Max(originalFindings.Count, enrichedPerFileFindings.Count));
+        foreach (var finding in originalFindings)
+        {
+            var signature = CreateCommentSignature(finding);
+            if (enrichedBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
+            {
+                resolved.Add(queue.Dequeue());
+                continue;
+            }
+
+            resolved.Add(finding);
+        }
+
+        foreach (var remaining in enrichedBySignature.Values)
+        {
+            while (remaining.Count > 0)
+            {
+                resolved.Add(remaining.Dequeue());
+            }
+        }
+
+        return resolved;
     }
 
     private CandidateReviewFinding CreateDerivedCandidateFinding(ReviewComment comment, int ordinal)
@@ -138,7 +196,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         }
 
         var derivedFindingId = $"finding-derived-{ordinal:D3}";
-        var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
+        var normalizedLineNumber = AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
         return new CandidateReviewFinding(
             derivedFindingId,
             new CandidateFindingProvenance(
@@ -147,13 +205,13 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 comment.FilePath),
             comment.Severity,
             comment.Message,
-            FileByFileReviewOrchestrator.DetermineCategory(comment),
+            AgenticFileByFileReviewOrchestrator.DetermineCategory(comment),
             comment.FilePath,
             normalizedLineNumber,
             invariantCheckContext: this.BuildInvariantCheckContext(
                 derivedFindingId,
                 comment,
-                FileByFileReviewOrchestrator.DetermineCategory(comment),
+                AgenticFileByFileReviewOrchestrator.DetermineCategory(comment),
                 comment.FilePath,
                 normalizedLineNumber,
                 null));
@@ -172,7 +230,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             return null;
         }
 
-        var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(lineNumber);
+        var normalizedLineNumber = AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(lineNumber);
         var probeFinding = new CandidateReviewFinding(
             findingId,
             new CandidateFindingProvenance(
@@ -200,9 +258,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             return null;
         }
 
-        var normalizedLineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
+        var normalizedLineNumber = AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
         var probeFinding = new CandidateReviewFinding(
-            FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, ordinal),
+            AgenticFileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, ordinal),
             new CandidateFindingProvenance(
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 "per_file_review",
@@ -211,7 +269,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 ordinal),
             comment.Severity,
             comment.Message,
-            FileByFileReviewOrchestrator.DetermineCategory(comment),
+            AgenticFileByFileReviewOrchestrator.DetermineCategory(comment),
             comment.FilePath,
             normalizedLineNumber);
 

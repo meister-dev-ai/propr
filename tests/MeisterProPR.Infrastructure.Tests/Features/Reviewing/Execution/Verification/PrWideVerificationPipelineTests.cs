@@ -10,13 +10,12 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution.Verification;
@@ -28,7 +27,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: false);
+        var reviewTools = CreateReviewTools(false);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -120,7 +119,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: true);
+        var reviewTools = CreateReviewTools(true);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -204,7 +203,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: true);
+        var reviewTools = CreateReviewTools(true);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -302,7 +301,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: true);
+        var reviewTools = CreateReviewTools(true);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -373,7 +372,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: true);
+        var reviewTools = CreateReviewTools(true);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -450,7 +449,7 @@ public sealed class PrWideVerificationPipelineTests
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
-        var reviewTools = CreateReviewTools(returnFileContent: true);
+        var reviewTools = CreateReviewTools(true);
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(

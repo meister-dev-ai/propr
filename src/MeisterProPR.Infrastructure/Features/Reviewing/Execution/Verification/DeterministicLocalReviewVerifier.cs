@@ -26,6 +26,16 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
             try
             {
                 var claim = workItem.Claim;
+                if (SupportsObjectiveDeterministicVerification(claim))
+                {
+                    outcomes.Add(
+                        VerificationOutcome.Supported(
+                            claim,
+                            ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport,
+                            "Deterministic objective verification confirmed the follow-up finding."));
+                    continue;
+                }
+
                 if (RequiresBoundedEvidence(claim))
                 {
                     outcomes.Add(CreateConservativeLocalOutcome(claim));
@@ -78,6 +88,16 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
         return !string.Equals(claim.VerificationMode, ClaimDescriptor.DeterministicOnlyMode, StringComparison.Ordinal) ||
                claim.RequiresCrossFileEvidence ||
                claim.RequiresSymbolEvidence;
+    }
+
+    private static bool SupportsObjectiveDeterministicVerification(ClaimDescriptor claim)
+    {
+        return claim.ClaimKind is CandidateReviewFinding.DockerFinalStageRootUserClaimKind
+            or CandidateReviewFinding.GitHubActionsSecretEchoClaimKind
+            or CandidateReviewFinding.TerraformPublicIngressClaimKind
+            or CandidateReviewFinding.ManifestLockfileMisalignmentClaimKind
+            or CandidateReviewFinding.WiringMissingRegistrationClaimKind
+            or CandidateReviewFinding.ShellUnquotedVariableClaimKind;
     }
 
     private static VerificationOutcome CreateConservativeLocalOutcome(ClaimDescriptor claim)

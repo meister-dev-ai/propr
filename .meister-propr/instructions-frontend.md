@@ -19,7 +19,7 @@ when-to-use: When files change under admin-ui/, including .vue, .ts, router, ser
 
 ## Generated API Types And Client
 
-- `admin-ui/src/services/generated/openapi.ts` is generated from the root `openapi.json` via `npm run generate:api`. Do not edit generated OpenAPI type files by hand.
+- `npm run generate:api` regenerates both `admin-ui/src/types/index.ts` and `admin-ui/src/services/generated/openapi.ts` from the root `openapi.json`. Do not edit generated OpenAPI type files by hand.
 - The runtime client is `openapi-fetch`, wrapped by `createAdminClient()` in `src/services/api.ts`.
 - `createAdminClient()` is responsible for adding the bearer token, attempting silent refresh near expiry, and throwing `UnauthorizedError` when refresh fails. Keep that behavior centralized.
 - The standard `openapi-fetch` response shape is `{ data, error, response }`. Existing handwritten service modules check `response.ok` and translate API errors before components consume them.

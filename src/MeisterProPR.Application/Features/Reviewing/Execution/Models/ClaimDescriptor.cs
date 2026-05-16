@@ -76,6 +76,11 @@ public sealed record ClaimDescriptor
     public const string OperationalRiskFamily = "OperationalRisk";
 
     /// <summary>
+    ///     Support source used when repeated judgment agrees on the same evidence set.
+    /// </summary>
+    public const string JudgmentAgreementSupportSource = "JudgmentAgreement";
+
+    /// <summary>
     ///     Initializes a structured claim extracted from a review finding.
     /// </summary>
     /// <param name="claimId">Stable identifier for the claim.</param>

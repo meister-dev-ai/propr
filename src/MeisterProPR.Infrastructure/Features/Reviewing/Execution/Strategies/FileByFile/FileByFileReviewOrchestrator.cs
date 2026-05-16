@@ -6,6 +6,7 @@ using System.Text.Json;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -18,7 +19,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace MeisterProPR.Infrastructure.AI.FileByFileReview;
+namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 internal sealed partial class FileByFileReviewOrchestrator(
     IProtocolRecorder protocolRecorder,
@@ -84,7 +85,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IReviewClaimExtractor? reviewClaimExtractor = null,
         IReviewFindingVerifier? reviewFindingVerifier = null,
         IReviewEvidenceCollector? reviewEvidenceCollector = null,
-        ISummaryReconciliationService? summaryReconciliationService = null)
+        ISummaryReconciliationService? summaryReconciliationService = null,
+        IReviewPipeline<PerFileReviewContext>? perFilePipeline = null)
         : this(
             protocolRecorder,
             jobRepository,
@@ -97,6 +99,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 jobRepository,
                 options.Value,
                 logger,
+                perFilePipeline,
                 aiConnectionRepository,
                 aiClientFactory,
                 memoryService,

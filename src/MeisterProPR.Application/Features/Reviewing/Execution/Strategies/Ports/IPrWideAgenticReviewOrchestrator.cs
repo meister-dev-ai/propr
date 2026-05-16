@@ -6,7 +6,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 
-namespace MeisterProPR.Application.Interfaces;
+namespace MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 
 /// <summary>Runs the staged PR-wide agentic review strategy.</summary>
 public interface IPrWideAgenticReviewOrchestrator

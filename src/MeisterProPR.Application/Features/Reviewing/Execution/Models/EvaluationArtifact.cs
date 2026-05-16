@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -42,7 +43,8 @@ public sealed record EvaluationFixtureMetadata(
 public sealed record EvaluationConfigurationMetadata(
     string ConfigurationId,
     string ModelId,
-    string DetailMode);
+    string DetailMode,
+    ReviewStrategy Strategy);
 
 /// <summary>
 ///     Structured verification outcome for comparing generated review output against fixture expectations.

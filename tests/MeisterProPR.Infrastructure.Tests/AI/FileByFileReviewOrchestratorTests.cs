@@ -169,6 +169,51 @@ public class FileByFileReviewOrchestratorTests
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_FileByFileStrategy_DoesNotTraverseAgenticPlanningPath()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("file summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Direct file finding remains publishable.")]));
+
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await chatClient.Received(1)
+            .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+
+        var publishedComment = Assert.Single(result.Comments);
+        Assert.Equal("Direct file finding remains publishable.", publishedComment.Message);
+    }
+
     // T033 — A failed file does not stop remaining files
     [Fact]
     public async Task ReviewAsync_OneFileFails_OtherFilesStillReviewed()
@@ -239,7 +284,7 @@ public class FileByFileReviewOrchestratorTests
         repo.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ReviewJob?>(null));
         // We need a ReviewJob whose FileReviewResults contains completedResult
-        // Use a sub that supports FileReviewResults collection inspection  
+        // Use a sub that supports FileReviewResults collection inspection
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
             .Returns(ci =>
             {

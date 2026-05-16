@@ -42,6 +42,26 @@ public sealed record CandidateReviewFinding
     public const string ClaimCountContextKey = "claimCount";
 
     /// <summary>
+    ///     Invariant-check context key for the trigger family that justified bounded follow-up.
+    /// </summary>
+    public const string FollowUpTriggerFamilyContextKey = "followUpTriggerFamily";
+
+    /// <summary>
+    ///     Invariant-check context key for repeated-judgment agreement state.
+    /// </summary>
+    public const string RepeatedJudgmentAgreementStateContextKey = "repeatedJudgmentAgreementState";
+
+    /// <summary>
+    ///     Invariant-check context key for repeated-judgment evidence-set reuse.
+    /// </summary>
+    public const string RepeatedJudgmentUsedSameEvidenceSetContextKey = "repeatedJudgmentUsedSameEvidenceSet";
+
+    /// <summary>
+    ///     Invariant-check context key for repeated-judgment source support.
+    /// </summary>
+    public const string RepeatedJudgmentSupportSourceContextKey = "repeatedJudgmentSupportSource";
+
+    /// <summary>
     ///     Claim kind used when a review comment message is unexpectedly null.
     /// </summary>
     public const string ReviewCommentMessageNullableClaimKind = "review_comment_message_nullable";
@@ -65,6 +85,36 @@ public sealed record CandidateReviewFinding
     ///     Claim kind used for generic review assertions.
     /// </summary>
     public const string GenericReviewAssertionClaimKind = "generic_review_assertion";
+
+    /// <summary>
+    ///     Claim kind used for Docker final-stage root-user runtime findings.
+    /// </summary>
+    public const string DockerFinalStageRootUserClaimKind = "docker_final_stage_root_user";
+
+    /// <summary>
+    ///     Claim kind used for GitHub Actions secret echo or logging exposure findings.
+    /// </summary>
+    public const string GitHubActionsSecretEchoClaimKind = "github_actions_secret_echo";
+
+    /// <summary>
+    ///     Claim kind used for Terraform public-ingress exposure findings.
+    /// </summary>
+    public const string TerraformPublicIngressClaimKind = "terraform_public_ingress";
+
+    /// <summary>
+    ///     Claim kind used for manifest and lockfile misalignment findings.
+    /// </summary>
+    public const string ManifestLockfileMisalignmentClaimKind = "manifest_lockfile_misalignment";
+
+    /// <summary>
+    ///     Claim kind used for missing wiring or dispatch registration findings.
+    /// </summary>
+    public const string WiringMissingRegistrationClaimKind = "wiring_missing_registration";
+
+    /// <summary>
+    ///     Claim kind used for shell unquoted variable expansion findings.
+    /// </summary>
+    public const string ShellUnquotedVariableClaimKind = "shell_unquoted_variable";
 
     /// <summary>
     ///     Initializes a final-gated candidate finding.

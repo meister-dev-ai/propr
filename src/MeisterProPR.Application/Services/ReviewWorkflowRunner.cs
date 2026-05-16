@@ -24,8 +24,11 @@ public sealed class ReviewWorkflowRunner(
     IRepositoryInstructionFetcher instructionFetcher,
     IRepositoryExclusionFetcher exclusionFetcher,
     IRepositoryInstructionEvaluator instructionEvaluator,
-    IFileByFileReviewOrchestrator fileByFileReviewOrchestrator) : IReviewWorkflowRunner
+    IReviewStrategyDispatcher reviewStrategyDispatcher,
+    IEnumerable<BoundaryIssueReport>? boundaryIssues = null) : IReviewWorkflowRunner
 {
+    private readonly IReadOnlyList<BoundaryIssueReport> _boundaryIssues = boundaryIssues?.ToList() ?? [];
+
     /// <inheritdoc />
     public async Task<ReviewWorkflowResult> RunAsync(
         ReviewWorkflowRequest request,
@@ -117,18 +120,19 @@ public sealed class ReviewWorkflowRunner(
                 Temperature = request.Configuration?.Temperature,
             };
 
-            var result = await fileByFileReviewOrchestrator.ReviewAsync(
+            var result = await reviewStrategyDispatcher.ReviewAsync(
                 job,
                 pullRequest,
                 context,
                 cancellationToken,
-                request.ChatClient);
+                request.ChatClient,
+                request.PipelineProfileId);
 
             await jobs.SetResultAsync(job.Id, result, cancellationToken);
 
             var protocols = (await diagnosticsReader.GetJobProtocolAsync(job.Id, cancellationToken))?.Protocols ?? [];
 
-            return new ReviewWorkflowResult(jobs.GetById(job.Id) ?? job, result, protocols);
+            return new ReviewWorkflowResult(jobs.GetById(job.Id) ?? job, result, protocols, this._boundaryIssues);
         }
         catch (Exception ex)
         {

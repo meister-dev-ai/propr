@@ -19,6 +19,16 @@ public sealed record CandidateFindingProvenance
     public const string SynthesizedCrossCuttingOrigin = "synthesized_cross_cutting";
 
     /// <summary>
+    ///     Origin kind used for findings produced by deeper file-scoped follow-up.
+    /// </summary>
+    public const string DeeperFollowUpOrigin = "deeper_follow_up";
+
+    /// <summary>
+    ///     Origin kind used for findings retained through repeated judgment.
+    /// </summary>
+    public const string RepeatedJudgmentOrigin = "repeated_judgment";
+
+    /// <summary>
     ///     Initializes stable provenance metadata for a candidate finding.
     /// </summary>
     /// <param name="originKind">Kind of source that produced the finding.</param>
@@ -26,12 +36,18 @@ public sealed record CandidateFindingProvenance
     /// <param name="sourceFilePath">Optional repository-relative source file path.</param>
     /// <param name="sourceFileResultId">Optional review file result identifier.</param>
     /// <param name="sourceCommentOrdinal">Optional ordinal of the originating comment within the file result.</param>
+    /// <param name="evidenceSetId">Optional stable evidence-set identifier associated with the finding.</param>
+    /// <param name="requiresExplicitSupport">Whether the finding requires explicit support before publication.</param>
+    /// <param name="sourceOriginId">Optional stable identifier of the deeper follow-up task or repeated-judgment origin.</param>
     public CandidateFindingProvenance(
         string originKind,
         string generatedByStage,
         string? sourceFilePath = null,
         Guid? sourceFileResultId = null,
-        int? sourceCommentOrdinal = null)
+        int? sourceCommentOrdinal = null,
+        string? evidenceSetId = null,
+        bool requiresExplicitSupport = false,
+        string? sourceOriginId = null)
     {
         if (string.IsNullOrWhiteSpace(originKind))
         {
@@ -48,6 +64,9 @@ public sealed record CandidateFindingProvenance
         this.SourceFilePath = sourceFilePath;
         this.SourceFileResultId = sourceFileResultId;
         this.SourceCommentOrdinal = sourceCommentOrdinal;
+        this.EvidenceSetId = string.IsNullOrWhiteSpace(evidenceSetId) ? null : evidenceSetId;
+        this.RequiresExplicitSupport = requiresExplicitSupport;
+        this.SourceOriginId = string.IsNullOrWhiteSpace(sourceOriginId) ? null : sourceOriginId;
     }
 
     /// <summary>
@@ -74,4 +93,19 @@ public sealed record CandidateFindingProvenance
     ///     Gets the ordinal of the originating comment within the source file result when available.
     /// </summary>
     public int? SourceCommentOrdinal { get; }
+
+    /// <summary>
+    ///     Gets the stable evidence-set identifier used to evaluate this finding when available.
+    /// </summary>
+    public string? EvidenceSetId { get; }
+
+    /// <summary>
+    ///     Gets a value indicating whether this finding requires explicit support before publication.
+    /// </summary>
+    public bool RequiresExplicitSupport { get; }
+
+    /// <summary>
+    ///     Gets the stable origin identifier for deeper follow-up or repeated-judgment findings when available.
+    /// </summary>
+    public string? SourceOriginId { get; }
 }

@@ -747,6 +747,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("review_patch_identity");
 
+                    b.Property<string>("ReviewPipelineProfileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("review_pipeline_profile_id");
+
                     b.Property<int>("ReviewPublicationMode")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
