@@ -1,0 +1,40 @@
+Review focus: Use of unique pointer after lifetime ends
+
+What to look for:
+- Referencing the contents of a unique pointer after the underlying object has expired may lead to unexpected behavior.
+- Calling`get`on a`std::unique_ptr`object returns a pointer to the underlying allocations. When the`std::unique_ptr`object is destroyed, the pointer returned by`get`is no longer valid. If the pointer is used after the`std::unique_ptr`object is destroyed, then the behavior is undefined.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseOfUniquePointerAfterLifetimeEndsBad.cpp`):
+```
+#include <memory>
+std::unique_ptr<T> getUniquePointer();
+void work(const T*);
+
+// BAD: the unique pointer is deallocated when `get` returns. So `work`
+// is given a pointer to invalid memory.
+void work_with_unique_ptr_bad() {
+  const T* combined_string = getUniquePointer().get();
+  work(combined_string);
+}
+```
+- Reference example (`UseOfUniquePointerAfterLifetimeEndsGood.cpp`):
+```
+#include <memory>
+std::unique_ptr<T> getUniquePointer();
+void work(const T*);
+
+// GOOD: the unique pointer outlives the call to `work`. So the pointer
+// obtainted from `get` is valid.
+void work_with_unique_ptr_good() {
+  auto combined_string = getUniquePointer();
+  work(combined_string.get());
+}
+```

@@ -1,0 +1,42 @@
+Review focus: Use of expired stack-address
+
+What to look for:
+- Accessing the stack-allocated memory of a function after it has returned can lead to memory corruption.
+- This rule finds uses of pointers that likely point to local variables in expired stack frames. A pointer to a local variable is only valid until the function returns, after which it becomes a dangling pointer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UsingExpiredStackAddress.cpp`):
+```
+static const int* xptr;
+
+void localAddressEscapes() {
+  int x = 0;
+  xptr = &x;
+}
+
+void example1() {
+  localAddressEscapes();
+  const int* x = xptr; // BAD: This pointer points to expired stack allocated memory.
+}
+
+void localAddressDoesNotEscape() {
+  int x = 0;
+  xptr = &x;
+  // ...
+  // use `xptr`
+  // ...
+  xptr = nullptr;
+}
+
+void example2() {
+  localAddressDoesNotEscape();
+  const int* x = xptr; // GOOD: This pointer does not point to expired memory.
+}
+```

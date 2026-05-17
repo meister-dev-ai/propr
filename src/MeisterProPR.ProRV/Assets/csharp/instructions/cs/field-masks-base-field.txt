@@ -1,0 +1,36 @@
+Review focus: Field masks field in super class
+
+What to look for:
+- Finds fields that hide the definition of a field in a superclass, where additionally there are no references of the form 'base.f' in the subclass.
+- This rule identifies a field that hides a field in a superclass because the field has the same name and, additionally, there are no methods in the subclass that refer to the field in the superclass directly using`super.field`. Redefining the field in the subclass is a common mistake.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FieldMasksSuperField.cs`):
+```
+class Person
+{
+    private string name;
+    public Person() { }
+    public Person(string name)
+    {
+        this.name = name;
+    }
+}
+class Employee : Person
+{
+    private string name; // BAD
+    private string department;
+    public Employee(string name, string department)
+    {
+        this.name = name;
+        this.department = department;
+    }
+}
+```

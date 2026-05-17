@@ -1,0 +1,35 @@
+Review focus: Special method has incorrect signature
+
+What to look for:
+- Special method has incorrect signature
+- Special methods (sometimes also called magic methods) are how user defined classes interact with the Python virtual machine. For example, for a class to support addition it must implement the`__add__`and`__radd__`special methods. When the expression`a + b`is evaluated the Python virtual machine will call`type(a).__add__(a, b)`and if that is not implemented it will call`type(b).__radd__(b, a)`. Since these special methods are always called by the virtual machine with a fixed number of parameters, if the method is implemented with a different number of parameters it will fail at runtime with a`TypeError`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SignatureSpecialMethods.py`):
+```
+#-*- coding: utf-8 -*-
+
+class Point(object):
+
+    def __init__(self, x, y):
+        self.x
+        self.y
+
+    def __add__(self, other):
+        if not isinstance(other, Point):
+            return NotImplemented
+        return Point(self.x + other.x, self.y + other.y)
+
+    def __str__(self, style): #Spurious extra parameter
+        if style == 'polar':
+            u"%s @ %s\u00b0" % (abs(self), self.angle())
+        else:
+            return "[%s, %s]" % (self.x, self.y)
+```

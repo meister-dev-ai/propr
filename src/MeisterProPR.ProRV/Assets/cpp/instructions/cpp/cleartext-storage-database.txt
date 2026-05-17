@@ -1,0 +1,52 @@
+Review focus: Cleartext storage of sensitive information in an SQLite database
+
+What to look for:
+- Storing sensitive information in a non-encrypted database can expose it to an attacker.
+- Sensitive information that is stored in an unencrypted SQLite database is accessible to an attacker who gains access to the database.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextSqliteDatabase.c`):
+```
+void bad(void) {
+  const char *password = "cleartext password";
+  sqlite3 *credentialsDB;
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_open("credentials.db", &credentialsDB) == SQLITE_OK) {
+    // BAD: database opened without encryption being enabled
+    sqlite3_exec(credentialsDB, "CREATE TABLE IF NOT EXISTS creds (password TEXT);", NULL, NULL, NULL);
+    if (sqlite3_prepare_v2(credentialsDB, "INSERT INTO creds(password) VALUES(?)", -1, &stmt, NULL) == SQLITE_OK) {
+      sqlite3_bind_text(stmt, 1, password, -1, SQLITE_TRANSIENT);
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+      sqlite3_close(credentialsDB);
+    }
+  }
+}
+
+void good(const char *secretKey) {
+  const char *password = "cleartext password";
+  sqlite3 *credentialsDB;
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_open("credentials.db", &credentialsDB) == SQLITE_OK) {
+    // GOOD: database encryption enabled:
+    std::string setKeyString = std::string("PRAGMA key = '") + secretKey + "'";
+    sqlite3_exec(credentialsDB, setKeyString.c_str(), NULL, NULL, NULL);
+    sqlite3_exec(credentialsDB, "CREATE TABLE IF NOT EXISTS creds (password TEXT);", NULL, NULL, NULL);
+    if (sqlite3_prepare_v2(credentialsDB, "INSERT INTO creds(password) VALUES(?)", -1, &stmt, NULL) == SQLITE_OK) {
+      sqlite3_bind_text(stmt, 1, password, -1, SQLITE_TRANSIENT);
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+      sqlite3_close(credentialsDB);
+    }
+  }
+}
+```

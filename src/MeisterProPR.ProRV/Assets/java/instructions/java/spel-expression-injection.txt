@@ -1,0 +1,12 @@
+Review focus: Expression language injection (Spring)
+
+What to look for:
+- Evaluation of a user-controlled Spring Expression Language (SpEL) expression may lead to remote code execution.
+- The Spring Expression Language (SpEL) is a powerful expression language provided by the Spring Framework. The language offers many features including invocation of methods available in the JVM. If a SpEL expression is built using attacker-controlled data, and then evaluated in a powerful context, then it may allow the attacker to run arbitrary code. The`SpelExpressionParser` class parses a SpEL expression string and returns an`Expression`instance that can be then evaluated by calling one of its methods. By default, an expression is evaluated in a powerful`StandardEvaluationContext`that allows the expression to access other methods available in the JVM.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

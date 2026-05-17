@@ -1,0 +1,898 @@
+{
+   "checks" : [
+      {
+         "id" : "rb/incomplete-hostname-regexp",
+         "instructionPath" : "instructions/rb/incomplete-hostname-regexp.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteHostnameRegExp.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching a URL or hostname against a regular expression that contains an unescaped dot as part of the hostname might match more hostnames than expected.",
+         "sourceRelativePath" : "queries/security/cwe-020/IncompleteHostnameRegExp.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete regular expression for hostnames"
+      },
+      {
+         "id" : "rb/incomplete-url-substring-sanitization",
+         "instructionPath" : "instructions/rb/incomplete-url-substring-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteUrlSubstringSanitization_BAD1.rb",
+            "IncompleteUrlSubstringSanitization_BAD2.rb",
+            "IncompleteUrlSubstringSanitization_GOOD.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Security checks on the substrings of an unparsed URL are often vulnerable to bypassing.",
+         "sourceRelativePath" : "queries/security/cwe-020/IncompleteUrlSubstringSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete URL substring sanitization"
+      },
+      {
+         "id" : "rb/regex/badly-anchored-regexp",
+         "instructionPath" : "instructions/rb/regex/badly-anchored-regexp.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "missing_full_anchor_bad.rb",
+            "missing_full_anchor_good.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expressions anchored using `^` or `$` are vulnerable to bypassing.",
+         "sourceRelativePath" : "queries/security/cwe-020/MissingFullAnchor.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Badly anchored regular expression"
+      },
+      {
+         "id" : "rb/regex/missing-regexp-anchor",
+         "instructionPath" : "instructions/rb/regex/missing-regexp-anchor.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "missing_regexp_anchor_bad.rb",
+            "missing_regexp_anchor_good.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expressions without anchors can be vulnerable to bypassing.",
+         "sourceRelativePath" : "queries/security/cwe-020/MissingRegExpAnchor.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Missing regular expression anchor"
+      },
+      {
+         "id" : "rb/overly-large-range",
+         "instructionPath" : "instructions/rb/overly-large-range.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Overly permissive regular expression ranges match a wider range of characters than intended.",
+         "sourceRelativePath" : "queries/security/cwe-020/OverlyLargeRange.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Overly permissive regular expression range"
+      },
+      {
+         "id" : "rb/path-injection",
+         "instructionPath" : "instructions/rb/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "tainted_path.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "queries/security/cwe-022/PathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "rb/command-line-injection",
+         "instructionPath" : "instructions/rb/command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "command_injection.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "queries/security/cwe-078/CommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Uncontrolled command line"
+      },
+      {
+         "id" : "rb/kernel-open",
+         "instructionPath" : "instructions/rb/kernel-open.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using `Kernel.open`, `IO.read`, `IO.write`, `IO.binread`, `IO.binwrite`, `IO.foreach`, `IO.readlines`, or `URI.open` may allow a malicious user to execute arbitrary system...",
+         "sourceRelativePath" : "queries/security/cwe-078/KernelOpen.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088",
+            "external/cwe/cwe-073"
+         ],
+         "title" : "Use of `Kernel.open`, `IO.read` or similar sinks with user-controlled input"
+      },
+      {
+         "id" : "rb/non-constant-kernel-open",
+         "instructionPath" : "instructions/rb/non-constant-kernel-open.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Using `Kernel.open`, `IO.read`, `IO.write`, `IO.binread`, `IO.binwrite`, `IO.foreach`, `IO.readlines`, or `URI.open` may allow a malicious user to execute arbitrary system...",
+         "sourceRelativePath" : "queries/security/cwe-078/NonConstantKernelOpen.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088",
+            "external/cwe/cwe-073"
+         ],
+         "title" : "Use of `Kernel.open` or `IO.read` or similar sinks with a non-constant value"
+      },
+      {
+         "id" : "rb/shell-command-constructed-from-input",
+         "instructionPath" : "instructions/rb/shell-command-constructed-from-input.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "unsafe-shell-command-construction.rb",
+            "unsafe-shell-command-construction_fixed.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "queries/security/cwe-078/UnsafeShellCommandConstruction.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088",
+            "external/cwe/cwe-073"
+         ],
+         "title" : "Unsafe shell command constructed from library input"
+      },
+      {
+         "id" : "rb/reflected-xss",
+         "instructionPath" : "instructions/rb/reflected-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "reflected_xss_safe.html.erb",
+            "reflected_xss_unsafe.html.erb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to a web page allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "queries/security/cwe-079/ReflectedXSS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Reflected server-side cross-site scripting"
+      },
+      {
+         "id" : "rb/stored-xss",
+         "instructionPath" : "instructions/rb/stored-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "stored_xss_rails_safe.html.erb",
+            "stored_xss_rails_unsafe.html.erb",
+            "stored_xss_file_unsafe.html.erb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using uncontrolled stored values in HTML allows for a stored cross-site scripting vulnerability.",
+         "sourceRelativePath" : "queries/security/cwe-079/StoredXSS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Stored cross-site scripting"
+      },
+      {
+         "id" : "rb/html-constructed-from-input",
+         "instructionPath" : "instructions/rb/html-constructed-from-input.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "unsafe-html-construction.rb",
+            "unsafe-html-construction_safe.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings to construct HTML might allow a malicious user to perform a cross-site scripting attack.",
+         "sourceRelativePath" : "queries/security/cwe-079/UnsafeHtmlConstruction.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Unsafe HTML constructed from library input"
+      },
+      {
+         "id" : "rb/sql-injection",
+         "instructionPath" : "instructions/rb/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SqlInjection.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a SQL query from user-controlled sources is vulnerable to insertion of malicious SQL code by the user.",
+         "sourceRelativePath" : "queries/security/cwe-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089"
+         ],
+         "title" : "SQL query built from user-controlled sources"
+      },
+      {
+         "id" : "rb/code-injection",
+         "instructionPath" : "instructions/rb/code-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "code_injection.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.",
+         "sourceRelativePath" : "queries/security/cwe-094/CodeInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Code injection"
+      },
+      {
+         "id" : "rb/unsafe-code-construction",
+         "instructionPath" : "instructions/rb/unsafe-code-construction.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnsafeCodeConstruction.rb",
+            "UnsafeCodeConstructionSafe.rb",
+            "UnsafeCodeConstruction2.rb",
+            "UnsafeCodeConstruction2Safe.rb",
+            "UnsafeCodeConstruction3.rb",
+            "UnsafeCodeConstruction3Safe.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using externally controlled strings to construct code may allow a malicious user to execute arbitrary code.",
+         "sourceRelativePath" : "queries/security/cwe-094/UnsafeCodeConstruction.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Unsafe code constructed from library input"
+      },
+      {
+         "id" : "rb/bad-tag-filter",
+         "instructionPath" : "instructions/rb/bad-tag-filter.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadTagFilter.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching HTML tags using regular expressions is hard to do right, and can easily lead to security issues.",
+         "sourceRelativePath" : "queries/security/cwe-116/BadTagFilter.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-185",
+            "external/cwe/cwe-186"
+         ],
+         "title" : "Bad HTML filtering regexp"
+      },
+      {
+         "id" : "rb/incomplete-multi-character-sanitization",
+         "instructionPath" : "instructions/rb/incomplete-multi-character-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A sanitizer that removes a sequence of characters may reintroduce the dangerous sequence.",
+         "sourceRelativePath" : "queries/security/cwe-116/IncompleteMultiCharacterSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-080",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Incomplete multi-character sanitization"
+      },
+      {
+         "id" : "rb/incomplete-sanitization",
+         "instructionPath" : "instructions/rb/incomplete-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteSanitization.rb",
+            "IncompleteSanitizationGood.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A string transformer that does not replace or escape all occurrences of a meta-character may be ineffective.",
+         "sourceRelativePath" : "queries/security/cwe-116/IncompleteSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-080",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Incomplete string escaping or encoding"
+      },
+      {
+         "id" : "rb/log-injection",
+         "instructionPath" : "instructions/rb/log-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "log_injection_bad.rb",
+            "log_injection_good.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled sources is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "queries/security/cwe-117/LogInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log injection"
+      },
+      {
+         "id" : "rb/polynomial-redos",
+         "instructionPath" : "instructions/rb/polynomial-redos.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A regular expression that can require polynomial time to match may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "queries/security/cwe-1333/PolynomialReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Polynomial regular expression used on uncontrolled data"
+      },
+      {
+         "id" : "rb/redos",
+         "instructionPath" : "instructions/rb/redos.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "A regular expression that requires exponential time to match certain inputs can be a performance bottleneck, and may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "queries/security/cwe-1333/ReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Inefficient regular expression"
+      },
+      {
+         "id" : "rb/regexp-injection",
+         "instructionPath" : "instructions/rb/regexp-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "regexp_injection_bad.rb",
+            "regexp_injection_good.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User input should not be used in regular expressions without first being escaped.",
+         "sourceRelativePath" : "queries/security/cwe-1333/RegExpInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Regular expression injection"
+      },
+      {
+         "id" : "rb/tainted-format-string",
+         "instructionPath" : "instructions/rb/tainted-format-string.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "tainted_format_string_bad.rb",
+            "tainted_format_string_good.rb",
+            "tainted_format_string_interpolation.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using external input in format strings can lead to garbled output.",
+         "sourceRelativePath" : "queries/security/cwe-134/TaintedFormatString.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-134"
+         ],
+         "title" : "Use of externally-controlled format string"
+      },
+      {
+         "id" : "rb/stack-trace-exposure",
+         "instructionPath" : "instructions/rb/stack-trace-exposure.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StackTraceExposure.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Leaking information about an exception, such as messages and stack traces, to an external user can expose implementation details that are useful to an attacker for developing a...",
+         "sourceRelativePath" : "queries/security/cwe-209/StackTraceExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-209",
+            "external/cwe/cwe-497"
+         ],
+         "title" : "Information exposure through an exception"
+      },
+      {
+         "id" : "rb/request-without-cert-validation",
+         "instructionPath" : "instructions/rb/request-without-cert-validation.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "RequestWithoutValidation.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Making a request without certificate validation can allow man-in-the-middle attacks.",
+         "sourceRelativePath" : "queries/security/cwe-295/RequestWithoutValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295"
+         ],
+         "title" : "Request without certificate validation"
+      },
+      {
+         "id" : "rb/insecure-dependency",
+         "instructionPath" : "instructions/rb/insecure-dependency.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "bad_gemfile.rb",
+            "good_gemfile.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using unencrypted protocols to fetch dependencies can leave an application open to man-in-the-middle attacks.",
+         "sourceRelativePath" : "queries/security/cwe-300/InsecureDependencyResolution.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-300",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-494",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Dependency download using unencrypted communication channel"
+      },
+      {
+         "id" : "rb/clear-text-logging-sensitive-data",
+         "instructionPath" : "instructions/rb/clear-text-logging-sensitive-data.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextLoggingBad.rb",
+            "CleartextLoggingGood.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Logging sensitive information without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "queries/security/cwe-312/CleartextLogging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-359",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Clear-text logging of sensitive information"
+      },
+      {
+         "id" : "rb/clear-text-storage-sensitive-data",
+         "instructionPath" : "instructions/rb/clear-text-storage-sensitive-data.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextStorageBad.rb",
+            "CleartextStorageGood.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Storing sensitive information without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "queries/security/cwe-312/CleartextStorage.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-359",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Clear-text storage of sensitive information"
+      },
+      {
+         "id" : "rb/weak-cryptographic-algorithm",
+         "instructionPath" : "instructions/rb/weak-cryptographic-algorithm.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "broken_crypto.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic algorithms can compromise security.",
+         "sourceRelativePath" : "queries/security/cwe-327/BrokenCryptoAlgorithm.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Use of a broken or weak cryptographic algorithm"
+      },
+      {
+         "id" : "rb/weak-sensitive-data-hashing",
+         "instructionPath" : "instructions/rb/weak-sensitive-data-hashing.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "weak_certificate_hashing.rb",
+            "weak_password_hashing_bad.rb",
+            "weak_password_hashing_good.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic hashing algorithms can compromise security.",
+         "sourceRelativePath" : "queries/security/cwe-327/WeakSensitiveDataHashing.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328",
+            "external/cwe/cwe-916"
+         ],
+         "title" : "Use of a broken or weak cryptographic hashing algorithm on sensitive data"
+      },
+      {
+         "id" : "rb/csrf-protection-disabled",
+         "instructionPath" : "instructions/rb/csrf-protection-disabled.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UsersController.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Disabling or weakening CSRF protection may make the application vulnerable to a Cross-Site Request Forgery (CSRF) attack.",
+         "sourceRelativePath" : "queries/security/cwe-352/CSRFProtectionDisabled.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "CSRF protection weakened or disabled"
+      },
+      {
+         "id" : "rb/csrf-protection-not-enabled",
+         "instructionPath" : "instructions/rb/csrf-protection-not-enabled.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ProtectFromForgeryGood.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Not enabling CSRF protection may make the application vulnerable to a Cross-Site Request Forgery (CSRF) attack.",
+         "sourceRelativePath" : "queries/security/cwe-352/CSRFProtectionNotEnabled.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "CSRF protection not enabled"
+      },
+      {
+         "id" : "rb/unsafe-deserialization",
+         "instructionPath" : "instructions/rb/unsafe-deserialization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsafeDeserializationBad.rb",
+            "UnsafeDeserializationGood.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Deserializing user-controlled data may allow attackers to execute arbitrary code.",
+         "sourceRelativePath" : "queries/security/cwe-502/UnsafeDeserialization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-502"
+         ],
+         "title" : "Deserialization of user-controlled data"
+      },
+      {
+         "id" : "rb/hardcoded-data-interpreted-as-code",
+         "instructionPath" : "instructions/rb/hardcoded-data-interpreted-as-code.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "HardcodedDataInterpretedAsCode.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Transforming hard-coded data (such as hexadecimal constants) into code to be executed is a technique often associated with backdoors and should be avoided.",
+         "sourceRelativePath" : "queries/security/cwe-506/HardcodedDataInterpretedAsCode.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-506"
+         ],
+         "title" : "Hard-coded data interpreted as code"
+      },
+      {
+         "id" : "rb/sensitive-get-query",
+         "instructionPath" : "instructions/rb/sensitive-get-query.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "routes.rb",
+            "users_controller.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Placing sensitive data in a GET request increases the risk of the data being exposed to an attacker.",
+         "sourceRelativePath" : "queries/security/cwe-598/SensitiveGetQuery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-598"
+         ],
+         "title" : "Sensitive data read from GET request"
+      },
+      {
+         "id" : "rb/url-redirection",
+         "instructionPath" : "instructions/rb/url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "url_redirect.rb",
+            "url_redirect_good.rb",
+            "url_redirect_domain.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "queries/security/cwe-601/UrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "URL redirection from remote source"
+      },
+      {
+         "id" : "rb/xxe",
+         "instructionPath" : "instructions/rb/xxe.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "Xxe.rb",
+            "XxeGood.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Parsing user input as an XML document with external entity expansion is vulnerable to XXE attacks.",
+         "sourceRelativePath" : "queries/security/cwe-611/Xxe.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-611",
+            "external/cwe/cwe-776",
+            "external/cwe/cwe-827"
+         ],
+         "title" : "XML external entity expansion"
+      },
+      {
+         "id" : "rb/weak-cookie-configuration",
+         "instructionPath" : "instructions/rb/weak-cookie-configuration.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "weak_cookie_configuration.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Misconfiguring how cookies are encrypted or sent can expose a user to various attacks.",
+         "sourceRelativePath" : "queries/security/cwe-732/WeakCookieConfiguration.ql",
+         "tags" : [
+            "external/cwe/cwe-732",
+            "external/cwe/cwe-1275",
+            "security"
+         ],
+         "title" : "Weak cookie configuration"
+      },
+      {
+         "id" : "rb/overly-permissive-file",
+         "instructionPath" : "instructions/rb/overly-permissive-file.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Allowing files to be readable or writable by users other than the owner may allow sensitive information to be accessed.",
+         "sourceRelativePath" : "queries/security/cwe-732/WeakFilePermissions.ql",
+         "tags" : [
+            "external/cwe/cwe-732",
+            "security"
+         ],
+         "title" : "Overly permissive file permissions"
+      },
+      {
+         "id" : "rb/hardcoded-credentials",
+         "instructionPath" : "instructions/rb/hardcoded-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HardcodedCredentials.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Credentials are hard coded in the source code of the application.",
+         "sourceRelativePath" : "queries/security/cwe-798/HardcodedCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded credentials"
+      },
+      {
+         "id" : "rb/insecure-download",
+         "instructionPath" : "instructions/rb/insecure-download.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "insecure_download.rb",
+            "secure_download.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Downloading executables and other sensitive files over an insecure connection may allow man-in-the-middle attacks.",
+         "sourceRelativePath" : "queries/security/cwe-829/InsecureDownload.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Download of sensitive file through insecure connection"
+      },
+      {
+         "id" : "rb/http-to-file-access",
+         "instructionPath" : "instructions/rb/http-to-file-access.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "http_to_file_access.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Writing network data directly to the file system allows arbitrary file upload and might indicate a backdoor.",
+         "sourceRelativePath" : "queries/security/cwe-912/HttpToFileAccess.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-912",
+            "external/cwe/cwe-434"
+         ],
+         "title" : "Network data written to file"
+      },
+      {
+         "id" : "rb/insecure-mass-assignment",
+         "instructionPath" : "instructions/rb/insecure-mass-assignment.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MassAssignmentBad.rb",
+            "MassAssignmentGood.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using mass assignment with user-controlled attributes allows unintended parameters to be set.",
+         "sourceRelativePath" : "queries/security/cwe-915/MassAssignment.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-915"
+         ],
+         "title" : "Insecure Mass Assignment"
+      },
+      {
+         "id" : "rb/request-forgery",
+         "instructionPath" : "instructions/rb/request-forgery.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ServerSideRequestForgery.rb"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Making a network request with user-controlled data in the URL allows for request forgery attacks.",
+         "sourceRelativePath" : "queries/security/cwe-918/ServerSideRequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Server-side request forgery"
+      },
+      {
+         "id" : "rb/useless-assignment-to-local",
+         "instructionPath" : "instructions/rb/useless-assignment-to-local.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DeadStoreOfLocal.rb",
+            "DeadStoreOfLocalGood.rb"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a local variable that is not used later on, or whose value is always overwritten, has no effect.",
+         "sourceRelativePath" : "queries/variables/DeadStoreOfLocal.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to local variable"
+      },
+      {
+         "id" : "rb/uninitialized-local-variable",
+         "instructionPath" : "instructions/rb/uninitialized-local-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using a local variable before it is initialized gives the variable a default 'nil' value.",
+         "sourceRelativePath" : "queries/variables/UninitializedLocal.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Potentially uninitialized local variable"
+      },
+      {
+         "id" : "rb/unused-parameter",
+         "instructionPath" : "instructions/rb/unused-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A parameter that is not used later on, or whose value is always overwritten, can be removed.",
+         "sourceRelativePath" : "queries/variables/UnusedParameter.ql",
+         "tags" : [
+            "maintainability",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Unused parameter"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T06:48:27Z",
+   "language" : "ruby"
+}

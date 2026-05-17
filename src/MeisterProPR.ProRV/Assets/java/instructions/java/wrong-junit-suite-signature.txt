@@ -1,0 +1,12 @@
+Review focus: Bad suite method
+
+What to look for:
+- A 'suite' method in a JUnit 3.8 test that does not match the expected signature is not detected by JUnit.
+- JUnit 3.8 requires that a`suite`method for defining a`TestSuite`that will be used by a`TestRunner`has a specific signature. If the`suite`method does not have the expected signature, JUnit does not detect the method as a`suite`method.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

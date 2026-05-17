@@ -1,0 +1,40 @@
+Review focus: Non-linear pattern
+
+What to look for:
+- If the same pattern variable appears twice in an array or object pattern, the second binding will silently overwrite the first binding, which is probably unintentional.
+- If the same pattern variable is bound multiple times in the same object or array pattern, the last binding overwrites all of the earlier ones. This is most likely unintended and should be avoided. In TypeScript, a common mistake is to try to write type annotations inside a pattern. This is not possible, and the type annotation should come after the pattern.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonLinearPattern.js`):
+```
+function distanceFromOrigin(point) {
+    var [x, x] = point;
+    return Math.sqrt(x*x + y*y);
+}
+```
+- Reference example (`NonLinearPatternGood.js`):
+```
+function distanceFromOrigin(point) {
+    var [x, y] = point;
+    return Math.sqrt(x*x + y*y);
+}
+```
+- Reference example (`NonLinearPatternTS.ts`):
+```
+function distance({x: number, y: number}) {
+    return Math.sqrt(x*x + y*y);
+}
+```
+- Reference example (`NonLinearPatternTSGood.ts`):
+```
+function distance({x, y}: {x: number, y: number}) {
+    return Math.sqrt(x*x + y*y);
+}
+```

@@ -1,0 +1,47 @@
+Review focus: Unused variable, import, function or class
+
+What to look for:
+- Unused variables, imports, functions or classes may be a symptom of a bug and should be examined carefully.
+- Unused local variables make code hard to read and understand. Any computation used to initialize an unused variable is wasted, which may lead to performance problems. Similarly, unused imports and unused functions or classes can be confusing. They may even be a symptom of a bug caused, for example, by an incomplete refactoring.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedVariable.js`):
+```
+function f() {
+	var x = expensiveComputation();
+	return 23;
+}
+```
+- Reference example (`UnusedVariable2.js`):
+```
+var f = function f() {
+  return "Hi!";
+};
+f();
+```
+- Reference example (`UnusedVariable2Good.js`):
+```
+var f = function () {
+  return "Hi!";
+};
+f();
+```
+- Reference example (`UnusedVariable3.js`):
+```
+export default function f() {
+  return "Hi!";
+};
+```
+- Reference example (`UnusedVariable3Good.js`):
+```
+export default function () {
+  return "Hi!";
+};
+```

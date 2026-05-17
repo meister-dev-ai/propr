@@ -1,0 +1,34 @@
+Review focus: HTTP Response Splitting
+
+What to look for:
+- Writing user input directly to an HTTP header makes code vulnerable to attack by header splitting.
+- Directly writing user input (for example, an HTTP request parameter) to an HTTP header can lead to an HTTP response-splitting vulnerability. If user-controlled input is used in an HTTP header that allows line break characters, an attacker can inject additional headers or control the response body, leading to vulnerabilities such as XSS or cache poisoning.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`header_injection.py`):
+```
+@app.route("/example_bad")
+def example_bad():
+    rfs_header = request.args["rfs_header"]
+    response = Response()
+    custom_header = "X-MyHeader-" + rfs_header
+    # BAD: User input is used as part of the header name.
+    response.headers[custom_header] = "HeaderValue" 
+    return response
+
+@app.route("/example_good")
+def example_bad():
+    rfs_header = request.args["rfs_header"]
+    response = Response()
+    custom_header = "X-MyHeader-" + rfs_header.replace("\n", "").replace("\r","").replace(":","")
+    # GOOD: Line break characters are removed from the input.
+    response.headers[custom_header] = "HeaderValue" 
+    return response
+```

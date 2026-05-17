@@ -1,0 +1,37 @@
+Review focus: Classes with too many fields
+
+What to look for:
+- Finds classes with many fields; they could probably be refactored by breaking them down into smaller classes, and using composition.
+- This rule finds classes with more than 15 instance (i.e., non-`static`) fields. Library classes are not shown. Having too many fields in one class is a sign that the class may lack cohesion (i.e. lack a single purpose). These classes can be split into smaller, more cohesive classes. Alternatively, the related fields can be grouped into`struct`s.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ClassesWithManyFields.cpp`):
+```
+//This struct contains 30 fields.
+struct MyParticle {
+  bool isActive;
+  int priority;
+
+  float x, y, z;
+  float dx, dy, dz;
+  float ddx, ddy, ddz;
+  bool isCollider;
+
+  int age, maxAge;
+  float size1, size2;
+
+  bool hasColor;
+  unsigned char r1, g1, b1, a1;
+  unsigned char r2, g2, b2, a2;
+
+  class texture *tex;
+  float u1, v1, u2, v2;
+};
+```

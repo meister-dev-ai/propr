@@ -1,0 +1,26 @@
+Review focus: Assignment to constant
+
+What to look for:
+- Assigning to a variable that is declared 'const' has either no effect or leads to a runtime error, depending on the platform.
+- Most popular JavaScript platforms support`const`declarations, although this feature is not part of the ECMAScript 5 standard. Assigning a new value to a variable that is declared`const`does not result in an error on current platforms, and simply has no effect. Relying on this behavior is error-prone, particularly since ECMAScript 2015 prohibits such assignments.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AssignmentToConst.js`):
+```
+const loc = null;
+if (dist < 10)
+    loc = "here";
+else
+    loc = "there";
+```
+- Reference example (`AssignmentToConstGood.js`):
+```
+const loc = dist < 10 ? "here" : "there";
+```

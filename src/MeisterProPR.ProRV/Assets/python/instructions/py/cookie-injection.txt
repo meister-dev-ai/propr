@@ -1,0 +1,33 @@
+Review focus: Construction of a cookie using user-supplied input
+
+What to look for:
+- Constructing cookies from user input may allow an attacker to perform a Cookie Poisoning attack.
+- Constructing cookies from user input can allow an attacker to control a user's cookie. This may lead to a session fixation attack. Additionally, client code may not expect a cookie to contain attacker-controlled data, and fail to sanitize it for common vulnerabilities such as Cross Site Scripting (XSS). An attacker manipulating the raw cookie header may additionally be able to set cookie attributes such as`HttpOnly`to insecure values.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CookieInjection.py`):
+```
+from flask import request, make_response
+
+
+@app.route("/1")
+def set_cookie():
+    resp = make_response()
+    resp.set_cookie(request.args["name"], # BAD: User input is used to set the cookie's name and value
+                    value=request.args["name"])
+    return resp
+
+
+@app.route("/2")
+def set_cookie_header():
+    resp = make_response()
+    resp.headers['Set-Cookie'] = f"{request.args['name']}={request.args['name']};" # BAD: User input is used to set the raw cookie header.
+    return resp
+```

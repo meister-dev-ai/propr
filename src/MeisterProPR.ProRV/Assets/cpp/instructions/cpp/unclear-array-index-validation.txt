@@ -1,0 +1,58 @@
+Review focus: Unclear validation of array index
+
+What to look for:
+- Accessing an array without first checking that the index is within the bounds of the array can cause undefined behavior and can also be a security risk.
+- C and C++ do not have built-in bounds checking for array indexing expressions such as`x[i]`. If`i`is out of bounds then the program will read/write whatever data happens to be at that address. An attacker who is able to control the value of`i`might be able to read or modify data which they are not authorized to access.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ImproperArrayIndexValidationBad.c`):
+```
+int example(int socket, int data[]) {
+  char inputBuffer[CHAR_ARRAY_SIZE];
+  int recvResult;
+  int i;
+
+  recvResult = recv(socket, inputBuffer, CHAR_ARRAY_SIZE - 1, 0);
+  if (recvResult < 0)
+  {
+    return -1;
+  }
+
+  inputBuffer[recvResult] = '\0';
+  i = atoi(inputBuffer);
+
+  // BAD: i has not been validated.
+  return data[i];
+}
+```
+- Reference example (`ImproperArrayIndexValidationGood.c`):
+```
+int example(int socket, int data[], int ndata) {
+  char inputBuffer[CHAR_ARRAY_SIZE];
+  int recvResult;
+  int i;
+
+  recvResult = recv(socket, inputBuffer, CHAR_ARRAY_SIZE - 1, 0);
+  if (recvResult < 0)
+  {
+    return -1;
+  }
+
+  inputBuffer[recvResult] = '\0';
+  i = atoi(inputBuffer);
+
+  if (i < 0 || ndata <= i) {
+    return -1;
+  }
+
+  // GOOD: i has been validated.
+  return data[i];
+}
+```

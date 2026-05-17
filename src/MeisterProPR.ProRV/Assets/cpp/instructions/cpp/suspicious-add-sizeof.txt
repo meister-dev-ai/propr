@@ -1,0 +1,31 @@
+Review focus: Suspicious add with sizeof
+
+What to look for:
+- Explicitly scaled pointer arithmetic expressions can cause buffer overflow conditions if the offset is also implicitly scaled.
+- Pointer arithmetic in C and C++ is automatically scaled according to the size of the data type. For example, if the type of p is T* and sizeof(T) == 4 then the expression p+1 adds 4 bytes to p. This query finds code of the form p + k*sizeof(T). Such code is usually a mistake because there is no need to manually scale the offset by sizeof(T).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousAddWithSizeof.cpp`):
+```
+int example1(int i) {
+  int intArray[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+  int *intPointer = intArray;
+  // BAD: the offset is already automatically scaled by sizeof(int),
+  // so this code will compute the wrong offset.
+  return *(intPointer + (i * sizeof(int)));
+}
+
+int example2(int i) {
+  int intArray[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+  int *intPointer = intArray;
+  // GOOD: the offset is automatically scaled by sizeof(int).
+  return *(intPointer + i);
+}
+```

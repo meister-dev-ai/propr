@@ -1,0 +1,32 @@
+Review focus: Download of sensitive file through insecure connection
+
+What to look for:
+- Downloading executables and other sensitive files over an insecure connection opens up for potential man-in-the-middle attacks.
+- Downloading executables or other sensitive files over an unencrypted connection can leave a server open to man-in-the-middle attacks (MITM). Such an attack can allow an attacker to insert arbitrary content into the downloaded file, and in the worst case, allow the attacker to execute arbitrary code on the vulnerable system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`insecure-download.js`):
+```
+const fetch = require("node-fetch");
+const cp = require("child_process");
+
+fetch('http://mydownload.example.org/myscript.sh')
+    .then(res => res.text())
+    .then(script => cp.execSync(script));
+```
+- Reference example (`secure-download.js`):
+```
+const fetch = require("node-fetch");
+const cp = require("child_process");
+
+fetch('https://mydownload.example.org/myscript.sh')
+    .then(res => res.text())
+    .then(script => cp.execSync(script));
+```

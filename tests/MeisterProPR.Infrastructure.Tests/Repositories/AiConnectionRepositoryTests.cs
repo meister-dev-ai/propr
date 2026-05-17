@@ -66,6 +66,7 @@ public sealed class AiConnectionRepositoryTests
             ?
             [
                 AiPurpose.ReviewDefault,
+                AiPurpose.ProRVPrefilter,
                 AiPurpose.ReviewLowEffort,
                 AiPurpose.ReviewMediumEffort,
                 AiPurpose.ReviewHighEffort,
@@ -192,6 +193,7 @@ public sealed class AiConnectionRepositoryTests
             [chatModel, embeddingModel],
             [
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewDefault, null, chatModelId),
+                new AiPurposeBindingDto(Guid.Empty, AiPurpose.ProRVPrefilter, null, chatModelId),
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewLowEffort, null, chatModelId),
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewMediumEffort, null, chatModelId),
                 new AiPurposeBindingDto(Guid.Empty, AiPurpose.ReviewHighEffort, null, chatModelId),
@@ -473,6 +475,46 @@ public sealed class AiConnectionRepositoryTests
         Assert.NotNull(result);
         Assert.Equal(activeProfile.Id, result.Id);
         Assert.Equal("gpt-4o", result.GetBoundModelId(AiPurpose.ReviewDefault));
+    }
+
+    [Fact]
+    public async Task GetActiveBindingForPurposeAsync_MissingProRvPrefilterBinding_FallsBackToReviewDefault()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.ReviewDefault,
+            AiPurpose.MemoryReconsideration,
+            AiPurpose.EmbeddingDefault);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetActiveBindingForPurposeAsync(clientId, AiPurpose.ProRVPrefilter);
+
+        Assert.NotNull(result);
+        Assert.Equal(AiPurpose.ReviewDefault, result.Binding.Purpose);
+        Assert.Equal("gpt-4o", result.Model.RemoteModelId);
+    }
+
+    [Fact]
+    public async Task GetActiveBindingForPurposeAsync_DedicatedProRvPrefilterBinding_UsesDedicatedBinding()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(clientId, true, true, "Test Connection", AiPurpose.ReviewDefault, AiPurpose.ProRVPrefilter);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetActiveBindingForPurposeAsync(clientId, AiPurpose.ProRVPrefilter);
+
+        Assert.NotNull(result);
+        Assert.Equal(AiPurpose.ProRVPrefilter, result.Binding.Purpose);
     }
 
     [Fact]

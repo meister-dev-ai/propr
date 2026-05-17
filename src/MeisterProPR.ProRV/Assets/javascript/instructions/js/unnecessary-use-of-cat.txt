@@ -1,0 +1,30 @@
+Review focus: Unnecessary use of `cat` process
+
+What to look for:
+- Using the  `cat` process to read a file is unnecessarily complex, inefficient, unportable, and can lead to subtle bugs, or even security vulnerabilities.
+- Using the unix command`cat`only to read a file is an unnecessarily complex way to achieve something that can be done in a simpler and safer manner using the Node.js`fs.readFile`API. The use of`cat`for simple file reads leads to code that is unportable, inefficient, complex, and can lead to subtle bugs or even security vulnerabilities.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`useless-cat.js`):
+```
+var child_process = require('child_process');
+
+module.exports = function (name) {
+    return child_process.execSync("cat " + name).toString();
+};
+```
+- Reference example (`useless-cat-fixed.js`):
+```
+var fs = require('fs');
+
+module.exports = function (name) {
+    return fs.readFileSync(name).toString();
+};
+```

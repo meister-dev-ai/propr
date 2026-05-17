@@ -1,0 +1,27 @@
+Review focus: Hard-coded cryptographic value
+
+What to look for:
+- Using hard-coded keys, passwords, salts or initialization vectors is not secure.
+- Hard-coded passwords, keys, initialization vectors, and salts should not be used for cryptographic operations.
+- Attackers can easily recover hard-coded values if they have access to the source code or compiled executable.
+- Some hard-coded values are easily guessable.
+- Use of hard-coded values may leave cryptographic operations vulnerable to dictionary attacks, rainbow tables, and other forms of cryptanalysis.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HardcodedCryptographicValueBad.rs`):
+```
+let key: [u8;32] = [0;32]; // BAD: Using hard-coded keys for encryption
+let cipher = Aes256Gcm::new(&key.into());
+```
+- Reference example (`HardcodedCryptographicValueGood.rs`):
+```
+let key = Aes256Gcm::generate_key(aes_gcm::aead::OsRng); // GOOD: Using randomly generated keys for encryption
+let cipher = Aes256Gcm::new(&key);
+```

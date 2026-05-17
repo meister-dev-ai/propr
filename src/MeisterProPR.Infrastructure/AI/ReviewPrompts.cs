@@ -289,6 +289,8 @@ internal static class ReviewPrompts
                 "No sibling-file investigation is required; you may set `investigation_complete` to `true` immediately.");
         }
 
+        AppendFocusedReviewGuidanceSection(sb, context?.PerFileHint?.FocusedReviewGuidance);
+
         if (context?.PerFileHint?.AgenticPlan is { } plan)
         {
             sb.AppendLine();
@@ -361,47 +363,91 @@ internal static class ReviewPrompts
             return overrideText!;
         }
 
-        return """
-               You are running Stage A of an agentic file-scoped review workflow.
-               Your job is to assess one anchor file, decide which concerns warrant bounded follow-up,
-               and produce only file-scoped planning artifacts for later steps.
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            """
+            You are running Stage A of an agentic file-scoped review workflow.
+            Your job is to assess one anchor file, decide which concerns warrant bounded follow-up,
+            and produce only file-scoped planning artifacts for later steps.
 
-               Rules:
-               1. Keep the plan file-scoped. The anchor file remains the publication target.
-               2. Only start Stage B when an explicit trigger family justifies deeper follow-up.
-               3. Straightforward files with no explicit trigger must produce zero investigation tasks.
-               4. Only include sibling files when they are needed to validate a concern in the anchor file.
-               5. Prefer a small number of high-value investigations over exhaustive coverage.
-               6. Do not produce final review comments or publishable findings.
+            Rules:
+            1. Keep the plan file-scoped. The anchor file remains the publication target.
+            2. Only start Stage B when an explicit trigger family justifies deeper follow-up.
+            3. Straightforward files with no explicit trigger must produce zero investigation tasks.
+            4. Only include sibling files when they are needed to validate a concern in the anchor file.
+            5. Prefer a small number of high-value investigations over exhaustive coverage.
+            6. Do not produce final review comments or publishable findings.
 
-               Allowed trigger families:
-               - configuration_or_wiring
-               - dispatch_or_registration
-               - bounded_cross_file_consistency
-               - explicit_local_evidence_gap
-               - symbol_or_api_context
+            Allowed trigger families:
+            - configuration_or_wiring
+            - dispatch_or_registration
+            - bounded_cross_file_consistency
+            - explicit_local_evidence_gap
+            - symbol_or_api_context
+            """);
 
-               Respond with a single raw JSON object only.
-               Schema:
-               {
-                 "plan_id": "<stable id>",
-                 "anchor_file_path": "<relative path>",
-                 "concerns": ["<concern>"],
-                 "changed_areas": ["<path or area>"],
-                 "investigation_tasks": [
-                    {
-                      "id": "task-001",
-                      "task_type": "concern"|"sibling_file"|"context_lookup",
-                      "trigger_family": "configuration_or_wiring"|"dispatch_or_registration"|"bounded_cross_file_consistency"|"explicit_local_evidence_gap"|"symbol_or_api_context",
-                      "concern": "<bounded hypothesis>",
-                      "seed_file_paths": ["<relative path>"],
-                      "allowed_tools": ["get_file_content","get_file_tree","get_changed_files"],
-                      "max_tool_calls": <positive integer>
-                   }
-                 ],
-                 "no_investigation_reason": "<nullable explanation>"
-               }
-               """;
+        AppendFocusedReviewGuidanceSection(sb, context?.PerFileHint?.FocusedReviewGuidance);
+
+        sb.AppendLine();
+        sb.AppendLine(
+            """
+            Respond with a single raw JSON object only.
+            Schema:
+            {
+              "plan_id": "<stable id>",
+              "anchor_file_path": "<relative path>",
+              "concerns": ["<concern>"],
+              "changed_areas": ["<path or area>"],
+              "investigation_tasks": [
+                 {
+                   "id": "task-001",
+                   "task_type": "concern"|"sibling_file"|"context_lookup",
+                   "trigger_family": "configuration_or_wiring"|"dispatch_or_registration"|"bounded_cross_file_consistency"|"explicit_local_evidence_gap"|"symbol_or_api_context",
+                   "concern": "<bounded hypothesis>",
+                   "seed_file_paths": ["<relative path>"],
+                   "allowed_tools": ["get_file_content","get_file_tree","get_changed_files"],
+                   "max_tool_calls": <positive integer>
+                }
+              ],
+              "no_investigation_reason": "<nullable explanation>"
+            }
+            """);
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendFocusedReviewGuidanceSection(
+        StringBuilder sb,
+        IReadOnlyList<FocusedReviewGuidanceItem>? focusedGuidance)
+    {
+        if (focusedGuidance is not { Count: > 0 })
+        {
+            return;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## Focused Review Guidance");
+        sb.AppendLine(
+            "The following diff-relevant concerns were prefiltered from review knowledge. " +
+            "Treat them as targeted investigation cues, not as automatic findings.");
+
+        foreach (var item in focusedGuidance)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"### {item.Id} | {item.Title} (score {item.Score})");
+
+            if (!string.IsNullOrWhiteSpace(item.Reason))
+            {
+                sb.AppendLine($"Why it may matter: {item.Reason}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.ShortDescription))
+            {
+                sb.AppendLine(item.ShortDescription);
+            }
+
+            sb.AppendLine(item.Instruction.TrimEnd());
+        }
     }
 
     internal static string BuildAgenticFilePlanningUserMessage(ChangedFile file, PullRequest pr)

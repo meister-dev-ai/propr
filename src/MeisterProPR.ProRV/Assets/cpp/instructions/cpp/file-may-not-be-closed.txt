@@ -1,0 +1,26 @@
+Review focus: Open file may not be closed
+
+What to look for:
+- A function may return before closing a file that was opened in the function.
+- This rule looks at functions that return a`FILE*`, but may return an error value before actually closing the resource. This can occur when an operation performed on the open descriptor fails, and the function returns with an error before closing the open resource. An improperly handled error may cause the function to leak file descriptors.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FileMayNotBeClosed.cpp`):
+```
+FILE* f() {
+	try {
+		FILE *fp = fopen("foo.txt", "w");
+		do_stuff(fp);
+		return fp; //if there are no exceptions, the file pointer is returned correctly
+	} catch (int do_stuff_exception) {
+		return NULL; //returns NULL on error, but does not close fp
+	}
+}
+```

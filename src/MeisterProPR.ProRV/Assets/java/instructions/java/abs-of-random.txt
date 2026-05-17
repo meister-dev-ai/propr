@@ -1,0 +1,12 @@
+Review focus: Incorrect absolute value of random number
+
+What to look for:
+- Calling 'Math.abs' to find the absolute value of a randomly generated integer is not guaranteed to return a non-negative integer.
+- Using`Math.abs`on the result of a call to`Random.nextInt()`(or`Random.nextLong()`) is not guaranteed to return a non-negative number.`Random.nextInt()`can return`Integer.MIN_VALUE`, which when passed to`Math.abs`results in the same value,`Integer.MIN_VALUE`. (Because of the two's-complement representation of integers in Java, the positive equivalent of`Integer.MIN_VALUE`cannot be represented in the same number of bits.) The case for`Random.nextLong()`is similar.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

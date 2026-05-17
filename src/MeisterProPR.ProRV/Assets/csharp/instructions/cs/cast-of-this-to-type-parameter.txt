@@ -1,0 +1,104 @@
+Review focus: Cast of 'this' to a type parameter
+
+What to look for:
+- Casting 'this' to a type parameter of the current type masks an implicit type constraint that should be explicitly stated.
+- Casting`this`to a type parameter may indicate an implicit type constraint. That is, the programmer wanted to express that`this`can be converted to the type parameter but could not find an appropriate way to do so. Instead, they rely on derived type to implement the correct interface.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CastThisToTypeParameter.cs`):
+```
+class CastThisToTypeParameter
+{
+    abstract class BaseNode<T> where T : BaseNode<T>
+    {
+        public abstract T Parent { get; }
+
+        public T Root
+        {
+            get
+            {
+                T cur = (T)this;
+                while (cur.Parent != null)
+                {
+                    cur = cur.Parent;
+                }
+                return cur;
+            }
+        }
+    }
+
+    class Derived1 : BaseNode<Derived1>
+    {
+        private string name;
+        private Derived1 parent;
+
+        public Derived1(string name, Derived1 parent)
+        {
+            this.name = name;
+            this.parent = parent;
+        }
+
+        public override Derived1 Parent { get { return parent; } }
+    }
+
+    class Derived2 : BaseNode<Derived1>
+    {
+        private string name;
+        private Derived1 parent;
+
+        public Derived2(string name, Derived1 parent)
+        {
+            this.name = name;
+            this.parent = parent;
+        }
+
+        public override Derived1 Parent { get { return parent; } }
+    }
+}
+```
+- Reference example (`CastThisToTypeParameterFix.cs`):
+```
+class CastThisToTypeParameterFix
+{
+    abstract class BaseNode<T> where T : BaseNode<T>
+    {
+        public abstract T Self { get; }
+        public abstract T Parent { get; }
+
+        public T Root
+        {
+            get
+            {
+                T cur = Self;
+                while (cur.Parent != null)
+                {
+                    cur = cur.Parent;
+                }
+                return cur;
+            }
+        }
+    }
+
+    class ConcreteNode : BaseNode<ConcreteNode>
+    {
+        private string name;
+        private ConcreteNode parent;
+
+        public ConcreteNode(string name, ConcreteNode parent)
+        {
+            this.name = name;
+            this.parent = parent;
+        }
+
+        public override ConcreteNode Self { get { return this; } }
+        public override ConcreteNode Parent { get { return parent; } }
+    }
+}
+```

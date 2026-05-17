@@ -1,0 +1,48 @@
+Review focus: Loop variable capture
+
+What to look for:
+- Capturing a loop variable is not the same as capturing its value, and can lead to unexpected behavior or bugs.
+- In Python, a nested function or lambda expression that captures a variable from its surrounding scope is a late-binding closure, meaning that the value of the variable is determined when the closure is called, not when it is created. Care must be taken when the captured variable is a loop variable. If the closure is called after the loop ends, it will use the value of the variable on the last iteration of the loop, rather than the value at the iteration at which it was created.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`bad.py`):
+```
+# BAD: The loop variable `i` is captured.
+tasks = []
+for i in range(5):
+    tasks.append(lambda: print(i))
+
+# This will print `4,4,4,4,4`, rather than `0,1,2,3,4` as likely intended.
+for t in tasks:
+    t()
+```
+- Good example (`good.py`):
+```
+# GOOD: A default parameter is used, so the variable `i` is not being captured.
+tasks = []
+for i in range(5):
+    tasks.append(lambda i=i: print(i))
+
+# This will print `0,1,2,3,4``.
+for t in tasks:
+    t()
+```
+- Good example (`good2.py`):
+```
+import functools
+# GOOD: `functools.partial` takes care of capturing the _value_ of `i`.
+tasks = []
+for i in range(5):
+    tasks.append(functools.partial(lambda i: print(i), i))
+
+# This will print `0,1,2,3,4``.
+for t in tasks:
+    t()
+```

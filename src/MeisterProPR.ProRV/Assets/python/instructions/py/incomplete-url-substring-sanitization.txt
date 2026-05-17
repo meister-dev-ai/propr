@@ -1,0 +1,61 @@
+Review focus: Incomplete URL substring sanitization
+
+What to look for:
+- Security checks on the substrings of an unparsed URL are often vulnerable to bypassing.
+- Sanitizing untrusted URLs is a common technique for preventing attacks such as request forgeries and malicious redirections. Usually, this is done by checking that the host of a URL is in a set of allowed hosts. However, treating the URL as a string and checking if one of the allowed hosts is a substring of the URL is very prone to errors. Malicious URLs can bypass such security checks by embedding one of the allowed hosts in an unexpected location. Even if the substring check is not used in a security-critical context, the incomplete check may still cause undesirable behaviors when the check succeeds accidentally.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncompleteUrlSubstringSanitization.py`):
+```
+from flask import Flask, request, redirect
+from urllib.parse import urlparse
+
+app = Flask(__name__)
+
+# Not safe, as "evil-example.net/example.com" would be accepted
+
+@app.route('/some/path/bad1')
+def unsafe1(request):
+    target = request.args.get('target', '')
+    if "example.com" in target:
+        return redirect(target)
+
+# Not safe, as "benign-looking-prefix-example.com" would be accepted
+
+@app.route('/some/path/bad2')
+def unsafe2(request):
+    target = request.args.get('target', '')
+    if target.endswith("example.com"):
+        return redirect(target)
+
+
+
+#Simplest and safest approach is to use an allowlist
+
+@app.route('/some/path/good1')
+def safe1(request):
+    allowlist = [
+        "example.com/home",
+        "example.com/login",
+    ]
+    target = request.args.get('target', '')
+    if target in allowlist:
+        return redirect(target)
+
+#More complex example allowing sub-domains.
+
+@app.route('/some/path/good2')
+def safe2(request):
+    target = request.args.get('target', '')
+    host = urlparse(target).hostname
+    #Note the '.' preceding example.com
+    if host and host.endswith(".example.com"):
+        return redirect(target)
+```

@@ -1,0 +1,40 @@
+Review focus: Useless assignment to global variable
+
+What to look for:
+- An assignment to a global variable that is never used has no effect.
+- If a global variable is only ever assigned to but its value is never read, this could indicate dead code, a typo or a logic error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadStoreOfGlobal.js`):
+```
+function countLeaves(nd) {
+	var leftLeaves, rightLeaves;
+	
+	if (nd.isLeaf)
+		return 1;
+	
+	leftLeaves = countLeaves(nd.left);
+	rigtLeaves = countLeaves(nd.right);
+	return leftLeaves + rightLeaves;
+}
+```
+- Reference example (`DeadStoreOfGlobalGood.js`):
+```
+function countLeaves(nd) {
+	var leftLeaves, rightLeaves;
+	
+	if (nd.isLeaf)
+		return 1;
+	
+	leftLeaves = countLeaves(nd.left);
+	rightLeaves = countLeaves(nd.right);
+	return leftLeaves + rightLeaves;
+}
+```

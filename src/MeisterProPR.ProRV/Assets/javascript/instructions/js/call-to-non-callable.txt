@@ -1,0 +1,62 @@
+Review focus: Invocation of non-function
+
+What to look for:
+- Trying to invoke a value that is not a function will result in a runtime exception.
+- Attempting to invoke a non-function (that is, a primitive value or an object) will cause an exception at runtime. This applies both to calls using`new`and normal calls.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousInvocation.js`):
+```
+function error(msg) {
+  console.log(msg);
+}
+
+function processResponse(response) {
+  if (response.status === 200) {
+    var error = processResponseText(response.responseText);
+    if (error)
+       throw error;
+  } else {
+    error("Unexpected response status " + response.status);
+  }
+}
+```
+- Reference example (`SuspiciousInvocationGood.js`):
+```
+function error(msg) {
+  console.log(msg);
+}
+
+function processResponse(response) {
+  if (response.status === 200) {
+    let error = processResponseText(response.responseText);
+    if (error)
+       throw error;
+  } else {
+    error("Unexpected response status " + response.status);
+  }
+}
+```
+- Reference example (`SuspiciousInvocationGood2.js`):
+```
+function error(msg) {
+  console.log(msg);
+}
+
+function processResponse(response) {
+  if (response.status === 200) {
+    var err = processResponseText(response.responseText);
+    if (err)
+       throw err;
+  } else {
+    error("Unexpected response status " + response.status);
+  }
+}
+```

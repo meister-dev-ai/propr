@@ -1,0 +1,36 @@
+Review focus: Unnecessarily complex Boolean expression
+
+What to look for:
+- Boolean expressions that are unnecessarily complicated hinder readability.
+- There are a number of Boolean expression patterns that can easily be rewritten to make them simpler. Boolean expressions involving comparisons with Boolean literals, ternary conditionals with a Boolean literal as one of the results, double negations, or negated comparisons can all be changed to equivalent and simpler expressions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SimplifyBoolExprBad.cs`):
+```
+class Bad
+{
+    int Size { get; set; }
+
+    bool Espresso => !(Size > 4);
+    bool Latte => Espresso == false && Size <= 8;
+    bool Grande => Espresso == false ? Latte != true : false;
+}
+```
+- Reference example (`SimplifyBoolExprGood.cs`):
+```
+class Good
+{
+    int Size { get; set; }
+
+    bool Espresso => Size <= 4;
+    bool Latte => !Espresso && Size <= 8;
+    bool Grande => !Espresso && !Latte;
+}
+```

@@ -1,0 +1,34 @@
+Review focus: Block code with a single Response.Write()
+
+What to look for:
+- Embedded code blocks with a single 'Response.Write()' reduce the readability of the page.
+- An inline code block containing a single`Response.Write()`can be written more clearly using an inline expression. ASP.NET provides general-purpose inline code, using the syntax "``". The inline code can emit content into the resulting HTML page by calling`Response.Write()`. In many cases, the inline code is only one line long, and does nothing more than issue a single call to`Response.Write()`. For such cases, the call to`Response.Write()`can be longer than the code to compute what will be embedded. This makes it harder to understand the intent of the code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BlockCodeResponseWriteBad.aspx`):
+```
+<%@ Page Language="C#" %>
+
+<html>
+<body>
+<p>2 + 3 = <%Response.Write(2 + 3)%></p>
+</body>
+</html>
+```
+- Reference example (`BlockCodeResponseWriteGood.aspx`):
+```
+<%@ Page Language="C#" %>
+
+<html>
+<body>
+<p>2 + 3 = <%=2 + 3%></p>
+</body>
+</html>
+```

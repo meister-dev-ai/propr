@@ -1,0 +1,37 @@
+Review focus: Regular expression injection
+
+What to look for:
+- User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to inject an expression that could modify the meaning of...
+- Constructing a regular expression with unsanitized user input can be dangerous. A malicious user may be able to modify the meaning of the expression, causing it to match unexpected strings and construct large regular expressions by using counted repetitions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`RegexInjectionBad.rs`):
+```
+use regex::Regex;
+
+fn get_value<'h>(key: &str, property: &'h str) -> Option<&'h str> {
+    // BAD: User provided `key` is interpolated into the regular expression.
+    let pattern = format!(r"^property:{key}=(.*)$");
+    let re = Regex::new(&pattern).unwrap();
+    re.captures(property)?.get(1).map(|m| m.as_str())
+}
+```
+- Reference example (`RegexInjectionGood.rs`):
+```
+use regex::{escape, Regex};
+
+fn get_value<'h>(key: &str, property: &'h str) -> option<&'h str> {
+    // GOOD: User input is escaped before being used in the regular expression.
+    let escaped_key = escape(key);
+    let pattern = format!(r"^property:{escaped_key}=(.*)$");
+    let re = regex::new(&pattern).unwrap();
+    re.captures(property)?.get(1).map(|m| m.as_str())
+}
+```

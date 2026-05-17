@@ -1,0 +1,22 @@
+Review focus: Duplicate HTML element attributes
+
+What to look for:
+- Specifying the same attribute twice on the same HTML element is redundant and may indicate a copy-paste mistake.
+- According to the HTML5 standard, an HTML element must not have two or more attributes with the same name. If the attribute values are the same, this is most likely harmless, but it may indicate a copy-paste mistake.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateAttributes.html`):
+```
+<a href="https://semmle.com" href="https://semmle.com">Semmle</a>
+```
+- Reference example (`DuplicateAttributesGood.html`):
+```
+<a href="https://semmle.com">Semmle</a>
+```

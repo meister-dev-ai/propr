@@ -1,0 +1,77 @@
+Review focus: Slice memory allocation with excessive size value
+
+What to look for:
+- Allocating memory for slices with the built-in make function from user-controlled sources can lead to a denial of service.
+- Using untrusted input to allocate slices with the built-in`make`function could lead to excessive memory allocation and potentially cause the program to crash due to running out of memory. This vulnerability could be exploited to perform a denial-of-service attack by consuming all available server resources.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UncontrolledAllocationSizeBad.go`):
+```
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+)
+
+func OutOfMemoryBad(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	queryStr := query.Get("n")
+	collectionSize, err := strconv.Atoi(queryStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result := make([]string, collectionSize)
+	for i := 0; i < collectionSize; i++ {
+		result[i] = fmt.Sprintf("Item %d", i+1)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+```
+- Reference example (`UncontrolledAllocationSizeGood.go`):
+```
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+)
+
+func OutOfMemoryGood(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	MaxValue := 6
+	queryStr := query.Get("n")
+	collectionSize, err := strconv.Atoi(queryStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if collectionSize < 0 || collectionSize > MaxValue {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	result := make([]string, collectionSize)
+	for i := 0; i < collectionSize; i++ {
+		result[i] = fmt.Sprintf("Item %d", i+1)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+```

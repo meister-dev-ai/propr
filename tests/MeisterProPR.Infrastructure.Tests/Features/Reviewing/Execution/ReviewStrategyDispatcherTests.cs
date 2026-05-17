@@ -116,7 +116,7 @@ public sealed class ReviewStrategyDispatcherTests
                 ReviewPipelineProfileProvider.AgenticExperimentalProfileId,
                 "Agentic experimental",
                 ReviewStrategy.AgenticFileByFile,
-                [ReviewPipelineProfileProvider.DispatchStageFamilyId],
+                [AgenticProRvPrefilterStage.StageIdConstant],
                 [
                     AgenticSpeculativeCommentFilterStage.StageIdConstant,
                     AgenticInfoCommentStripStage.StageIdConstant,

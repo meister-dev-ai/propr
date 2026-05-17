@@ -1,0 +1,16 @@
+Review focus: Avoid autowiring
+
+What to look for:
+- Using autowiring in Spring beans may make it difficult to maintain large projects.
+- Using Spring autowiring can make it difficult to see what beans get passed to constructors or setters. The Spring Framework Reference documentation cites the following disadvantages of autowiring:
+- Explicit dependencies in`property`and`constructor-arg`settings always override autowiring. You cannot autowire so-called simple properties such as primitives,`Strings`, and`Classes`(and arrays of such simple properties). This limitation is by design.
+- Autowiring is less exact than explicit wiring. Although ... Spring is careful to avoid guessing in case of ambiguity that might have unexpected results, the relationships between your Spring-managed objects are no longer documented explicitly.
+- Wiring information may not be available to tools that may generate documentation from a Spring container.
+- Multiple bean definitions within the container may match the type specified by the setter method or constructor argument to be autowired. For arrays, collections, or Maps, this is not necessarily a problem. However for dependencies that expect a single value, this ambiguity is not arbitrarily resolved. If no unique bean definition is available, an exception is thrown.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

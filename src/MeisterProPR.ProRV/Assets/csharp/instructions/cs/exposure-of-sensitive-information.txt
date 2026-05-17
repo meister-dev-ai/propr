@@ -1,0 +1,30 @@
+Review focus: Exposure of private information
+
+What to look for:
+- If private information is written to an external location, it may be accessible by unauthorized persons.
+- Private information that is stored in an external location may be more vulnerable because that location may not be protected by the same access controls as other parts of the system. Examples include log files, cookies and plain text storage on disk.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExposureOfPrivateInformation.cs`):
+```
+using System.Text;
+using System.Web;
+using System.Web.Security;
+
+public class PrivateInformationHandler : IHttpHandler
+{
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string address = ctx.Request.QueryString["Address1"];
+        logger.Info("User has address: " + address);
+    }
+}
+```

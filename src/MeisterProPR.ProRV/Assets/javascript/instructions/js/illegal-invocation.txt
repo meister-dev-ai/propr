@@ -1,0 +1,12 @@
+Review focus: Illegal invocation
+
+What to look for:
+- Attempting to invoke a method or an arrow function using 'new', or invoking a constructor as a function, will cause a runtime error.
+- Class methods and arrow functions must not be invoked using`new`, and attempting to do so will result in a runtime error. Conversely, constructors can only be invoked using`new`or`super(...)`, and attempting to invoke them as a normal function will result in a runtime error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

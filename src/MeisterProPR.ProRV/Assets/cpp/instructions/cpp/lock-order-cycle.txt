@@ -1,0 +1,37 @@
+Review focus: Cyclic lock order dependency
+
+What to look for:
+- Locking mutexes in different orders in different threads can cause deadlock.
+- Deadlock can occur when two or more threads each attempt to lock multiple mutexes, but not in the same order. A famous example of this is the "Dining Philosophers Problem" (see references below). In this example, deadlock occurs when all five philosophers simultaneously pick up the fork to their left because then none of them can pick up the fork to their right. A simple solution is to assign an order to the mutexes. If the philosophers always pick up the lower numbered fork first, rather than the fork to their left, then deadlock cannot occur. In general, we can build a graph of the order in which the mutexes are locked. For example, if one of the threads locks mutex A first and B second (while A is still locked), then we add a graph edge from A to B. If the resulting graph contains a cycle then there is a possibility of deadlock. The graph for the dining philosophers example contains a cycle because each philosopher creates a graph edge from their left fork to their right fork.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LockOrderCycleExample.cpp`):
+```
+std::mutex mtx1;
+std::mutex mtx2;
+
+void f1() {
+  // GOOD: lock mtx1 before mtx2.
+  mtx1.lock();
+  mtx2.lock();
+  printf("f1");
+  mtx2.unlock();
+  mtx1.unlock();
+}
+
+void f2() {
+  // BAD: lock mtx2 before mtx1.
+  mtx2.lock();
+  mtx1.lock();
+  printf("f2");
+  mtx1.unlock();
+  mtx2.unlock();
+}
+```

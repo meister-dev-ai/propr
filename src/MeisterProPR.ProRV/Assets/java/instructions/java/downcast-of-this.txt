@@ -1,0 +1,12 @@
+Review focus: Dubious downcast of 'this'
+
+What to look for:
+- Casting 'this' to a derived type introduces a dependency cycle between the type of 'this' and the target type.
+- Downcasting`this`to a derived type creates a dependency cycle. Derived types already depend on their parent type and the cast creates a dependency in the other direction. Dependency cycles should be avoided as they make code both difficult to read and difficult to test. In addition, a type should not know about its specific descendants, even though it may impose some constraints on them as a group (for example, abstract classes may require every derived type to implement a method with a specific signature).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

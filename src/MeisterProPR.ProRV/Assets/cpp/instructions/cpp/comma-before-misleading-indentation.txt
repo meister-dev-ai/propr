@@ -1,0 +1,49 @@
+Review focus: Comma before misleading indentation
+
+What to look for:
+- If expressions before and after a comma operator use different indentation, it is easy to misread the purpose of the code.
+- If the expression after the comma operator starts at an earlier column than the expression before the comma, then this suspicious indentation possibly indicates a logic error, caused by a typo that may escape visual inspection. This query has medium precision because CodeQL currently does not distinguish between tabs and spaces in whitespace. If a file contains mixed tabs and spaces, alerts may highlight code that is correctly indented for one value of tab size but not for other tab sizes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CommaBeforeMisleadingIndentation.cpp`):
+```
+/*
+ * In this example, the developer intended to use a semicolon but accidentally used a comma:
+ */
+
+enum privileges entitlements = NONE;
+
+if (is_admin)
+    entitlements = FULL, // BAD
+
+restrict_privileges(entitlements);
+
+/*
+ * The use of a comma means that the first example is equivalent to this second example:
+ */
+
+enum privileges entitlements = NONE;
+
+if (is_admin) {
+    entitlements = FULL;
+    restrict_privileges(entitlements);
+}
+
+/*
+ * The indentation of the first example suggests that the developer probably intended the following code:
+ */
+
+enum privileges entitlements = NONE;
+
+if (is_admin)
+    entitlements = FULL; // GOOD
+
+restrict_privileges(entitlements);
+```

@@ -1,0 +1,26 @@
+Review focus: Open descriptor may not be closed
+
+What to look for:
+- Failing to close resources in the function that opened them makes it difficult to avoid and detect resource leaks.
+- This query looks at functions that return file or socket descriptors, but may return an error value before actually closing the resource. This can occur when an operation performed on the open descriptor fails, and the function returns with an error before it closes the open resource. An improperly handled error could cause the function to leak resource descriptors. Failing to close resources in the function that opened them also makes it more difficult to detect leaks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DescriptorMayNotBeClosed.cpp`):
+```
+int f() {
+	try {
+		int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		do_stuff(sockfd);
+		return sockfd; //if there are no exceptions, the socket is returned
+	} catch (int do_stuff_exception) {
+		return -1; //return error value, but sockfd may still be open
+	}
+}
+```

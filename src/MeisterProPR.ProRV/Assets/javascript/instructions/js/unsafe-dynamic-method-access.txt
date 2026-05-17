@@ -1,0 +1,53 @@
+Review focus: Unsafe dynamic method access
+
+What to look for:
+- Invoking user-controlled methods on certain objects can lead to remote code execution.
+- Calling a user-controlled method on certain objects can lead to invocation of unsafe functions, such as`eval`or the`Function`constructor. In particular, the global object contains the`eval`function, and any function object contains the`Function`constructor in its`constructor`property.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnsafeDynamicMethodAccess.js`):
+```
+// API methods
+function play(data) {
+  // ...
+}
+function pause(data) {
+  // ...
+}
+
+window.addEventListener("message", (ev) => {
+    let message = JSON.parse(ev.data);
+
+    // Let the parent frame call the 'play' or 'pause' function 
+    window[message.name](message.payload);
+});
+```
+- Reference example (`UnsafeDynamicMethodAccessGood.js`):
+```
+// API methods
+let api = {
+  play: function(data) {
+    // ...
+  },
+  pause: function(data) {
+    // ...
+  }
+};
+
+window.addEventListener("message", (ev) => {
+    let message = JSON.parse(ev.data);
+
+    // Let the parent frame call the 'play' or 'pause' function
+    if (!api.hasOwnProperty(message.name)) {
+      return;
+    }
+    api[message.name](message.payload);
+});
+```

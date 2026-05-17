@@ -1,0 +1,101 @@
+Review focus: Chain of 'is' tests
+
+What to look for:
+- Long sequences of type tests on a variable are generally an indication of questionable design.
+- Long sequences of type tests are primarily used to dispatch to different bits of code based on the type of a variable, as shown in the example later in this topic. They are often used to simulate pattern-matching in languages that do not support it. Whilst they do work as a dispatch method, they have a number of disadvantages:
+- They are difficult to maintain, because it is easy to add a new subtype and forget to modify all of the type test sequences throughout your code.
+- They introduce unwanted dependencies on concrete classes. Code that could be written only in terms of an interface must now take account of all the special cases.
+- They can be error-prone - if you inadvertently test for a base type before a derived type, the code that handles the derived type is never executed.
+- They can exhibit poor performance, because they effectively iterate through a list of types in linear time, checking each one in turn.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ChainedIs.cs`):
+```
+class ChainedIs
+{
+    interface Animal { }
+    class Cat : Animal { }
+    class Dog : Animal { }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> animals = new List<Animal> { new Cat(), new Dog() };
+        foreach (Animal a in animals)
+        {
+            if (a is Cat)
+                Console.WriteLine("Miaow!");
+            else if (a is Dog)
+                Console.WriteLine("Woof!");
+            else
+                throw new Exception("Oops!");
+        }
+    }
+}
+```
+- Reference example (`ChainedIsFix1.cs`):
+```
+class ChainedIs
+{
+    interface Animal
+    {
+        void Speak();
+    }
+    class Cat : Animal
+    {
+        public void Speak() { Console.WriteLine("Miaow!"); }
+    }
+    class Dog : Animal
+    {
+        public void Speak() { Console.WriteLine("Woof!"); }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> animals = new List<Animal> { new Cat(), new Dog() };
+        foreach (var a in animals)
+            a.Speak();
+    }
+}
+```
+- Reference example (`ChainedIsFix2.cs`):
+```
+class ChainedIs
+{
+    interface Visitor
+    {
+        void Visit(Cat c);
+        void Visit(Dog d);
+    }
+    class SpeakVisitor : Visitor
+    {
+        public void Visit(Cat c) { Console.WriteLine("Miaow!"); }
+        public void Visit(Dog d) { Console.WriteLine("Woof!"); }
+    }
+    interface Animal
+    {
+        void Accept(Visitor v);
+    }
+    class Cat : Animal
+    {
+        public void Accept(Visitor v) { v.Visit(this); }
+    }
+    class Dog : Animal
+    {
+        public void Accept(Visitor v) { v.Visit(this); }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> animals = new List<Animal> { new Cat(), new Dog() };
+        foreach (var a in animals)
+            a.Accept(new SpeakVisitor());
+    }
+}
+```

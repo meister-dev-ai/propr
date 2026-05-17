@@ -1,0 +1,12 @@
+Review focus: String instead of regular expression
+
+What to look for:
+- Calling 'String.prototype.replace' or 'String.prototype.split' with a string argument that looks like a regular expression is probably a mistake because the called function will...
+- Calling the builtin methods`String.prototype.split`and`String.prototype.replace`with a string as the first argument makes the methods search for that exact string. Providing a regular expression instead of the string makes the methods perform a regular expression search. Calling the methods with a string that has the format of a regular expression is likely a mistake because the methods will not convert the string to a regular expression.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

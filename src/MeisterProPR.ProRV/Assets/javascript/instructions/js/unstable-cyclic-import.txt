@@ -1,0 +1,65 @@
+Review focus: Unstable cyclic import
+
+What to look for:
+- If the top-level of a module accesses a variable from a cyclic import, its value depends on which module is globally imported first.
+- The ECMAScript module system allows modules to cyclically depend on each other. However, modules must still be initialized one at a time. Normally, a module is initialized after its imported modules, but in the case of cyclic imports, this is not possible. This means that some modules in a cycle must be initialized before all of its imported modules are ready to be used. When the top-level code of a library depends on a value obtained from a cyclic import, its behavior thus depends on the initialization order. This order is determined by which module is first imported from the main module. Simply adding, removing, or reordering import statements can therefore cause the cyclic modules to stop working. Note that imports that are only used for type annotations in TypeScript files are removed at compile time. Such imports can therefore safely be used in a cycle.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnstableCyclicImport.js`):
+```
+// services.js
+import { AudioService } from './audio'
+import { StoreService } from './store';
+
+export const services = [
+  AudioService,
+  StoreService
+];
+
+export function registerService(service) {
+  /* ... */
+}
+
+// audio.js
+import { registerService } from './services';
+
+export class AudioService {
+  static create() {
+    registerService(new AudioService());
+  }
+}
+```
+- Reference example (`UnstableCyclicImportGood.js`):
+```
+// service_base.js
+export function registerService(service) {
+  /* ... */
+}
+
+// services.js
+import { AudioService } from './audio'
+import { StoreService } from './store';
+
+export { registerService } from './service_base'
+
+export const services = [
+  AudioService,
+  StoreService
+];
+
+// audio.js
+import { registerService } from './service_base';
+
+export class AudioService {
+  static create() {
+    registerService(new AudioService());
+  }
+}
+```

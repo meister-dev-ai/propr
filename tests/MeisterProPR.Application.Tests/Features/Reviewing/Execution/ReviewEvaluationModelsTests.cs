@@ -160,6 +160,7 @@ public sealed class ReviewEvaluationModelsTests
                     [
                         new FixtureThreadComment("Reviewer", "Please confirm this change."),
                     ]),
-            ]);
+            ],
+            ProRVPrefilterExpectations: new FixtureProRVPrefilterExpectations([]));
     }
 }

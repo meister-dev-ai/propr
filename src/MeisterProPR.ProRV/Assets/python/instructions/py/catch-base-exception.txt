@@ -1,0 +1,43 @@
+Review focus: Except block handles 'BaseException'
+
+What to look for:
+- Handling 'BaseException' means that system exits and keyboard interrupts may be mis-handled.
+- All exception classes in Python derive from`BaseException`.`BaseException`has three important subclasses,`Exception`from which all errors and normal exceptions derive,`KeyboardInterrupt`which is raised when the user interrupts the program from the keyboard and`SystemExit`which is raised by the`sys.exit()`function to terminate the program. Since`KeyboardInterrupt`and`SystemExit`are special they should not be grouped together with other`Exception`classes. Catching`BaseException`, rather than its subclasses may prevent proper handling of`KeyboardInterrupt`or`SystemExit`. It is easy to catch`BaseException`accidentally as it is caught implicitly by an empty`except:`statement.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CatchingBaseException.py`):
+```
+def call_main_program_implicit_handle_base_exception():
+    try:
+        #application.main calls sys.exit() when done.
+        application.main()
+    except Exception as ex:
+        log(ex)
+    except:
+        pass
+
+def call_main_program_explicit_handle_base_exception():
+    try:
+        #application.main calls sys.exit() when done.
+        application.main()
+    except Exception as ex:
+        log(ex)
+    except BaseException:
+        pass
+
+def call_main_program_fixed():
+    try:
+        #application.main calls sys.exit() when done.
+        application.main()
+    except Exception as ex:
+        log(ex)
+    except SystemExit:
+        pass
+```

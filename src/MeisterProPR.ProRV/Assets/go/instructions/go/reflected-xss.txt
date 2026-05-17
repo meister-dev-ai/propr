@@ -1,0 +1,61 @@
+Review focus: Reflected cross-site scripting
+
+What to look for:
+- Writing user input directly to an HTTP response allows for a cross-site scripting vulnerability.
+- Directly writing user input (for example, an HTTP request parameter) to an HTTP response without properly sanitizing the input first, allows for a cross-site scripting vulnerability. This kind of vulnerability is also called reflected cross-site scripting, to distinguish it from other types of cross-site scripting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ReflectedXss.go`):
+```
+package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func serve() {
+	http.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		username := r.Form.Get("username")
+		if !isValidUsername(username) {
+			// BAD: a request parameter is incorporated without validation into the response
+			fmt.Fprintf(w, "%q is an unknown user", username)
+		} else {
+			// TODO: Handle successful login
+		}
+	})
+	http.ListenAndServe(":80", nil)
+}
+```
+- Reference example (`ReflectedXssGood.go`):
+```
+package main
+
+import (
+	"fmt"
+	"html"
+	"net/http"
+)
+
+func serve1() {
+	http.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		username := r.Form.Get("username")
+		if !isValidUsername(username) {
+			// GOOD: a request parameter is escaped before being put into the response
+			fmt.Fprintf(w, "%q is an unknown user", html.EscapeString(username))
+		} else {
+			// TODO: do something exciting
+		}
+	})
+	http.ListenAndServe(":80", nil)
+}
+```

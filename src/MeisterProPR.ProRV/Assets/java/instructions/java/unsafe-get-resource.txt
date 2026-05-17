@@ -1,0 +1,14 @@
+Review focus: Unsafe use of getResource
+
+What to look for:
+- Calling 'this.getClass().getResource()' may yield unexpected results if called from a subclass in another package.
+- Using the`Class.getResource`method is a common way of including some non-code resources with an application. There are problems when this is called using`x.getClass().getResource()`, for some variable`x`. This is not a safe way to retrieve a resource. The method`getClass`returns the run-time class of`x`(that is, its actual, "most derived" class, rather than its declared type), which causes two potential problems:
+- If the run-time type of the receiving object is a subclass of the declared type and is in a different package, the resource path may be interpreted differently. According to its contract,`Class.getResource`qualifies non-absolute paths with the current package name, thus potentially returning a different resource or failing to find the requested resource.
+- -`Class.getResource`delegates finding the resource to the class loader that loaded the class. At run time, there is no guarantee that all subclasses of a particular type are loaded by the same class loader, resulting in resource lookup failures that are difficult to diagnose.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

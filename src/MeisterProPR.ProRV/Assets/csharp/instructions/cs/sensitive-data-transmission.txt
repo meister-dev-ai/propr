@@ -1,0 +1,50 @@
+Review focus: Information exposure through transmitted data
+
+What to look for:
+- Transmitting sensitive information to the user is a potential security risk.
+- Transmitting sensitive data to the user is a potential security risk. Always ensure that transmitted data is intended for the user. For example, passwords and the contents of database exceptions are generally not appropriate to send to the user, as they reveal information that could be abused or exploited.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TransmittedPassword.cs`):
+```
+public class Handler : IHttpHandler
+{
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        try
+        {
+       ...
+    }
+        catch (AuthenticationFailure ex)
+        {
+            ctx.Response.Write("Invalid password: " + password);
+        }
+    }
+}
+```
+- Reference example (`TransmittedException.cs`):
+```
+public class Handler : IHttpHandler
+{
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        try
+        {
+       ...
+    }
+        catch (DbException ex)
+        {
+            ctx.Response.Write("Database error: " + ex.Message);
+        }
+    }
+}
+```

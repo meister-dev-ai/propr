@@ -1,0 +1,67 @@
+Review focus: Arbitrary file write extracting an archive containing symbolic links
+
+What to look for:
+- Extracting files from a malicious zip archive without validating that the destination file path is within the destination directory can cause files outside the destination...
+- Extracting symbolic links from a malicious zip archive, without validating that the destination file path is within the destination directory, can cause files outside the destination directory to be overwritten. This can happen if there are previously-extracted symbolic links or directory traversal elements and links (`..`) in archive paths. This problem is related to the ZipSlip vulnerability which is detected by the`go/zipslip`query; please see that query's help for more general information about malicious archive file vulnerabilities. This query considers the specific case where symbolic links are extracted from an archive, in which case the extraction code must be aware of existing symbolic links when checking whether it is about to extract a link pointing to a location outside the target extraction directory.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnsafeUnzipSymlink.go`):
+```
+package main
+
+import (
+	"archive/tar"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func isRel(candidate, target string) bool {
+	// BAD: purely syntactic means are used to check
+	// that `candidate` does not escape from `target`
+	if filepath.IsAbs(candidate) {
+		return false
+	}
+	relpath, err := filepath.Rel(target, filepath.Join(target, candidate))
+	return err == nil && !strings.HasPrefix(filepath.Clean(relpath), "..")
+}
+
+func unzipSymlink(f io.Reader, target string) {
+	r := tar.NewReader(f)
+	for {
+		header, err := r.Next()
+		if err != nil {
+			break
+		}
+		if isRel(header.Linkname, target) && isRel(header.Name, target) {
+			os.Symlink(header.Linkname, header.Name)
+		}
+	}
+}
+```
+- Reference example (`UnsafeUnzipSymlinkGood.go`):
+```
+package main
+
+func isRel(candidate, target string) bool {
+	// GOOD: resolves all symbolic links before checking
+	// that `candidate` does not escape from `target`
+	if filepath.IsAbs(candidate) {
+		return false
+	}
+	realpath, err := filepath.EvalSymlinks(filepath.Join(target, candidate))
+	if err != nil {
+		return false
+	}
+	relpath, err := filepath.Rel(target, realpath)
+	return err == nil && !strings.HasPrefix(filepath.Clean(relpath), "..")
+}
+```

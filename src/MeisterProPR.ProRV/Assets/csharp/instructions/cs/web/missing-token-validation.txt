@@ -1,0 +1,36 @@
+Review focus: Missing cross-site request forgery token validation
+
+What to look for:
+- Handling a POST request without verifying that the request came from the user allows a malicious attacker to submit a request on behalf of the user.
+- Web applications that use tokens to prevent cross-site request forgery (CSRF) should validate the tokens for all Http POST requests. Although login and authentication methods are not vulnerable to traditional CSRF attacks, they still need to be protected with a token or other mitigation. This because an unprotected login page can be used by an attacker to force a login using an account controlled by the attacker. Subsequent requests to the site are then made using this account, without the user being aware that this is the case. This can result in the user associating private information with the attacker-controlled account.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingAntiForgeryTokenValidation.cs`):
+```
+using System.Web.Mvc;
+
+public class HomeController : Controller
+{
+    // BAD: Anti forgery token has been forgotten
+    [HttpPost]
+    public ActionResult Login()
+    {
+        return View();
+    }
+
+    // GOOD: Anti forgery token is validated
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public ActionResult UpdateDetails()
+    {
+        return View();
+    }
+}
+```

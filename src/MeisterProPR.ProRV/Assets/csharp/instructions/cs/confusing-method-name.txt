@@ -1,0 +1,33 @@
+Review focus: Confusing method names because of capitalization
+
+What to look for:
+- Finds methods whose name only differs in capitalization from another method defined in the same class.
+- It is bad practice to have two methods with names that differ only in capitalization. If a developer does not notice both methods they may call the wrong one. If they do notice then they will have to waste time investigating which method needs to be called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ConfusingMethodNames.cs`):
+```
+class Date
+{
+    private int year;
+    private int month;
+    private int day;
+
+    public String ConvertToISO()
+    {
+        return year + "-" + month + "-" + day;
+    }
+
+    public String ConvertToIso()
+    {
+        return year + "-" + month + "-" + day;
+    }
+}
+```

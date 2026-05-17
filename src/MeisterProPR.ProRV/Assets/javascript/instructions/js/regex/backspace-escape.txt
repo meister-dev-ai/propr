@@ -1,0 +1,19 @@
+Review focus: Backspace escape in regular expression
+
+What to look for:
+- Using '\b' to escape the backspace character in a regular expression is confusing since it could be mistaken for a word boundary assertion.
+- The meaning of the`\b`escape sequence inside a regular expression depends on its syntactic context: inside a character class, it matches the backspace character; outside of a character class, it matches a word boundary. This context dependency makes regular expressions hard to read, so the`\b`escape sequence should not be used inside character classes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BackspaceEscape.js`):
+```
+if (/\b[\t\b]/.test(input))
+	console.log("Found word boundary followed by tab or backspace");
+```

@@ -196,14 +196,18 @@ describe('ClientAiConnectionsTab', () => {
     await flushPromises()
 
     const bindingRows = wrapper.findAll('.ai-binding-row')
-    expect(bindingRows).toHaveLength(6)
+    expect(bindingRows).toHaveLength(7)
     
     // Checkboxes inside custom component wrappers or raw HTML inputs can sometimes be flaky to toggle in mount,
     // so let's directly edit the data model or ensure the correct input is bound if needed. 
     // Since we just need to verify the model binding works, we'll select models for chat and embed.
     for (const [index, row] of bindingRows.entries()) {
       const selects = row.findAll('select')
-      await selects[0].setValue(index === 5 ? 'embed-local' : 'chat-local')
+      if (index === 1) {
+        continue
+      }
+
+      await selects[0].setValue(index === 6 ? 'embed-local' : 'chat-local')
     }
 
     const saveButton = wrapper.findAll('button').find((button) => button.text().includes('Create Profile'))
@@ -252,6 +256,7 @@ describe('ClientAiConnectionsTab', () => {
       ],
       purposeBindings: [
         { id: undefined, purpose: 'reviewDefault', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
+        { id: undefined, purpose: 'proRvPrefilter', configuredModelId: undefined, remoteModelId: undefined, protocolMode: 'auto', isEnabled: false },
         { id: undefined, purpose: 'reviewLowEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
         { id: undefined, purpose: 'reviewMediumEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
         { id: undefined, purpose: 'reviewHighEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },

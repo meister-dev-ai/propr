@@ -1,0 +1,48 @@
+Review focus: Futile synchronization on field
+
+What to look for:
+- Synchronizing on a field and updating that field while the lock is held is unlikely to provide the desired thread safety.
+- A`lock`statement that locks a field which is modified is unlikely to provide thread safety. This is because different threads only lock the value of the field, not the field itself. Since the value of the field changes, different threads are locking different objects, and so are not mutually exclusive.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FutileSyncOnField.cs`):
+```
+class Adder
+{
+    dynamic total = 0;
+
+    public void AddItem(int item)
+    {
+        lock (total)     // Wrong
+        {
+            total = total + item;
+        }
+    }
+}
+```
+- Reference example (`FutileSyncOnFieldFix.cs`):
+```
+using System;
+
+class Adder
+{
+    dynamic total = 0;
+
+    private readonly Object mutex = new Object();
+
+    public void AddItem(int item)
+    {
+        lock (mutex)    // Fixed
+        {
+            total = total + item;
+        }
+    }
+}
+```

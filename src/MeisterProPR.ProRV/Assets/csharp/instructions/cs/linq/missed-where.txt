@@ -1,0 +1,57 @@
+Review focus: Missed opportunity to use Where
+
+What to look for:
+- The intent of a foreach loop that implicitly filters its target sequence can often be better expressed using LINQ's 'Where' method.
+- Programmers sometimes need to iterative over a filtered version of a sequence, rather than the sequence itself. For example, you might want to print out only the numbers in the range [1,10] that are even. One standard way of doing this is to write a loop that iterates over the whole sequence, testing the variable each iteration to determine whether or not it is even. This is often written using either`if(!condition(var)) continue;`as the initial statement in the loop, or by enclosing the entire loop body with`if(condition(var))`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedWhereOpportunity.cs`):
+```
+class MissedWhereOpportunity
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = Enumerable.Range(1, 10).ToList();
+
+        foreach (int i in lst)
+        {
+            if (i % 2 != 0)
+                continue;
+            Console.WriteLine(i);
+            Console.WriteLine((i / 2));
+        }
+
+        foreach (int i in lst)
+        {
+            if (i % 2 == 0)
+            {
+                Console.WriteLine(i);
+                Console.WriteLine((i / 2));
+            }
+        }
+    }
+}
+```
+- Reference example (`MissedWhereOpportunityFix.cs`):
+```
+class MissedWhereOpportunityFix
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = Enumerable.Range(1, 10).ToList();
+
+        foreach (int i in lst.Where(e => e % 2 == 0))
+        {
+            Console.WriteLine(i);
+            Console.WriteLine((i / 2));
+        }
+    }
+}
+```

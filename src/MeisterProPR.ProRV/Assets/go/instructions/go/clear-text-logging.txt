@@ -1,0 +1,57 @@
+Review focus: Clear-text logging of sensitive information
+
+What to look for:
+- Logging sensitive information without encryption or hashing can expose it to an attacker.
+- Sensitive information that is logged unencrypted is accessible to an attacker who gains access to the logs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextLogging.go`):
+```
+package main
+
+import (
+	"log"
+	"net/http"
+)
+
+func serve() {
+	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		user := r.Form.Get("user")
+		pw := r.Form.Get("password")
+
+		log.Printf("Registering new user %s with password %s.\n", user, pw)
+	})
+	http.ListenAndServe(":80", nil)
+}
+```
+- Reference example (`CleartextLoggingGood.go`):
+```
+package main
+
+import (
+	"log"
+	"net/http"
+)
+
+func serve1() {
+	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		user := r.Form.Get("user")
+		pw := r.Form.Get("password")
+
+		log.Printf("Registering new user %s.\n", user)
+
+		// ...
+		use(pw)
+	})
+	http.ListenAndServe(":80", nil)
+}
+```

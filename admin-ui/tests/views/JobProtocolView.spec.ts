@@ -996,4 +996,48 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('Publish')
     expect(wrapper.text()).toContain('verified_bounded_claim_support')
   })
+
+  it('renders ProRV prefilter proof details for the selected pass', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            proRvPrefilter: {
+              selected: true,
+              executionState: 'completed',
+              stageId: 'file-by-file.prorv-prefilter',
+              runtimeSource: 'dedicated_runtime',
+              modelId: 'gpt-5.4-mini',
+              language: 'javascript',
+              prefilterStatus: 'Success',
+              guidanceCount: 2,
+              aiCallRecorded: true,
+              guidanceApplied: true,
+              appliedPromptKind: 'per_file_review',
+              appliedGuidanceIds: ['js/incomplete-sanitization', 'js/path-injection'],
+            },
+            events: [],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('ProRV Prefilter')
+    expect(wrapper.text()).toContain('Guidance Applied')
+    expect(wrapper.text()).toContain('per_file_review')
+    expect(wrapper.text()).toContain('dedicated_runtime')
+    expect(wrapper.text()).toContain('gpt-5.4-mini')
+    expect(wrapper.text()).toContain('js/incomplete-sanitization')
+    expect(wrapper.text()).toContain('js/path-injection')
+  })
 })

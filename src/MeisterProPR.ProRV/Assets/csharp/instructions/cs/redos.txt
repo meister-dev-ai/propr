@@ -1,0 +1,37 @@
+Review focus: Denial of Service from comparison of user input against expensive regex
+
+What to look for:
+- User input should not be matched against a regular expression that could require exponential time on certain input.
+- Matching user input against a regular expression which takes exponential time in the worst case can allow a malicious user to perform a Denial of Service ("DoS") attack by crafting input that takes a long time to execute. Most regular expression engines, including the C# standard library implementation, are designed to work with an extended regular expression syntax. Although this provides flexibility for the user, it can prevent the engine from constructing an efficient implementation of the matcher in all circumstances. In particular, the "worst case time complexity" (see the references) of certain regular expressions may be "exponential". This would allow a malicious user to provide some input which causes the regular expression to take a very long time to execute. Typically, a regular expression is vulnerable to this attack if it applies repetition to a sub-expression which itself is repeated, or contains overlapping options. For example,`(a+)+`is vulnerable to a string such as`aaaaaaaaaaaaaaaaaaaaaaaaaaab`. More information about the precise circumstances can be found in the references.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ReDoS.cs`):
+```
+using System;
+using System.Web;
+using System.Text.RegularExpressions;
+
+public class ReDoSHandler : IHttpHandler
+{
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string userInput = ctx.Request.QueryString["userInput"];
+
+        // BAD: User input is matched against a regex with exponential worst case behavior
+        new Regex("^([a-z]*)*$").Match(userInput);
+
+        // GOOD: Regex is given a timeout to avoid DoS
+        new Regex("^([a-z]*)*$",
+                  RegexOptions.IgnoreCase,
+                  TimeSpan.FromSeconds(1)).Match(userInput);
+    }
+}
+```

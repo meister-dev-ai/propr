@@ -353,7 +353,8 @@ public sealed class ReviewWorkflowRunnerTests
                 "feature/offline-review",
                 "main",
                 [new FixtureChangedFile("src/Example.cs", ChangeType.Add, "+++ b/src/Example.cs", "public class Example {}")]),
-            Expectations: new FixtureExpectations([], [], []));
+            Expectations: new FixtureExpectations([], [], []),
+            ProRVPrefilterExpectations: new FixtureProRVPrefilterExpectations([]));
     }
 
     private static PullRequest CreatePullRequest()

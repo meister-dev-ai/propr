@@ -1,0 +1,39 @@
+Review focus: Cookie security: overly broad domain
+
+What to look for:
+- Finds cookies with an overly broad domain.
+- This rule finds cookies with an overly broad domain. Cookies with an overly broad domain, such as ".mybank.com", can be accessed by all web applications deployed on this domain and its sub-domains. A cookie with sensitive data, but with too broad a domain, could hence be read and tampered with by a less secure and untrusted application.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CookieWithOverlyBroadDomain.cs`):
+```
+class CookieWithOverlyBroadDomain
+{
+    static public void AddCookie()
+    {
+        HttpCookie cookie1 = new HttpCookie("sessionID");
+        cookie1.Domain = "online-bank.com";
+
+        HttpCookie cookie2 = new HttpCookie("sessionID");
+        cookie2.Domain = ".ebanking.online-bank.com";
+    }
+}
+```
+- Reference example (`CookieWithOverlyBroadDomainFix.cs`):
+```
+class CookieWithOverlyBroadDomainFix
+{
+    static public void AddCookie()
+    {
+        HttpCookie cookie = new HttpCookie("sessionID");
+        cookie.Domain = "ebanking.online-bank.com";
+    }
+}
+```

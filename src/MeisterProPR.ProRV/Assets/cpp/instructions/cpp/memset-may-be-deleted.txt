@@ -1,0 +1,26 @@
+Review focus: Call to `memset` may be deleted
+
+What to look for:
+- Using the `memset` function to clear private data in a variable that has no subsequent use can make information-leak vulnerabilities easier to exploit because the compiler can...
+- Calling`memset`or`bzero`on a buffer to clear its contents may get optimized away by the compiler if the buffer is not subsequently used. This is not desirable behavior if the buffer contains sensitive data that could somehow be retrieved by an attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`MemsetMayBeDeleted-bad.c`):
+```
+char password[MAX_PASSWORD_LENGTH];
+// read and verify password
+memset(password, 0, MAX_PASSWORD_LENGTH);
+```
+- Good example (`MemsetMayBeDeleted-good.c`):
+```
+char password[MAX_PASSWORD_LENGTH];
+// read and verify password
+memset_s(password, MAX_PASSWORD_LENGTH, 0, MAX_PASSWORD_LENGTH);
+```

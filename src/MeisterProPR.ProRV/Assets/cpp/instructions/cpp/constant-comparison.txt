@@ -1,0 +1,32 @@
+Review focus: Comparison result is always the same
+
+What to look for:
+- When a comparison operation, such as x < y, always returns the same result, it means that the comparison is redundant and may mask a bug because a different check was intended.
+- Comparison operations like`x >= y`or`x != y`will always return the same result if the ranges of`x`and`y`do not overlap. In some cases this can cause an infinite loop. In the example below the loop condition on line 9 is always true because the range of`i`is [0..5], so the loop will never terminate. The bounds which were deduced for the left and right operands of the comparison are included in the message as they often make it easier to understand why a result was reported. For example the message for the comparison`x >= y`might read: "Comparison is always false because x >= 5 and 3 >= y."
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`PointlessComparison.cpp`):
+```
+int f() {
+  int i;
+  int total = 0;
+
+  for (i = 0; i < 10; i = i+1) {  // GOOD: comparison could be either true or false.
+    total += i;
+  }
+
+  for (i = 0; i < 10; i = i+1) {  // BAD: comparison is always true, because i <= 5. 
+    i = i % 5;
+    total += i;
+  }
+
+  return total;
+}
+```

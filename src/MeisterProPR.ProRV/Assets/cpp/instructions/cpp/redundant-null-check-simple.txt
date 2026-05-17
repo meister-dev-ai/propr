@@ -1,0 +1,27 @@
+Review focus: Redundant null check due to previous dereference
+
+What to look for:
+- Checking a pointer for nullness after dereferencing it is likely to be a sign that either the check can be removed, or it should be moved before the dereference.
+- This rule finds comparisons of a pointer to null that occur after a reference of that pointer. It's likely either the check is not required and can be removed, or it should be moved to before the dereference so that a null pointer dereference does not occur.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`RedundantNullCheckSimple.cpp`):
+```
+int f(MyList *list) {
+	list->append(1);
+
+	// ...
+
+	if (list != NULL)
+	{
+		list->append(2);
+	}
+}
+```

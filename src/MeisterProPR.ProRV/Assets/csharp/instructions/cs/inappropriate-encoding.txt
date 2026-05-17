@@ -1,0 +1,95 @@
+Review focus: Inappropriate encoding
+
+What to look for:
+- Using an inappropriate encoding may give unintended results and may pose a security risk.
+- Using an inappropriate encoding may yield unintended results. For example, using URL encoding for HTML content may result in an incorrectly rendered web page. Using an inappropriate encoding may further pose a security risk when a remote user can control the value being encoded. For example, redirecting to an HTML encoded URL provided by a remote user can facilitate phishing attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HtmlEncode.cs`):
+```
+using System;
+using System.Web;
+using System.Net;
+
+public class HtmlEncode
+{
+    public static void Bad(HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        ctx.Response.Write("Hello, " + WebUtility.UrlEncode(user));
+    }
+
+    public static void Good(HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        ctx.Response.Write("Hello, " + WebUtility.HtmlEncode(user));
+    }
+}
+```
+- Reference example (`UrlEncode.cs`):
+```
+using System;
+using System.Web;
+using System.Net;
+
+public class UrlEncode
+{
+    public static void Bad(string value, HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        ctx.Response.Redirect("?param=" + WebUtility.HtmlEncode(user));
+    }
+
+    public static void Good(string value, HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        ctx.Response.Redirect("?param=" + WebUtility.UrlEncode(user));
+    }
+}
+```
+- Reference example (`SqlEncode.cs`):
+```
+using System;
+using System.Data;
+using System.Data.SqlClient;
+using System.Web;
+using System.Net;
+
+public class SqlEncode
+{
+    public static DataSet Bad(HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        using (var connection = new SqlConnection(""))
+        {
+            var query = "select * from Users where Name='" + user.Replace("\"", "\"\"") + "'";
+            var adapter = new SqlDataAdapter(query, connection);
+            var result = new DataSet();
+            adapter.Fill(result);
+            return result;
+        }
+    }
+
+    public static DataSet Good(HttpContext ctx)
+    {
+        var user = WebUtility.UrlDecode(ctx.Request.QueryString["user"]);
+        using (var connection = new SqlConnection(""))
+        {
+            var query = "select * from Users where Name=@name";
+            var adapter = new SqlDataAdapter(query, connection);
+            var parameter = new SqlParameter("name", user);
+            adapter.SelectCommand.Parameters.Add(parameter);
+            var result = new DataSet();
+            adapter.Fill(result);
+            return result;
+        }
+    }
+}
+```

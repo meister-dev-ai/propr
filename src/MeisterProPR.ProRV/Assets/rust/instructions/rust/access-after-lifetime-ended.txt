@@ -1,0 +1,54 @@
+Review focus: Access of a pointer after its lifetime has ended
+
+What to look for:
+- Dereferencing a pointer after the lifetime of its target has ended causes undefined behavior and may result in memory corruption.
+- Dereferencing a pointer after the lifetime of its target has ended causes undefined behavior. Memory may be corrupted, causing the program to crash or behave incorrectly, in some cases exposing the program to potential attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`AccessAfterLifetimeBad.rs`):
+```
+fn get_pointer() -> *const i64 {
+	let val = 123;
+
+	&val
+} // lifetime of `val` ends here, the pointer becomes dangling
+
+fn example() {
+	let ptr = get_pointer();
+	let dereferenced_ptr;
+
+	// ...
+
+	unsafe {
+		dereferenced_ptr = *ptr; // BAD: dereferences `ptr` after the lifetime of `val` has ended
+	}
+
+	// ...
+}
+```
+- Reference example (`AccessAfterLifetimeGood.rs`):
+```
+fn get_box() -> Box<i64> {
+	let val = 123;
+
+	Box::new(val) // copies `val` onto the heap, where it remains for the lifetime of the `Box`.
+}
+
+fn example() {
+	let ptr = get_box();
+	let dereferenced_ptr;
+
+	// ...
+
+	dereferenced_ptr = *ptr; // GOOD
+
+	// ...
+}
+```

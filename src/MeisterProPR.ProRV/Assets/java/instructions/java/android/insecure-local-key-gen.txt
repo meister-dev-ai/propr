@@ -1,0 +1,12 @@
+Review focus: Insecurely generated keys for local authentication
+
+What to look for:
+- Generation of keys with insecure parameters for local biometric authentication can allow attackers with physical access to bypass authentication checks.
+- Biometric authentication, such as fingerprint recognition, can be used alongside cryptographic keys stored in the Android`KeyStore`to protect sensitive parts of the application. However, when a key generated for this purpose has certain parameters set insecurely, an attacker with physical access can bypass the authentication check using application hooking tools such as Frida.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

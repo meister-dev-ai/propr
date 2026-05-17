@@ -1,0 +1,31 @@
+Review focus: Setting a DACL to NULL in a SECURITY_DESCRIPTOR
+
+What to look for:
+- Setting a DACL to NULL in a SECURITY_DESCRIPTOR will result in an unprotected object.
+- This query indicates that a call is setting the DACL field in a`SECURITY_DESCRIPTOR`to null. When using`SetSecurityDescriptorDacl`to set a discretionary access control (DACL), setting the`bDaclPresent`argument to`TRUE`indicates the presence of a DACL in the security description in the argument`pDacl`. When the`pDacl`parameter does not point to a DACL (i.e. it is`NULL`) and the`bDaclPresent`flag is`TRUE`, a`NULL DACL`is specified. A`NULL DACL`grants full access to any user who requests it; normal security checking is not performed with respect to the object.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnsafeDaclSecurityDescriptor.cpp`):
+```
+SECURITY_DESCRIPTOR  pSD;
+SECURITY_ATTRIBUTES  SA;
+
+if (!InitializeSecurityDescriptor(&pSD, SECURITY_DESCRIPTOR_REVISION))
+{
+    // error handling
+}
+if (!SetSecurityDescriptorDacl(&pSD,
+    TRUE,   // bDaclPresent - this value indicates the presence of a DACL in the security descriptor
+    NULL,   // pDacl - the pDacl parameter does not point to a DACL. All access will be allowed
+    FALSE))
+{
+    // error handling
+}
+```

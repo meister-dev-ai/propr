@@ -1,0 +1,12 @@
+Review focus: Cyclomatic Complexity
+
+What to look for:
+- Functions with high cyclomatic complexity.
+- This rule computes cyclomatic complexity per function. Cyclomatic complexity is a measure of how complex a function is, and is derived from the number of branching statements in the function. Complex functions can be difficult to understand and maintain, and usually can be split into smaller, less complex functions. The rule finds functions with high (e.g. >50) cyclomatic complexity.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

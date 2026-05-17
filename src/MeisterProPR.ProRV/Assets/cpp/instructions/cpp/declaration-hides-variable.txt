@@ -1,0 +1,29 @@
+Review focus: Declaration hides variable
+
+What to look for:
+- A local variable hides another local variable from a surrounding scope.
+- This rule finds declarations of local variables that hide a local variable from a surrounding scope. Such declarations create variables with the same name but different scopes. This makes it difficult to know which variable is actually used in an expression.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeclarationHidesVariable.cpp`):
+```
+void f() {
+	int i = 10;
+
+	for (int i = 0; i < 10; i++) { //the loop counter hides the variable
+		 ...
+	}
+
+	{
+		int i = 12; //this variable hides the variable in the outer block
+		...
+	}
+}
+```

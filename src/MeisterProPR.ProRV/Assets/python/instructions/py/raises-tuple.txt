@@ -1,0 +1,30 @@
+Review focus: Raising a tuple
+
+What to look for:
+- Raising a tuple will result in all but the first element being discarded
+- In Python 2, if a tuple is raised then all elements but the first are ignored and only the first part is raised. If the first element is itself a tuple, then the first element of that is used and so on. This unlikely to be the intended effect and will most likely indicate some sort of error. It is important to note that the exception in`raise Exception, message`is not a tuple, whereas the exception in`ex = Exception, message; raise ex`is a tuple. In Python 3, raising a tuple is an error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RaisingTuple.py`):
+```
+def raise_tuple():
+    ex = Exception, "Important diagnostic information"
+    raise ex
+```
+- Reference example (`RaisingTuple2.py`):
+```
+def fixed_raise_tuple1():
+    ex = Exception("Important diagnostic information")
+    raise ex
+
+
+def fixed_raise_tuple2():
+    raise Exception, "Important diagnostic information"
+```

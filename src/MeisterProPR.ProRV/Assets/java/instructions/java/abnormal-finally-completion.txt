@@ -1,0 +1,12 @@
+Review focus: Finally block may not complete normally
+
+What to look for:
+- A 'finally' block that runs because an exception has been thrown, and that does not complete normally, causes the exception to disappear silently.
+- A`finally`block that does not complete normally suppresses any exceptions that may have been thrown in the corresponding`try`block. This can happen if the`finally`block contains any`return`or`throw`statements, or if it contains any`break`or`continue`statements whose jump target lies outside of the`finally`block.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

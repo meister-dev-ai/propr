@@ -1,0 +1,29 @@
+Review focus: Bad param tag
+
+What to look for:
+- A 'param' tag that does not include a name is confusing since it is unclear which parameter it is meant to document.
+- JSDoc comments for functions and constructors should use the`@param`tag to describe the available parameters. Each`@param`tag should include both the name of the documented parameter and a description of its meaning and use. A missing name or description makes the tag much less useful and may indicate badly maintained code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadParamTag.js`):
+```
+/**
+ * A message.
+ *
+ * @constructor
+ * 
+ * @param title
+ * @param text
+ */
+function Message(title, body) {
+    this.title = title;
+    this.body = body;
+}
+```

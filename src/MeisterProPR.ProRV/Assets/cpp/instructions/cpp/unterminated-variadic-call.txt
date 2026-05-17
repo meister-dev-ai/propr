@@ -1,0 +1,48 @@
+Review focus: Unterminated variadic call
+
+What to look for:
+- Calling a variadic function without a sentinel value may result in a buffer overflow if the function expects a specific value to terminate the argument list.
+- The program calls a function that expects the variable argument list to be terminated with a sentinel value (typically NULL, 0 or -1). In this case, the sentinel value has been omitted as a final argument. This defect may result in incorrect behavior of the function and unintended stack memory access, leading to incorrect program results, instability, and even vulnerability to buffer overflow style attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnterminatedVarargsCall.cpp`):
+```
+#include <stdarg.h>
+
+void pushStrings(char *firstString, ...)
+{
+	va_list args;
+	char *arg;
+
+	va_start(args, firstString);
+
+	// process inputs, beginning with firstString, ending when NULL is reached
+	arg = firstString;
+	while (arg != NULL)
+	{
+		// push the string
+		pushString(arg);
+	
+		// move on to the next input
+		arg = va_arg(args, char *);
+	}
+
+	va_end(args);
+}
+
+void badFunction()
+{
+	pushStrings("hello", "world", NULL); // OK
+	
+	pushStrings("apple", "pear", "banana", NULL); // OK
+
+	pushStrings("car", "bus", "train"); // BAD, not terminated with the expected NULL
+}
+```

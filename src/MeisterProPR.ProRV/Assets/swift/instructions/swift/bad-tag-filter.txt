@@ -1,0 +1,12 @@
+Review focus: Bad HTML filtering regexp
+
+What to look for:
+- Matching HTML tags using regular expressions is hard to do right, and can lead to security issues.
+- It is possible to match some single HTML tags using regular expressions (parsing general HTML using regular expressions is impossible). However, if the regular expression is not written well, it might be possible to circumvent it. This can lead to cross-site scripting or other security issues. Some of these mistakes are caused by browsers having very forgiving HTML parsers, and will often render invalid HTML containing syntax errors. Regular expressions that attempt to match HTML should also recognize tags containing such syntax errors.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

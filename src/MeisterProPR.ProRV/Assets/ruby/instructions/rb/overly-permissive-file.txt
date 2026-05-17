@@ -1,0 +1,12 @@
+Review focus: Overly permissive file permissions
+
+What to look for:
+- Allowing files to be readable or writable by users other than the owner may allow sensitive information to be accessed.
+- When creating a file, POSIX systems allow permissions to be specified for owner, group and others separately. Permissions should be kept as strict as possible, preventing access to the files contents by other users.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

@@ -1,0 +1,12 @@
+Review focus: Deprecated slice method
+
+What to look for:
+- Defining special methods for slicing has been deprecated since Python 2.0.
+- The`__getslice__`,`__setslice__`and`__delslice__`methods have been deprecated since Python 2.0. In general, no class should implement these methods. The only exceptions to this rule are classes that inherit from`list`and override`__getitem__`,`__setitem__`or`__delitem__`. Since`list`implements the slicing methods any class inheriting from`list`must implement the the slicing methods to ensure correct behavior of`__getitem__`,`__setitem__`and`__delitem__`. These exceptions to the rule will not be treated as violations.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

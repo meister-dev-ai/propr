@@ -1,0 +1,29 @@
+Review focus: Avoid floats in for loops
+
+What to look for:
+- Floating point variables should not be used as loop counters.
+- This rule finds`float`variables being used as loop counter.`float`values are prone to rounding and truncation. In particular, very large and very small float values are prone to rounding errors and could lead to unexpected loop behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 197.cpp`):
+```
+void f() {
+	float i = 0.0f;
+	//wrong: float used as loop counter
+	for (i = 0; i < 1000000.0f; i++) { //may execute 1000000 +x/-x times
+		//...
+	}
+	for (i = 0; i < 100000000.0f; i++) { //may never terminate, as rounding errors 
+	                                     //cancel out the addition of 1.0 once 
+	                                     //i becomes large enough
+		//...
+	}
+}
+```

@@ -1,0 +1,42 @@
+Review focus: Unreachable method overloads
+
+What to look for:
+- Having multiple overloads with the same parameter types in TypeScript makes all overloads except the first one unreachable, as the compiler always resolves calls to the textually...
+- The TypeScript compiler has to choose which specific overload is called when a method with multiple overloads is called. The compiler will always choose the textually first overload that does not give rise to any type errors with the arguments provided at the function call. This behavior can be unintuitive for programmers unfamiliar with the type system in TypeScript, and can in some instances lead to situations where a programmer writes an overloaded method where only the first overload can ever be used.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnreachableMethodOverloads.ts`):
+```
+interface Foo {
+    getParsedThing(id: string): string[];
+    getParsedThing(id: string): number[];
+    getParsedThing(id: string): object[];
+}
+```
+- Reference example (`UnreachableMethodOverloadsGood.ts`):
+```
+interface Foo {
+    getParsedThing(id: string): object[] | number[] | string[];
+}
+```
+- Reference example (`UnreachableMethodOverloadsTypeParameters.ts`):
+```
+interface Foo {
+    create<T>(a: string): MyObject<T>;
+    create(a: string): MyObject<any>;
+}
+```
+- Reference example (`UnreachableMethodOverloadsTypeParametersGood.ts`):
+```
+interface Foo {
+    create(a: string): Array<any>;
+    create<T>(a: string): Array<T>;
+}
+```

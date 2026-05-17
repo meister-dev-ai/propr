@@ -1,0 +1,35 @@
+Review focus: Missing X-Frame-Options HTTP header
+
+What to look for:
+- If the 'X-Frame-Options' setting is not provided, a malicious user may be able to overlay their own UI on top of the site by using an iframe.
+- Websites that do not specify the`X-Frame-Options`HTTP header may be vulnerable to UI redress attacks ("clickjacking"). In these attacks, the vulnerable site is loaded in a frame on an attacker-controlled site which uses opaque or transparent layers to trick the user into unintentionally clicking a button or link on the vulnerable site.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`missing-X-Frame-Options.js`):
+```
+var express = require('express'),
+    app = express();
+
+
+app.get('/', function (req, res) {
+    res.send('X-Frame-Options: ' + res.get('X-Frame-Options'))
+})
+```
+- Reference example (`X-Frame-Options.js`):
+```
+var express = require('express'),
+    app = express();
+
+
+app.get('/', function (req, res) {
+    res.set('X-Frame-Options', value)
+    res.send('X-Frame-Options: ' + res.get('X-Frame-Options'))
+})
+```

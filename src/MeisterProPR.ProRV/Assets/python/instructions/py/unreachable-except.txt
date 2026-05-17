@@ -1,0 +1,24 @@
+Review focus: Unreachable `except` block
+
+What to look for:
+- Handling general exceptions before specific exceptions means that the specific handlers are never executed.
+- When handling an exception, Python searches the except blocks in source code order until it finds a matching`except`block for the exception. An except block,`except E:`, specifies a class`E`and will match any exception that is an instance of`E`. If a more general except block precedes a more specific except block, then the more general block is always executed and the more specific block is never executed. An except block,`except A:`, is more general than another except block,`except B:`, if`A`is a super class of`B`. For example:`except Exception:`is more general than`except Error:`as`Exception`is a super class of`Error`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectExceptOrder.py`):
+```
+def incorrect_except_order(val):
+    try:
+        val.attr
+    except Exception:
+        print ("Exception")
+    except AttributeError:
+        print ("AttributeError")
+```

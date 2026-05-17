@@ -1,0 +1,33 @@
+Review focus: Nested loops with same variable
+
+What to look for:
+- When a nested loop uses the same iteration variable as its outer loop, the behavior of the outer loop easily becomes difficult to understand as the inner loop will affect its...
+- This rule finds nested loops in which the iteration variable is the same for both loops. The behavior of the loop will be difficult to understand as the inner loop will affect the iteration variable of the outer loop; this is most likely a typo. The rule flags the condition expression in the inner loop that uses the same variable as the iteration variable of the outer loop.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedLoopSameVar.cpp`):
+```
+int x1 = 0;
+for (x1 = 0; x1 < 100; x1++) {
+    int x2 = 0;
+    for (x1 = 0; x1 < 300; x1++) {
+    // this is most likely a typo
+    // the outer loop will exit immediately
+    } 
+}
+
+for (x1 = 0; x1 < 100; x1++) {
+  if(x1 == 10 && condition) {
+    for (; x1 < 75; x1++) {
+      // this should be written as a while loop
+    }   
+  }
+}
+```

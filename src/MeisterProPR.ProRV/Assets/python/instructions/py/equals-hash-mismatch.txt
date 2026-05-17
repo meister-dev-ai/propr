@@ -1,0 +1,25 @@
+Review focus: Inconsistent equality and hashing
+
+What to look for:
+- Defining a hash operation without defining equality may be a mistake.
+- A hashable class has an`__eq__`method, and a`__hash__`method that agrees with equality. When a hash method is defined, an equality method should also be defined; otherwise object identity is used for equality comparisons which may not be intended. Note that defining an`__eq__`method without defining a`__hash__`method automatically makes the class unhashable in Python 3. (even if a superclass defines a hash method).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EqualsOrHash.py`):
+```
+class A:
+    def __init__(self, a, b):
+        self.a = a 
+        self.b = b
+
+    # No equality method is defined
+    def __hash__(self):
+        return hash((self.a, self.b))
+```

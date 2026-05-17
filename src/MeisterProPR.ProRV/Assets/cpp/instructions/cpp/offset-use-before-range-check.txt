@@ -1,0 +1,38 @@
+Review focus: Array offset used before range check
+
+What to look for:
+- Accessing an array offset before checking the range means that the program may attempt to read beyond the end of a buffer
+- The program contains an and-expression where the array access is defined before the range check. Consequently the array is accessed without any bounds checking. The range check does not protect the program from segmentation faults caused by attempts to read beyond the end of a buffer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OffsetUseBeforeRangeCheck.c`):
+```
+int find(int start, char *str, char goal)
+{
+    int len = strlen(str);
+    //Potential buffer overflow
+    for (int i = start; str[i] != 0 && i < len; i++) { 
+        if (str[i] == goal)
+            return i; 
+    }
+    return -1;
+}
+
+int findRangeCheck(int start, char *str, char goal)
+{
+    int len = strlen(str);
+    //Range check protects against buffer overflow
+    for (int i = start; i < len && str[i] != 0 ; i++) {
+        if (str[i] == goal)
+            return i; 
+    }
+    return -1;
+}
+```

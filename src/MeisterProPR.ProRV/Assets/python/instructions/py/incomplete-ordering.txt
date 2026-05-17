@@ -1,0 +1,24 @@
+Review focus: Incomplete ordering
+
+What to look for:
+- Class defines ordering comparison methods, but does not define both strict and nonstrict ordering methods, to ensure all four comparison operators behave as expected.
+- A class that implements the rich comparison operators (`__lt__`,`__gt__`,`__le__`, or`__ge__`) should ensure that all four comparison operations``, and`>=`function as expected, consistent with expected mathematical rules. In Python 3, this is ensured by implementing one of`__lt__`or`__gt__`, and one of`__le__`or`__ge__`. If the ordering is not consistent with default equality, then`__eq__`should also be implemented.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncompleteOrdering.py`):
+```
+class A:
+    def __init__(self, i):
+        self.i = i
+
+    # BAD: le is not defined, so `A(1) <= A(2)` would result in an error.
+    def __lt__(self, other):
+        return self.i < other.i
+```

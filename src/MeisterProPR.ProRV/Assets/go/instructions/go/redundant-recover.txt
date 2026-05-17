@@ -1,0 +1,68 @@
+Review focus: Redundant call to recover
+
+What to look for:
+- Calling 'recover' in a function which isn't called using a defer statement has no effect.
+- The built-in`recover`function is only useful inside deferred functions. Calling it in a function that is never deferred means that it will always return`nil`and it will never regain control of a panicking goroutine. The same is true of calling`recover`directly in a defer statement.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RedundantRecover1.go`):
+```
+package main
+
+import "fmt"
+
+func callRecover1() {
+	if recover() != nil {
+		fmt.Printf("recovered")
+	}
+}
+
+func fun1() {
+	defer func() {
+		callRecover1()
+	}()
+	panic("1")
+}
+```
+- Reference example (`RedundantRecover1Good.go`):
+```
+package main
+
+import "fmt"
+
+func callRecover1Good() {
+	if recover() != nil {
+		fmt.Printf("recovered")
+	}
+}
+
+func fun1Good() {
+	defer callRecover1Good()
+	panic("1")
+}
+```
+- Reference example (`RedundantRecover2.go`):
+```
+package main
+
+func fun2() {
+	defer recover()
+	panic("2")
+}
+```
+- Reference example (`RedundantRecover2Good.go`):
+```
+package main
+
+func fun2Good() {
+	defer func() { recover() }()
+	panic("2")
+}
+```

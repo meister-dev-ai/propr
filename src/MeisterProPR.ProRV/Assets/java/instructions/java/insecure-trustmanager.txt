@@ -1,0 +1,18 @@
+Review focus: `TrustManager` that accepts all certificates
+
+What to look for:
+- Trusting all certificates allows an attacker to perform a machine-in-the-middle attack.
+- If the`checkServerTrusted`method of a`TrustManager`never throws a`CertificateException`, it trusts every certificate. This allows an attacker to perform a machine-in-the-middle attack against the application, therefore breaking any security Transport Layer Security (TLS) gives. An attack might look like this:
+- The vulnerable program connects to`https://example.com`.
+- The attacker intercepts this connection and presents a valid, self-signed certificate for`https://example.com`.
+- The vulnerable program calls the`checkServerTrusted`method to check whether it should trust the certificate.
+- The`checkServerTrusted`method of your`TrustManager`does not throw a`CertificateException`.
+- The vulnerable program accepts the certificate and proceeds with the connection since your`TrustManager`implicitly trusted it by not throwing an exception.
+- The attacker can now read the data your program sends to`https://example.com`and/or alter its replies while the program thinks the connection is secure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

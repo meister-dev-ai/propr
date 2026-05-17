@@ -1,0 +1,36 @@
+Review focus: Useless conditional
+
+What to look for:
+- If a conditional expression always evaluates to true or always evaluates to false, this suggests incomplete code or a logic error.
+- If a condition always evaluates to true or always evaluates to false, this often indicates incomplete code or a latent bug and should be examined carefully.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UselessConditional.js`):
+```
+function getLastLine(input) {
+  var lines = [], nextLine;
+  while ((nextLine = readNextLine(input)))
+    lines.push(nextLine);
+  if (!lines)
+    throw new Error("No lines!");
+  return lines[lines.length-1];
+}
+```
+- Reference example (`UselessConditionalGood.js`):
+```
+function getLastLine(input) {
+  var lines = [], nextLine;
+  while ((nextLine = readNextLine(input)))
+    lines.push(nextLine);
+  if (!lines.length)
+    throw new Error("No lines!");
+  return lines[lines.length-1];
+}
+```

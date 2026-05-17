@@ -1,0 +1,34 @@
+Review focus: Ambiguous HTML id attribute
+
+What to look for:
+- If an HTML document contains two elements with the same id attribute, it may be interpreted differently by different browsers.
+- According to the HTML5 standard, the value of the`id`attribute of an element must be unique amongst all the IDs in the element's home subtree. In particular, a single HTML document must not contain two elements with the same ID. Documents that do not conform to this restriction may be interpreted differently by different browsers.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AmbiguousIdAttribute.html`):
+```
+<html>
+<body>
+<ul>
+<li id="first">First element
+<li id="first">Second element
+</ul>
+</body>
+```
+- Reference example (`AmbiguousIdAttributeGood.html`):
+```
+<html>
+<body>
+<ul>
+<li id="first">First element
+<li id="second">Second element
+</ul>
+</body>
+```

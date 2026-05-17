@@ -1,0 +1,12 @@
+Review focus: Useless parameter
+
+What to look for:
+- Parameters that are not used add unnecessary complexity to an interface.
+- Parameters that are never read in the body of the method, and are not required due to overriding, are useless and can be removed. Useless parameters unnecessarily complicate the interface for that method, and cause a maintenance and development burden. Methods with useless parameters indicate that either the method can be simplified by removing the parameter, or that the method is not using a value it should be using. Parameters of methods that override other methods will not be marked as useless, because they are required. Similarly, parameters of methods that are overridden by other methods are not marked as useless if they are used by one of the overriding methods.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

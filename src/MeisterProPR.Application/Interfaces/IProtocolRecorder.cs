@@ -226,4 +226,15 @@ public interface IProtocolRecorder
         string? output,
         string? error,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records ProRV prefilter stage lifecycle and outcome events on the existing protocol path. Never throws.
+    /// </summary>
+    Task RecordProRvEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
 }

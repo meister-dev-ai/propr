@@ -1,0 +1,12 @@
+Review focus: Field masks field in super class
+
+What to look for:
+- Hiding a field in a superclass by redeclaring it in a subclass might be unintentional, especially if references to the hidden field are not qualified using 'super'.
+- A field that has the same name as a field in a superclass hides the field in the superclass. Such hiding might be unintentional, especially if there are no references to the hidden field using the`super`qualifier. In any case, it makes code more difficult to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

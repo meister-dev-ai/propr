@@ -1,0 +1,12 @@
+Review focus: Windows controls with generated names
+
+What to look for:
+- Replacing the generated names in windows forms with meaningful names makes it easier for other developers to understand the code.
+- This query identifies Windows form controls that have a default name such as`textBox1`. Replacing the default names with names that describe their purpose makes it much easier for other developers to understand your code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

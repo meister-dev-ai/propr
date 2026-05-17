@@ -1,0 +1,15 @@
+Review focus: Missed ternary opportunity
+
+What to look for:
+- An 'if' statement where both branches either (a) return or (b) write to the same variable can often be expressed more clearly using the '?' operator.
+- An`if`statement where both branches do nothing but return or write to a variable can be better expressed using the ternary`?`operator. Use of the ternary operator enhances readability in two ways:
+- It focuses the reader's attention on the intent of the code (to return or write) rather than the testing of a condition.
+- It is more concise, reducing the amount of code that needs to be read.
+- You can initialize a variable conditionally on the line on which it is declared, rather than assigning to it after initialization. This ensures that you initialize the variable as you intended.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,51 @@
+Review focus: Potentially unsafe quoting
+
+What to look for:
+- If a quoted string literal is constructed from data that may itself contain quotes, the embedded data could (accidentally or intentionally) change the structure of the overall...
+- Code that constructs a quoted string literal containing user-provided data needs to ensure that this data does not itself contain a quote. Otherwise the embedded data could (accidentally or intentionally) terminate the string literal early and thereby change the structure of the overall string, with potentially severe consequences. If, for example, the string is later used as part of an operating-system command or database query, an attacker may be able to craft input data that injects a malicious command.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`StringBreak.go`):
+```
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	sq "github.com/Masterminds/squirrel"
+)
+
+func save(id string, version interface{}) {
+	versionJSON, _ := json.Marshal(version)
+	sq.StatementBuilder.
+		Insert("resources").
+		Columns("resource_id", "version_md5").
+		Values(id, sq.Expr(fmt.Sprintf("md5('%s')", versionJSON))).
+		Exec()
+}
+```
+- Reference example (`StringBreakGood.go`):
+```
+package main
+
+import (
+	"encoding/json"
+	sq "github.com/Masterminds/squirrel"
+)
+
+func saveGood(id string, version interface{}) {
+	versionJSON, _ := json.Marshal(version)
+	sq.StatementBuilder.
+		Insert("resources").
+		Columns("resource_id", "version_md5").
+		Values(id, sq.Expr("md5(?)", versionJSON)).
+		Exec()
+}
+```

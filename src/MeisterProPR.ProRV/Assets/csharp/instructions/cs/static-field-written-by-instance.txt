@@ -1,0 +1,25 @@
+Review focus: Static field written by instance method
+
+What to look for:
+- Finds instance methods and properties that write to static fields.
+- Static fields represent the shared state of all instances of a class. It is therefore bad practice to modify this state from any particular instance. Because static fields are shared between all instances of a class existing in all threads of a program, one instance trying to read the field while another tries to write it can lead to race conditions and hence mean the class is not thread safe. It also decreases readability as most developers expect instance methods to only affect the instance state and static methods to only affect the static state.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StaticFieldWrittenByInstance.cs`):
+```
+public class Customer
+{
+    private static String name;
+    public void rename(String newname)
+    {
+        name = newname; // BAD
+    }
+}
+```

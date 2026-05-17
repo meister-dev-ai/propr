@@ -1,0 +1,24 @@
+Review focus: Non-portable comparison using is when operands support `__eq__`
+
+What to look for:
+- Comparison using 'is' when equivalence is not the same as identity and may not be portable.
+- When you compare two values using the`is`or`is not`operator, it is the object identities of the two values that is tested rather than their equality. If the class of either of the values in the comparison redefines equality then the`is`operator may return`False`even though the objects compare as equal. CPython interns a number of commonly used values, such as small integers, which means that using`is`instead of`==`will work correctly. However, this might not be portable to other implementations such as PyPy, IronPython, Jython or MicroPython.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonPortableComparisonUsingIs.py`):
+```
+CONSTANT = 12
+
+def equals_to_twelve(x):
+    return x is CONSTANT
+
+#This works in CPython, but might not for other implementations.
+print (equals_to_twelve(5 + 7))
+```

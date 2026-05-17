@@ -1,0 +1,67 @@
+Review focus: Cleartext storage of sensitive information in a database
+
+What to look for:
+- Storing sensitive information in a non-encrypted database can expose it to an attacker.
+- Sensitive information that is stored unencrypted in a database is accessible to an attacker who gains access to that database. For example, the information could be accessed by any process or user in a rooted device, or exposed through another vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextStorageDatabaseBad.rs`):
+```
+let query = "INSERT INTO PAYMENTDETAILS(ID, CARDNUM) VALUES(?, ?)";
+let result = sqlx::query(query)
+	.bind(id)
+	.bind(credit_card_number) // BAD: Cleartext storage of sensitive data in the database
+	.execute(pool)
+	.await?;
+```
+- Reference example (`CleartextStorageDatabaseGood.rs`):
+```
+fn encrypt(text: String, encryption_key: &aes_gcm::Key<Aes256Gcm>) -> String {
+    // encrypt text -> ciphertext
+    let cipher = Aes256Gcm::new(&encryption_key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher.encrypt(&nonce, text.as_ref()).unwrap();
+
+    // append (nonce, ciphertext)
+    let mut combined = nonce.to_vec();
+    combined.extend(ciphertext);
+
+    // encode to base64 string
+    BASE64_STANDARD.encode(combined)
+}
+
+fn decrypt(data: String, encryption_key: &aes_gcm::Key<Aes256Gcm>) -> String {
+    let cipher = Aes256Gcm::new(&encryption_key);
+
+    // decode base64 string
+    let decoded = BASE64_STANDARD.decode(data).unwrap();
+
+    // split into (nonce, ciphertext)
+    let nonce_size = <Aes256Gcm as AeadCore>::NonceSize::to_usize();
+    let (nonce, ciphertext) = decoded.split_at(nonce_size);
+
+    // decrypt ciphertext -> plaintext
+    let plaintext = cipher.decrypt(nonce.into(), ciphertext).unwrap();
+    String::from_utf8(plaintext).unwrap()
+}
+
+...
+
+let encryption_key = Aes256Gcm::generate_key(OsRng);
+
+...
+
+let query = "INSERT INTO PAYMENTDETAILS(ID, CARDNUM) VALUES(?, ?)";
+let result = sqlx::query(query)
+	.bind(id)
+	.bind(encrypt(credit_card_number, &encryption_key)) // GOOD: Encrypted storage of sensitive data in the database
+	.execute(pool)
+	.await?;
+```

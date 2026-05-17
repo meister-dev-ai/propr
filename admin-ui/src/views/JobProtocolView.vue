@@ -316,6 +316,29 @@
                             </dl>
                         </section>
 
+                        <section v-if="activePassProRvPrefilter" class="pass-file-outcome-section">
+                            <div class="pass-final-result-header">
+                                <h4>ProRV Prefilter</h4>
+                                <span class="chip chip-muted">{{ activePassProRvPrefilter.executionState ?? 'Not recorded' }}</span>
+                            </div>
+
+                            <dl class="summary-grid pass-summary pass-file-outcome-grid">
+                                <div><dt>Selected</dt><dd>{{ activePassProRvPrefilter.selected ? 'Yes' : 'No' }}</dd></div>
+                                <div><dt>Execution</dt><dd>{{ activePassProRvPrefilter.executionState ?? 'Not recorded' }}</dd></div>
+                                <div><dt>Guidance Applied</dt><dd>{{ activePassProRvPrefilter.guidanceApplied ? 'Yes' : 'No' }}</dd></div>
+                                <div><dt>Prompt Kind</dt><dd>{{ activePassProRvPrefilter.appliedPromptKind ?? 'Not recorded' }}</dd></div>
+                                <div><dt>Guidance Count</dt><dd>{{ activePassProRvPrefilter.guidanceCount ?? 0 }}</dd></div>
+                                <div><dt>AI Call Recorded</dt><dd>{{ activePassProRvPrefilter.aiCallRecorded ? 'Yes' : 'No' }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.stageId"><dt>Stage</dt><dd>{{ activePassProRvPrefilter.stageId }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.runtimeSource"><dt>Runtime</dt><dd>{{ activePassProRvPrefilter.runtimeSource }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.modelId"><dt>Model</dt><dd>{{ activePassProRvPrefilter.modelId }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.language"><dt>Language</dt><dd>{{ activePassProRvPrefilter.language }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.prefilterStatus"><dt>Prefilter Status</dt><dd>{{ activePassProRvPrefilter.prefilterStatus }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.reason"><dt>Reason</dt><dd>{{ activePassProRvPrefilter.reason }}</dd></div>
+                                <div v-if="activePassProRvPrefilter.appliedGuidanceIds?.length"><dt>Guidance IDs</dt><dd>{{ activePassProRvPrefilter.appliedGuidanceIds.join(', ') }}</dd></div>
+                            </dl>
+                        </section>
+
                         <section v-if="activePass.finalSummary || activePassFinalComments.length" class="pass-final-result-section">
                             <div class="pass-final-result-header">
                                 <h4>Final File Result</h4>
@@ -1516,6 +1539,10 @@ const activePassFollowUp = computed<ProtocolFollowUp | null>(() =>
 
 const activePassRepeatedJudgment = computed<ProtocolRepeatedJudgment | null>(() =>
     activePass.value?.repeatedJudgment ?? null,
+)
+
+const activePassProRvPrefilter = computed(() =>
+    activePass.value?.proRvPrefilter ?? null,
 )
 
 const reviewTemperatureDisplay = computed(() => formatTemperature(jobDetail.value?.reviewTemperature))

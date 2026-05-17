@@ -1,0 +1,12 @@
+Review focus: Unterminated switch case
+
+What to look for:
+- A 'case' statement that does not contain a 'break' statement allows execution to 'fall through' to the next 'case', which may not be intended.
+- In a`switch`statement, execution 'falls through' from one`case`to the next, unless the`case`ends with a`break`statement. A common programming error is to forget to insert a`break`at the end of a`case`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

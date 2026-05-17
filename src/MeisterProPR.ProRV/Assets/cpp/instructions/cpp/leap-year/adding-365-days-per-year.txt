@@ -1,0 +1,12 @@
+Review focus: Arithmetic operation assumes 365 days per year
+
+What to look for:
+- When an arithmetic operation modifies a date by a constant value of 365, it may be a sign that leap years are not taken into account.
+- When performing arithmetic operations on a variable that represents a date, leap years must be taken into account. It is not safe to assume that a year is 365 days long.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

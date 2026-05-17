@@ -1,0 +1,21 @@
+Review focus: Nested loops with same variable
+
+What to look for:
+- Nested loops in which the target variable is the same for each loop make the behavior of the loops difficult to understand.
+- In Python variables have function-wide scope which means that if two variables have the same name in the same scope, they are in fact one variable. Consequently, nested loops in which the target variables have the same name in fact share a single variable. Such loops are difficult to understand as the inner loop will modify the target variable of the outer loop; this may be a typographical error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedLoopsSameVariable.py`):
+```
+for var in range(3):
+    for var in range(3):
+        pass
+    print (var) # Prints 2 2 2 not 0 1 2 as might be expected
+```

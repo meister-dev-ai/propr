@@ -1,0 +1,74 @@
+Review focus: Server crash
+
+What to look for:
+- A server that can be forced to crash may be vulnerable to denial-of-service attacks.
+- Servers handle requests from clients until terminated deliberately by a server administrator. A client request that results in an uncaught server-side exception causes the current server response generation to fail, and should not have an effect on subsequent client requests. Under some circumstances, uncaught exceptions can however cause the entire server to terminate abruptly. Such a behavior is highly undesirable, especially if it gives malicious users the ability to turn off the server at will, which is an efficient denial-of-service attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`server-crash.BAD.js`):
+```
+const express = require("express"),
+  fs = require("fs");
+
+function save(rootDir, path, content) {
+  if (!isValidPath(rootDir, req.query.filePath)) {
+    throw new Error(`Invalid filePath: ${req.query.filePath}`); // BAD crashes the server
+  }
+  // write content to disk
+}
+
+express().post("/save", (req, res) => {
+  fs.access(rootDir, (err) => {
+    if (err) {
+      console.error(
+        `Server setup is corrupted, ${rootDir} cannot be accessed!`
+      );
+      res.status(500);
+      res.end();
+      return;
+    }
+    save(rootDir, req.query.path, req.body);
+    res.status(200);
+    res.end();
+  });
+});
+```
+- Reference example (`server-crash.GOOD-A.js`):
+```
+// ...
+express().post("/save", (req, res) => {
+  fs.access(rootDir, (err) => {
+    // ...
+    try {
+      save(rootDir, req.query.path, req.body); // GOOD exception is caught below
+      res.status(200);
+      res.end();
+    } catch (e) {
+      res.status(500);
+      res.end();
+    }
+  });
+});
+```
+- Reference example (`server-crash.GOOD-B.js`):
+```
+// ...
+express().post("/save", async (req, res) => {
+  try {
+    await fs.promises.access(rootDir);
+    save(rootDir, req.query.path, req.body); // GOOD exception is caught below
+    res.status(200);
+    res.end();
+  } catch (e) {
+    res.status(500);
+    res.end();
+  }
+});
+```

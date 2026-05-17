@@ -1,0 +1,45 @@
+Review focus: Infinite loop with unsatisfiable exit condition
+
+What to look for:
+- A loop with an unsatisfiable exit condition could prevent the program from terminating, making it vulnerable to a denial of service attack.
+- Loops can contain multiple exit conditions, either directly in the loop condition or as guards around`break`or`return`statements. If none of the exit conditions can ever be satisfied, then the loop will never terminate. A program containing an infinite loop could be vulnerable to a denial of service attack if it is possible for an attacker to trigger the loop.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InfiniteLoopBad.c`):
+```
+void test(int n) {
+  int i = 0;
+  if (n <= 0) {
+    return;
+  }
+  while (1) {
+    // BAD: condition is never true, so loop will not terminate.
+    if (i == n) {
+      break;
+    }
+  }
+}
+```
+- Reference example (`InfiniteLoopGood.c`):
+```
+void test(int n) {
+  int i = 0;
+  if (n <= 0) {
+    return;
+  }
+  while (1) {
+    // GOOD: condition is true after n iterations.
+    if (i == n) {
+      break;
+    }
+    i++;
+  }
+}
+```

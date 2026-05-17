@@ -1,0 +1,27 @@
+Review focus: Unmatchable dollar in regular expression
+
+What to look for:
+- Regular expressions containing a dollar '$' in the middle cannot be matched, whatever the input.
+- A dollar assertion`$`in a regular expression only matches at the end of the input, or (for multi-line regular expressions) at the end of a line. If it is followed by a pattern that must match a non-empty sequence of (non-newline) input characters, it cannot possibly match, rendering the entire regular expression unmatchable.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnmatchableDollar.py`):
+```
+import re
+#Regular expression that includes a dollar, but not at the end.
+matcher = re.compile(r"\.\(\w+$\)")
+
+def find_it(filename):
+    if matcher.match(filename):
+        print("Found it!")
+
+#Regular expression anchored to end of input.
+fixed_matcher = re.compile(r"\.\(\w+\)$")
+```

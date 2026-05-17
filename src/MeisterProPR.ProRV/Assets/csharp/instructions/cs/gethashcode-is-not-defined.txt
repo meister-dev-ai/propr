@@ -1,0 +1,50 @@
+Review focus: Hashed value without GetHashCode definition
+
+What to look for:
+- Finds uses of hashing on types that define 'Equals(...)' but not 'GetHashCode()'.
+- Classes that override`System.Object.Equals()`but not`System.Object.GetHashCode()`can yield unexpected results if instances of those classes are stored in a hashing data structure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`HashedButNoHash.cs`):
+```
+using System;
+using System.Collections;
+
+class Point
+{
+    private int x;
+    private int y;
+
+    public Point(int x, int y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+
+    public override bool Equals(Object other)
+    {
+        Point point = other as Point;
+        if (point == null)
+        {
+            return false;
+        }
+        return this.x == point.x && this.y == point.y;
+    }
+
+    public static void Main(string[] args)
+    {
+        Hashtable hashtable = new Hashtable();
+        hashtable[new Point(5, 4)] = "A point"; // BAD
+        // Point overrides the Equals method but not GetHashCode.
+        // As such it is probably not useful to use one as the key for a Hashtable.
+        Console.WriteLine(hashtable[new Point(5, 4)]);
+    }
+}
+```

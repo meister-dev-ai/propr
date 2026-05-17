@@ -1,0 +1,12 @@
+Review focus: CSRF protection not enabled
+
+What to look for:
+- Not enabling CSRF protection may make the application vulnerable to a Cross-Site Request Forgery (CSRF) attack.
+- Cross-site request forgery (CSRF) is a type of vulnerability in which an attacker is able to force a user to carry out an action that the user did not intend. The attacker tricks an authenticated user into submitting a request to the web application. Typically this request will result in a state change on the server, such as changing the user's password. The request can be initiated when the user visits a site controlled by the attacker. If the web application relies only on cookies for authentication, or on other credentials that are automatically included in the request, then this request will appear as legitimate to the server. A common countermeasure for CSRF is to generate a unique token to be included in the HTML sent from the server to a user. This token can be used as a hidden field to be sent back with requests to the server, where the server can then check that the token is valid and associated with the relevant user session.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,24 @@
+Review focus: Unsigned comparison to zero
+
+What to look for:
+- An unsigned value is always non-negative, even if it has been assigned a negative number, so the comparison is redundant and may mask a bug because a different check was intended.
+- This rule finds expressions of the form`x >= 0`where`x`is an unsigned value. This comparison is pointless as it will always yield`1`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnsignedGEZero.cpp`):
+```
+typedef long long LONGLONG;
+
+int f(unsigned int u, LONGLONG l) {
+	if(u > 0 || l >=0)       //correct: unsigned value is check for > 0
+		return 23;
+	return u >= 0;           //wrong: unsigned values are always greater than or equal to 0
+}
+```

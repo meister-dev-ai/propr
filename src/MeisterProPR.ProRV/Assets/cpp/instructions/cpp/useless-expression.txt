@@ -1,0 +1,24 @@
+Review focus: Expression has no effect
+
+What to look for:
+- A pure expression whose value is ignored is likely to be the result of a typo.
+- This rule finds expressions without side effects (i.e. changing variable values) that are used in a context where their value is ignored. These expressions are most likely intended to be part of a condition but were coded improperly. In most cases these are defects caused by the unintended use of the comma operator. It is easy to misuse the comma operator (particularly in conditions) and it would be good practice to use it only when the brevity it allows is absolutely necessary (e.g. macro definitions).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ExprHasNoEffect.cpp`):
+```
+void f(int j) {
+	int i=0;
+	for(i; i<10, j>0; ++i, --j) { //i < 10 has no effect, since the comma 
+	                              //operator only returns the value of the last expression
+		/* ... */
+	}
+}
+```

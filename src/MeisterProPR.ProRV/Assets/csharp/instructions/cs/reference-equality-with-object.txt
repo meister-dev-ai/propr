@@ -1,0 +1,37 @@
+Review focus: Reference equality test on System.Object
+
+What to look for:
+- Comparisons ('==' or '!=') between something of type 'System.Object' and something of another type will use reference comparison, which may not have been what was intended.
+- If one or both operands of a comparison have the compile type`System.Object`or interface type, a reference comparison will be performed. This is often not what is wanted, especially when the runtime type of one of the operands declares`operator==`. It should be noted that an exception is made for comparisons to read-only constants - a reference comparison is more likely to be intentional in such cases.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ObjectComparison.cs`):
+```
+class ObjectComparison
+{
+    class AlwaysEqual
+    {
+        public static bool operator ==(AlwaysEqual a, AlwaysEqual b)
+        {
+            return true;
+        }
+        public static bool operator !=(AlwaysEqual a, AlwaysEqual b)
+        {
+            return false;
+        }
+    }
+    public static void Main(string[] args)
+    {
+        object a = new AlwaysEqual();
+        AlwaysEqual b = new AlwaysEqual();
+        Console.WriteLine(a == b);
+    }
+}
+```

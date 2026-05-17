@@ -1,0 +1,52 @@
+Review focus: Implicit operand conversion
+
+What to look for:
+- Relying on implicit conversion of operands is error-prone and makes code hard to read.
+- In JavaScript, most operators can be applied to operands of arbitrary types; at runtime, the operands will be implicitly converted to the appropriate type. For instance, the expression`p in obj`checks whether the object`obj`contains a property whose name equals the string that`p`evaluates to. If`p`does not evaluate to a string or`o`does not evaluate to an object, implicit conversions are performed before the check is carried out. In many cases, however, these implicit conversions result from a typo or a misunderstanding of operator precedence rules. Even if the conversions are intentional, relying on them makes the code hard to understand.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImplicitOperandConversion.js`):
+```
+function invk(obj, member) {
+    if (!member in obj)
+        throw new Error("No such member: " + member);
+    return obj[member]();
+}
+```
+- Reference example (`ImplicitOperandConversionGood.js`):
+```
+function invk(obj, member) {
+    if (!(member in obj))
+        throw new Error("No such member: " + member);
+    return obj[member]();
+}
+```
+- Reference example (`ImplicitOperandConversion2.js`):
+```
+function cmp(x, y) {
+    return (x > y) - (x < y);
+}
+```
+- Reference example (`ImplicitOperandConversion2Good.js`):
+```
+function cmp(x, y) {
+    if (x > y)
+        return 1;
+    if (x < y)
+        return -1;
+    return 0;
+}
+```
+- Reference example (`ImplicitOperandConversion2Good2.js`):
+```
+function cmp(x, y) {
+    return +(x > y) - +(x < y);
+}
+```

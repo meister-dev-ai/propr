@@ -1,0 +1,12 @@
+Review focus: Inefficient output stream
+
+What to look for:
+- Using the default implementation of 'write(byte[],int,int)' provided by 'java.io.OutputStream' is very inefficient.
+- The classes`java.io.OutputStream`and`java.io.FilterOutputStream`only require subclasses to implement the method`write(byte b)`. Typically, uses of`OutputStream`s will not write single bytes, but an array via the`write(byte[] b, int off, int len)`method. The default implementation of this method, which you are not required to override, calls`write(byte b)`for each byte in the array. If this method involves I/O, such as accessing the network or disk, this is likely to incur significant overhead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,56 @@
+Review focus: XPath query built from user-controlled sources
+
+What to look for:
+- Building a XPath query from user-controlled sources is vulnerable to insertion of malicious Xpath code by the user.
+- If an XPath expression is built using string concatenation, and the components of the concatenation include user input, it makes it very easy for a user to create a malicious XPath expression.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`xpathBad.py`):
+```
+from lxml import etree
+from io import StringIO
+
+from django.urls import path
+from django.http import HttpResponse
+from django.template import Template, Context, Engine, engines
+
+
+def a(request):
+    value = request.GET['xpath']
+    f = StringIO('<foo><bar></bar></foo>')
+    tree = etree.parse(f)
+    r = tree.xpath("/tag[@id='%s']" % value)
+
+
+urlpatterns = [
+    path('a', a)
+]
+```
+- Reference example (`xpathGood.py`):
+```
+from lxml import etree
+from io import StringIO
+
+from django.urls import path
+from django.http import HttpResponse
+from django.template import Template, Context, Engine, engines
+
+
+def a(request):
+    value = request.GET['xpath']
+    f = StringIO('<foo><bar></bar></foo>')
+    tree = etree.parse(f)
+    r = tree.xpath("/tag[@id=$tagid]", tagid=value)
+
+
+urlpatterns = [
+    path('a', a)
+]
+```

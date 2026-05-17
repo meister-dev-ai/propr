@@ -1,0 +1,14 @@
+Review focus: Invalid prototype value
+
+What to look for:
+- An attempt to use a value that is not an object or 'null' as a prototype will either be ignored or result in a runtime error.
+- All JavaScript objects (including functions, classes and arrays) have a prototype, which is either`null`or another object. The prototype of an object can be set in two ways, both of which guard against attempts to assign an invalid prototype (such as a primitive value):
+- Assigning a value to the object's`__proto__`property; if the value is not a valid prototype, the assignment is silently ignored.
+- Using the standard library functions`Object.create`or`Object.setPrototypeOf`; invalid prototype values lead to a runtime error. In summary, any attempt to set the prototype of an object to a value that is not an object or`null`will be ineffective and may lead to a runtime error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

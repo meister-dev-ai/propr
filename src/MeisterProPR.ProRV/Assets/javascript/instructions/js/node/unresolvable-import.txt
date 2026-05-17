@@ -1,0 +1,43 @@
+Review focus: Unresolvable import
+
+What to look for:
+- An import that cannot be resolved to a module will cause an exception at runtime.
+- Node.js modules can be imported either directly by specifying a file or folder, or indirectly by specifying a module name, which will be looked up in a`node_modules`folder. In the latter case, care should be taken that the imported module is either bundled with the code that uses it, or declared as a dependency in the`package.json`file to ensure that the import does not fail at runtime.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnresolvableImport.js`):
+```
+// package.json
+{
+  "name": "example-package",
+  "version": "0.1.0"
+}
+
+// index.js
+var acorn = require('acorn'),
+    fs = require('fs');
+acorn.parse(fs.readFileSync('tst.js'), 'utf-8');
+```
+- Reference example (`UnresolvableImportGood.js`):
+```
+// package.json
+{
+  "name": "example-package",
+  "version": "0.1.0",
+  "dependencies": {
+    "acorn": "*"
+  }
+}
+
+// index.js
+var acorn = require('acorn'),
+    fs = require('fs');
+acorn.parse(fs.readFileSync('tst.js'), 'utf-8');
+```

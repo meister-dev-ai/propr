@@ -1,0 +1,38 @@
+Review focus: Missing origin verification in `postMessage` handler
+
+What to look for:
+- Missing origin verification in a `postMessage` handler allows any windows to send arbitrary data to the handler.
+- The`"message"`event is used to send messages between windows. An untrusted window can send a message to a trusted window, and it is up to the receiver to verify the legitimacy of the message. One way of performing that verification is to check the`origin`of the message ensure that it originates from a trusted window.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingOriginCheckBad.js`):
+```
+function postMessageHandler(event) {
+    let origin = event.origin.toLowerCase();
+
+    console.log(origin)
+    // BAD: the origin property is not checked
+    eval(event.data);
+}
+
+window.addEventListener('message', postMessageHandler, false);
+```
+- Reference example (`MissingOriginCheckGood.js`):
+```
+function postMessageHandler(event) {
+    console.log(event.origin)
+    // GOOD: the origin property is checked
+    if (event.origin === 'https://www.example.com') {
+        // do something
+    }
+}
+
+window.addEventListener('message', postMessageHandler, false);
+```

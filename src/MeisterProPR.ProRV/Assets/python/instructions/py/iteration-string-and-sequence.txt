@@ -1,0 +1,34 @@
+Review focus: Iterable can be either a string or a sequence
+
+What to look for:
+- Iteration over either a string or a sequence in the same loop can cause errors that are hard to find.
+- The`for`statement is designed to allow you to iterate over the elements of a sequence or other iterable object. Strings in Python are iterable, and often used as such. However, they are also often considered, not as sequences of characters, but as atomic entities. One source of defects in Python is mistakenly iterating over a non-iterable object such as an integer. This sort of defect is easily detected as a`TypeError`will be raised. However, if a string is mistakenly used as the iterable in a`for`statement, which also receives other sequences (such as lists) then the code will iterate over the string one character at a time. This is probably not what the programmer intended and results in errors that are hard to find.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IterableStringOrSequence.py`):
+```
+#Mistakenly mixed list and string
+def greeting():
+    if is_global():
+        greet = [ "Hello", "World" ]
+    else:
+        greet = "Hello"
+    for word in greet:
+        print(word)
+
+#Only use list
+def fixed_greeting():
+    if is_global():
+        greet = [ "Hello", "World" ]
+    else:
+        greet = [ "Hello" ]
+    for word in greet:
+        print(word)
+```

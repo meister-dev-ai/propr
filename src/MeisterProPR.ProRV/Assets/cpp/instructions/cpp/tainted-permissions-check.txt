@@ -1,0 +1,27 @@
+Review focus: Untrusted input for a condition
+
+What to look for:
+- Using untrusted inputs in a statement that makes a security decision makes code vulnerable to attack.
+- This rule finds code where untrusted inputs are used in an`if`statement, and the body of that statement makes a security decision. This is an example of CWE-807 and makes the program vulnerable to attack. An attacker might be able to gain unauthorized access to the system by manipulating external inputs to the system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedCondition.c`):
+```
+struct hostent *hp;struct in_addr myaddr;
+char* tHost = "trustme.example.com";
+myaddr.s_addr=inet_addr(ip_addr_string);
+
+hp = gethostbyaddr((char *) &myaddr, sizeof(struct in_addr), AF_INET);
+if (hp && !strncmp(hp->h_name, tHost, sizeof(tHost))) {
+  trusted = true;
+} else {
+  trusted = false;
+}
+```

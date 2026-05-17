@@ -1,0 +1,38 @@
+Review focus: Mishandling the Japanese era start date
+
+What to look for:
+- Japanese era should be handled with the built-in 'JapaneseCalendar' class.
+- When eras change, calling a date and time instantiation method that relies on the default era can produce an ambiguous date. In the example below, the call to the`JapaneseCalendar.ToDateTime`method that uses the default era returns different dates depending on whether or not the new era has been defined in the registry.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MishandlingJapaneseEra.cs`):
+```
+using  System;
+using System.Globalization;
+public class Example
+{
+   public static void Main()
+   {
+      var cal = new JapaneseCalendar();
+      // constructing date using current era 
+      var dat = cal.ToDateTime(2, 1, 2, 0, 0, 0, 0);
+      Console.WriteLine($"{dat:s}");
+      // constructing date using current era 
+      dat = new DateTime(2, 1, 2, cal);
+      Console.WriteLine($"{dat:s}");
+   }
+}
+// Output with the Heisei era current:
+//      1990-01-02T00:00:00
+//      1990-01-02T00:00:00
+// Output with the new era current:
+//      2020-01-02T00:00:00
+//      2020-01-02T00:00:00
+```

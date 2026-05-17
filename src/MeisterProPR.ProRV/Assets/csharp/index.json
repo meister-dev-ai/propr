@@ -1,0 +1,3946 @@
+{
+   "checks" : [
+      {
+         "id" : "cs/call-to-gc",
+         "instructionPath" : "instructions/cs/call-to-gc.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CallToGCCollectBad.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Explicit requests for garbage collection often indicate performance problems and memory leaks.",
+         "sourceRelativePath" : "API Abuse/CallToGCCollect.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "Call to GC.Collect()"
+      },
+      {
+         "id" : "cs/call-to-obsolete-method",
+         "instructionPath" : "instructions/cs/call-to-obsolete-method.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CallToObsoleteMethodBad.cs",
+            "CallToObsoleteMethodGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calls to methods marked as [Obsolete] should be replaced because the method is no longer maintained and may be removed in the future.",
+         "sourceRelativePath" : "API Abuse/CallToObsoleteMethod.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "changeability",
+            "external/cwe/cwe-477"
+         ],
+         "title" : "Call to obsolete method"
+      },
+      {
+         "id" : "cs/class-missing-equals",
+         "instructionPath" : "instructions/cs/class-missing-equals.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ClassDoesNotImplementEqualsBad.cs",
+            "ClassDoesNotImplementEqualsGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The class does not implement the 'Equals(object)' method, which can cause unexpected behavior.",
+         "sourceRelativePath" : "API Abuse/ClassDoesNotImplementEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Class does not implement Equals(object)"
+      },
+      {
+         "id" : "cs/class-implements-icloneable",
+         "instructionPath" : "instructions/cs/class-implements-icloneable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ClassImplementsICloneableBad.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Implementing 'ICloneable' is discouraged due to its imprecise semantics and its viral effect on your code base.",
+         "sourceRelativePath" : "API Abuse/ClassImplementsICloneable.ql",
+         "tags" : [
+            "quality",
+            "maintainability"
+         ],
+         "title" : "Class implements ICloneable"
+      },
+      {
+         "id" : "cs/dispose-not-called-on-throw",
+         "instructionPath" : "instructions/cs/dispose-not-called-on-throw.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "DisposeNotCalledOnExceptionBad.cs",
+            "DisposeNotCalledOnExceptionGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Methods that create objects of type 'IDisposable' should call 'Dispose()' on those objects, even during exceptional circumstances, otherwise unmanaged resources may not be...",
+         "sourceRelativePath" : "API Abuse/DisposeNotCalledOnException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "performance",
+            "external/cwe/cwe-404",
+            "external/cwe/cwe-459",
+            "external/cwe/cwe-460"
+         ],
+         "title" : "Dispose may not be called if an exception is thrown during execution"
+      },
+      {
+         "id" : "cs/invalid-string-formatting",
+         "instructionPath" : "instructions/cs/invalid-string-formatting.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "FormatInvalidBad.cs",
+            "FormatInvalidGood.cs",
+            "FormatUnusedArgumentBad.cs",
+            "FormatMissingArgumentBad.cs",
+            "FormatMissingArgumentGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Calling 'string.Format()' with either an invalid format string or incorrect number of arguments may result in dropped arguments or a 'System.FormatException'.",
+         "sourceRelativePath" : "API Abuse/FormatInvalid.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Invalid string formatting"
+      },
+      {
+         "id" : "cs/inconsistent-equals-and-gethashcode",
+         "instructionPath" : "instructions/cs/inconsistent-equals-and-gethashcode.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "InconsistentEqualsGetHashCodeBad.cs",
+            "InconsistentEqualsGetHashCodeGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a class overrides only one of 'Equals(object)' and 'GetHashCode()', it may mean that 'Equals(object)' and 'GetHashCode()' are inconsistent.",
+         "sourceRelativePath" : "API Abuse/InconsistentEqualsGetHashCode.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-581"
+         ],
+         "title" : "Inconsistent Equals(object) and GetHashCode()"
+      },
+      {
+         "id" : "cs/wrong-compareto-signature",
+         "instructionPath" : "instructions/cs/wrong-compareto-signature.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "IncorrectCompareToSignatureBad.cs",
+            "IncorrectCompareToSignatureGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The declaring type of a method with signature `CompareTo(T)` does not implement `IComparable<T>`.",
+         "sourceRelativePath" : "API Abuse/IncorrectCompareToSignature.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Potentially incorrect CompareTo(...) signature"
+      },
+      {
+         "id" : "cs/wrong-equals-signature",
+         "instructionPath" : "instructions/cs/wrong-equals-signature.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "IncorrectEqualsSignatureBad.cs",
+            "IncorrectEqualsSignatureGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The declaring type of a method with signature 'Equals(T)' does not implement 'Equals(object)'.",
+         "sourceRelativePath" : "API Abuse/IncorrectEqualsSignature.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Potentially incorrect Equals(...) signature"
+      },
+      {
+         "id" : "cs/member-not-disposed",
+         "instructionPath" : "instructions/cs/member-not-disposed.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MissingDisposeCallBad.cs",
+            "MissingDisposeCallGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Classes that implement 'IDisposable' and have members of 'IDisposable' type should dispose those members in their 'Dispose()' method.",
+         "sourceRelativePath" : "API Abuse/MissingDisposeCall.ql",
+         "tags" : [
+            "efficiency",
+            "maintainability",
+            "external/cwe/cwe-404",
+            "external/cwe/cwe-459"
+         ],
+         "title" : "Missing Dispose call"
+      },
+      {
+         "id" : "cs/missing-dispose-method",
+         "instructionPath" : "instructions/cs/missing-dispose-method.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MissingDisposeMethodBad.cs",
+            "MissingDisposeMethodGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Classes that implement 'IDisposable' and have members of 'IDisposable' type should also declare/override 'Dispose()'.",
+         "sourceRelativePath" : "API Abuse/MissingDisposeMethod.ql",
+         "tags" : [
+            "efficiency",
+            "maintainability",
+            "external/cwe/cwe-404",
+            "external/cwe/cwe-459"
+         ],
+         "title" : "Missing Dispose method"
+      },
+      {
+         "id" : "cs/local-not-disposed",
+         "instructionPath" : "instructions/cs/local-not-disposed.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NoDisposeCallOnLocalIDisposableBad.cs",
+            "NoDisposeCallOnLocalIDisposableGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Methods that create objects of type 'IDisposable' should call 'Dispose' on those objects, otherwise unmanaged resources may not be released.",
+         "sourceRelativePath" : "API Abuse/NoDisposeCallOnLocalIDisposable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "efficiency",
+            "external/cwe/cwe-404",
+            "external/cwe/cwe-459",
+            "external/cwe/cwe-460"
+         ],
+         "title" : "Missing Dispose call on local IDisposable"
+      },
+      {
+         "id" : "cs/nonoverriding-method",
+         "instructionPath" : "instructions/cs/nonoverriding-method.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "NonOverridingMethodBad.cs",
+            "NonOverridingMethodGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A method looks like it should override a virtual method from a base type, but does not actually do so.",
+         "sourceRelativePath" : "API Abuse/NonOverridingMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Non-overriding method"
+      },
+      {
+         "id" : "cs/null-argument-to-equals",
+         "instructionPath" : "instructions/cs/null-argument-to-equals.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NullArgumentToEqualsBad.cs",
+            "NullArgumentToEqualsGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calls of the form 'o.Equals(null)' always return false for non-null 'o', and throw a 'NullReferenceException' when 'o' is null.",
+         "sourceRelativePath" : "API Abuse/NullArgumentToEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Null argument to Equals(object)"
+      },
+      {
+         "id" : "cs/unchecked-return-value",
+         "instructionPath" : "instructions/cs/unchecked-return-value.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UncheckedReturnValueBad.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If most of the calls to a method use the return value of that method, the calls that do not check the return value may be mistakes.",
+         "sourceRelativePath" : "API Abuse/UncheckedReturnValue.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-252",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Unchecked return value"
+      },
+      {
+         "id" : "cs/asp/response-write",
+         "instructionPath" : "instructions/cs/asp/response-write.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BlockCodeResponseWriteBad.aspx",
+            "BlockCodeResponseWriteGood.aspx"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Embedded code blocks with a single 'Response.Write()' reduce the readability of the page.",
+         "sourceRelativePath" : "ASP/BlockCodeResponseWrite.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "frameworks/asp.net"
+         ],
+         "title" : "Block code with a single Response.Write()"
+      },
+      {
+         "id" : "cs/asp/complex-inline-code",
+         "instructionPath" : "instructions/cs/asp/complex-inline-code.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ComplexInlineCodeBad.aspx",
+            "ComplexInlineCodeGood.aspx"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Embedding complex inline code makes .aspx pages more difficult to maintain.",
+         "sourceRelativePath" : "ASP/ComplexInlineCode.ql",
+         "tags" : [
+            "maintainability",
+            "frameworks/asp.net"
+         ],
+         "title" : "Complex inline code"
+      },
+      {
+         "id" : "cs/asp/text-not-internationalized",
+         "instructionPath" : "instructions/cs/asp/text-not-internationalized.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "NonInternationalizedTextBad.aspx",
+            "NonInternationalizedTextGood.aspx"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Including text directly on a page makes it more difficult to internationalize the website.",
+         "sourceRelativePath" : "ASP/NonInternationalizedText.ql",
+         "tags" : [
+            "maintainability",
+            "frameworks/asp.net"
+         ],
+         "title" : "Text has not been internationalized"
+      },
+      {
+         "id" : "cs/asp/split-control-structure",
+         "instructionPath" : "instructions/cs/asp/split-control-structure.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "SplitControlStructureBad.aspx",
+            "SplitControlStructureGood.aspx"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Splitting control structures across multiple code blocks makes .aspx pages more difficult to maintain.",
+         "sourceRelativePath" : "ASP/SplitControlStructure.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Split control structure"
+      },
+      {
+         "id" : "cs/mutually-dependent-types",
+         "instructionPath" : "instructions/cs/mutually-dependent-types.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MutualDependencyBad.cs",
+            "MutualDependencyGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Mutual dependency between types makes code difficult to understand and test.",
+         "sourceRelativePath" : "Architecture/Dependencies/MutualDependency.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "modularity"
+         ],
+         "title" : "Mutually-dependent types"
+      },
+      {
+         "id" : "cs/method-feature-envy",
+         "instructionPath" : "instructions/cs/method-feature-envy.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "FeatureEnvyBad.cs",
+            "FeatureEnvyGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A method that uses more methods or variables from another (unrelated) class than from its own class violates the principle of putting data and behavior in the same place.",
+         "sourceRelativePath" : "Architecture/Refactoring Opportunities/FeatureEnvy.ql",
+         "tags" : [
+            "changeability",
+            "maintainability",
+            "modularity"
+         ],
+         "title" : "Feature envy"
+      },
+      {
+         "id" : "cs/coupled-types",
+         "instructionPath" : "instructions/cs/coupled-types.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Two otherwise unrelated classes that share too much information about each other are difficult to maintain, change and understand.",
+         "sourceRelativePath" : "Architecture/Refactoring Opportunities/InappropriateIntimacy.ql",
+         "tags" : [
+            "maintainability",
+            "complexity",
+            "modularity"
+         ],
+         "title" : "Inappropriate intimacy"
+      },
+      {
+         "id" : "cs/call-to-unmanaged-code",
+         "instructionPath" : "instructions/cs/call-to-unmanaged-code.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CallsUnmanagedCode.cs",
+            "CallsUnmanagedCodeFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds calls to \"extern\" methods (which are implemented by unmanaged code).",
+         "sourceRelativePath" : "Bad Practices/CallsUnmanagedCode.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Calls to unmanaged code"
+      },
+      {
+         "id" : "cs/catch-nullreferenceexception",
+         "instructionPath" : "instructions/cs/catch-nullreferenceexception.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CatchOfNullReferenceException.cs",
+            "CatchOfNullReferenceExceptionFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds catch clauses that catch NullReferenceException",
+         "sourceRelativePath" : "Bad Practices/CatchOfNullReferenceException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "error-handling",
+            "external/cwe/cwe-395"
+         ],
+         "title" : "Poor error handling: catch of NullReferenceException"
+      },
+      {
+         "id" : "cs/commented-out-code",
+         "instructionPath" : "instructions/cs/commented-out-code.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Commented-out code makes the remaining code more difficult to read.",
+         "sourceRelativePath" : "Bad Practices/Comments/CommentedOutCode.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Commented-out code"
+      },
+      {
+         "id" : "cs/todo-comment",
+         "instructionPath" : "instructions/cs/todo-comment.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "TodoCommentsBad.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A comment that contains 'TODO' or similar keywords may indicate code that is incomplete or broken, or it may highlight an ambiguity in the software's specification.",
+         "sourceRelativePath" : "Bad Practices/Comments/TodoComments.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "external/cwe/cwe-546"
+         ],
+         "title" : "TODO comment"
+      },
+      {
+         "id" : "cs/constant-condition",
+         "instructionPath" : "instructions/cs/constant-condition.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ConstantConditionBad.cs",
+            "ConstantConditionGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A condition that always evaluates to 'true' or always evaluates to 'false' should be removed, and if the condition is a loop condition, the condition is likely to cause an...",
+         "sourceRelativePath" : "Bad Practices/Control-Flow/ConstantCondition.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-835"
+         ],
+         "title" : "Constant condition"
+      },
+      {
+         "id" : "cs/empty-interface",
+         "instructionPath" : "instructions/cs/empty-interface.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "EmptyInterfaceBad.cs",
+            "EmptyInterfaceGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Empty interfaces (those that do not declare any members) are often used as \"markers\" to associate metadata with a class, but custom attributes are a better alternative.",
+         "sourceRelativePath" : "Bad Practices/Declarations/EmptyInterface.ql",
+         "tags" : [
+            "maintainability",
+            "modularity"
+         ],
+         "title" : "Empty interface"
+      },
+      {
+         "id" : "cs/local-shadows-member",
+         "instructionPath" : "instructions/cs/local-shadows-member.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LocalScopeVariableShadowsMemberBad.cs",
+            "LocalScopeVariableShadowsMemberGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A local scope variable that shadows a member with the same name can be confusing, and can result in logic errors.",
+         "sourceRelativePath" : "Bad Practices/Declarations/LocalScopeVariableShadowsMember.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Local scope variable shadows member"
+      },
+      {
+         "id" : "cs/constants-only-interface",
+         "instructionPath" : "instructions/cs/constants-only-interface.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "NoConstantsOnlyBad.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Constants should be placed in a class where they belong logically, rather than in an abstract class containing just constants.",
+         "sourceRelativePath" : "Bad Practices/Declarations/NoConstantsOnly.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Abstract class only declares common constants"
+      },
+      {
+         "id" : "cs/too-many-ref-parameters",
+         "instructionPath" : "instructions/cs/too-many-ref-parameters.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "TooManyRefParametersBad.cs",
+            "TooManyRefParametersGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Methods with large numbers of 'ref' parameters can be hard to understand - consider using a wrapper object instead.",
+         "sourceRelativePath" : "Bad Practices/Declarations/TooManyRefParameters.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "testability"
+         ],
+         "title" : "Too many 'ref' parameters"
+      },
+      {
+         "id" : "cs/empty-catch-block",
+         "instructionPath" : "instructions/cs/empty-catch-block.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "EmptyCatchBlock.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds catch clauses with an empty block",
+         "sourceRelativePath" : "Bad Practices/EmptyCatchBlock.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "exceptions",
+            "external/cwe/cwe-390",
+            "external/cwe/cwe-391"
+         ],
+         "title" : "Poor error handling: empty catch block"
+      },
+      {
+         "id" : "cs/class-name-comparison",
+         "instructionPath" : "instructions/cs/class-name-comparison.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ErroneousClassCompareFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds checks of an object's type based on its class name",
+         "sourceRelativePath" : "Bad Practices/ErroneousClassCompare.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-486"
+         ],
+         "title" : "Erroneous class compare"
+      },
+      {
+         "id" : "cs/cast-from-abstract-to-concrete-collection",
+         "instructionPath" : "instructions/cs/cast-from-abstract-to-concrete-collection.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "AbstractToConcreteCollectionBad.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A cast from an abstract collection to a concrete implementation type makes the code brittle; it is best to program against the abstract collection interface only.",
+         "sourceRelativePath" : "Bad Practices/Implementation Hiding/AbstractToConcreteCollection.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-485"
+         ],
+         "title" : "Cast from abstract to concrete collection"
+      },
+      {
+         "id" : "cs/expose-implementation",
+         "instructionPath" : "instructions/cs/expose-implementation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ExposeRepresentationBad.cs",
+            "ExposeRepresentationGood1.cs",
+            "ExposeRepresentationGood2.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "An object that accidentally exposes its internal representation may allow the object's fields to be modified in ways that the object is not prepared to handle.",
+         "sourceRelativePath" : "Bad Practices/Implementation Hiding/ExposeRepresentation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-485"
+         ],
+         "title" : "Exposing internal representation"
+      },
+      {
+         "id" : "cs/static-array",
+         "instructionPath" : "instructions/cs/static-array.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "StaticArrayBad.cs",
+            "StaticArrayGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Array constants are mutable and can be changed by malicious code or by accident.",
+         "sourceRelativePath" : "Bad Practices/Implementation Hiding/StaticArray.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-582"
+         ],
+         "title" : "Array constant vulnerable to change"
+      },
+      {
+         "id" : "cs/web/debug-code",
+         "instructionPath" : "instructions/cs/web/debug-code.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds leftover entry points in web applications",
+         "sourceRelativePath" : "Bad Practices/LeftoverDebugCode.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-489"
+         ],
+         "title" : "ASP.NET: leftover debug code"
+      },
+      {
+         "id" : "cs/magic-number",
+         "instructionPath" : "instructions/cs/magic-number.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MagicConstantsNumbers.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "'Magic constants' should be avoided: if a nontrivial constant is used repeatedly, it should be encapsulated into a const variable or macro definition.",
+         "sourceRelativePath" : "Bad Practices/Magic Constants/MagicConstantsNumbers.ql",
+         "tags" : [
+            "changeability",
+            "maintainability"
+         ],
+         "title" : "Magic numbers"
+      },
+      {
+         "id" : "cs/magic-string",
+         "instructionPath" : "instructions/cs/magic-string.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MagicConstantsString.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "'Magic constants' should be avoided: if a nontrivial constant is used repeatedly, it should be encapsulated into a const variable or macro definition.",
+         "sourceRelativePath" : "Bad Practices/Magic Constants/MagicConstantsString.ql",
+         "tags" : [
+            "changeability",
+            "maintainability"
+         ],
+         "title" : "Magic strings"
+      },
+      {
+         "id" : "cs/use-number-constant",
+         "instructionPath" : "instructions/cs/use-number-constant.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MagicNumbersUseConstant.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A numeric literal that matches the initializer of a final variable was found.",
+         "sourceRelativePath" : "Bad Practices/Magic Constants/MagicNumbersUseConstant.ql",
+         "tags" : [
+            "changeability",
+            "maintainability"
+         ],
+         "title" : "Magic numbers: use defined constant"
+      },
+      {
+         "id" : "cs/use-string-constant",
+         "instructionPath" : "instructions/cs/use-string-constant.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MagicStringsUseConstant.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A string literal that matches the initializer of a final variable was found.",
+         "sourceRelativePath" : "Bad Practices/Magic Constants/MagicStringsUseConstant.ql",
+         "tags" : [
+            "changeability",
+            "maintainability"
+         ],
+         "title" : "Magic strings: use defined constant"
+      },
+      {
+         "id" : "cs/confusing-method-name",
+         "instructionPath" : "instructions/cs/confusing-method-name.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ConfusingMethodNames.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds methods whose name only differs in capitalization from another method defined in the same class.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/ConfusingMethodNames.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Confusing method names because of capitalization"
+      },
+      {
+         "id" : "cs/confusing-override-name",
+         "instructionPath" : "instructions/cs/confusing-override-name.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ConfusingOverridesNames.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds methods m1 and m2, where m1 would override m2, except that their names differ in capitalization.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/ConfusingOverridesNames.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "correctness"
+         ],
+         "title" : "Confusing method names because of overriding"
+      },
+      {
+         "id" : "cs/bad-constant-name",
+         "instructionPath" : "instructions/cs/bad-constant-name.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ConstantNaming.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Constant fields should use the relevant Microsoft-recommended naming scheme.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/ConstantNaming.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "naming"
+         ],
+         "title" : "Public static read-only fields should be named in PascalCase"
+      },
+      {
+         "id" : "cs/web/unprefixed-control-name",
+         "instructionPath" : "instructions/cs/web/unprefixed-control-name.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Including standard prefixes in the field names of ASP.NET Web / HTML controls makes code easier to understand.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/ControlNamePrefixes.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "ASP.NET control name prefixes"
+      },
+      {
+         "id" : "cs/forms/default-control-name",
+         "instructionPath" : "instructions/cs/forms/default-control-name.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Replacing the generated names in windows forms with meaningful names makes it easier for other developers to understand the code.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/DefaultControlNames.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Windows controls with generated names"
+      },
+      {
+         "id" : "cs/field-masks-base-field",
+         "instructionPath" : "instructions/cs/field-masks-base-field.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "FieldMasksSuperField.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds fields that hide the definition of a field in a superclass, where additionally there are no references of the form 'base.f' in the subclass.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/FieldMasksSuperField.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "naming"
+         ],
+         "title" : "Field masks field in super class"
+      },
+      {
+         "id" : "cs/class-name-matches-base-class",
+         "instructionPath" : "instructions/cs/class-name-matches-base-class.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SameNameAsSuper.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds classes that have the same name as their super class; this may be confusing.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/SameNameAsSuper.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "naming"
+         ],
+         "title" : "Class has same name as super class"
+      },
+      {
+         "id" : "cs/short-variable-name",
+         "instructionPath" : "instructions/cs/short-variable-name.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "VariableNameTooShort.cs",
+            "VariableNameTooShortAcceptable.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using meaningful names for variables makes code easier to understand.",
+         "sourceRelativePath" : "Bad Practices/Naming Conventions/VariableNameTooShort.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Variable name is too short"
+      },
+      {
+         "id" : "cs/path-combine",
+         "instructionPath" : "instructions/cs/path-combine.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "'Path.Combine' may silently drop its earlier arguments if its later arguments are absolute paths.",
+         "sourceRelativePath" : "Bad Practices/PathCombine.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Call to 'System.IO.Path.Combine' may silently drop its earlier arguments"
+      },
+      {
+         "id" : "cs/unmanaged-code",
+         "instructionPath" : "instructions/cs/unmanaged-code.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnmanagedCodeCheck.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds \"extern\" methods, implemented by unmanaged code.",
+         "sourceRelativePath" : "Bad Practices/UnmanagedCodeCheck.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unmanaged code"
+      },
+      {
+         "id" : "cs/web/html-hidden-input",
+         "instructionPath" : "instructions/cs/web/html-hidden-input.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds uses of hidden fields on forms",
+         "sourceRelativePath" : "Bad Practices/UseOfHtmlInputHidden.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-472"
+         ],
+         "title" : "Use of HTMLInputHidden"
+      },
+      {
+         "id" : "cs/console-output",
+         "instructionPath" : "instructions/cs/console-output.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds uses of system output streams instead of proper logging",
+         "sourceRelativePath" : "Bad Practices/UseOfSystemOutputStream.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Poor logging: use of system output stream"
+      },
+      {
+         "id" : "cs/virtual-call-in-constructor",
+         "instructionPath" : "instructions/cs/virtual-call-in-constructor.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "VirtualCallInConstructorOrDestructor.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds virtual calls or accesses in a constructor or destructor",
+         "sourceRelativePath" : "Bad Practices/VirtualCallInConstructorOrDestructor.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Virtual call in constructor or destructor"
+      },
+      {
+         "id" : "cs/comparison-of-identical-expressions",
+         "instructionPath" : "instructions/cs/comparison-of-identical-expressions.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CompareIdenticalValues.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When the same variable occurs on both sides of a comparison operator, the behavior is always constant, and probably not what it was intended to be.",
+         "sourceRelativePath" : "CSI/CompareIdenticalValues.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Comparison of identical values"
+      },
+      {
+         "id" : "cs/dereferenced-value-is-always-null",
+         "instructionPath" : "instructions/cs/dereferenced-value-is-always-null.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NullAlwaysBad.cs",
+            "NullAlwaysGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Dereferencing a variable whose value is 'null' causes a 'NullReferenceException'.",
+         "sourceRelativePath" : "CSI/NullAlways.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "exceptions",
+            "external/cwe/cwe-476"
+         ],
+         "title" : "Dereferenced variable is always null"
+      },
+      {
+         "id" : "cs/dereferenced-value-may-be-null",
+         "instructionPath" : "instructions/cs/dereferenced-value-may-be-null.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NullMaybeBad.cs",
+            "NullMaybeGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Dereferencing a variable whose value may be 'null' may cause a 'NullReferenceException'.",
+         "sourceRelativePath" : "CSI/NullMaybe.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "exceptions",
+            "external/cwe/cwe-476"
+         ],
+         "title" : "Dereferenced variable may be null"
+      },
+      {
+         "id" : "cs/complex-block",
+         "instructionPath" : "instructions/cs/complex-block.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Blocks with too many consecutive statements are candidates for refactoring.",
+         "sourceRelativePath" : "Complexity/BlockWithTooManyStatements.ql",
+         "tags" : [
+            "maintainability",
+            "complexity",
+            "testability"
+         ],
+         "title" : "Block with too many statements"
+      },
+      {
+         "id" : "cs/complex-condition",
+         "instructionPath" : "instructions/cs/complex-condition.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ComplexCondition.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Boolean expressions should not be too deeply nested.",
+         "sourceRelativePath" : "Complexity/ComplexCondition.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "testability"
+         ],
+         "title" : "Complex condition"
+      },
+      {
+         "id" : "cs/unsafe-sync-on-field",
+         "instructionPath" : "instructions/cs/unsafe-sync-on-field.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "FutileSyncOnField.cs",
+            "FutileSyncOnFieldFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Synchronizing on a field and updating that field while the lock is held is unlikely to provide the desired thread safety.",
+         "sourceRelativePath" : "Concurrency/FutileSyncOnField.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "correctness",
+            "external/cwe/cwe-662",
+            "external/cwe/cwe-366"
+         ],
+         "title" : "Futile synchronization on field"
+      },
+      {
+         "id" : "cs/inconsistent-lock-sequence",
+         "instructionPath" : "instructions/cs/inconsistent-lock-sequence.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LockOrderBad.cs",
+            "LockOrderGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Locking in an inconsistent sequence can lead to deadlock.",
+         "sourceRelativePath" : "Concurrency/LockOrder.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "correctness",
+            "external/cwe/cwe-662"
+         ],
+         "title" : "Inconsistent lock sequence"
+      },
+      {
+         "id" : "cs/lock-this",
+         "instructionPath" : "instructions/cs/lock-this.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LockThis.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "It is bad practice to lock the 'this' object because it might be locked elsewhere.",
+         "sourceRelativePath" : "Concurrency/LockThis.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "modularity",
+            "external/cwe/cwe-662"
+         ],
+         "title" : "Locking the 'this' object in a lock statement"
+      },
+      {
+         "id" : "cs/locked-wait",
+         "instructionPath" : "instructions/cs/locked-wait.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LockedWait.cs",
+            "LockedWaitFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A lock is held during a call to System.Threading.Monitor.Wait().",
+         "sourceRelativePath" : "Concurrency/LockedWait.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "correctness",
+            "external/cwe/cwe-662",
+            "external/cwe/cwe-833"
+         ],
+         "title" : "A lock is held during a wait"
+      },
+      {
+         "id" : "cs/unsynchronized-getter",
+         "instructionPath" : "instructions/cs/unsynchronized-getter.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "SynchSetUnsynchGet.cs",
+            "SynchSetUnsynchGetFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a property has a lock in its setter, but not in its getter, then the value returned by the getter can be inconsistent.",
+         "sourceRelativePath" : "Concurrency/SynchSetUnsynchGet.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "correctness",
+            "external/cwe/cwe-662"
+         ],
+         "title" : "Inconsistently synchronized property"
+      },
+      {
+         "id" : "cs/unsafe-double-checked-lock",
+         "instructionPath" : "instructions/cs/unsafe-double-checked-lock.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnsafeLazyInitialization1.cs",
+            "UnsafeLazyInitialization2.cs",
+            "UnsafeLazyInitializationFix1.cs",
+            "UnsafeLazyInitializationFix2.cs",
+            "UnsafeLazyInitializationFix3.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A repeated check on a non-volatile field is not thread-safe on some platforms, and could result in unexpected behavior.",
+         "sourceRelativePath" : "Concurrency/UnsafeLazyInitialization.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "external/cwe/cwe-609"
+         ],
+         "title" : "Double-checked lock is not thread-safe"
+      },
+      {
+         "id" : "cs/unsynchronized-static-access",
+         "instructionPath" : "instructions/cs/unsynchronized-static-access.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnsynchronizedStaticAccess.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If an unsynchronized access to a static collection member occurs during an addition or resizing operation, an infinite loop can occur.",
+         "sourceRelativePath" : "Concurrency/UnsynchronizedStaticAccess.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "external/cwe/cwe-362",
+            "external/cwe/cwe-567"
+         ],
+         "title" : "Unsynchronized access to static collection member in non-static context"
+      },
+      {
+         "id" : "cs/empty-password-in-configuration",
+         "instructionPath" : "instructions/cs/empty-password-in-configuration.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds empty passwords in configuration files.",
+         "sourceRelativePath" : "Configuration/EmptyPasswordInConfigurationFile.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-258",
+            "external/cwe/cwe-862"
+         ],
+         "title" : "Empty password in configuration file"
+      },
+      {
+         "id" : "cs/password-in-configuration",
+         "instructionPath" : "instructions/cs/password-in-configuration.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds passwords in configuration files.",
+         "sourceRelativePath" : "Configuration/PasswordInConfigurationFile.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-013",
+            "external/cwe/cwe-256",
+            "external/cwe/cwe-313"
+         ],
+         "title" : "Password in configuration file"
+      },
+      {
+         "id" : "cs/unused-reftype",
+         "instructionPath" : "instructions/cs/unused-reftype.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "DeadRefTypes.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds non-public reference types (classes, interfaces) that are not accessed anywhere in the codebase.",
+         "sourceRelativePath" : "Dead Code/DeadRefTypes.ql",
+         "tags" : [
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Dead reference types"
+      },
+      {
+         "id" : "cs/useless-assignment-to-local",
+         "instructionPath" : "instructions/cs/useless-assignment-to-local.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DeadStoreOfLocalBad.cs",
+            "DeadStoreOfLocalGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a local variable that is not used later on, or whose value is always overwritten, has no effect.",
+         "sourceRelativePath" : "Dead Code/DeadStoreOfLocal.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to local variable"
+      },
+      {
+         "id" : "cs/unassigned-field",
+         "instructionPath" : "instructions/cs/unassigned-field.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "NonAssignedFields.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Fields are automatically initialised with the default values for their type, which may not be the intent: prefer explicit initialisation.",
+         "sourceRelativePath" : "Dead Code/NonAssignedFields.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-457"
+         ],
+         "title" : "Field is never assigned a non-default value"
+      },
+      {
+         "id" : "cs/unused-field",
+         "instructionPath" : "instructions/cs/unused-field.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnusedField.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds private fields that seem to never be used, or solely used from dead methods",
+         "sourceRelativePath" : "Dead Code/UnusedField.ql",
+         "tags" : [
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unused field"
+      },
+      {
+         "id" : "cs/unused-method",
+         "instructionPath" : "instructions/cs/unused-method.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnusedMethod.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds private methods that seem to never be used, or solely used from other dead methods",
+         "sourceRelativePath" : "Dead Code/UnusedMethod.ql",
+         "tags" : [
+            "efficiency",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unused method"
+      },
+      {
+         "id" : "cs/xmldoc/unknown-parameter",
+         "instructionPath" : "instructions/cs/xmldoc/unknown-parameter.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "XmldocExtraParam.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The parameter name given in a `<param>` tag does not exist.",
+         "sourceRelativePath" : "Documentation/XmldocExtraParam.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Incorrect parameter name in documentation"
+      },
+      {
+         "id" : "cs/xmldoc/unknown-type-parameter",
+         "instructionPath" : "instructions/cs/xmldoc/unknown-type-parameter.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "XmldocTypeParam.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The type parameter name given in a `<typeparam>` tag does not exist.",
+         "sourceRelativePath" : "Documentation/XmldocExtraTypeParam.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Incorrect type parameter name in documentation"
+      },
+      {
+         "id" : "cs/xmldoc/missing-xmldoc",
+         "instructionPath" : "instructions/cs/xmldoc/missing-xmldoc.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "XmldocExample.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A public class, method or constructor that does not have a documentation comment affects maintainability.",
+         "sourceRelativePath" : "Documentation/XmldocMissing.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Missing documentation for public class or method"
+      },
+      {
+         "id" : "cs/xmldoc/missing-exception",
+         "instructionPath" : "instructions/cs/xmldoc/missing-exception.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "XmldocMethod.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Exceptions thrown by the method should be documented using `<exception cref=\"...\"> </exception>` tags.",
+         "sourceRelativePath" : "Documentation/XmldocMissingException.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Missing documentation for exception"
+      },
+      {
+         "id" : "cs/xmldoc/missing-parameter",
+         "instructionPath" : "instructions/cs/xmldoc/missing-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "XmldocMethod.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "All parameters should be documented using `<param name=\"...\"> </param>` tags.",
+         "sourceRelativePath" : "Documentation/XmldocMissingParam.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Missing documentation for parameter"
+      },
+      {
+         "id" : "cs/xmldoc/missing-return",
+         "instructionPath" : "instructions/cs/xmldoc/missing-return.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "XmldocMethod.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The method returns a value, but the return value is not documented using a `<returns>` tag.",
+         "sourceRelativePath" : "Documentation/XmldocMissingReturn.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Missing documentation for return value"
+      },
+      {
+         "id" : "cs/xmldoc/missing-summary",
+         "instructionPath" : "instructions/cs/xmldoc/missing-summary.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XmldocClass.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The documentation comment does not contain a `<summary>` tag.",
+         "sourceRelativePath" : "Documentation/XmldocMissingSummary.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Missing a summary in documentation comment"
+      },
+      {
+         "id" : "cs/xmldoc/missing-type-parameter",
+         "instructionPath" : "instructions/cs/xmldoc/missing-type-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "XmldocTypeParam.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "All type parameters should be documented using `<typeparam name=\"...\"> </typeparam>` tags.",
+         "sourceRelativePath" : "Documentation/XmldocMissingTypeParam.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Missing documentation for type parameter"
+      },
+      {
+         "id" : "cs/web/file-upload",
+         "instructionPath" : "instructions/cs/web/file-upload.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds uses of file upload",
+         "sourceRelativePath" : "Input Validation/UseOfFileUpload.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-434"
+         ],
+         "title" : "Use of file upload"
+      },
+      {
+         "id" : "cs/web/ambiguous-client-variable",
+         "instructionPath" : "instructions/cs/web/ambiguous-client-variable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ValueShadowing.cs",
+            "ValueShadowingFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds ambiguous accesses to client variables",
+         "sourceRelativePath" : "Input Validation/ValueShadowing.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-348"
+         ],
+         "title" : "Value shadowing"
+      },
+      {
+         "id" : "cs/web/ambiguous-server-variable",
+         "instructionPath" : "instructions/cs/web/ambiguous-server-variable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ValueShadowingServerVariable.cs",
+            "ValueShadowingServerVariableFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds ambiguous accesses to server variables",
+         "sourceRelativePath" : "Input Validation/ValueShadowingServerVariable.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-348"
+         ],
+         "title" : "Value shadowing: server variable"
+      },
+      {
+         "id" : "cs/cast-of-this-to-type-parameter",
+         "instructionPath" : "instructions/cs/cast-of-this-to-type-parameter.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CastThisToTypeParameter.cs",
+            "CastThisToTypeParameterFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Casting 'this' to a type parameter of the current type masks an implicit type constraint that should be explicitly stated.",
+         "sourceRelativePath" : "Language Abuse/CastThisToTypeParameter.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Cast of 'this' to a type parameter"
+      },
+      {
+         "id" : "cs/catch-of-all-exceptions",
+         "instructionPath" : "instructions/cs/catch-of-all-exceptions.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CatchOfGenericException.cs",
+            "CatchOfGenericExceptionFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Catching all exceptions with a generic catch clause may be overly broad, which can make errors harder to diagnose.",
+         "sourceRelativePath" : "Language Abuse/CatchOfGenericException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-396"
+         ],
+         "title" : "Generic catch clause"
+      },
+      {
+         "id" : "cs/chained-type-tests",
+         "instructionPath" : "instructions/cs/chained-type-tests.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ChainedIs.cs",
+            "ChainedIsFix1.cs",
+            "ChainedIsFix2.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Long sequences of type tests on a variable are generally an indication of questionable design.",
+         "sourceRelativePath" : "Language Abuse/ChainedIs.ql",
+         "tags" : [
+            "reliability",
+            "performance",
+            "changeability",
+            "language-features"
+         ],
+         "title" : "Chain of 'is' tests"
+      },
+      {
+         "id" : "cs/downcast-of-this",
+         "instructionPath" : "instructions/cs/downcast-of-this.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DubiousDowncastOfThis.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Casting 'this' to a derived type introduces a dependency cycle between the type of 'this' and the target type.",
+         "sourceRelativePath" : "Language Abuse/DubiousDowncastOfThis.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "testability",
+            "language-features"
+         ],
+         "title" : "Dubious downcast of 'this'"
+      },
+      {
+         "id" : "cs/type-test-of-this",
+         "instructionPath" : "instructions/cs/type-test-of-this.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DubiousTypeTestOfThis.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Testing whether 'this' is an instance of a derived type introduces a dependency cycle between the type of 'this' and the target type.",
+         "sourceRelativePath" : "Language Abuse/DubiousTypeTestOfThis.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "testability",
+            "language-features"
+         ],
+         "title" : "Dubious type test of 'this'"
+      },
+      {
+         "id" : "cs/captured-foreach-variable",
+         "instructionPath" : "instructions/cs/captured-foreach-variable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ForeachCapture.cs",
+            "ForeachCaptureFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Code that captures a 'foreach' variable and uses it outside the loop behaves differently in C# version 4 and C# version 5",
+         "sourceRelativePath" : "Language Abuse/ForeachCapture.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Capturing a foreach variable"
+      },
+      {
+         "id" : "cs/missed-readonly-modifier",
+         "instructionPath" : "instructions/cs/missed-readonly-modifier.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedReadonlyOpportunityBad.cs",
+            "MissedReadonlyOpportunityGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A private field where all assignments occur as part of the declaration or in a constructor in the same class can be 'readonly'.",
+         "sourceRelativePath" : "Language Abuse/MissedReadonlyOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed 'readonly' opportunity"
+      },
+      {
+         "id" : "cs/missed-ternary-operator",
+         "instructionPath" : "instructions/cs/missed-ternary-operator.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedTernaryOpportunity.cs",
+            "MissedTernaryOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "An 'if' statement where both branches either (a) return or (b) write to the same variable can often be expressed more clearly using the '?' operator.",
+         "sourceRelativePath" : "Language Abuse/MissedTernaryOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed ternary opportunity"
+      },
+      {
+         "id" : "cs/missed-using-statement",
+         "instructionPath" : "instructions/cs/missed-using-statement.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedUsingOpportunity.cs",
+            "MissedUsingOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "C# provides a 'using' statement as a better alternative to manual resource disposal in a finally block - it makes sense to use it.",
+         "sourceRelativePath" : "Language Abuse/MissedUsingOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed 'using' opportunity"
+      },
+      {
+         "id" : "cs/nested-if-statements",
+         "instructionPath" : "instructions/cs/nested-if-statements.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NestedIf.cs",
+            "NestedIfFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Nested 'if' statements can be simplified by combining them using '&&'.",
+         "sourceRelativePath" : "Language Abuse/NestedIf.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Nested 'if' statements can be combined"
+      },
+      {
+         "id" : "cs/rethrown-exception-variable",
+         "instructionPath" : "instructions/cs/rethrown-exception-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RethrowException.cs",
+            "RethrowExceptionFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Throwing the exception variable will lose the original stack information.",
+         "sourceRelativePath" : "Language Abuse/RethrowException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "language-features"
+         ],
+         "title" : "Rethrowing exception variable"
+      },
+      {
+         "id" : "cs/simplifiable-boolean-expression",
+         "instructionPath" : "instructions/cs/simplifiable-boolean-expression.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SimplifyBoolExprBad.cs",
+            "SimplifyBoolExprGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Boolean expressions that are unnecessarily complicated hinder readability.",
+         "sourceRelativePath" : "Language Abuse/SimplifyBoolExpr.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Unnecessarily complex Boolean expression"
+      },
+      {
+         "id" : "cs/unused-property-value",
+         "instructionPath" : "instructions/cs/unused-property-value.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedPropertyValue.cs",
+            "UnusedPropertyValueFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Ignoring the value assigned to a property is potentially confusing and can lead to unexpected results.",
+         "sourceRelativePath" : "Language Abuse/UnusedPropertyValue.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Property value is not used when setting a property"
+      },
+      {
+         "id" : "cs/useless-cast-to-self",
+         "instructionPath" : "instructions/cs/useless-cast-to-self.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessCastToSelf.cs",
+            "UselessCastToSelfFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A cast to the same type as the original expression is always redundant.",
+         "sourceRelativePath" : "Language Abuse/UselessCastToSelf.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Cast to same type"
+      },
+      {
+         "id" : "cs/useless-is-before-as",
+         "instructionPath" : "instructions/cs/useless-is-before-as.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessIsBeforeAs.cs",
+            "UselessIsBeforeAsFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The C# 'as' operator performs a type test - there is no need to precede it with an 'is'.",
+         "sourceRelativePath" : "Language Abuse/UselessIsBeforeAs.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Useless 'is' before 'as'"
+      },
+      {
+         "id" : "cs/coalesce-of-identical-expressions",
+         "instructionPath" : "instructions/cs/coalesce-of-identical-expressions.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessNullCoalescingExpression.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The null-coalescing operator is intended to help provide special handling for the case when a variable is null - its two operands should always do different things.",
+         "sourceRelativePath" : "Language Abuse/UselessNullCoalescingExpression.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Useless ?? expression"
+      },
+      {
+         "id" : "cs/useless-type-test",
+         "instructionPath" : "instructions/cs/useless-type-test.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessTypeTest.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "There is no need to test whether or not an instance of a derived type is also an instance of a base type - it always is.",
+         "sourceRelativePath" : "Language Abuse/UselessTypeTest.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Useless type test"
+      },
+      {
+         "id" : "cs/useless-upcast",
+         "instructionPath" : "instructions/cs/useless-upcast.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessUpcastBad.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Casting an expression is normally not needed when there exists an implicit conversion.",
+         "sourceRelativePath" : "Language Abuse/UselessUpcast.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Useless upcast"
+      },
+      {
+         "id" : "cs/incomplete-parity-check",
+         "instructionPath" : "instructions/cs/incomplete-parity-check.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "BadCheckOdd.cs",
+            "BadCheckOddGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Code that uses 'x % 2 == 1' or 'x % 2 > 0' to check whether a number is odd does not work for negative numbers.",
+         "sourceRelativePath" : "Likely Bugs/BadCheckOdd.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Bad parity check"
+      },
+      {
+         "id" : "cs/index-out-of-bounds",
+         "instructionPath" : "instructions/cs/index-out-of-bounds.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ContainerLengthCmpOffByOne.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The index is compared to be less than or equal to the container length, then used in an array indexing operation that could be out of bounds.",
+         "sourceRelativePath" : "Likely Bugs/Collections/ContainerLengthCmpOffByOne.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-193"
+         ],
+         "title" : "Off-by-one comparison against container length"
+      },
+      {
+         "id" : "cs/test-for-negative-container-size",
+         "instructionPath" : "instructions/cs/test-for-negative-container-size.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ContainerSizeCmpZero.cs",
+            "ContainerSizeCmpZeroGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparing the size of a container to zero with this operator will always return the same value.",
+         "sourceRelativePath" : "Likely Bugs/Collections/ContainerSizeCmpZero.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Container size compared to zero"
+      },
+      {
+         "id" : "cs/empty-collection",
+         "instructionPath" : "instructions/cs/empty-collection.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReadOnlyContainer.cs",
+            "ReadOnlyContainerFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Querying the contents of a collection or map that is never initialized is not normally useful.",
+         "sourceRelativePath" : "Likely Bugs/Collections/ReadOnlyContainer.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Container contents are never initialized"
+      },
+      {
+         "id" : "cs/unused-collection",
+         "instructionPath" : "instructions/cs/unused-collection.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WriteOnlyContainer.cs",
+            "WriteOnlyContainerFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A collection or map whose contents are never queried or accessed is useless.",
+         "sourceRelativePath" : "Likely Bugs/Collections/WriteOnlyContainer.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Container contents are never accessed"
+      },
+      {
+         "id" : "cs/non-short-circuit",
+         "instructionPath" : "instructions/cs/non-short-circuit.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DangerousNonShortCircuitLogic.cs",
+            "DangerousNonShortCircuitLogicFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The & and | operators do not use short-circuit evaluation and can be dangerous when applied to boolean operands.",
+         "sourceRelativePath" : "Likely Bugs/DangerousNonShortCircuitLogic.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-691"
+         ],
+         "title" : "Potentially dangerous use of non-short-circuit logic"
+      },
+      {
+         "id" : "cs/invalid-dynamic-call",
+         "instructionPath" : "instructions/cs/invalid-dynamic-call.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "BadDynamicCall.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The type of the target of a dynamic invocation expression must have a method or operator with the appropriate signature, or an exception will be thrown.",
+         "sourceRelativePath" : "Likely Bugs/Dynamic/BadDynamicCall.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-628"
+         ],
+         "title" : "Bad dynamic call"
+      },
+      {
+         "id" : "cs/equality-on-floats",
+         "instructionPath" : "instructions/cs/equality-on-floats.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EqualityCheckOnFloats.cs",
+            "EqualityCheckOnFloatsFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparing results of floating-point computations with '==' or '!=' is likely to yield surprising results since floating-point computation does not follow the standard rules of...",
+         "sourceRelativePath" : "Likely Bugs/EqualityCheckOnFloats.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Equality check on floating point values"
+      },
+      {
+         "id" : "cs/equals-on-arrays",
+         "instructionPath" : "instructions/cs/equals-on-arrays.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EqualsArray.cs",
+            "EqualsArrayFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Comparing collections using the Equals method only checks reference equality.",
+         "sourceRelativePath" : "Likely Bugs/EqualsArray.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Equals on collections"
+      },
+      {
+         "id" : "cs/equals-uses-as",
+         "instructionPath" : "instructions/cs/equals-uses-as.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "EqualsUsesAs.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Implementations of 'Equals' should not use \"as\" to test the type of the argument, but rather call GetType().",
+         "sourceRelativePath" : "Likely Bugs/EqualsUsesAs.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Equals should not apply \"as\""
+      },
+      {
+         "id" : "cs/equals-uses-is",
+         "instructionPath" : "instructions/cs/equals-uses-is.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "EqualsUsesIs.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Implementations of 'Equals' should not use \"is\" to test the type of the argument, but rather call GetType().",
+         "sourceRelativePath" : "Likely Bugs/EqualsUsesIs.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Equals should not apply \"is\""
+      },
+      {
+         "id" : "cs/gethashcode-is-not-defined",
+         "instructionPath" : "instructions/cs/gethashcode-is-not-defined.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "HashedButNoHash.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds uses of hashing on types that define 'Equals(...)' but not 'GetHashCode()'.",
+         "sourceRelativePath" : "Likely Bugs/HashedButNoHash.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Hashed value without GetHashCode definition"
+      },
+      {
+         "id" : "cs/impossible-array-cast",
+         "instructionPath" : "instructions/cs/impossible-array-cast.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ImpossibleArrayCast.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Downcasts on expressions of array type are sometimes guaranteed to fail at runtime, e.g.",
+         "sourceRelativePath" : "Likely Bugs/ImpossibleArrayCast.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Impossible array cast"
+      },
+      {
+         "id" : "cs/equals-on-unrelated-types",
+         "instructionPath" : "instructions/cs/equals-on-unrelated-types.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncomparableEquals.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Finds calls of the form 'x.Equals(y)' with incomparable types for x and y.",
+         "sourceRelativePath" : "Likely Bugs/IncomparableEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Equals on incomparable types"
+      },
+      {
+         "id" : "cs/inconsistent-compareto-and-equals",
+         "instructionPath" : "instructions/cs/inconsistent-compareto-and-equals.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "InconsistentCompareTo.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a class implements 'IComparable.CompareTo' but does not override 'Equals', the two can be inconsistent.",
+         "sourceRelativePath" : "Likely Bugs/InconsistentCompareTo.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Inconsistent CompareTo and Equals"
+      },
+      {
+         "id" : "cs/unsafe-year-construction",
+         "instructionPath" : "instructions/cs/unsafe-year-construction.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnsafeYearConstructionBad.cs",
+            "UnsafeYearConstructionGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Constructing a 'DateTime' struct by setting the year argument to an increment or decrement of the year of a different 'DateTime' struct.",
+         "sourceRelativePath" : "Likely Bugs/LeapYear/UnsafeYearConstruction.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unsafe year argument for 'DateTime' constructor"
+      },
+      {
+         "id" : "cs/mishandling-japanese-era",
+         "instructionPath" : "instructions/cs/mishandling-japanese-era.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "MishandlingJapaneseEra.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Japanese era should be handled with the built-in 'JapaneseCalendar' class.",
+         "sourceRelativePath" : "Likely Bugs/MishandlingJapaneseEra.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Mishandling the Japanese era start date"
+      },
+      {
+         "id" : "cs/nested-loops-with-same-variable",
+         "instructionPath" : "instructions/cs/nested-loops-with-same-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NestedLoopsSameVariable.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The behavior of nested loops that both have the same iteration variable can be difficult to understand, as the inner loop will affect the iteration of the outer loop.",
+         "sourceRelativePath" : "Likely Bugs/NestedLoopsSameVariable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Nested loops with same variable"
+      },
+      {
+         "id" : "cs/reference-equality-with-object",
+         "instructionPath" : "instructions/cs/reference-equality-with-object.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ObjectComparison.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparisons ('==' or '!=') between something of type 'System.Object' and something of another type will use reference comparison, which may not have been what was intended.",
+         "sourceRelativePath" : "Likely Bugs/ObjectComparison.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-595"
+         ],
+         "title" : "Reference equality test on System.Object"
+      },
+      {
+         "id" : "cs/loss-of-precision",
+         "instructionPath" : "instructions/cs/loss-of-precision.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PossibleLossOfPrecision.cs",
+            "PossibleLossOfPrecisionFix.cs",
+            "PossibleLossOfPrecision2.cs",
+            "PossibleLossOfPrecisionFix2.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Dividing or multiplying integral expressions and converting the result to a floating-point value may result in a loss of precision.",
+         "sourceRelativePath" : "Likely Bugs/PossibleLossOfPrecision.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-190",
+            "external/cwe/cwe-192",
+            "external/cwe/cwe-197",
+            "external/cwe/cwe-681"
+         ],
+         "title" : "Possible loss of precision"
+      },
+      {
+         "id" : "cs/random-used-once",
+         "instructionPath" : "instructions/cs/random-used-once.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "RandomUsedOnce.cs",
+            "RandomUsedOnceFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Creating an instance of 'Random' for each pseudo-random number required does not guarantee an evenly distributed sequence of random numbers.",
+         "sourceRelativePath" : "Likely Bugs/RandomUsedOnce.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "external/cwe/cwe-335"
+         ],
+         "title" : "Random used only once"
+      },
+      {
+         "id" : "cs/recursive-equals-call",
+         "instructionPath" : "instructions/cs/recursive-equals-call.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RecursiveEquals.cs",
+            "RecursiveEqualsFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A call to 'Equals(object)' is recursive: often this is due to a mistake in invoking a definition of 'Equals(...)' with a different signature.",
+         "sourceRelativePath" : "Likely Bugs/RecursiveEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Recursive call to Equals(object)"
+      },
+      {
+         "id" : "cs/recursive-operator-equals-call",
+         "instructionPath" : "instructions/cs/recursive-operator-equals-call.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "RecursiveOperatorEquals.cs",
+            "RecursiveOperatorEqualsFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A call to 'operator==' is recursive: often this is due to a failed attempt to perform a reference equality comparison.",
+         "sourceRelativePath" : "Likely Bugs/RecursiveOperatorEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Recursive call to operator=="
+      },
+      {
+         "id" : "cs/reference-equality-on-valuetypes",
+         "instructionPath" : "instructions/cs/reference-equality-on-valuetypes.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReferenceEqualsOnValueTypes.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "'ReferenceEquals(...)' always returns false on value types - its use is at best redundant and at worst erroneous.",
+         "sourceRelativePath" : "Likely Bugs/ReferenceEqualsOnValueTypes.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-595"
+         ],
+         "title" : "Call to ReferenceEquals(...) on value type expressions"
+      },
+      {
+         "id" : "cs/self-assignment",
+         "instructionPath" : "instructions/cs/self-assignment.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SelfAssignment.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Assigning a variable to itself is useless and very likely indicates an error in the code.",
+         "sourceRelativePath" : "Likely Bugs/SelfAssignment.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Self-assignment"
+      },
+      {
+         "id" : "cs/empty-block",
+         "instructionPath" : "instructions/cs/empty-block.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EmptyBlock.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Empty blocks that occur as a branch of a conditional or as a loop body may indicate badly-maintained code or a bug due to an unhandled case.",
+         "sourceRelativePath" : "Likely Bugs/Statements/EmptyBlock.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Empty branch of conditional, or empty loop body"
+      },
+      {
+         "id" : "cs/empty-lock-statement",
+         "instructionPath" : "instructions/cs/empty-lock-statement.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EmptyLockStatement.cs",
+            "EmptyLockStatementFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Empty lock statements are often a result of commenting-out code in a previously non-empty lock, but may sometimes be being used as a poor alternative to event wait handles or...",
+         "sourceRelativePath" : "Likely Bugs/Statements/EmptyLockStatement.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "concurrency",
+            "changeability",
+            "language-features",
+            "external/cwe/cwe-585"
+         ],
+         "title" : "Empty lock statement"
+      },
+      {
+         "id" : "cs/misleading-indentation",
+         "instructionPath" : "instructions/cs/misleading-indentation.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UseBraces.cs",
+            "UseBracesFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a control structure does not use braces, misleading indentation makes it difficult to see which statements are within its scope.",
+         "sourceRelativePath" : "Likely Bugs/Statements/UseBraces.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "correctness"
+         ],
+         "title" : "Misleading indentation"
+      },
+      {
+         "id" : "cs/static-field-written-by-instance",
+         "instructionPath" : "instructions/cs/static-field-written-by-instance.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StaticFieldWrittenByInstance.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds instance methods and properties that write to static fields.",
+         "sourceRelativePath" : "Likely Bugs/StaticFieldWrittenByInstance.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "modularity"
+         ],
+         "title" : "Static field written by instance method"
+      },
+      {
+         "id" : "cs/stringbuilder-initialized-with-character",
+         "instructionPath" : "instructions/cs/stringbuilder-initialized-with-character.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StringBuilderCharInit.cs",
+            "StringBuilderCharInitFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A character value is passed to the constructor of 'StringBuilder'.",
+         "sourceRelativePath" : "Likely Bugs/StringBuilderCharInit.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Character passed to StringBuilder constructor"
+      },
+      {
+         "id" : "cs/thread-unsafe-icryptotransform-field-in-class",
+         "instructionPath" : "instructions/cs/thread-unsafe-icryptotransform-field-in-class.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ThreadUnSafeICryptoTransformBad.cs",
+            "ThreadUnSafeICryptoTransformGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The class has a field that directly or indirectly make use of a static System.Security.Cryptography.ICryptoTransform object.",
+         "sourceRelativePath" : "Likely Bugs/ThreadUnsafeICryptoTransform.ql",
+         "tags" : [
+            "concurrency",
+            "security",
+            "external/cwe/cwe-362"
+         ],
+         "title" : "Thread-unsafe use of a static ICryptoTransform field"
+      },
+      {
+         "id" : "cs/thread-unsafe-icryptotransform-captured-in-lambda",
+         "instructionPath" : "instructions/cs/thread-unsafe-icryptotransform-captured-in-lambda.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ThreadUnSafeICryptoTransformLambdaBad.cs",
+            "ThreadUnSafeICryptoTransformLambdaGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An instance of a class that either implements or has a field of type System.Security.Cryptography.ICryptoTransform is being captured by a lambda, and used in what seems to be a...",
+         "sourceRelativePath" : "Likely Bugs/ThreadUnsafeICryptoTransformLambda.ql",
+         "tags" : [
+            "concurrency",
+            "security",
+            "external/cwe/cwe-362"
+         ],
+         "title" : "Thread-unsafe capturing of an ICryptoTransform object"
+      },
+      {
+         "id" : "cs/unchecked-cast-in-equals",
+         "instructionPath" : "instructions/cs/unchecked-cast-in-equals.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UncheckedCastInEquals.cs",
+            "UncheckedCastInEqualsFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The object passed as a parameter to 'Equals' is used in a cast without first checking its type, which can cause an unwanted 'InvalidCastException'.",
+         "sourceRelativePath" : "Likely Bugs/UncheckedCastInEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unchecked cast in Equals method"
+      },
+      {
+         "id" : "cs/linq/inconsistent-enumeration",
+         "instructionPath" : "instructions/cs/linq/inconsistent-enumeration.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "BadMultipleIteration.cs",
+            "BadMultipleIterationFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Not every enumerable sequence is repeatable, so it is dangerous to write code that can consume elements of a sequence in more than one place.",
+         "sourceRelativePath" : "Linq/BadMultipleIteration.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-834"
+         ],
+         "title" : "Bad multiple iteration"
+      },
+      {
+         "id" : "cs/linq/missed-all",
+         "instructionPath" : "instructions/cs/linq/missed-all.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedAllOpportunity.cs",
+            "MissedAllOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The intent of a foreach loop that checks whether every element of its target sequence satisfies some predicate can be expressed more directly using LINQ's 'All' method.",
+         "sourceRelativePath" : "Linq/MissedAllOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed opportunity to use All"
+      },
+      {
+         "id" : "cs/linq/missed-cast",
+         "instructionPath" : "instructions/cs/linq/missed-cast.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedCastOpportunity.cs",
+            "MissedCastOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The intent of a foreach loop that immediately casts its iteration variable to another type and then never uses the iteration variable again can often be better expressed using...",
+         "sourceRelativePath" : "Linq/MissedCastOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed opportunity to use Cast"
+      },
+      {
+         "id" : "cs/linq/missed-oftype",
+         "instructionPath" : "instructions/cs/linq/missed-oftype.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedOfTypeOpportunity.cs",
+            "MissedOfTypeOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The intent of a foreach loop that immediately uses 'as' to coerce its iteration variable to another type and then never uses the iteration variable again can often be better...",
+         "sourceRelativePath" : "Linq/MissedOfTypeOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed opportunity to use OfType"
+      },
+      {
+         "id" : "cs/linq/missed-select",
+         "instructionPath" : "instructions/cs/linq/missed-select.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedSelectOpportunity.cs",
+            "MissedSelectOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The intent of a foreach loop that immediately maps its iteration variable to another variable and then never uses the iteration variable again can often be better expressed using...",
+         "sourceRelativePath" : "Linq/MissedSelectOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed opportunity to use Select"
+      },
+      {
+         "id" : "cs/linq/missed-where",
+         "instructionPath" : "instructions/cs/linq/missed-where.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissedWhereOpportunity.cs",
+            "MissedWhereOpportunityFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The intent of a foreach loop that implicitly filters its target sequence can often be better expressed using LINQ's 'Where' method.",
+         "sourceRelativePath" : "Linq/MissedWhereOpportunity.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Missed opportunity to use Where"
+      },
+      {
+         "id" : "cs/linq/useless-select",
+         "instructionPath" : "instructions/cs/linq/useless-select.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RedundantSelect.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Writing 'seq.Select(e => e)' or 'from e in seq select e' is redundant.",
+         "sourceRelativePath" : "Linq/RedundantSelect.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "language-features",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Redundant Select"
+      },
+      {
+         "id" : "cs/stringbuilder-creation-in-loop",
+         "instructionPath" : "instructions/cs/stringbuilder-creation-in-loop.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "StringBuilderInLoop.cs",
+            "StringBuilderInLoopFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Creating a 'StringBuilder' in a loop is less efficient than reusing a single 'StringBuilder'.",
+         "sourceRelativePath" : "Performance/StringBuilderInLoop.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "StringBuilder creation in loop"
+      },
+      {
+         "id" : "cs/string-concatenation-in-loop",
+         "instructionPath" : "instructions/cs/string-concatenation-in-loop.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "StringConcatenationInLoop.cs",
+            "StringConcatenationInLoopFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Finds code that performs string concatenation in a loop using the + operator.",
+         "sourceRelativePath" : "Performance/StringConcatenationInLoop.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "String concatenation in loop"
+      },
+      {
+         "id" : "cs/inefficient-containskey",
+         "instructionPath" : "instructions/cs/inefficient-containskey.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UseTryGetValue.cs",
+            "UseTryGetValueFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Testing whether a dictionary contains a value before getting it is inefficient and redundant.",
+         "sourceRelativePath" : "Performance/UseTryGetValue.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "Inefficient use of ContainsKey"
+      },
+      {
+         "id" : "cs/web/debug-binary",
+         "instructionPath" : "instructions/cs/web/debug-binary.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "Web.config.bad",
+            "Web.config.good"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "ASP.NET projects should not produce debug binaries when deploying to production as debug builds provide additional information useful to a malicious attacker.",
+         "sourceRelativePath" : "Security Features/CWE-011/ASPNetDebug.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/asp.net",
+            "external/cwe/cwe-011",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Creating an ASP.NET debug binary may reveal sensitive information"
+      },
+      {
+         "id" : "cs/web/large-max-request-length",
+         "instructionPath" : "instructions/cs/web/large-max-request-length.txt",
+         "kind" : "problem",
+         "precision" : "",
+         "referenceExampleFileNames" : [
+            "Web.config.ASPNetMaxRequestLength.bad",
+            "Web.config.ASPNetMaxRequestLength.good"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Setting a large 'maxRequestLength' value may render a webpage vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security Features/CWE-016/ASPNetMaxRequestLength.ql",
+         "tags" : [
+            "security",
+            "frameworks/asp.net",
+            "external/cwe/cwe-016"
+         ],
+         "title" : "Large 'maxRequestLength' value"
+      },
+      {
+         "id" : "cs/web/request-validation-disabled",
+         "instructionPath" : "instructions/cs/web/request-validation-disabled.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ASPNetPagesValidateRequestBad.config",
+            "ASPNetPagesValidateRequestGood.config"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "ASP.NET pages should not disable the built-in request validation.",
+         "sourceRelativePath" : "Security Features/CWE-016/ASPNetPagesValidateRequest.ql",
+         "tags" : [
+            "security",
+            "frameworks/asp.net",
+            "external/cwe/cwe-016"
+         ],
+         "title" : "Page request validation is disabled"
+      },
+      {
+         "id" : "cs/insecure-request-validation-mode",
+         "instructionPath" : "instructions/cs/insecure-request-validation-mode.txt",
+         "kind" : "problem",
+         "precision" : "",
+         "referenceExampleFileNames" : [
+            "ASPNetRequestValidationModeBad.config",
+            "ASPNetRequestValidationModeGood.config"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Setting 'requestValidationMode' to less than 4.5 disables built-in validations included by default in ASP.NET.",
+         "sourceRelativePath" : "Security Features/CWE-016/ASPNetRequestValidationMode.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-016"
+         ],
+         "title" : "Insecure configuration for ASP.NET requestValidationMode"
+      },
+      {
+         "id" : "cs/serialization-check-bypass",
+         "instructionPath" : "instructions/cs/serialization-check-bypass.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "RuntimeChecksBypassBad.cs",
+            "RuntimeChecksBypassGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A write that looks like it may be bypassing runtime checks.",
+         "sourceRelativePath" : "Security Features/CWE-020/RuntimeChecksBypass.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Serialization check bypass"
+      },
+      {
+         "id" : "cs/untrusted-data-to-external-api",
+         "instructionPath" : "instructions/cs/untrusted-data-to-external-api.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ExternalAPISinkExample.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Data provided remotely is used in this external API without sanitization, which could be a security risk.",
+         "sourceRelativePath" : "Security Features/CWE-020/UntrustedDataToExternalAPI.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Untrusted data passed to external API"
+      },
+      {
+         "id" : "cs/path-injection",
+         "instructionPath" : "instructions/cs/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TaintedPath.cs",
+            "TaintedPathGoodNormalize.cs",
+            "TaintedPathGoodFolder.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "Security Features/CWE-022/TaintedPath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "cs/zipslip",
+         "instructionPath" : "instructions/cs/zipslip.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ZipSlipBad.cs",
+            "ZipSlipGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Extracting files from a malicious ZIP file, or similar type of archive, without validating that the destination file path is within the destination directory can allow an...",
+         "sourceRelativePath" : "Security Features/CWE-022/ZipSlip.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022"
+         ],
+         "title" : "Arbitrary file access during archive extraction (\"Zip Slip\")"
+      },
+      {
+         "id" : "cs/command-line-injection",
+         "instructionPath" : "instructions/cs/command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CommandInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "Security Features/CWE-078/CommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Uncontrolled command line"
+      },
+      {
+         "id" : "cs/web/xss",
+         "instructionPath" : "instructions/cs/web/xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XSSBad.cs",
+            "XSSGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to a web page allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security Features/CWE-079/XSS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Cross-site scripting"
+      },
+      {
+         "id" : "cs/sql-injection",
+         "instructionPath" : "instructions/cs/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SqlInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a SQL query from user-controlled sources is vulnerable to insertion of malicious SQL code by the user.",
+         "sourceRelativePath" : "Security Features/CWE-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089"
+         ],
+         "title" : "SQL query built from user-controlled sources"
+      },
+      {
+         "id" : "cs/ldap-injection",
+         "instructionPath" : "instructions/cs/ldap-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LDAPInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building an LDAP query from user-controlled sources is vulnerable to insertion of malicious LDAP code by the user.",
+         "sourceRelativePath" : "Security Features/CWE-090/LDAPInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-090"
+         ],
+         "title" : "LDAP query built from user-controlled sources"
+      },
+      {
+         "id" : "cs/xml-injection",
+         "instructionPath" : "instructions/cs/xml-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XMLInjectionBad.cs",
+            "XMLInjectionGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building an XML document from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security Features/CWE-091/XMLInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-091"
+         ],
+         "title" : "XML injection"
+      },
+      {
+         "id" : "cs/code-injection",
+         "instructionPath" : "instructions/cs/code-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CodeInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Treating externally controlled strings as code can allow an attacker to execute malicious code.",
+         "sourceRelativePath" : "Security Features/CWE-094/CodeInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-096"
+         ],
+         "title" : "Improper control of generation of code"
+      },
+      {
+         "id" : "cs/resource-injection",
+         "instructionPath" : "instructions/cs/resource-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ResourceInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a resource descriptor from untrusted user input is vulnerable to a malicious user providing an unintended resource.",
+         "sourceRelativePath" : "Security Features/CWE-099/ResourceInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Resource injection"
+      },
+      {
+         "id" : "cs/web/cookie-httponly-not-set",
+         "instructionPath" : "instructions/cs/web/cookie-httponly-not-set.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "httponlyflagcore.cs",
+            "cookiepolicyoptions.cs",
+            "httponlyflag.cs",
+            "Web.config"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sensitive cookies without the `HttpOnly` property set are accessible by client-side scripts such as JavaScript.",
+         "sourceRelativePath" : "Security Features/CWE-1004/CookieWithoutHttpOnly.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1004"
+         ],
+         "title" : "Cookie 'HttpOnly' attribute is not set to true"
+      },
+      {
+         "id" : "cs/xml/missing-validation",
+         "instructionPath" : "instructions/cs/xml/missing-validation.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingXMLValidation.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "User input should not be processed as XML without validating it against a known schema.",
+         "sourceRelativePath" : "Security Features/CWE-112/MissingXMLValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-112"
+         ],
+         "title" : "Missing XML validation"
+      },
+      {
+         "id" : "cs/assembly-path-injection",
+         "instructionPath" : "instructions/cs/assembly-path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "AssemblyPathInjectionBad.cs",
+            "AssemblyPathInjectionGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Loading a .NET assembly based on a path constructed from user-controlled sources may allow a malicious user to load code which modifies the program in unintended ways.",
+         "sourceRelativePath" : "Security Features/CWE-114/AssemblyPathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-114"
+         ],
+         "title" : "Assembly path injection"
+      },
+      {
+         "id" : "cs/log-forging",
+         "instructionPath" : "instructions/cs/log-forging.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LogForging.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled sources is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "Security Features/CWE-117/LogForging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log entries created from user input"
+      },
+      {
+         "id" : "cs/unvalidated-local-pointer-arithmetic",
+         "instructionPath" : "instructions/cs/unvalidated-local-pointer-arithmetic.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LocalUnvalidatedArithmetic.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using the result of a virtual method call in pointer arithmetic without validation is dangerous because the method may be overridden by a subtype to return any value.",
+         "sourceRelativePath" : "Security Features/CWE-119/LocalUnvalidatedArithmetic.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-119",
+            "external/cwe/cwe-120",
+            "external/cwe/cwe-122",
+            "external/cwe/cwe-788"
+         ],
+         "title" : "Unvalidated local pointer arithmetic"
+      },
+      {
+         "id" : "cs/uncontrolled-format-string",
+         "instructionPath" : "instructions/cs/uncontrolled-format-string.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UncontrolledFormatStringBad.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Passing untrusted format strings from remote data sources can throw exceptions and cause a denial of service.",
+         "sourceRelativePath" : "Security Features/CWE-134/UncontrolledFormatString.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-134"
+         ],
+         "title" : "Uncontrolled format string"
+      },
+      {
+         "id" : "cs/sensitive-data-transmission",
+         "instructionPath" : "instructions/cs/sensitive-data-transmission.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TransmittedPassword.cs",
+            "TransmittedException.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Transmitting sensitive information to the user is a potential security risk.",
+         "sourceRelativePath" : "Security Features/CWE-201/ExposureInTransmittedData.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-201"
+         ],
+         "title" : "Information exposure through transmitted data"
+      },
+      {
+         "id" : "cs/information-exposure-through-exception",
+         "instructionPath" : "instructions/cs/information-exposure-through-exception.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ExceptionInformationExposure.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Leaking information about an exception, such as messages and stack traces, to an external user can expose implementation details that are useful to an attacker for developing a...",
+         "sourceRelativePath" : "Security Features/CWE-209/ExceptionInformationExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-209",
+            "external/cwe/cwe-497"
+         ],
+         "title" : "Information exposure through an exception"
+      },
+      {
+         "id" : "cs/web/missing-global-error-handler",
+         "instructionPath" : "instructions/cs/web/missing-global-error-handler.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadWeb.config",
+            "GoodWeb.config",
+            "global.asax.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "ASP.NET applications should not set the 'customError' mode to \"off\" without providing a global error handler, otherwise they may leak exception information.",
+         "sourceRelativePath" : "Security Features/CWE-248/MissingASPNETGlobalErrorHandler.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-012",
+            "external/cwe/cwe-248"
+         ],
+         "title" : "Missing global error handler"
+      },
+      {
+         "id" : "cs/web/missing-function-level-access-control",
+         "instructionPath" : "instructions/cs/web/missing-function-level-access-control.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "WebForms.cs",
+            "Web.config",
+            "MVC.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sensitive actions should have authorization checks to prevent them from being used by malicious actors.",
+         "sourceRelativePath" : "Security Features/CWE-285/MissingAccessControl.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-285",
+            "external/cwe/cwe-284",
+            "external/cwe/cwe-862"
+         ],
+         "title" : "Missing function level access control"
+      },
+      {
+         "id" : "cs/cleartext-storage-of-sensitive-information",
+         "instructionPath" : "instructions/cs/cleartext-storage-of-sensitive-information.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextStorage.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Sensitive information stored without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security Features/CWE-312/CleartextStorage.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-315",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Clear text storage of sensitive information"
+      },
+      {
+         "id" : "cs/hardcoded-key",
+         "instructionPath" : "instructions/cs/hardcoded-key.txt",
+         "kind" : "path-problem",
+         "precision" : "",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The .Key property or rgbKey parameter of a SymmetricAlgorithm should never be a hard-coded value.",
+         "sourceRelativePath" : "Security Features/CWE-321/HardcodedEncryptionKey.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-320"
+         ],
+         "title" : "Hard-coded encryption key"
+      },
+      {
+         "id" : "cs/hard-coded-symmetric-encryption-key",
+         "instructionPath" : "instructions/cs/hard-coded-symmetric-encryption-key.txt",
+         "kind" : "path-problem",
+         "precision" : "",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The .Key property or rgbKey parameter of a SymmetricAlgorithm should never be a hardcoded value.",
+         "sourceRelativePath" : "Security Features/CWE-321/HardcodedSymmetricEncryptionKey.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-321"
+         ],
+         "title" : "Hard-coded symmetric encryption key"
+      },
+      {
+         "id" : "cs/adding-cert-to-root-store",
+         "instructionPath" : "instructions/cs/adding-cert-to-root-store.txt",
+         "kind" : "path-problem",
+         "precision" : "",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Application- or user-specific certificates placed in the system root store could weaken security for other processing running on the same system.",
+         "sourceRelativePath" : "Security Features/CWE-327/DontInstallRootCert.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Do not add certificates to the system root store"
+      },
+      {
+         "id" : "cs/insecure-sql-connection",
+         "instructionPath" : "instructions/cs/insecure-sql-connection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "InsecureSQLConnectionBad.cs",
+            "InsecureSQLConnectionGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using an SQL Server connection without enforcing encryption is a security vulnerability.",
+         "sourceRelativePath" : "Security Features/CWE-327/InsecureSQLConnection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Insecure SQL connection"
+      },
+      {
+         "id" : "cs/web/missing-token-validation",
+         "instructionPath" : "instructions/cs/web/missing-token-validation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingAntiForgeryTokenValidation.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Handling a POST request without verifying that the request came from the user allows a malicious attacker to submit a request on behalf of the user.",
+         "sourceRelativePath" : "Security Features/CWE-352/MissingAntiForgeryTokenValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "Missing cross-site request forgery token validation"
+      },
+      {
+         "id" : "cs/exposure-of-sensitive-information",
+         "instructionPath" : "instructions/cs/exposure-of-sensitive-information.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ExposureOfPrivateInformation.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If private information is written to an external location, it may be accessible by unauthorized persons.",
+         "sourceRelativePath" : "Security Features/CWE-359/ExposureOfPrivateInformation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Exposure of private information"
+      },
+      {
+         "id" : "cs/session-reuse",
+         "instructionPath" : "instructions/cs/session-reuse.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "AbandonSession.cs",
+            "AbandonSessionFix.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Reusing an existing session as a different user could allow an attacker to access someone else's account by using their session.",
+         "sourceRelativePath" : "Security Features/CWE-384/AbandonSession.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-384"
+         ],
+         "title" : "Failure to abandon session"
+      },
+      {
+         "id" : "cs/web/missing-x-frame-options",
+         "instructionPath" : "instructions/cs/web/missing-x-frame-options.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "Web.config",
+            "MissingXFrameOptions.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If the 'X-Frame-Options' setting is not provided, a malicious user may be able to overlay their own UI on top of the site by using an iframe.",
+         "sourceRelativePath" : "Security Features/CWE-451/MissingXFrameOptions.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-451",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Missing X-Frame-Options HTTP header"
+      },
+      {
+         "id" : "cs/deserialized-delegate",
+         "instructionPath" : "instructions/cs/deserialized-delegate.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DeserializedDelegateBad.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Deserializing a delegate allows for remote code execution when an attacker can control the serialized data.",
+         "sourceRelativePath" : "Security Features/CWE-502/DeserializedDelegate.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-502"
+         ],
+         "title" : "Deserialized delegate"
+      },
+      {
+         "id" : "cs/unsafe-deserialization",
+         "instructionPath" : "instructions/cs/unsafe-deserialization.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnsafeDeserializationBad.cs",
+            "UnsafeDeserializationGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling an unsafe deserializer with data controlled by an attacker can lead to denial of service and other security problems.",
+         "sourceRelativePath" : "Security Features/CWE-502/UnsafeDeserialization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-502"
+         ],
+         "title" : "Unsafe deserializer"
+      },
+      {
+         "id" : "cs/unsafe-deserialization-untrusted-input",
+         "instructionPath" : "instructions/cs/unsafe-deserialization-untrusted-input.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsafeDeserializationUntrustedInputBad.cs",
+            "UnsafeDeserializationUntrustedInputGood.cs",
+            "UnsafeDeserializationUntrustedInputTypeBad.cs",
+            "UnsafeDeserializationUntrustedInputTypeGood.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Calling an unsafe deserializer with data controlled by an attacker can lead to denial of service and other security problems.",
+         "sourceRelativePath" : "Security Features/CWE-502/UnsafeDeserializationUntrustedInput.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-502"
+         ],
+         "title" : "Deserialization of untrusted data"
+      },
+      {
+         "id" : "cs/web/directory-browse-enabled",
+         "instructionPath" : "instructions/cs/web/directory-browse-enabled.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "Web.config.bad",
+            "Web.config.good"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Directory browsing should not be enabled in production as it can leak sensitive information.",
+         "sourceRelativePath" : "Security Features/CWE-548/ASPNetDirectoryListing.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-548"
+         ],
+         "title" : "ASP.NET config file enables directory browsing"
+      },
+      {
+         "id" : "cs/web/unvalidated-url-redirection",
+         "instructionPath" : "instructions/cs/web/unvalidated-url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UrlRedirect.cs",
+            "UrlRedirectGood.cs",
+            "UrlRedirectGoodDomain.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "Security Features/CWE-601/UrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "URL redirection from remote source"
+      },
+      {
+         "id" : "cs/xml/insecure-dtd-handling",
+         "instructionPath" : "instructions/cs/xml/insecure-dtd-handling.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Untrusted XML is read with an insecure resolver and DTD processing enabled.",
+         "sourceRelativePath" : "Security Features/CWE-611/UntrustedDataInsecureXml.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-611",
+            "external/cwe/cwe-827",
+            "external/cwe/cwe-776"
+         ],
+         "title" : "Untrusted XML is read insecurely"
+      },
+      {
+         "id" : "cs/insecure-xml-read",
+         "instructionPath" : "instructions/cs/insecure-xml-read.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "InsecureXml.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "XML may include dangerous external references, which should be restricted using a secure resolver or disabling DTD processing.",
+         "sourceRelativePath" : "Security Features/CWE-611/UseXmlSecureResolver.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-611",
+            "external/cwe/cwe-827",
+            "external/cwe/cwe-776"
+         ],
+         "title" : "XML is read insecurely"
+      },
+      {
+         "id" : "cs/web/cookie-secure-not-set",
+         "instructionPath" : "instructions/cs/web/cookie-secure-not-set.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "secureflagcore.cs",
+            "cookiepolicyoptions.cs",
+            "secureflag.cs",
+            "Web.config"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Cookies without the `Secure` flag may be sent in cleartext.",
+         "sourceRelativePath" : "Security Features/CWE-614/CookieWithoutSecure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-614"
+         ],
+         "title" : "Cookie 'Secure' attribute is not set to true"
+      },
+      {
+         "id" : "cs/web/requiressl-not-set",
+         "instructionPath" : "instructions/cs/web/requiressl-not-set.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "Web.config"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Omitting the 'requireSSL' attribute allows data to be transmitted insecurely using HTTP.",
+         "sourceRelativePath" : "Security Features/CWE-614/RequireSSL.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-614"
+         ],
+         "title" : "'requireSSL' attribute is not set to true"
+      },
+      {
+         "id" : "cs/web/insecure-direct-object-reference",
+         "instructionPath" : "instructions/cs/web/insecure-direct-object-reference.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "WebFormsExample.cs",
+            "MVCExample.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using user input to control which object is modified without proper authorization checks allows an attacker to modify arbitrary objects.",
+         "sourceRelativePath" : "Security Features/CWE-639/InsecureDirectObjectReference.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-639"
+         ],
+         "title" : "Insecure Direct Object Reference"
+      },
+      {
+         "id" : "cs/xml/xpath-injection",
+         "instructionPath" : "instructions/cs/xml/xpath-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XPathInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building an XPath expression from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security Features/CWE-643/XPathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-643"
+         ],
+         "title" : "XPath injection"
+      },
+      {
+         "id" : "cs/redos",
+         "instructionPath" : "instructions/cs/redos.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReDoS.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User input should not be matched against a regular expression that could require exponential time on certain input.",
+         "sourceRelativePath" : "Security Features/CWE-730/ReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Denial of Service from comparison of user input against expensive regex"
+      },
+      {
+         "id" : "cs/regex-injection",
+         "instructionPath" : "instructions/cs/regex-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RegexInjection.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to provide a regex that could require exponential time on...",
+         "sourceRelativePath" : "Security Features/CWE-730/RegexInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Regular expression injection"
+      },
+      {
+         "id" : "cs/hardcoded-connection-string-credentials",
+         "instructionPath" : "instructions/cs/hardcoded-connection-string-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Credentials are hard-coded in a connection string in the source code of the application.",
+         "sourceRelativePath" : "Security Features/CWE-798/HardcodedConnectionString.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded connection string with credentials"
+      },
+      {
+         "id" : "cs/hardcoded-credentials",
+         "instructionPath" : "instructions/cs/hardcoded-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HardcodedCredentials.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Credentials are hard coded in the source code of the application.",
+         "sourceRelativePath" : "Security Features/CWE-798/HardcodedCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded credentials"
+      },
+      {
+         "id" : "cs/user-controlled-bypass",
+         "instructionPath" : "instructions/cs/user-controlled-bypass.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConditionalBypass.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User-controlled bypassing of sensitive methods may allow attackers to avoid passing through authentication systems.",
+         "sourceRelativePath" : "Security Features/CWE-807/ConditionalBypass.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-807",
+            "external/cwe/cwe-247",
+            "external/cwe/cwe-350"
+         ],
+         "title" : "User-controlled bypass of sensitive method"
+      },
+      {
+         "id" : "cs/inappropriate-encoding",
+         "instructionPath" : "instructions/cs/inappropriate-encoding.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HtmlEncode.cs",
+            "UrlEncode.cs",
+            "SqlEncode.cs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using an inappropriate encoding may give unintended results and may pose a security risk.",
+         "sourceRelativePath" : "Security Features/CWE-838/InappropriateEncoding.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-838"
+         ],
+         "title" : "Inappropriate encoding"
+      },
+      {
+         "id" : "cs/web/broad-cookie-domain",
+         "instructionPath" : "instructions/cs/web/broad-cookie-domain.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CookieWithOverlyBroadDomain.cs",
+            "CookieWithOverlyBroadDomainFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds cookies with an overly broad domain.",
+         "sourceRelativePath" : "Security Features/CookieWithOverlyBroadDomain.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-287"
+         ],
+         "title" : "Cookie security: overly broad domain"
+      },
+      {
+         "id" : "cs/web/broad-cookie-path",
+         "instructionPath" : "instructions/cs/web/broad-cookie-path.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CookieWithOverlyBroadPath.cs",
+            "CookieWithOverlyBroadPathFix.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds cookies with an overly broad path.",
+         "sourceRelativePath" : "Security Features/CookieWithOverlyBroadPath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-287"
+         ],
+         "title" : "Cookie security: overly broad path"
+      },
+      {
+         "id" : "cs/ecb-encryption",
+         "instructionPath" : "instructions/cs/ecb-encryption.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Highlights uses of the encryption mode 'CipherMode.ECB'.",
+         "sourceRelativePath" : "Security Features/Encryption using ECB.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Encryption using ECB"
+      },
+      {
+         "id" : "cs/web/disabled-header-checking",
+         "instructionPath" : "instructions/cs/web/disabled-header-checking.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds places where header checking is disabled.",
+         "sourceRelativePath" : "Security Features/HeaderCheckingDisabled.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-113"
+         ],
+         "title" : "Header checking disabled"
+      },
+      {
+         "id" : "cs/inadequate-rsa-padding",
+         "instructionPath" : "instructions/cs/inadequate-rsa-padding.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds uses of RSA encryption with inadequate padding.",
+         "sourceRelativePath" : "Security Features/InadequateRSAPadding.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-780"
+         ],
+         "title" : "Weak encryption: inadequate RSA padding"
+      },
+      {
+         "id" : "cs/insecure-randomness",
+         "instructionPath" : "instructions/cs/insecure-randomness.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureRandomness.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using a cryptographically weak pseudo-random number generator to generate a security sensitive value may allow an attacker to predict what sensitive value will be generated.",
+         "sourceRelativePath" : "Security Features/InsecureRandomness.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-338"
+         ],
+         "title" : "Insecure randomness"
+      },
+      {
+         "id" : "cs/insufficient-key-size",
+         "instructionPath" : "instructions/cs/insufficient-key-size.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Finds uses of encryption algorithms with too small a key size",
+         "sourceRelativePath" : "Security Features/InsufficientKeySize.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-326"
+         ],
+         "title" : "Weak encryption: Insufficient key size"
+      },
+      {
+         "id" : "cs/web/persistent-cookie",
+         "instructionPath" : "instructions/cs/web/persistent-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Persistent cookies are vulnerable to attacks.",
+         "sourceRelativePath" : "Security Features/PersistentCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-539"
+         ],
+         "title" : "Cookie security: persistent cookie"
+      },
+      {
+         "id" : "cs/weak-encryption",
+         "instructionPath" : "instructions/cs/weak-encryption.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WeakEncryption.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds uses of encryption algorithms that are weak and obsolete",
+         "sourceRelativePath" : "Security Features/WeakEncryption.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Weak encryption"
+      },
+      {
+         "id" : "cs/call-to-object-tostring",
+         "instructionPath" : "instructions/cs/call-to-object-tostring.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DefaultToStringBad.cs",
+            "DefaultToStringGood.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling the default implementation of 'ToString' returns a value that is unlikely to be what you expect.",
+         "sourceRelativePath" : "Useless code/DefaultToString.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of default ToString()"
+      },
+      {
+         "id" : "cs/useless-if-statement",
+         "instructionPath" : "instructions/cs/useless-if-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "FutileConditional.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If-statement with an empty then-branch and no else-branch.",
+         "sourceRelativePath" : "Useless code/FutileConditional.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "useless-code"
+         ],
+         "title" : "Futile conditional"
+      },
+      {
+         "id" : "cs/useless-gethashcode-call",
+         "instructionPath" : "instructions/cs/useless-gethashcode-call.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IntGetHashCode.cs",
+            "IntGetHashCodeFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Calling 'GetHashCode()' on integer types is redundant because the method always returns the original value.",
+         "sourceRelativePath" : "Useless code/IntGetHashCode.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "useless-code"
+         ],
+         "title" : "Useless call to GetHashCode()"
+      },
+      {
+         "id" : "cs/useless-forwarding-method",
+         "instructionPath" : "instructions/cs/useless-forwarding-method.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "PointlessForwardingMethod.cs",
+            "PointlessForwardingMethodFix.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A method forwards calls to another method of the same name that is not called independently.",
+         "sourceRelativePath" : "Useless code/PointlessForwardingMethod.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Pointless forwarding method"
+      },
+      {
+         "id" : "cs/useless-tostring-call",
+         "instructionPath" : "instructions/cs/useless-tostring-call.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RedundantToStringCallBad.cs",
+            "RedundantToStringCallGood.cs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Explicit calls to `ToString()` can be removed when the call appears in a context where an implicit conversion exists.",
+         "sourceRelativePath" : "Useless code/RedundantToStringCall.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Redundant ToString() call"
+      },
+      {
+         "id" : "cs/unused-label",
+         "instructionPath" : "instructions/cs/unused-label.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedLabel.cs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An unused label serves no purpose and should be removed.",
+         "sourceRelativePath" : "Useless code/UnusedLabel.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unused label"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:33:57Z",
+   "language" : "csharp"
+}

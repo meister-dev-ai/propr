@@ -1,0 +1,92 @@
+Review focus: A lock is held during a wait
+
+What to look for:
+- A lock is held during a call to System.Threading.Monitor.Wait().
+- Holding a lock during a call to`System.Threading.Monitor.Wait()`can lead to performance problems or deadlock because the lock can prevent other threads from running. This can be caused by nesting the call to`System.Threading.Monitor.Wait()`in two`lock`statements, or by waiting on a different object to the one which is locked. Synchronized methods (with the attribute`[MethodImpl(MethodImplOptions.Synchronized)]`) can also cause problems, because they are equivalent to`lock(this)`or`lock(typeof(Class))`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LockedWait.cs`):
+```
+class Message
+{
+    readonly Object countLock = new Object();
+    readonly Object textLock = new Object();
+
+    int count;
+    string text;
+
+    public void Print()
+    {
+        lock (countLock)
+        {
+            lock (textLock)
+            {
+                while (text == null)
+                    System.Threading.Monitor.Wait(textLock);
+                System.Console.Out.WriteLine(text + "=" + count);
+            }
+        }
+    }
+
+    public string Text
+    {
+        set
+        {
+            lock (countLock)
+            {
+                lock (textLock)
+                {
+                    ++count;
+                    text = value;
+                    System.Threading.Monitor.Pulse(textLock);
+                }
+            }
+        }
+    }
+}
+```
+- Reference example (`LockedWaitFix.cs`):
+```
+class Message
+{
+    readonly Object countLock = new Object();
+    readonly Object textLock = new Object();
+
+    int count;
+    string text;
+
+    public void Print()
+    {
+        lock (textLock)
+        {
+            while (text == null)
+                System.Threading.Monitor.Wait(textLock);
+            lock (countLock)
+                System.Console.Out.WriteLine(text + "=" + count);
+        }
+    }
+
+    public string Text
+    {
+        set
+        {
+            lock (countLock)
+            {
+                lock (textLock)
+                {
+                    ++count;
+                    text = value;
+                    System.Threading.Monitor.Pulse(textLock);
+                }
+            }
+        }
+    }
+}
+```

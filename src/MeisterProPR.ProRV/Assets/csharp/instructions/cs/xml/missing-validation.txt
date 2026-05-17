@@ -1,0 +1,55 @@
+Review focus: Missing XML validation
+
+What to look for:
+- User input should not be processed as XML without validating it against a known schema.
+- If unsanitized user input is processed as XML, it should be validated against a known schema. If no validation occurs, or if the validation relies on the schema or DTD specified in the document itself, then the XML document may contain any data in any form, which may invalidate assumptions the program later makes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`MissingXMLValidation.cs`):
+```
+using System;
+using System.IO;
+using System.Web;
+using System.Xml;
+using System.Xml.Schema;
+
+public class MissingXmlValidationHandler : IHttpHandler
+{
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        String userProvidedXml = ctx.Request.QueryString["userProvidedXml"];
+
+        // BAD: User provided XML is processed without any validation,
+        //      because there is no settings instance configured.
+        XmlReader.Create(new StringReader(userProvidedXml));
+
+        // BAD: User provided XML is processed without any validation,
+        //      because the settings instance specifies DTD as the ValidationType
+        XmlReaderSettings badSettings = new XmlReaderSettings();
+        badSettings.ValidationType = ValidationType.DTD;
+        XmlReader.Create(new StringReader(userProvidedXml), badSettings);
+
+        // BAD: User provided XML is processed with validation, but the ProcessInlineSchema
+        //      option is specified, so an attacker can provide their own schema to validate
+        //      against.
+        XmlReaderSettings badInlineSettings = new XmlReaderSettings();
+        badInlineSettings.ValidationType = ValidationType.Schema;
+        badInlineSettings.ValidationFlags |= XmlSchemaValidationFlags.ProcessInlineSchema;
+        XmlReader.Create(new StringReader(userProvidedXml), badInlineSettings);
+
+        // GOOD: User provided XML is processed with validation
+        XmlReaderSettings goodSettings = new XmlReaderSettings();
+        goodSettings.ValidationType = ValidationType.Schema;
+        goodSettings.Schemas = new XmlSchemaSet() { { "urn:my-schema", "my.xsd" } };
+        XmlReader.Create(new StringReader(userProvidedXml), goodSettings);
+    }
+}
+```

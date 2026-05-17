@@ -1,0 +1,12 @@
+Review focus: Block with too many statements
+
+What to look for:
+- A block that contains too many complex statements becomes unreadable and unmaintainable.
+- Code has a tendency to become more complex over time. A method that is initially simple may need to be extended to accommodate additional functionality or to address defects. Before long it becomes unreadable and unmaintainable, with many complex statements nested within each other. This rule applies to a block that contains a significant number of complex statements. Note that this is quite different from just considering the number of statements in a block, because each complex statement is potentially a candidate for being extracted to a new method as part of refactoring. For the purposes of this rule, loops and switch statements are considered to be complex.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

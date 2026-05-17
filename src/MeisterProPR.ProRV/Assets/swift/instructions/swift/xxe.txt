@@ -1,0 +1,24 @@
+Review focus: Resolving XML external entity in user-controlled data
+
+What to look for:
+- Parsing user-controlled XML documents and allowing expansion of external entity references may lead to disclosure of confidential data or denial of service.
+- Parsing untrusted XML files with a weakly configured XML parser may lead to an XML External Entity (XXE) attack. This type of attack uses external entity references to access arbitrary files on a system, carry out denial-of-service attacks, or server-side request forgery. Even when the result of parsing is not returned to the user, out-of-band data retrieval techniques may allow attackers to steal sensitive data. Denial of services can also be carried out in this situation.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`XXEBad.swift`):
+```
+let parser = XMLParser(data: remoteData) // BAD (parser explicitly enables external entities)
+parser.shouldResolveExternalEntities = true
+```
+- Good example (`XXEGood.swift`):
+```
+let parser = XMLParser(data: remoteData) // GOOD (parser explicitly disables external entities)
+parser.shouldResolveExternalEntities = false
+```

@@ -1,0 +1,12 @@
+Review focus: Code injection
+
+What to look for:
+- Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.
+- Directly evaluating user input (for example, an HTTP request parameter) as code without first sanitizing the input allows an attacker arbitrary code execution. This can occur when user input is passed to code that interprets it as an expression to be evaluated, using methods such as`Kernel.eval`or`Kernel.send`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

@@ -1,0 +1,103 @@
+Review focus: Exposing internal representation
+
+What to look for:
+- An object that accidentally exposes its internal representation may allow the object's fields to be modified in ways that the object is not prepared to handle.
+- Sometimes a method of a class can expose an internal field to change by other code if it returns a reference to a mutable private field.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ExposeRepresentationBad.cs`):
+```
+using System;
+
+class Bad
+{
+    class Range
+    {
+        private int[] rarray = new int[2];
+
+        public Range(int min, int max)
+        {
+            if (min <= max)
+            {
+                rarray[0] = min;
+                rarray[1] = max;
+            }
+        }
+
+        public int[] Get() => rarray;
+    }
+
+    public static void Main(string[] args)
+    {
+        var r = new Range(1, 10);
+        var r_range = r.Get();
+        r_range[0] = 500;
+        Console.WriteLine("Min: " + r.Get()[0] + " Max: " + r.Get()[1]);
+        // prints "Min: 500 Max: 10"
+    }
+}
+```
+- Reference example (`ExposeRepresentationGood1.cs`):
+```
+using System.Collections.ObjectModel;
+
+class Good1
+{
+    class Range
+    {
+        private ReadOnlyCollection<int> rarray = new ReadOnlyCollection<int>(new int[2]);
+
+        public Range(int min, int max)
+        {
+            if (min <= max)
+            {
+                int[] rarray = new int[2];
+                rarray[0] = min;
+                rarray[1] = max;
+                this.rarray = new ReadOnlyCollection<int>(rarray);
+            }
+        }
+
+        public ReadOnlyCollection<int> Get() => rarray;
+    }
+}
+```
+- Reference example (`ExposeRepresentationGood2.cs`):
+```
+using System;
+
+class Good2
+{
+    class Range
+    {
+        private int[] rarray = new int[2];
+
+        public Range(int min, int max)
+        {
+            if (min <= max)
+            {
+                rarray[0] = min;
+                rarray[1] = max;
+            }
+        }
+
+        public int[] Get() => (int[])rarray.Clone();
+    }
+
+    public static void Main(string[] args)
+    {
+        Range a = new Range(1, 10);
+        int[] a_range = a.Get();
+        a_range[0] = 500;
+        Console.WriteLine("Min: " + a.Get()[0] + " Max: " + a.Get()[1]);
+        // prints "Min: 1 Max: 10"
+    }
+}
+```

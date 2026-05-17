@@ -80,6 +80,9 @@ public partial record ReviewJobProtocolDto
 
     /// <summary>Repeated-judgment decision details associated with this pass, when available.</summary>
     public ProtocolRepeatedJudgmentDto? RepeatedJudgment { get; init; }
+
+    /// <summary>ProRV prefilter execution visibility metadata associated with this pass, when available.</summary>
+    public ProtocolProRvPrefilterDto? ProRvPrefilter { get; init; }
 }
 
 /// <summary>
@@ -152,3 +155,21 @@ public sealed record ProtocolRepeatedJudgmentDto(
     string RecommendedDisposition,
     bool UsedSameEvidenceSet,
     IReadOnlyList<string> ReasonCodes);
+
+/// <summary>
+///     ProRV prefilter execution visibility metadata for one protocol pass.
+/// </summary>
+public sealed record ProtocolProRvPrefilterDto(
+    bool Selected,
+    string ExecutionState,
+    string? StageId,
+    string? Reason,
+    string? RuntimeSource,
+    string? ModelId,
+    string? Language,
+    string? PrefilterStatus,
+    int GuidanceCount,
+    bool AiCallRecorded,
+    bool GuidanceApplied,
+    string? AppliedPromptKind,
+    IReadOnlyList<string> AppliedGuidanceIds);

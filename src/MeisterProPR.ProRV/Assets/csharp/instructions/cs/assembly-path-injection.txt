@@ -1,0 +1,57 @@
+Review focus: Assembly path injection
+
+What to look for:
+- Loading a .NET assembly based on a path constructed from user-controlled sources may allow a malicious user to load code which modifies the program in unintended ways.
+- C# supports runtime loading of assemblies by path through the use of the`System.Reflection.Assembly`API. If an external user can influence the path used to load an assembly, then the application can potentially be tricked into loading an assembly which was not intended to be loaded, and executing arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`AssemblyPathInjectionBad.cs`):
+```
+using System;
+using System.Web;
+using System.Reflection;
+
+public class AssemblyPathInjectionHandler : IHttpHandler {
+  public void ProcessRequest(HttpContext ctx) {
+    string assemblyPath = ctx.Request.QueryString["assemblyPath"];
+
+    // BAD: Load assembly based on user input
+    var badAssembly = Assembly.LoadFile(assemblyPath);
+
+    // Method called on loaded assembly. If the user can control the loaded assembly, then this
+    // could result in a remote code execution vulnerability
+    MethodInfo m = badAssembly.GetType("Config").GetMethod("GetCustomPath");
+    Object customPath = m.Invoke(null, null);
+    // ...
+  }
+}
+```
+- Reference example (`AssemblyPathInjectionGood.cs`):
+```
+using System;
+using System.Web;
+using System.Reflection;
+
+public class AssemblyPathInjectionHandler : IHttpHandler {
+  public void ProcessRequest(HttpContext ctx) {
+    string configType = ctx.Request.QueryString["configType"];
+
+    if (configType.equals("configType1") || configType.equals("configType2")) {
+      // GOOD: Loaded assembly is one of the two known safe options
+      var safeAssembly = Assembly.LoadFile(@"C:\SafeLibraries\" + configType + ".dll");
+
+      // Code execution is limited to one of two known and vetted assemblies
+      MethodInfo m = safeAssembly.GetType("Config").GetMethod("GetCustomPath");
+      Object customPath = m.Invoke(null, null);
+      // ...
+    }
+  }
+}
+```

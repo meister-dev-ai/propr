@@ -1,0 +1,42 @@
+Review focus: Potentially dangerous use of non-short-circuit logic
+
+What to look for:
+- The & and | operators do not use short-circuit evaluation and can be dangerous when applied to boolean operands.
+- The`|`and`&`logical operators, known as non-short circuit operators, should not be used. Using a non-short circuit operator reduces the efficiency of the program, is potentially confusing and can even lead to the program crashing if the first operand acts as a safety check for the second.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DangerousNonShortCircuitLogic.cs`):
+```
+class DangerousNonShortCircuitLogic
+{
+    public static void Main(string[] args)
+    {
+        string a = null;
+        if (a != null & a.ToLower() == "hello world")
+        {
+            Console.WriteLine("The string said hello world.");
+        }
+    }
+}
+```
+- Reference example (`DangerousNonShortCircuitLogicFix.cs`):
+```
+class DangerousNonShortCircuitLogicFix
+{
+    public static void Main(string[] args)
+    {
+        string a = null;
+        if (a != null && a.ToLower() == "hello world")
+        {
+            Console.WriteLine("The string said hello world.");
+        }
+    }
+}
+```

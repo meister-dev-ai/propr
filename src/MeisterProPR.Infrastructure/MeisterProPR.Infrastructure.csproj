@@ -4,6 +4,7 @@
         <ProjectReference Include="..\MeisterProPR.Domain\MeisterProPR.Domain.csproj"/>
         <ProjectReference Include="..\MeisterProPR.Application\MeisterProPR.Application.csproj"/>
         <ProjectReference Include="..\MeisterProPR.ProCursor.Contracts\MeisterProPR.ProCursor.Contracts.csproj"/>
+        <ProjectReference Include="..\MeisterProPR.ProRV\MeisterProPR.ProRV.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

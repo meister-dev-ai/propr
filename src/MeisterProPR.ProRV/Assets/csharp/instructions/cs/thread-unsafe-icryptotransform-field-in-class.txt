@@ -1,0 +1,98 @@
+Review focus: Thread-unsafe use of a static ICryptoTransform field
+
+What to look for:
+- The class has a field that directly or indirectly make use of a static System.Security.Cryptography.ICryptoTransform object.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ThreadUnSafeICryptoTransformBad.cs`):
+```
+internal class TokenCacheThreadUnsafeICryptoTransformDemo
+{
+    private static SHA256 _sha = SHA256.Create();
+
+    public string ComputeHash(string data)
+    {
+        byte[] passwordBytes = UTF8Encoding.UTF8.GetBytes(data);
+        return Convert.ToBase64String(_sha.ComputeHash(passwordBytes));
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        int max = 1000;
+        Task[] tasks = new Task[max];
+
+        Action<object> action = (object obj) =>
+        {
+            var unsafeObj = new TokenCacheThreadUnsafeICryptoTransformDemo();
+            if (unsafeObj.ComputeHash((string)obj) != "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=")
+            {
+                Console.WriteLine("**** We got incorrect Results!!! ****");
+            }
+        };
+
+        for (int i = 0; i < max; i++)
+        {
+            // hash calculated on all threads should be the same:
+            // ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0= (base64)
+            // 
+            tasks[i] = Task.Factory.StartNew(action, "abc");
+        }
+
+        Task.WaitAll(tasks);
+    }
+}
+```
+- Reference example (`ThreadUnSafeICryptoTransformGood.cs`):
+```
+internal class TokenCacheThreadUnsafeICryptoTransformDemoFixed
+{
+    // We are replacing the static SHA256 field with an instance one
+    //
+    //private static SHA256 _sha = SHA256.Create();
+    private SHA256 _sha = SHA256.Create();
+
+    public string ComputeHash(string data)
+    {
+        byte[] passwordBytes = UTF8Encoding.UTF8.GetBytes(data);
+        return Convert.ToBase64String(_sha.ComputeHash(passwordBytes));
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        int max = 1000;
+        Task[] tasks = new Task[max];
+
+        Action<object> action = (object obj) =>
+        {
+            var safeObj = new TokenCacheThreadUnsafeICryptoTransformDemoFixed();
+            if (safeObj.ComputeHash((string)obj) != "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=")
+            {
+                Console.WriteLine("**** We got incorrect Results!!! ****");
+            }
+        };
+
+        for (int i = 0; i < max; i++)
+        {
+            // hash calculated on all threads should be the same:
+            // ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0= (base64)
+            // 
+            tasks[i] = Task.Factory.StartNew(action, "abc");
+        }
+
+        Task.WaitAll(tasks);
+    }
+}
+```

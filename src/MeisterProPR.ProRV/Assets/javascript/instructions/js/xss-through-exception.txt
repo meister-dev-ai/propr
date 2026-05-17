@@ -1,0 +1,43 @@
+Review focus: Exception text reinterpreted as HTML
+
+What to look for:
+- Reinterpreting text from an exception as HTML can lead to a cross-site scripting vulnerability.
+- Directly writing error messages to a webpage without sanitization allows for a cross-site scripting vulnerability if parts of the error message can be influenced by a user.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExceptionXss.js`):
+```
+function setLanguageOptions() {
+    var href = document.location.href,
+        deflt = href.substring(href.indexOf("default=")+8);
+    
+    try {
+        var parsed = unknownParseFunction(deflt); 
+    } catch(e) {
+        document.write("Had an error: " + e + ".");
+    }
+}
+```
+- Reference example (`ExceptionXssAjv.js`):
+```
+import express from 'express';
+import Ajv from 'ajv';
+
+let app = express();
+let ajv = new Ajv();
+
+ajv.addSchema({type: 'object', additionalProperties: {type: 'number'}}, 'pollData');
+
+app.post('/polldata', (req, res) => {
+    if (!ajv.validate('pollData', req.body)) {
+        res.send(ajv.errorsText());
+    }
+});
+```

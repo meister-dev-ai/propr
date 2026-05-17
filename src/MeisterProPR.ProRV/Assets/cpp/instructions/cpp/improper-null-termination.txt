@@ -1,0 +1,37 @@
+Review focus: Potential improper null termination
+
+What to look for:
+- Using a string that may not be null terminated as an argument to a string function can result in buffer overflow or buffer over-read.
+- Built-in C string functions such as`strcat`require that their input string arguments are null terminated. If the input string arguments are not null terminated, these functions will read/write beyond the length of the buffer containing the string, resulting in either buffer over-read or buffer overflow, respectively.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImproperNullTerminationBad.cpp`):
+```
+char source[100];
+memset(source, 'A', 100-1);
+source[100-1] = '\0'; // null terminate source
+
+char dest[200];
+memset(dest, 'B', 100-1);
+
+strcat(dest, source);
+```
+- Reference example (`ImproperNullTerminationGood.cpp`):
+```
+char source[100];
+memset(source, 'A', 100-1);
+source[100-1] = '\0'; // null terminate source
+
+char dest[200];
+memset(dest, 'B', 100-1);
+dest[100-1] = '\0'; // null terminate destination
+
+strcat(dest, source);
+```

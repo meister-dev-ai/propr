@@ -1,0 +1,12 @@
+Review focus: Android debuggable attribute enabled
+
+What to look for:
+- An enabled debugger can allow for entry points in the application or reveal sensitive information.
+- The Android manifest file defines configuration settings for Android applications. In this file, the`android:debuggable`attribute of the`application`element can be used to define whether or not the application can be debugged. When set to`true`, this attribute will allow the application to be debugged even when running on a device in user mode. When a debugger is enabled, it could allow for entry points in the application or reveal sensitive information. As a result,`android:debuggable`should only be enabled during development and should be disabled in production builds.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

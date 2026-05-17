@@ -1,0 +1,27 @@
+Review focus: Inconsistent null check of pointer
+
+What to look for:
+- A dereferenced pointer is not checked for nullness in this location, but it is checked in other locations.
+- This query finds pointer dereferences that do not first check the pointer for nullness, even though the same pointer is checked for nullness in other parts of the code. It is likely that the nullness check was accidentally omitted, and that a null pointer dereference can occur. Dereferencing a null pointer and attempting to modify its contents can lead to anything from a segmentation fault to corrupting important system data (including the interrupt table in some architectures).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InconsistentNullnessTesting.cpp`):
+```
+void* f() {
+	block = (MyBlock *)malloc(sizeof(MyBlock));
+	if (block) { //correct: block is checked for nullness here
+		block->id = NORMAL_BLOCK_ID;
+	}
+	//...
+	/* make sure data-portion is null-terminated */
+	block->data[BLOCK_SIZE - 1] = '\0'; //wrong: block not checked for nullness here
+	return block;
+}
+```

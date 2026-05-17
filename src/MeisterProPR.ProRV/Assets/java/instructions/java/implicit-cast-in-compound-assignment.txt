@@ -1,0 +1,12 @@
+Review focus: Implicit narrowing conversion in compound assignment
+
+What to look for:
+- Compound assignment statements (for example 'intvar += longvar') that implicitly cast a value of a wider type to a narrower type may result in information loss and numeric errors...
+- Compound assignment statements of the form`x += y`or`x *= y`perform an implicit narrowing conversion if the type of`x`is narrower than the type of`y`. For example,`x += y`is equivalent to`x = (T)(x + y)`, where`T`is the type of`x`. This can result in information loss and numeric errors such as overflows.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

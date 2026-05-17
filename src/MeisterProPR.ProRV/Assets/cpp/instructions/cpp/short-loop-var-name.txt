@@ -1,0 +1,31 @@
+Review focus: Error-prone name of loop variable
+
+What to look for:
+- The iteration variable of a nested loop should have a descriptive name: short names like i, j, or k can cause confusion except in very simple loops.
+- This rule finds loops with an iteration variable that has a short name. The iteration variable of a nested loop should have a descriptive name: avoid short names like i, j, or k that can cause confusion except in very simple loops.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShortLoopVarName.cpp`):
+```
+int i = 0;
+for (i = 0; i < NUM_RECORDS; i++) {
+	int j = 0;
+	//This loop should have a more descriptive iteration variable
+	for (j = 0; j < NUM_FIELDS; j++) {
+		process(record[i]->field[j]);
+	}
+	
+	int field_idx = 0;
+	//Better: the inner loop has a descriptive name
+	for (field_idx = 0; field_idx < NUM_FIELDS; field_idx++) {
+		save(record[i]->field[field_idx]);
+	}
+}
+```

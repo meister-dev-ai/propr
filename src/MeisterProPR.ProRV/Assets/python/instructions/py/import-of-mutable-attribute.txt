@@ -1,0 +1,41 @@
+Review focus: Importing value of mutable attribute
+
+What to look for:
+- Importing the value of a mutable attribute directly means that changes in global state will not be observed locally.
+- Explicitly importing an attribute from a module into the current namespace means that the value of that attribute will not be updated if the value in the original module changes. This can mean that changes in global state are not observed locally, which may lead to inconsistencies and possible errors.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`from_import.py`):
+```
+from sys import stdout
+
+def main():
+    stdout.write("Hello World!")
+```
+- Reference example (`redirect.py`):
+```
+import sys
+
+def redirect_to_file(function, args, kwargs, filename):
+    with open(filename) as out:
+        orig_stdout = sys.stdout
+        sys.stdout = out
+        try:
+            function(*args, **kwargs)
+        finally:
+            sys.stdout = orig_stdout
+```
+- Reference example (`from_import_fixed.py`):
+```
+import sys
+
+def main():
+    sys.stdout.write("Hello World!")
+```

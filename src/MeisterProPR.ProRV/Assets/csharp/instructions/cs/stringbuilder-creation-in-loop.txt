@@ -1,0 +1,39 @@
+Review focus: StringBuilder creation in loop
+
+What to look for:
+- Creating a 'StringBuilder' in a loop is less efficient than reusing a single 'StringBuilder'.
+- Creating a`StringBuilder`in the body of a loop is inefficient. It is more efficient to create the`StringBuilder`before the loop and reuse the same instance for each iteration. Use the`Clear`method to reset the`StringBuilder`, which reuses its internal buffer and is more efficient. This is particularly important in performance-critical code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StringBuilderInLoop.cs`):
+```
+static void Main(string[] args)
+{
+    foreach (var arg in args)
+    {
+        var sb = new StringBuilder();  // BAD: Creation in loop
+        sb.Append("Hello ").Append(arg);
+        Console.WriteLine(sb);
+    }
+}
+```
+- Reference example (`StringBuilderInLoopFix.cs`):
+```
+static void Main(string[] args)
+{
+    var sb = new StringBuilder();  // GOOD: Creation outside loop
+    foreach (var arg in args)
+    {
+        sb.Clear();
+        sb.Append("Hello ").Append(arg);
+        Console.WriteLine(sb);
+    }
+}
+```

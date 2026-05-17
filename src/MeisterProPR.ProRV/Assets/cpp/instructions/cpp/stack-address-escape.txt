@@ -1,0 +1,28 @@
+Review focus: Local variable address stored in non-local memory
+
+What to look for:
+- Storing the address of a local variable in non-local memory can cause a dangling pointer bug if the address is used after the function returns.
+- This rule finds assignments that might store the address of a local variable in non-local memory. The address of the local variable is only valid until the function returns, after which it becomes a dangling pointer. Such code is safe if the dangling pointer is never used after the function returns, but it is not a recommended coding practice. There is also a risk that the code is not thread-safe, unless the non-local memory is protected by a mutex.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StackAddressEscapes.cpp`):
+```
+static const int* xptr;
+
+void example1() {
+  int x = 0;
+  xptr = &x; // BAD: address of local variable stored in non-local memory.
+}
+
+void example2() {
+  static const int x = 0;
+  xptr = &x; // GOOD: storing address of static variable is safe.
+}
+```

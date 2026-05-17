@@ -1,0 +1,12 @@
+Review focus: Leaky catch
+
+What to look for:
+- If an exception is allocated on the heap, then it should be deleted when caught.
+- Modern C++ code and frameworks should not throw or catch pointers. Older frameworks, such as Microsoft's MFC, do throw and catch pointers. Said pointers will generally point to an exception object allocated on the heap, and therefore need to be freed when they are caught. Failure to free them will result in a memory leak.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

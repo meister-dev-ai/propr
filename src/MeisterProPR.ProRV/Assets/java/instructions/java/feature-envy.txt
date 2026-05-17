@@ -1,0 +1,12 @@
+Review focus: Feature envy
+
+What to look for:
+- A method that uses more methods or variables from another (unrelated) class than from its own class violates the principle of putting data and behavior in the same place.
+- Feature envy refers to situations where a method is "in the wrong place", because it does not use many methods or variables of its own class, but uses a whole range of methods or variables from some other class. This violates the principle of putting data and behavior in the same place, and exposes internals of the other class to the method.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

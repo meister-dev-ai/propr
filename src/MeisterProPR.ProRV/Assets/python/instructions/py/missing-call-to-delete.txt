@@ -1,0 +1,44 @@
+Review focus: Missing call to superclass `__del__` during object destruction
+
+What to look for:
+- An omitted call to a superclass `__del__` method may lead to class instances not being cleaned up properly.
+- Python, unlike some other object-oriented languages such as Java, allows the developer complete freedom in when and how superclass finalizers are called during object finalization. However, the developer has responsibility for ensuring that objects are properly cleaned up, and that all superclass`__del__`methods are called. Classes with a`__del__`method (a finalizer) typically hold some resource such as a file handle that needs to be cleaned up. If the`__del__`method of a superclass is not called during object finalization, it is likely that resources may be leaked. A call to the`__del__`method of a superclass during object initialization may be unintentionally skipped:
+- If a subclass calls the`__del__`method of the wrong class.
+- If a call to the`__del__`method of one its base classes is omitted.
+- If a call to`super().__del__`is used, but not all`__del__`methods in the Method Resolution Order (MRO) chain themselves call`super()`. This in particular arises more often in cases of multiple inheritance.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingCallToDel.py`):
+```
+class Vehicle(object):
+    
+    def __del__(self):
+        recycle(self.base_parts)
+        
+class Car(Vehicle):
+    
+    def __del__(self):
+        recycle(self.car_parts)
+        Vehicle.__del__(self)
+        
+#BAD: Car.__del__ is not called.
+class SportsCar(Car, Vehicle):
+    
+    def __del__(self):
+        recycle(self.sports_car_parts)
+        Vehicle.__del__(self)
+        
+#GOOD: Car.__del__ is called correctly.
+class FixedSportsCar(Car, Vehicle):
+    
+    def __del__(self):
+        recycle(self.sports_car_parts)
+        Car.__del__(self)
+```

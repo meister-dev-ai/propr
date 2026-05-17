@@ -1,0 +1,32 @@
+Review focus: Return c_str of local std::string
+
+What to look for:
+- Returning the c_str of a locally allocated std::string could cause the program to crash or behave non-deterministically because the memory is deallocated when the std::string...
+- The`c_str`method of`std::string`returns a raw pointer to the memory buffer owned by the`std::string`. The pointer is only safe to use while the`std::string`is still in scope. When the`std::string`goes out of scope, its destructor is called and the memory is deallocated, so it is no longer safe to use the pointer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnCstrOfLocalStdStringBad.cpp`):
+```
+#include <string>
+
+const char* hello() {
+  std::string str("hello");
+  return str.c_str();  // BAD: returning a dangling pointer.
+}
+```
+- Reference example (`ReturnCstrOfLocalStdStringGood.cpp`):
+```
+#include <string>
+
+std::string hello() {
+  std::string str("hello");
+  return str;  // GOOD: returning a std::string is safe.
+}
+```

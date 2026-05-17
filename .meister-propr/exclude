@@ -17,3 +17,6 @@
 # still keep the contract aligned.
 openapi.json
 admin-ui/src/services/generated/**
+
+# --- ProRV Text Assets ---
+src/MeisterProPR.ProRV/Assets/*.txt

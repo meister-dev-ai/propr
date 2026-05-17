@@ -1,0 +1,25 @@
+Review focus: Functions with too many parameters
+
+What to look for:
+- Finds functions with many parameters; they could probably be refactored by wrapping parameters into a struct.
+- This rule finds functions with many parameters. Passing too many parameters to a function is a sign that the function is not cohesive (i.e. lacks a single purpose). These functions could be split into smaller, more cohesive functions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FunctionsWithManyParameters.cpp`):
+```
+// this example has 15 parameters.
+void fillRect(int x, int y, int w, int h,
+              int r1, int g1, int b1, int a1,
+              int r2, int g2, int b2, int a2,
+              gradient_type grad, unsigned int flags, bool border)
+{
+    // ...
+}
+```

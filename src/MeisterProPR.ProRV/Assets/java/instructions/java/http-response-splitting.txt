@@ -1,0 +1,12 @@
+Review focus: HTTP response splitting
+
+What to look for:
+- Writing user input directly to an HTTP header makes code vulnerable to attack by header splitting.
+- Directly writing user input (for example, an HTTP request parameter) to an HTTP header can lead to an HTTP request-splitting or response-splitting vulnerability. HTTP response splitting can lead to vulnerabilities such as XSS and cache poisoning. HTTP request splitting can allow an attacker to inject an additional HTTP request into a client's outgoing socket connection. This can allow an attacker to perform an SSRF-like attack. In the context of a servlet container, if the user input includes blank lines and the servlet container does not escape the blank lines, then a remote user can cause the response to turn into two separate responses. The remote user can then control one or more responses, which is also HTTP response splitting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

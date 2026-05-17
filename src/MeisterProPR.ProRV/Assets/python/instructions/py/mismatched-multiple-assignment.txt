@@ -1,0 +1,31 @@
+Review focus: Mismatch in multiple assignment
+
+What to look for:
+- Assigning multiple variables without ensuring that you define a value for each variable causes an exception at runtime.
+- An assignment statement evaluates a sequence expression and assigns each item of the sequence to one of the variables on the left. If there is a mismatch between the number of variables on the left and the values in the sequence on the right of the statement, then an exception is raised at runtime.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MismatchInMultipleAssignment.py`):
+```
+# Fibonacci series 1:
+# the sum of two elements defines the next
+
+a, b = 0, 1, 1  # Assignment fails: accidentally put three values on right
+while b < 10:
+     print b
+     a, b = b, a+b
+
+# Fibonacci series 2:
+# the sum of two elements defines the next
+a, b = 0, 1   # Assignment succeeds: two variables on left and two values on right
+while b < 10:
+     print b
+     a, b = b, a+b
+```

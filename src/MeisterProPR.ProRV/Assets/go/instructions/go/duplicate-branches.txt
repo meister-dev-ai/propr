@@ -1,0 +1,38 @@
+Review focus: Duplicate 'if' branches
+
+What to look for:
+- If the 'then' and 'else' branches of an 'if' statement are identical, the conditional may be superfluous, or it may indicate a mistake.
+- If the 'then' and 'else' branches of an 'if' statement are identical, this suggests a copy-paste error where the first branch was copied and then not properly adjusted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateBranches.go`):
+```
+package main
+
+func abs(x int) int {
+	if x >= 0 {
+		return x
+	} else {
+		return x
+	}
+}
+```
+- Reference example (`DuplicateBranchesGood.go`):
+```
+package main
+
+func absGood(x int) int {
+	if x >= 0 {
+		return x
+	} else {
+		return -x
+	}
+}
+```

@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
+
 namespace MeisterProPR.Domain.Enums;
 
 /// <summary>
@@ -11,18 +13,22 @@ public enum AiPurpose
     /// <summary>Default review generation.</summary>
     ReviewDefault = 0,
 
+    /// <summary>Diff-based ProRV relevance prefiltering for focused review guidance.</summary>
+    [JsonStringEnumMemberName("proRvPrefilter")]
+    ProRVPrefilter = 1,
+
     /// <summary>Low-effort per-file review generation.</summary>
-    ReviewLowEffort = 1,
+    ReviewLowEffort = 2,
 
     /// <summary>Medium-effort per-file review generation.</summary>
-    ReviewMediumEffort = 2,
+    ReviewMediumEffort = 3,
 
     /// <summary>High-effort per-file review and synthesis generation.</summary>
-    ReviewHighEffort = 3,
+    ReviewHighEffort = 4,
 
     /// <summary>Thread-memory reconsideration chat calls.</summary>
-    MemoryReconsideration = 4,
+    MemoryReconsideration = 5,
 
     /// <summary>Default embedding generation.</summary>
-    EmbeddingDefault = 5,
+    EmbeddingDefault = 6,
 }

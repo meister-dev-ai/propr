@@ -1,0 +1,12 @@
+Review focus: Creates empty ZIP file entry
+
+What to look for:
+- Omitting a call to 'ZipOutputStream.write' when writing a ZIP file to an output stream means that an empty ZIP file entry is written.
+- The`ZipOutputStream` class is used to write ZIP files to a file or other stream. A ZIP file consists of a number of entries. Usually each entry corresponds to a file in the directory structure being zipped. There is a method on`ZipOutputStream`that is slightly confusingly named`putNextEntry`. Despite its name, it does not write a whole entry. Instead, it writes the metadata for an entry. The content for that entry is then written using the`write`method. Finally the entry is closed using`closeEntry`. Therefore, if you call`putNextEntry`and`closeEntry`but omit the call to`write`, an empty ZIP file entry is written to the output stream.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

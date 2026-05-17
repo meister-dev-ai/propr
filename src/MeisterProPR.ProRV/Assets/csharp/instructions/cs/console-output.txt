@@ -1,0 +1,12 @@
+Review focus: Poor logging: use of system output stream
+
+What to look for:
+- Finds uses of system output streams instead of proper logging
+- Writing directly to system output streams is often used as an unstructured form of logging. A proper logging mechanism is a better way to direct messages to the desired location and also ensures that no critical information is leaked to the standard outputs. The rule points out any call to the`Console.Write*(...)`methods and any access to`Console.Out`or`Console.Error`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

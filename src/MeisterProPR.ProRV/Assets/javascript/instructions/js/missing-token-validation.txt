@@ -1,0 +1,54 @@
+Review focus: Missing CSRF middleware
+
+What to look for:
+- Using cookies without CSRF protection may allow malicious websites to submit requests on behalf of the user.
+- Websites that rely on cookie-based authentication may be vulnerable to cross-site request forgery (CSRF). Specifically, a state-changing request should include a secret token so the request can't be forged by an attacker. Otherwise, unwanted requests can be submitted on behalf of a user who visits a malicious website. This is typically mitigated by embedding a session-specific secret token in each request. This token is then checked as an additional authentication measure. A malicious website should have no way of guessing the correct token to embed in the request.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingCsrfMiddlewareBad.js`):
+```
+const app = require("express")(),
+  cookieParser = require("cookie-parser"),
+  bodyParser = require("body-parser"),
+  session = require("express-session");
+
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(session({ secret: process.env['SECRET'], cookie: { maxAge: 60000 } }));
+
+// ...
+
+app.post("/changeEmail", function(req, res) {
+  const userId = req.session.id;
+  const email = req.body["email"];
+  // ... update email associated with userId
+});
+```
+- Reference example (`MissingCsrfMiddlewareGood.js`):
+```
+const app = require("express")(),
+  cookieParser = require("cookie-parser"),
+  bodyParser = require("body-parser"),
+  session = require("express-session"),
+  csrf = require('lusca').csrf;
+
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(session({ secret: process.env['SECRET'], cookie: { maxAge: 60000 } }));
+app.use(csrf());
+
+// ...
+
+app.post("/changeEmail", function(req, res) {
+  const userId = req.session.id;
+  const email = req.body["email"];
+  // ... update email associated with userId
+});
+```

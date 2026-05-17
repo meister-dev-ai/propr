@@ -1,0 +1,24 @@
+Review focus: Asserting a tuple
+
+What to look for:
+- Using an assert statement to test a tuple provides no validity checking.
+- When you define an`assert`statement to test a tuple the test will either always succeed (if the tuple is non-empty) or always fail (if the tuple is empty). This error usually occurs when the programmer writes`assert (condition, message)`instead of the correct form`assert condition, message`
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AssertOnTuple.py`):
+```
+assert xxx and yyy   # Alternative 1a. Check both expressions are true
+
+assert xxx, yyy      # Alternative 1b. Check 'xxx' is true, 'yyy' is the failure message.
+
+tuple = (xxx, yyy)   # Alternative 2. Check both elements of the tuple match expectations.
+assert tuple[0]==xxx
+assert tuple[1]==yyy
+```

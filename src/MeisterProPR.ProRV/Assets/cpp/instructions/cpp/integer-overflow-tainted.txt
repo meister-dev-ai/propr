@@ -1,0 +1,35 @@
+Review focus: Potential integer arithmetic overflow
+
+What to look for:
+- A user-controlled integer arithmetic expression that is not validated can cause overflows.
+- Performing calculations on user-controlled data can result in integer overflows unless the input is validated. Integer overflow occurs when the result of an arithmetic expression is too large to be represented by the (integer) output type of the expression. For example, if the result of the expression is 200, but the output type is a signed 8-bit integer, then overflow occurs because the largest value that can be represented is 127. The behavior of overflow is implementation defined, but the most common implementation is two's complement arithmetic, in which case the result is -56. Overflow can cause unexpected results, particularly when a large value overflows and the result is negative. It can also pose a security risk if the value of the expression is controllable by user, because it could enable an attacker to deliberately cause an overflow. Negative integer overflow is another form of integer overflow, in which a negative result cannot be represented in the output type.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ArithmeticTainted.c`):
+```
+int main(int argc, char** argv) {
+	char buffer[20];
+	fgets(buffer, 20, stdin);
+
+	int num = atoi(buffer);
+	// BAD: may overflow if input is very large
+	int scaled = num + 1000;
+
+	// ...
+
+	int num2 = atoi(buffer);
+	int scaled2;
+	// GOOD: use a guard to prevent overflow
+	if (num2 < INT_MAX-1000)
+		scaled2 = num2 + 1000;
+	else
+		scaled2 = INT_MAX;
+}
+```

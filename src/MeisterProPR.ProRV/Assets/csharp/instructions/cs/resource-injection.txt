@@ -1,0 +1,38 @@
+Review focus: Resource injection
+
+What to look for:
+- Building a resource descriptor from untrusted user input is vulnerable to a malicious user providing an unintended resource.
+- If a resource descriptor is built using string concatenation, and the components of the concatenation include user input, a user may be able to hijack the resource which is loaded.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ResourceInjection.cs`):
+```
+using System.Data.SqlClient;
+using System.Web;
+
+public class ResourceInjectionHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string userName = ctx.Request.QueryString["userName"];
+
+        // BAD: Direct use of user input in a connection string passed to SqlConnection
+        string connectionString = "server=(local);user id=" + userName + ";password= pass;";
+        SqlConnection sqlConnectionBad = new SqlConnection(connectionString);
+
+        // GOOD: Use SqlConnectionStringBuilder to safely include user input in a connection string
+        SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder();
+        builder["Data Source"] = "(local)";
+        builder["integrated Security"] = true;
+        builder["user id"] = userName;
+        SqlConnection sqlConnectionGood = new SqlConnection(builder.ConnectionString);
+    }
+}
+```

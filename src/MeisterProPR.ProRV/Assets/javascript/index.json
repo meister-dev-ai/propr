@@ -1,0 +1,4758 @@
+{
+   "checks" : [
+      {
+         "id" : "js/angular/dead-event-listener",
+         "instructionPath" : "instructions/js/angular/dead-event-listener.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "DeadAngularJSEventListener.js",
+            "DeadAngularJSEventListener_fixed.js",
+            "DeadAngularJSEventListener_emit.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An AngularJS event listener that listens for a non-existent event has no effect.",
+         "sourceRelativePath" : "AngularJS/DeadAngularJSEventListener.ql",
+         "tags" : [
+            "correctness",
+            "frameworks/angularjs"
+         ],
+         "title" : "Dead AngularJS event listener"
+      },
+      {
+         "id" : "js/angular/dependency-injection-mismatch",
+         "instructionPath" : "instructions/js/angular/dependency-injection-mismatch.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DependencyMismatch.js",
+            "DependencyMismatchGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the injected dependencies of a function go out of sync with its parameters, the function will become difficult to understand and maintain.",
+         "sourceRelativePath" : "AngularJS/DependencyMismatch.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/angularjs"
+         ],
+         "title" : "Dependency mismatch"
+      },
+      {
+         "id" : "js/angular/disabling-sce",
+         "instructionPath" : "instructions/js/angular/disabling-sce.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DisablingSce.js",
+            "DisablingSce_better.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Disabling strict contextual escaping (SCE) can cause security vulnerabilities.",
+         "sourceRelativePath" : "AngularJS/DisablingSce.ql",
+         "tags" : [
+            "security",
+            "maintainability",
+            "frameworks/angularjs",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Disabling SCE"
+      },
+      {
+         "id" : "js/angular/double-compilation",
+         "instructionPath" : "instructions/js/angular/double-compilation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DoubleCompilation.js",
+            "DoubleCompilationGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Recompiling an already compiled part of the DOM can lead to unexpected behavior of directives, performance problems, and memory leaks.",
+         "sourceRelativePath" : "AngularJS/DoubleCompilation.ql",
+         "tags" : [
+            "reliability",
+            "frameworks/angularjs",
+            "security",
+            "external/cwe/cwe-1176"
+         ],
+         "title" : "Double compilation"
+      },
+      {
+         "id" : "js/angular/duplicate-dependency",
+         "instructionPath" : "instructions/js/angular/duplicate-dependency.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateDependency.js",
+            "DuplicateDependency-fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Repeated dependency names are redundant for AngularJS dependency injection.",
+         "sourceRelativePath" : "AngularJS/DuplicateDependency.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "frameworks/angularjs"
+         ],
+         "title" : "Duplicate dependency"
+      },
+      {
+         "id" : "js/angular/incompatible-service",
+         "instructionPath" : "instructions/js/angular/incompatible-service.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompatibleService.js",
+            "IncompatibleService-fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Dependency-injecting a service of the wrong kind causes an error at runtime.",
+         "sourceRelativePath" : "AngularJS/IncompatibleService.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/angularjs"
+         ],
+         "title" : "Incompatible dependency injection"
+      },
+      {
+         "id" : "js/angular/insecure-url-whitelist",
+         "instructionPath" : "instructions/js/angular/insecure-url-whitelist.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InsecureUrlWhitelist.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "URL whitelists that are too permissive can cause security vulnerabilities.",
+         "sourceRelativePath" : "AngularJS/InsecureUrlWhitelist.ql",
+         "tags" : [
+            "security",
+            "frameworks/angularjs",
+            "external/cwe/cwe-183",
+            "external/cwe/cwe-625"
+         ],
+         "title" : "Insecure URL whitelist"
+      },
+      {
+         "id" : "js/angular/missing-explicit-injection",
+         "instructionPath" : "instructions/js/angular/missing-explicit-injection.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ImplicitDependency.js",
+            "ImplicitDependency-minified.js",
+            "ImplicitDependency-explicit.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Functions without explicit dependency injections will not work when their parameter names are minified.",
+         "sourceRelativePath" : "AngularJS/MissingExplicitInjection.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/angularjs"
+         ],
+         "title" : "Missing explicit dependency injection"
+      },
+      {
+         "id" : "js/angular/repeated-dependency-injection",
+         "instructionPath" : "instructions/js/angular/repeated-dependency-injection.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RepeatedInjection.js",
+            "RepeatedInjection-fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Specifying dependency injections of an AngularJS component multiple times overrides earlier specifications.",
+         "sourceRelativePath" : "AngularJS/RepeatedInjection.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "frameworks/angularjs"
+         ],
+         "title" : "Repeated dependency injection"
+      },
+      {
+         "id" : "js/angular/unused-dependency",
+         "instructionPath" : "instructions/js/angular/unused-dependency.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnusedAngularDependency.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused dependencies are confusing, and should be removed.",
+         "sourceRelativePath" : "AngularJS/UnusedAngularDependency.ql",
+         "tags" : [
+            "maintainability",
+            "frameworks/angularjs"
+         ],
+         "title" : "Unused AngularJS dependency"
+      },
+      {
+         "id" : "js/angular/expression-in-url-attribute",
+         "instructionPath" : "instructions/js/angular/expression-in-url-attribute.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UseNgSrc.html",
+            "UseNgSrcGood.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using AngularJS markup in an HTML attribute that references a URL (such as 'href' or 'src') may cause the browser to send a request with an invalid URL.",
+         "sourceRelativePath" : "AngularJS/UseNgSrc.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/angularjs"
+         ],
+         "title" : "Use of AngularJS markup in URL-valued attribute"
+      },
+      {
+         "id" : "js/commented-out-code",
+         "instructionPath" : "instructions/js/commented-out-code.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Comments that contain commented-out code should be avoided.",
+         "sourceRelativePath" : "Comments/CommentedOutCode.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Commented-out code"
+      },
+      {
+         "id" : "js/todo-comment",
+         "instructionPath" : "instructions/js/todo-comment.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "TodoComments.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A comment that contains 'TODO' or similar keywords may indicate code that is incomplete or broken, or it may highlight an ambiguity in the software's specification.",
+         "sourceRelativePath" : "Comments/TodoComments.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-546"
+         ],
+         "title" : "TODO comment"
+      },
+      {
+         "id" : "js/alert-call",
+         "instructionPath" : "instructions/js/alert-call.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "Alert.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "'alert' should not be used in production code.",
+         "sourceRelativePath" : "DOM/Alert.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-489"
+         ],
+         "title" : "Invocation of alert"
+      },
+      {
+         "id" : "js/duplicate-html-id",
+         "instructionPath" : "instructions/js/duplicate-html-id.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "AmbiguousIdAttribute.html",
+            "AmbiguousIdAttributeGood.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If an HTML document contains two elements with the same id attribute, it may be interpreted differently by different browsers.",
+         "sourceRelativePath" : "DOM/AmbiguousIdAttribute.ql",
+         "tags" : [
+            "maintainability",
+            "correctness"
+         ],
+         "title" : "Ambiguous HTML id attribute"
+      },
+      {
+         "id" : "js/conflicting-html-attribute",
+         "instructionPath" : "instructions/js/conflicting-html-attribute.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ConflictingAttributes.html",
+            "ConflictingAttributesGood.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If an HTML element has two attributes with the same name but different values, its behavior may be browser-dependent.",
+         "sourceRelativePath" : "DOM/ConflictingAttributes.ql",
+         "tags" : [
+            "maintainability",
+            "correctness",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Conflicting HTML element attributes"
+      },
+      {
+         "id" : "js/duplicate-html-attribute",
+         "instructionPath" : "instructions/js/duplicate-html-attribute.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateAttributes.html",
+            "DuplicateAttributesGood.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Specifying the same attribute twice on the same HTML element is redundant and may indicate a copy-paste mistake.",
+         "sourceRelativePath" : "DOM/DuplicateAttributes.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Duplicate HTML element attributes"
+      },
+      {
+         "id" : "js/malformed-html-id",
+         "instructionPath" : "instructions/js/malformed-html-id.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MalformedIdAttribute.html",
+            "MalformedIdAttributeGood.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the id of an HTML attribute is malformed, its interpretation may be browser-dependent.",
+         "sourceRelativePath" : "DOM/MalformedIdAttribute.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Malformed id attribute"
+      },
+      {
+         "id" : "js/eval-like-call",
+         "instructionPath" : "instructions/js/eval-like-call.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "PseudoEval.js",
+            "PseudoEvalGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "DOM functions that act like 'eval' and execute strings as code are dangerous and impede program analysis and understanding.",
+         "sourceRelativePath" : "DOM/PseudoEval.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-676"
+         ],
+         "title" : "Call to eval-like DOM function"
+      },
+      {
+         "id" : "js/unsafe-external-link",
+         "instructionPath" : "instructions/js/unsafe-external-link.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "TargetBlank.js",
+            "TargetBlankGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "External links that open in a new tab or window but do not specify link type 'noopener' or 'noreferrer' are a potential security risk.",
+         "sourceRelativePath" : "DOM/TargetBlank.ql",
+         "tags" : [
+            "maintainability",
+            "security",
+            "external/cwe/cwe-200",
+            "external/cwe/cwe-1022"
+         ],
+         "title" : "Potentially unsafe external link"
+      },
+      {
+         "id" : "js/arguments-redefinition",
+         "instructionPath" : "instructions/js/arguments-redefinition.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ArgumentsRedefined.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The special 'arguments' variable can be redefined, but this should be avoided since it makes code hard to read and maintain and may prevent compiler optimizations.",
+         "sourceRelativePath" : "Declarations/ArgumentsRedefined.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "Arguments redefined"
+      },
+      {
+         "id" : "js/assignment-to-constant",
+         "instructionPath" : "instructions/js/assignment-to-constant.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "AssignmentToConst.js",
+            "AssignmentToConstGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Assigning to a variable that is declared 'const' has either no effect or leads to a runtime error, depending on the platform.",
+         "sourceRelativePath" : "Declarations/AssignmentToConst.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Assignment to constant"
+      },
+      {
+         "id" : "js/variable-initialization-conflict",
+         "instructionPath" : "instructions/js/variable-initialization-conflict.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ClobberingVarInit.js",
+            "ClobberingVarInitGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a variable is declared and initialized twice inside the same variable declaration statement, the second initialization immediately overwrites the first one.",
+         "sourceRelativePath" : "Declarations/ClobberingVarInit.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Conflicting variable initialization"
+      },
+      {
+         "id" : "js/function-declaration-conflict",
+         "instructionPath" : "instructions/js/function-declaration-conflict.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConflictingFunctions.js",
+            "ConflictingFunctionsGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If two functions with the same name are declared in the same scope, one of the declarations overrides the other without warning.",
+         "sourceRelativePath" : "Declarations/ConflictingFunctions.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Conflicting function declarations"
+      },
+      {
+         "id" : "js/useless-assignment-to-global",
+         "instructionPath" : "instructions/js/useless-assignment-to-global.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "DeadStoreOfGlobal.js",
+            "DeadStoreOfGlobalGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a global variable that is never used has no effect.",
+         "sourceRelativePath" : "Declarations/DeadStoreOfGlobal.ql",
+         "tags" : [
+            "maintainability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to global variable"
+      },
+      {
+         "id" : "js/useless-assignment-to-local",
+         "instructionPath" : "instructions/js/useless-assignment-to-local.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a local variable that is not used later on, or whose value is always overwritten, has no effect.",
+         "sourceRelativePath" : "Declarations/DeadStoreOfLocal.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to local variable"
+      },
+      {
+         "id" : "js/useless-assignment-to-property",
+         "instructionPath" : "instructions/js/useless-assignment-to-property.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a property whose value is always overwritten has no effect.",
+         "sourceRelativePath" : "Declarations/DeadStoreOfProperty.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Useless assignment to property"
+      },
+      {
+         "id" : "js/use-before-declaration",
+         "instructionPath" : "instructions/js/use-before-declaration.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DeclBeforeUse.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Variables should be declared before their first use.",
+         "sourceRelativePath" : "Declarations/DeclBeforeUse.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Variable not declared before use"
+      },
+      {
+         "id" : "js/nested-function-reference-in-default-parameter",
+         "instructionPath" : "instructions/js/nested-function-reference-in-default-parameter.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DefaultArgumentReferencesNestedFunction.js",
+            "DefaultArgumentReferencesNestedFunctionGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a default parameter value references a function that is nested inside the function to which the parameter belongs, a runtime error will occur, since the function is not yet...",
+         "sourceRelativePath" : "Declarations/DefaultArgumentReferencesNestedFunction.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Default parameter references nested function"
+      },
+      {
+         "id" : "js/duplicate-variable-declaration",
+         "instructionPath" : "instructions/js/duplicate-variable-declaration.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateVarDecl.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A variable declaration statement that declares the same variable twice is confusing and hard to maintain.",
+         "sourceRelativePath" : "Declarations/DuplicateVarDecl.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Duplicate variable declaration"
+      },
+      {
+         "id" : "js/ineffective-parameter-type",
+         "instructionPath" : "instructions/js/ineffective-parameter-type.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IneffectiveParameterType.ts",
+            "IneffectiveParameterTypeGood.ts"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Omitting the name of a parameter causes its type annotation to be parsed as the name.",
+         "sourceRelativePath" : "Declarations/IneffectiveParameterType.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "typescript"
+         ],
+         "title" : "Ineffective parameter type"
+      },
+      {
+         "id" : "js/missing-this-qualifier",
+         "instructionPath" : "instructions/js/missing-this-qualifier.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingThisQualifier1.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Referencing an undeclared global variable in a class that has a member of the same name is confusing and may indicate a bug.",
+         "sourceRelativePath" : "Declarations/MissingThisQualifier.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "methods"
+         ],
+         "title" : "Missing 'this' qualifier"
+      },
+      {
+         "id" : "js/missing-variable-declaration",
+         "instructionPath" : "instructions/js/missing-variable-declaration.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingVarDecl.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a variable is not declared as a local variable, it becomes a global variable by default, which may be unintentional and could lead to unexpected behavior.",
+         "sourceRelativePath" : "Declarations/MissingVarDecl.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing variable declaration"
+      },
+      {
+         "id" : "js/mixed-static-instance-this-access",
+         "instructionPath" : "instructions/js/mixed-static-instance-this-access.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "staticInstance.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A reference to a static method from within an instance method needs to be qualified with the class name, not `this`.",
+         "sourceRelativePath" : "Declarations/MixedStaticInstanceThisAccess.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "methods"
+         ],
+         "title" : "Wrong use of 'this' for static method"
+      },
+      {
+         "id" : "js/variable-redeclaration",
+         "instructionPath" : "instructions/js/variable-redeclaration.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "RedeclaredVariable.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Declaring the same variable twice is confusing and may even suggest a latent bug.",
+         "sourceRelativePath" : "Declarations/RedeclaredVariable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Redeclared variable"
+      },
+      {
+         "id" : "js/suspicious-method-name-declaration",
+         "instructionPath" : "instructions/js/suspicious-method-name-declaration.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousMethodNameDeclaration.ts",
+            "SuspiciousMethodNameDeclarationFixed.ts",
+            "SuspiciousMethodNameDeclarationClass.ts",
+            "SuspiciousMethodNameDeclarationClassFixed.ts",
+            "SuspiciousMethodNameDeclarationFunction.ts",
+            "SuspiciousMethodNameDeclarationFunctionFixed.ts"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A method declaration with a name that is a special keyword in another context is suspicious.",
+         "sourceRelativePath" : "Declarations/SuspiciousMethodNameDeclaration.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "typescript",
+            "methods"
+         ],
+         "title" : "Suspicious method name declaration"
+      },
+      {
+         "id" : "js/variable-use-in-temporal-dead-zone",
+         "instructionPath" : "instructions/js/variable-use-in-temporal-dead-zone.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "TemporalDeadZone.js",
+            "TemporalDeadZoneGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing a let-bound variable before its declaration will lead to a runtime error on ECMAScript 2015-compatible platforms.",
+         "sourceRelativePath" : "Declarations/TemporalDeadZone.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "portability"
+         ],
+         "title" : "Access to let-bound variable in temporal dead zone"
+      },
+      {
+         "id" : "js/too-many-parameters",
+         "instructionPath" : "instructions/js/too-many-parameters.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "TooManyParameters.js",
+            "TooManyParametersGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Functions with many parameters are hard to read and hard to use.",
+         "sourceRelativePath" : "Declarations/TooManyParameters.ql",
+         "tags" : [
+            "testability",
+            "readability"
+         ],
+         "title" : "Function with too many parameters"
+      },
+      {
+         "id" : "js/duplicate-parameter-name",
+         "instructionPath" : "instructions/js/duplicate-parameter-name.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UniqueParameterNames.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a function has two parameters with the same name, the second parameter shadows the first one, which makes the code hard to understand and error-prone.",
+         "sourceRelativePath" : "Declarations/UniqueParameterNames.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Duplicate parameter names"
+      },
+      {
+         "id" : "js/overwritten-property",
+         "instructionPath" : "instructions/js/overwritten-property.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UniquePropertyNames.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If an object literal has two properties with the same name, the second property overwrites the first one, which makes the code hard to understand and error-prone.",
+         "sourceRelativePath" : "Declarations/UniquePropertyNames.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Overwritten property"
+      },
+      {
+         "id" : "js/unreachable-method-overloads",
+         "instructionPath" : "instructions/js/unreachable-method-overloads.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnreachableMethodOverloads.ts",
+            "UnreachableMethodOverloadsGood.ts",
+            "UnreachableMethodOverloadsTypeParameters.ts",
+            "UnreachableMethodOverloadsTypeParametersGood.ts"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Having multiple overloads with the same parameter types in TypeScript makes all overloads except the first one unreachable, as the compiler always resolves calls to the textually...",
+         "sourceRelativePath" : "Declarations/UnreachableMethodOverloads.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "typescript"
+         ],
+         "title" : "Unreachable method overloads"
+      },
+      {
+         "id" : "js/unstable-cyclic-import",
+         "instructionPath" : "instructions/js/unstable-cyclic-import.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnstableCyclicImport.js",
+            "UnstableCyclicImportGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the top-level of a module accesses a variable from a cyclic import, its value depends on which module is globally imported first.",
+         "sourceRelativePath" : "Declarations/UnstableCyclicImport.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Unstable cyclic import"
+      },
+      {
+         "id" : "js/unused-parameter",
+         "instructionPath" : "instructions/js/unused-parameter.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnusedParameter.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused parameters make functions hard to read and hard to use, and should be removed.",
+         "sourceRelativePath" : "Declarations/UnusedParameter.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Unused parameter"
+      },
+      {
+         "id" : "js/unused-property",
+         "instructionPath" : "instructions/js/unused-property.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnusedProperty.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused properties may be a symptom of a bug and should be examined carefully.",
+         "sourceRelativePath" : "Declarations/UnusedProperty.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Unused property"
+      },
+      {
+         "id" : "js/unused-local-variable",
+         "instructionPath" : "instructions/js/unused-local-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnusedVariable.js",
+            "UnusedVariable2.js",
+            "UnusedVariable2Good.js",
+            "UnusedVariable3.js",
+            "UnusedVariable3Good.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused variables, imports, functions or classes may be a symptom of a bug and should be examined carefully.",
+         "sourceRelativePath" : "Declarations/UnusedVariable.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unused variable, import, function or class"
+      },
+      {
+         "id" : "js/enabling-electron-insecure-content",
+         "instructionPath" : "instructions/js/enabling-electron-insecure-content.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "AllowRunningInsecureContent.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Enabling allowRunningInsecureContent can allow remote code execution.",
+         "sourceRelativePath" : "Electron/AllowRunningInsecureContent.ql",
+         "tags" : [
+            "security",
+            "frameworks/electron",
+            "external/cwe/cwe-494"
+         ],
+         "title" : "Enabling Electron allowRunningInsecureContent"
+      },
+      {
+         "id" : "js/disabling-electron-websecurity",
+         "instructionPath" : "instructions/js/disabling-electron-websecurity.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DisablingWebSecurity.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Disabling webSecurity can cause critical security vulnerabilities.",
+         "sourceRelativePath" : "Electron/DisablingWebSecurity.ql",
+         "tags" : [
+            "security",
+            "frameworks/electron",
+            "external/cwe/cwe-079"
+         ],
+         "title" : "Disabling Electron webSecurity"
+      },
+      {
+         "id" : "js/enabling-electron-renderer-node-integration",
+         "instructionPath" : "instructions/js/enabling-electron-renderer-node-integration.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "EnablingNodeIntegration.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Enabling `nodeIntegration` or `nodeIntegrationInWorker` can expose the application to remote code execution.",
+         "sourceRelativePath" : "Electron/EnablingNodeIntegration.ql",
+         "tags" : [
+            "security",
+            "frameworks/electron",
+            "external/cwe/cwe-094"
+         ],
+         "title" : "Enabling Node.js integration for Electron web content renderers"
+      },
+      {
+         "id" : "js/bitwise-sign-check",
+         "instructionPath" : "instructions/js/bitwise-sign-check.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "BitwiseSignCheck.js",
+            "BitwiseSignCheckGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Checking the sign of the result of a bitwise operation may yield unexpected results.",
+         "sourceRelativePath" : "Expressions/BitwiseSignCheck.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Sign check of bitwise operation"
+      },
+      {
+         "id" : "js/comparison-of-identical-expressions",
+         "instructionPath" : "instructions/js/comparison-of-identical-expressions.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "CompareIdenticalValues.js",
+            "CompareIdenticalValuesGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the same expression occurs on both sides of a comparison operator, the operator is redundant, and probably indicates a mistake.",
+         "sourceRelativePath" : "Expressions/CompareIdenticalValues.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "readability",
+            "convention",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison of identical values"
+      },
+      {
+         "id" : "js/comparison-with-nan",
+         "instructionPath" : "instructions/js/comparison-with-nan.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Arithmetic comparisons with NaN are useless: nothing is considered to be equal to NaN, not even NaN itself, and similarly nothing is considered greater or less than NaN.",
+         "sourceRelativePath" : "Expressions/ComparisonWithNaN.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison with NaN"
+      },
+      {
+         "id" : "js/duplicate-condition",
+         "instructionPath" : "instructions/js/duplicate-condition.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateCondition.js",
+            "DuplicateConditionGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If two conditions in an 'if'-'else if' chain are identical, the second condition will never hold.",
+         "sourceRelativePath" : "Expressions/DuplicateCondition.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate 'if' condition"
+      },
+      {
+         "id" : "js/duplicate-property",
+         "instructionPath" : "instructions/js/duplicate-property.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateProperty.js",
+            "DuplicatePropertyGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Listing the same property twice in one object literal is redundant and may indicate a copy-paste mistake.",
+         "sourceRelativePath" : "Expressions/DuplicateProperty.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Duplicate property"
+      },
+      {
+         "id" : "js/duplicate-switch-case",
+         "instructionPath" : "instructions/js/duplicate-switch-case.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateSwitchCase.js",
+            "DuplicateSwitchCaseGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If two cases in a switch statement have the same label, the second case will never be executed.",
+         "sourceRelativePath" : "Expressions/DuplicateSwitchCase.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate switch case"
+      },
+      {
+         "id" : "js/useless-expression",
+         "instructionPath" : "instructions/js/useless-expression.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExprHasNoEffect.js",
+            "ExprHasNoEffectGood.js",
+            "ExprHasNoEffect-PseudoDecl.js",
+            "ExprHasNoEffect-PseudoDeclGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An expression that has no effect and is used in a void context is most likely redundant and may indicate a bug.",
+         "sourceRelativePath" : "Expressions/ExprHasNoEffect.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Expression has no effect"
+      },
+      {
+         "id" : "js/comparison-between-incompatible-types",
+         "instructionPath" : "instructions/js/comparison-between-incompatible-types.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "HeterogeneousComparison.js",
+            "HeterogeneousComparisonGood.js",
+            "HeterogeneousComparison2.js",
+            "HeterogeneousComparison2Good.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An equality comparison between two values that cannot be meaningfully converted to the same type will always yield 'false', and an inequality comparison will always yield 'true'.",
+         "sourceRelativePath" : "Expressions/HeterogeneousComparison.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison between inconvertible types"
+      },
+      {
+         "id" : "js/implicit-operand-conversion",
+         "instructionPath" : "instructions/js/implicit-operand-conversion.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ImplicitOperandConversion.js",
+            "ImplicitOperandConversionGood.js",
+            "ImplicitOperandConversion2.js",
+            "ImplicitOperandConversion2Good.js",
+            "ImplicitOperandConversion2Good2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Relying on implicit conversion of operands is error-prone and makes code hard to read.",
+         "sourceRelativePath" : "Expressions/ImplicitOperandConversion.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-704"
+         ],
+         "title" : "Implicit operand conversion"
+      },
+      {
+         "id" : "js/missing-await",
+         "instructionPath" : "instructions/js/missing-await.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingAwait.js",
+            "MissingAwaitGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using a promise without awaiting its result can lead to unexpected behavior.",
+         "sourceRelativePath" : "Expressions/MissingAwait.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing await"
+      },
+      {
+         "id" : "js/missing-dot-length-in-comparison",
+         "instructionPath" : "instructions/js/missing-dot-length-in-comparison.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingDotLengthInComparison.js",
+            "MissingDotLengthInComparisonGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Two variables are being compared using a relational operator, but one is also used to index into the other, suggesting a \".length\" is missing from the comparison.",
+         "sourceRelativePath" : "Expressions/MissingDotLengthInComparison.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing '.length' in comparison"
+      },
+      {
+         "id" : "js/missing-space-in-concatenation",
+         "instructionPath" : "instructions/js/missing-space-in-concatenation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MissingSpaceInAppend.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Joining constant strings into a longer string where two words are concatenated without a separating space usually indicates a text error.",
+         "sourceRelativePath" : "Expressions/MissingSpaceInAppend.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Missing space in string concatenation"
+      },
+      {
+         "id" : "js/misspelled-identifier",
+         "instructionPath" : "instructions/js/misspelled-identifier.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MisspelledIdentifier.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Misspelled identifiers make code harder to read and understand.",
+         "sourceRelativePath" : "Expressions/MisspelledIdentifier.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Misspelled identifier"
+      },
+      {
+         "id" : "js/misspelled-variable-name",
+         "instructionPath" : "instructions/js/misspelled-variable-name.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MisspelledVariableName.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Misspelling a variable name implicitly introduces a global variable, which may not lead to a runtime error, but is likely to give wrong results.",
+         "sourceRelativePath" : "Expressions/MisspelledVariableName.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Misspelled variable name"
+      },
+      {
+         "id" : "js/redundant-operation",
+         "instructionPath" : "instructions/js/redundant-operation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RedundantExpression.js",
+            "RedundantExpressionGood.js",
+            "RedundantExpressionGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Passing identical, or seemingly identical, operands to an operator such as subtraction or conjunction may indicate a typo; even if it is intentional, it makes the code hard to...",
+         "sourceRelativePath" : "Expressions/RedundantExpression.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Identical operands"
+      },
+      {
+         "id" : "js/redundant-assignment",
+         "instructionPath" : "instructions/js/redundant-assignment.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SelfAssignment.js",
+            "SelfAssignmentGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Assigning a variable to itself has no effect.",
+         "sourceRelativePath" : "Expressions/SelfAssignment.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Self assignment"
+      },
+      {
+         "id" : "js/shift-out-of-range",
+         "instructionPath" : "instructions/js/shift-out-of-range.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ShiftOutOfRange.js",
+            "ShiftOutOfRangeGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The integer shift operators '<<', '>>' and '>>>' only take the five least significant bits of their right operand into account.",
+         "sourceRelativePath" : "Expressions/ShiftOutOfRange.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-197"
+         ],
+         "title" : "Shift out of range"
+      },
+      {
+         "id" : "js/string-instead-of-regex",
+         "instructionPath" : "instructions/js/string-instead-of-regex.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Calling 'String.prototype.replace' or 'String.prototype.split' with a string argument that looks like a regular expression is probably a mistake because the called function will...",
+         "sourceRelativePath" : "Expressions/StringInsteadOfRegex.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "String instead of regular expression"
+      },
+      {
+         "id" : "js/call-to-non-callable",
+         "instructionPath" : "instructions/js/call-to-non-callable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousInvocation.js",
+            "SuspiciousInvocationGood.js",
+            "SuspiciousInvocationGood2.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Trying to invoke a value that is not a function will result in a runtime exception.",
+         "sourceRelativePath" : "Expressions/SuspiciousInvocation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-476"
+         ],
+         "title" : "Invocation of non-function"
+      },
+      {
+         "id" : "js/property-access-on-non-object",
+         "instructionPath" : "instructions/js/property-access-on-non-object.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousPropAccess.js",
+            "SuspiciousPropAccessGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Trying to access a property of \"null\" or \"undefined\" will result in a runtime exception.",
+         "sourceRelativePath" : "Expressions/SuspiciousPropAccess.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-476"
+         ],
+         "title" : "Property access on null or undefined"
+      },
+      {
+         "id" : "js/unbound-event-handler-receiver",
+         "instructionPath" : "instructions/js/unbound-event-handler-receiver.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnboundEventHandlerReceiver.js",
+            "UnboundEventHandlerReceiver_fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Invoking an event handler method as a function can cause a runtime error.",
+         "sourceRelativePath" : "Expressions/UnboundEventHandlerReceiver.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unbound event handler receiver"
+      },
+      {
+         "id" : "js/unclear-operator-precedence",
+         "instructionPath" : "instructions/js/unclear-operator-precedence.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnclearOperatorPrecedence.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Nested expressions involving binary bitwise operators and comparisons are easy to misunderstand without additional disambiguating parentheses or whitespace.",
+         "sourceRelativePath" : "Expressions/UnclearOperatorPrecedence.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "statistical",
+            "non-attributable",
+            "external/cwe/cwe-783"
+         ],
+         "title" : "Unclear precedence of nested operators"
+      },
+      {
+         "id" : "js/unknown-directive",
+         "instructionPath" : "instructions/js/unknown-directive.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnknownDirective.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An unknown directive has no effect and may indicate a misspelling.",
+         "sourceRelativePath" : "Expressions/UnknownDirective.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unknown directive"
+      },
+      {
+         "id" : "js/unneeded-defensive-code",
+         "instructionPath" : "instructions/js/unneeded-defensive-code.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnneededDefensiveProgramming1_bad.js",
+            "UnneededDefensiveProgramming1_good.js",
+            "UnneededDefensiveProgramming2_bad.js",
+            "UnneededDefensiveProgramming2_good.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Defensive code that guards against a situation that never happens is not needed.",
+         "sourceRelativePath" : "Expressions/UnneededDefensiveProgramming.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Unneeded defensive code"
+      },
+      {
+         "id" : "js/whitespace-contradicts-precedence",
+         "instructionPath" : "instructions/js/whitespace-contradicts-precedence.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WhitespaceContradictsPrecedence.js",
+            "WhitespaceContradictsPrecedenceGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Nested expressions where the formatting contradicts the grouping enforced by operator precedence are difficult to read and may even indicate a bug.",
+         "sourceRelativePath" : "Expressions/WhitespaceContradictsPrecedence.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "statistical",
+            "non-attributable",
+            "external/cwe/cwe-783"
+         ],
+         "title" : "Whitespace contradicts operator precedence"
+      },
+      {
+         "id" : "js/jsdoc/malformed-param-tag",
+         "instructionPath" : "instructions/js/jsdoc/malformed-param-tag.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "BadParamTag.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A 'param' tag that does not include a name is confusing since it is unclear which parameter it is meant to document.",
+         "sourceRelativePath" : "JSDoc/BadParamTag.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "documentation"
+         ],
+         "title" : "Bad param tag"
+      },
+      {
+         "id" : "js/jsdoc/unknown-parameter",
+         "instructionPath" : "instructions/js/jsdoc/unknown-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "JSDocForNonExistentParameter.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A JSDoc 'param' tag that refers to a non-existent parameter is confusing and may indicate badly maintained code.",
+         "sourceRelativePath" : "JSDoc/JSDocForNonExistentParameter.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "documentation"
+         ],
+         "title" : "JSDoc tag for non-existent parameter"
+      },
+      {
+         "id" : "js/jsdoc/missing-parameter",
+         "instructionPath" : "instructions/js/jsdoc/missing-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UndocumentedParameter.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "If some parameters of a function are documented by JSDoc 'param' tags while others are not, this may indicate badly maintained code.",
+         "sourceRelativePath" : "JSDoc/UndocumentedParameter.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "documentation"
+         ],
+         "title" : "Undocumented parameter"
+      },
+      {
+         "id" : "js/call-stack-introspection",
+         "instructionPath" : "instructions/js/call-stack-introspection.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ArgumentsCallerCallee.js",
+            "ArgumentsCallerCalleeGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The properties 'arguments.caller' and 'argument.callee' have subtle semantics and make code non-modular and hard to maintain.",
+         "sourceRelativePath" : "LanguageFeatures/ArgumentsCallerCallee.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of arguments.caller or arguments.callee"
+      },
+      {
+         "id" : "js/useless-type-test",
+         "instructionPath" : "instructions/js/useless-type-test.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "BadTypeof.js",
+            "BadTypeofGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Comparing the result of a typeof test against a string other than 'undefined', 'boolean', 'number', 'string', 'object', 'function' or 'symbol' is useless, since this comparison...",
+         "sourceRelativePath" : "LanguageFeatures/BadTypeof.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Useless type test"
+      },
+      {
+         "id" : "js/conditional-comment",
+         "instructionPath" : "instructions/js/conditional-comment.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ConditionalComments.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Conditional comments are an IE-specific feature and not portable.",
+         "sourceRelativePath" : "LanguageFeatures/ConditionalComments.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "portability",
+            "language-features",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Conditional comments"
+      },
+      {
+         "id" : "js/debugger-statement",
+         "instructionPath" : "instructions/js/debugger-statement.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "DebuggerStatement.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The 'debugger' statement should not be used in production code.",
+         "sourceRelativePath" : "LanguageFeatures/DebuggerStatement.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "performance",
+            "external/cwe/cwe-489"
+         ],
+         "title" : "Use of debugger statement"
+      },
+      {
+         "id" : "js/deletion-of-non-property",
+         "instructionPath" : "instructions/js/deletion-of-non-property.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DeleteVar.js",
+            "DeleteVarGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The operand of the 'delete' operator should always be a property accessor.",
+         "sourceRelativePath" : "LanguageFeatures/DeleteVar.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-480"
+         ],
+         "title" : "Deleting non-property"
+      },
+      {
+         "id" : "js/omitted-array-element",
+         "instructionPath" : "instructions/js/omitted-array-element.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "EmptyArrayInit.js",
+            "EmptyArrayInitGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Omitted elements in array literals are easy to miss and should not be used.",
+         "sourceRelativePath" : "LanguageFeatures/EmptyArrayInit.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "language-features"
+         ],
+         "title" : "Omitted array element"
+      },
+      {
+         "id" : "js/eval-call",
+         "instructionPath" : "instructions/js/eval-call.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "Eval.js",
+            "Eval2.js",
+            "EvalGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "The 'eval' function and the 'Function' constructor execute strings as code.",
+         "sourceRelativePath" : "LanguageFeatures/Eval.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-676"
+         ],
+         "title" : "Use of eval"
+      },
+      {
+         "id" : "js/non-standard-language-feature",
+         "instructionPath" : "instructions/js/non-standard-language-feature.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExpressionClosures.js",
+            "ExpressionClosuresGood.js",
+            "ExpressionClosuresGood2.js",
+            "LetStatement.js",
+            "LetStatementGood.js",
+            "PostfixComprehension.js",
+            "PostfixComprehensionGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Non-standard language features such as expression closures or let expressions make it harder to reuse code.",
+         "sourceRelativePath" : "LanguageFeatures/ExpressionClosures.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "portability",
+            "language-features",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Use of platform-specific language features"
+      },
+      {
+         "id" : "js/for-in-comprehension",
+         "instructionPath" : "instructions/js/for-in-comprehension.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ForInComprehensionBlocks.js",
+            "ForInComprehensionBlocksGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "'for'-'in' comprehension blocks are a Mozilla-specific language extension that is no longer supported.",
+         "sourceRelativePath" : "LanguageFeatures/ForInComprehensionBlocks.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "portability",
+            "language-features",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Use of for-in comprehension blocks"
+      },
+      {
+         "id" : "js/illegal-invocation",
+         "instructionPath" : "instructions/js/illegal-invocation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Attempting to invoke a method or an arrow function using 'new', or invoking a constructor as a function, will cause a runtime error.",
+         "sourceRelativePath" : "LanguageFeatures/IllegalInvocation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Illegal invocation"
+      },
+      {
+         "id" : "js/inconsistent-use-of-new",
+         "instructionPath" : "instructions/js/inconsistent-use-of-new.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InconsistentNew.js",
+            "InconsistentNewGood.js",
+            "InconsistentNewGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a function is intended to be a constructor, it should always be invoked with 'new'.",
+         "sourceRelativePath" : "LanguageFeatures/InconsistentNew.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Inconsistent use of 'new'"
+      },
+      {
+         "id" : "js/invalid-prototype-value",
+         "instructionPath" : "instructions/js/invalid-prototype-value.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "An attempt to use a value that is not an object or 'null' as a prototype will either be ignored or result in a runtime error.",
+         "sourceRelativePath" : "LanguageFeatures/InvalidPrototype.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-704"
+         ],
+         "title" : "Invalid prototype value"
+      },
+      {
+         "id" : "js/exit-from-finally",
+         "instructionPath" : "instructions/js/exit-from-finally.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "JumpFromFinally.js",
+            "JumpFromFinallyGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Avoid using unstructured control flow statements (return, continue, or break) inside a 'finally' block.",
+         "sourceRelativePath" : "LanguageFeatures/JumpFromFinally.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "language-features",
+            "external/cwe/cwe-584"
+         ],
+         "title" : "Jump from finally"
+      },
+      {
+         "id" : "js/index-out-of-bounds",
+         "instructionPath" : "instructions/js/index-out-of-bounds.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LengthComparisonOffByOne.js",
+            "LengthComparisonOffByOneGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An array index is compared to be less than or equal to the 'length' property, and then used in an indexing operation that could be out of bounds.",
+         "sourceRelativePath" : "LanguageFeatures/LengthComparisonOffByOne.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "logic",
+            "language-features",
+            "external/cwe/cwe-193"
+         ],
+         "title" : "Off-by-one comparison against length"
+      },
+      {
+         "id" : "js/non-linear-pattern",
+         "instructionPath" : "instructions/js/non-linear-pattern.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NonLinearPattern.js",
+            "NonLinearPatternGood.js",
+            "NonLinearPatternTS.ts",
+            "NonLinearPatternTSGood.ts"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If the same pattern variable appears twice in an array or object pattern, the second binding will silently overwrite the first binding, which is probably unintentional.",
+         "sourceRelativePath" : "LanguageFeatures/NonLinearPattern.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Non-linear pattern"
+      },
+      {
+         "id" : "js/property-assignment-on-primitive",
+         "instructionPath" : "instructions/js/property-assignment-on-primitive.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Assigning to a property of a primitive value has no effect and may trigger a runtime error.",
+         "sourceRelativePath" : "LanguageFeatures/PropertyWriteOnPrimitive.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-704"
+         ],
+         "title" : "Assignment to property of primitive value"
+      },
+      {
+         "id" : "js/automatic-semicolon-insertion",
+         "instructionPath" : "instructions/js/automatic-semicolon-insertion.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SemicolonInsertion.js",
+            "SemicolonInsertionGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Code that uses automatic semicolon insertion inconsistently is hard to read and maintain.",
+         "sourceRelativePath" : "LanguageFeatures/SemicolonInsertion.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "language-features",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Semicolon insertion"
+      },
+      {
+         "id" : "js/ignored-setter-parameter",
+         "instructionPath" : "instructions/js/ignored-setter-parameter.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "SetterIgnoresParameter.js",
+            "SetterIgnoresParameterGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A setter function can silently ignore the new value that the property is meant to be set to, but this may result in unexpected behavior and could indicate a bug.",
+         "sourceRelativePath" : "LanguageFeatures/SetterIgnoresParameter.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "language-features"
+         ],
+         "title" : "Setter ignores its parameter"
+      },
+      {
+         "id" : "js/setter-return",
+         "instructionPath" : "instructions/js/setter-return.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SetterReturn.js",
+            "SetterReturnGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Returning a value from a setter function is useless, since it will always be ignored.",
+         "sourceRelativePath" : "LanguageFeatures/SetterReturn.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "language-features"
+         ],
+         "title" : "Useless return in setter"
+      },
+      {
+         "id" : "js/superfluous-trailing-arguments",
+         "instructionPath" : "instructions/js/superfluous-trailing-arguments.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SpuriousArguments.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A function is invoked with extra trailing arguments that are ignored.",
+         "sourceRelativePath" : "LanguageFeatures/SpuriousArguments.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-685"
+         ],
+         "title" : "Superfluous trailing arguments"
+      },
+      {
+         "id" : "js/strict-mode-call-stack-introspection",
+         "instructionPath" : "instructions/js/strict-mode-call-stack-introspection.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Accessing properties 'arguments.caller', 'arguments.callee', 'Function.prototype.caller' or 'Function.prototype.arguments' in strict mode will cause a runtime error.",
+         "sourceRelativePath" : "LanguageFeatures/StrictModeCallStackIntrospection.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Use of call stack introspection in strict mode"
+      },
+      {
+         "id" : "js/syntax-error",
+         "instructionPath" : "instructions/js/syntax-error.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SyntaxError.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A piece of code could not be parsed due to syntax errors.",
+         "sourceRelativePath" : "LanguageFeatures/SyntaxError.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Syntax error"
+      },
+      {
+         "id" : "js/template-syntax-in-string-literal",
+         "instructionPath" : "instructions/js/template-syntax-in-string-literal.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TemplateSyntaxInStringLiteral.js",
+            "TemplateSyntaxInStringLiteralGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A string literal appears to use template syntax but is not quoted with backticks.",
+         "sourceRelativePath" : "LanguageFeatures/TemplateSyntaxInStringLiteral.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Template syntax in string literal"
+      },
+      {
+         "id" : "js/incomplete-object-initialization",
+         "instructionPath" : "instructions/js/incomplete-object-initialization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Accessing 'this' or a property of 'super' in the constructor of a subclass before calling the super constructor will cause a runtime error.",
+         "sourceRelativePath" : "LanguageFeatures/ThisBeforeSuper.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features"
+         ],
+         "title" : "Use of incompletely initialized object"
+      },
+      {
+         "id" : "js/unused-index-variable",
+         "instructionPath" : "instructions/js/unused-index-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedIndexVariable.js",
+            "UnusedIndexVariableGood.js",
+            "UnusedIndexVariableGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Iterating over an array but not using the index variable to access array elements may indicate a typo or logic error.",
+         "sourceRelativePath" : "LanguageFeatures/UnusedIndexVariable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unused index variable"
+      },
+      {
+         "id" : "js/with-statement",
+         "instructionPath" : "instructions/js/with-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WithStatement.js",
+            "WithStatementGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The 'with' statement has subtle semantics and should not be used.",
+         "sourceRelativePath" : "LanguageFeatures/WithStatement.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "complexity",
+            "language-features"
+         ],
+         "title" : "With statement"
+      },
+      {
+         "id" : "js/json-in-javascript-file",
+         "instructionPath" : "instructions/js/json-in-javascript-file.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Storing JSON in files with extension 'js' or 'jsx' is error-prone.",
+         "sourceRelativePath" : "LanguageFeatures/WrongExtensionJSON.ql",
+         "tags" : [
+            "maintainability",
+            "language-features"
+         ],
+         "title" : "JSON in JavaScript file"
+      },
+      {
+         "id" : "js/yield-outside-generator",
+         "instructionPath" : "instructions/js/yield-outside-generator.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "YieldInNonGenerator.js",
+            "YieldInNonGeneratorGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "'yield' should only be used in generator functions.",
+         "sourceRelativePath" : "LanguageFeatures/YieldInNonGenerator.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "language-features",
+            "external/cwe/cwe-758"
+         ],
+         "title" : "Yield in non-generator function"
+      },
+      {
+         "id" : "js/node/cyclic-import",
+         "instructionPath" : "instructions/js/node/cyclic-import.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "CyclicImport.js",
+            "CyclicImportGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a module indirectly imports itself, some modules involved in the import cycle may end up with partially loaded dependencies.",
+         "sourceRelativePath" : "NodeJS/CyclicImport.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "frameworks/node.js"
+         ],
+         "title" : "Cyclic module import"
+      },
+      {
+         "id" : "js/node/import-without-export",
+         "instructionPath" : "instructions/js/node/import-without-export.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "DubiousImport.js",
+            "DubiousImportGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Importing a symbol from a module that does not export it most likely indicates a bug.",
+         "sourceRelativePath" : "NodeJS/DubiousImport.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "frameworks/node.js"
+         ],
+         "title" : "Dubious import"
+      },
+      {
+         "id" : "js/node/assignment-to-exports-variable",
+         "instructionPath" : "instructions/js/node/assignment-to-exports-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InvalidExport.js",
+            "InvalidExportGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Assigning to the special 'exports' variable only overwrites its value and does not export anything.",
+         "sourceRelativePath" : "NodeJS/InvalidExport.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/node.js",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Assignment to exports variable"
+      },
+      {
+         "id" : "js/node/missing-exports-qualifier",
+         "instructionPath" : "instructions/js/node/missing-exports-qualifier.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingExports.js",
+            "MissingExportsGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Referencing an undeclared global variable in a module that exports a definition of the same name is confusing and may indicate a bug.",
+         "sourceRelativePath" : "NodeJS/MissingExports.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/node.js"
+         ],
+         "title" : "Missing exports qualifier"
+      },
+      {
+         "id" : "js/node/unresolvable-import",
+         "instructionPath" : "instructions/js/node/unresolvable-import.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnresolvableImport.js",
+            "UnresolvableImportGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An import that cannot be resolved to a module will cause an exception at runtime.",
+         "sourceRelativePath" : "NodeJS/UnresolvableImport.ql",
+         "tags" : [
+            "maintainability",
+            "frameworks/node.js"
+         ],
+         "title" : "Unresolvable import"
+      },
+      {
+         "id" : "js/node/unused-npm-dependency",
+         "instructionPath" : "instructions/js/node/unused-npm-dependency.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UnusedDependency.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "If unnecessary package dependencies are included in package.json, the package will become harder to install.",
+         "sourceRelativePath" : "NodeJS/UnusedDependency.ql",
+         "tags" : [
+            "maintainability",
+            "frameworks/node.js"
+         ],
+         "title" : "Unused npm dependency"
+      },
+      {
+         "id" : "js/iteration-using-non-local-variable",
+         "instructionPath" : "instructions/js/iteration-using-non-local-variable.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "NonLocalForIn.js",
+            "NonLocalForInGood.js",
+            "NonLocalForIn2.js",
+            "NonLocalForIn2Good.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "For-in/for-of loops whose iteration variable is not a purely local variable may prevent optimization of the surrounding function.",
+         "sourceRelativePath" : "Performance/NonLocalForIn.ql",
+         "tags" : [
+            "efficiency",
+            "maintainability"
+         ],
+         "title" : "Iteration using non-local variable"
+      },
+      {
+         "id" : "js/polynomial-redos",
+         "instructionPath" : "instructions/js/polynomial-redos.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A regular expression that can require polynomial time to match may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Performance/PolynomialReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Polynomial regular expression used on uncontrolled data"
+      },
+      {
+         "id" : "js/redos",
+         "instructionPath" : "instructions/js/redos.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "A regular expression that requires exponential time to match certain inputs can be a performance bottleneck, and may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Performance/ReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Inefficient regular expression"
+      },
+      {
+         "id" : "js/parameter-reassignment-with-arguments",
+         "instructionPath" : "instructions/js/parameter-reassignment-with-arguments.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ReassignParameterAndUseArguments.js",
+            "ReassignParameterAndUseArgumentsGood1.js",
+            "ReassignParameterAndUseArgumentsGood2.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A function that reassigns one of its parameters and also uses the arguments object may not be optimized properly.",
+         "sourceRelativePath" : "Performance/ReassignParameterAndUseArguments.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "performance"
+         ],
+         "title" : "Parameter reassigned in function that uses arguments"
+      },
+      {
+         "id" : "js/unhandled-error-in-stream-pipeline",
+         "instructionPath" : "instructions/js/unhandled-error-in-stream-pipeline.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnhandledStreamPipe.js",
+            "UnhandledStreamPipeGood.js",
+            "UnhandledStreamPipeManualError.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling `pipe()` on a stream without error handling will drop errors coming from the input stream",
+         "sourceRelativePath" : "Quality/UnhandledErrorInStreamPipeline.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "frameworks/nodejs"
+         ],
+         "title" : "Unhandled error in stream pipeline"
+      },
+      {
+         "id" : "js/react/direct-state-mutation",
+         "instructionPath" : "instructions/js/react/direct-state-mutation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Mutating the state of a React component directly may lead to lost updates.",
+         "sourceRelativePath" : "React/DirectStateMutation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/react"
+         ],
+         "title" : "Direct state mutation"
+      },
+      {
+         "id" : "js/react/inconsistent-state-update",
+         "instructionPath" : "instructions/js/react/inconsistent-state-update.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Updating the state of a component based on the current value of 'this.state' or 'this.props' may lead to inconsistent component state.",
+         "sourceRelativePath" : "React/InconsistentStateUpdate.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/react"
+         ],
+         "title" : "Potentially inconsistent state update"
+      },
+      {
+         "id" : "js/react/unsupported-state-update-in-lifecycle-method",
+         "instructionPath" : "instructions/js/react/unsupported-state-update-in-lifecycle-method.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "unsupported-state-update-in-lifecycle-method.js",
+            "unsupported-state-update-in-lifecycle-method_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Attempting to update the state of a React component at the wrong time can cause undesired behavior.",
+         "sourceRelativePath" : "React/UnsupportedStateUpdateInLifecycleMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/react"
+         ],
+         "title" : "Unsupported state update in lifecycle method"
+      },
+      {
+         "id" : "js/react/unused-or-undefined-state-property",
+         "instructionPath" : "instructions/js/react/unused-or-undefined-state-property.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedOrUndefinedStateProperty.js",
+            "UnusedOrUndefinedStateProperty_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Unused or undefined component state properties may be a symptom of a bug and should be examined carefully.",
+         "sourceRelativePath" : "React/UnusedOrUndefinedStateProperty.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/react"
+         ],
+         "title" : "Unused or undefined state property"
+      },
+      {
+         "id" : "js/regex/back-reference-before-group",
+         "instructionPath" : "instructions/js/regex/back-reference-before-group.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "BackrefBeforeGroup.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a back reference precedes the capture group it refers to, it matches the empty string, which is probably not what was expected.",
+         "sourceRelativePath" : "RegExp/BackrefBeforeGroup.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Back reference precedes capture group"
+      },
+      {
+         "id" : "js/regex/back-reference-to-negative-lookahead",
+         "instructionPath" : "instructions/js/regex/back-reference-to-negative-lookahead.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "BackrefIntoNegativeLookahead.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a back reference refers to a capture group inside a preceding negative lookahead assertion, then the back reference always matches the empty string, which probably indicates a...",
+         "sourceRelativePath" : "RegExp/BackrefIntoNegativeLookahead.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Back reference into negative lookahead assertion"
+      },
+      {
+         "id" : "js/regex/backspace-escape",
+         "instructionPath" : "instructions/js/regex/backspace-escape.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "BackspaceEscape.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using '\\b' to escape the backspace character in a regular expression is confusing since it could be mistaken for a word boundary assertion.",
+         "sourceRelativePath" : "RegExp/BackspaceEscape.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "correctness"
+         ],
+         "title" : "Backspace escape in regular expression"
+      },
+      {
+         "id" : "js/regex/duplicate-in-character-class",
+         "instructionPath" : "instructions/js/regex/duplicate-in-character-class.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateCharacterInCharacterClass.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a character class in a regular expression contains the same character twice, this may indicate a bug.",
+         "sourceRelativePath" : "RegExp/DuplicateCharacterInCharacterClass.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Duplicate character in character class"
+      },
+      {
+         "id" : "js/regex/empty-character-class",
+         "instructionPath" : "instructions/js/regex/empty-character-class.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "EmptyCharacterClass.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Empty character classes are not normally useful and may indicate a bug.",
+         "sourceRelativePath" : "RegExp/EmptyCharacterClass.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Empty character class"
+      },
+      {
+         "id" : "js/identity-replacement",
+         "instructionPath" : "instructions/js/identity-replacement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "IdentityReplacement.js",
+            "IdentityReplacementGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Replacing a substring with itself has no effect and may indicate a mistake.",
+         "sourceRelativePath" : "RegExp/IdentityReplacement.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Replacement of a substring with itself"
+      },
+      {
+         "id" : "js/regex/syntax-error",
+         "instructionPath" : "instructions/js/regex/syntax-error.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MalformedRegExp.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Regular expressions that do not adhere to the ECMAScript standard may be interpreted differently across platforms and should be avoided.",
+         "sourceRelativePath" : "RegExp/MalformedRegExp.ql",
+         "tags" : [
+            "portability",
+            "maintainability",
+            "regular-expressions"
+         ],
+         "title" : "Malformed regular expression"
+      },
+      {
+         "id" : "js/regex/always-matches",
+         "instructionPath" : "instructions/js/regex/always-matches.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RegExpAlwaysMatches.js",
+            "RegExpAlwaysMatchesGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expression tests that always find a match indicate dead code or a logic error",
+         "sourceRelativePath" : "RegExp/RegExpAlwaysMatches.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Regular expression always matches"
+      },
+      {
+         "id" : "js/regex/unbound-back-reference",
+         "instructionPath" : "instructions/js/regex/unbound-back-reference.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnboundBackref.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expression escape sequences of the form '\\n', where 'n' is a positive number greater than the number of capture groups in the regular expression, are not allowed by the...",
+         "sourceRelativePath" : "RegExp/UnboundBackref.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions"
+         ],
+         "title" : "Unbound back reference"
+      },
+      {
+         "id" : "js/regex/unmatchable-caret",
+         "instructionPath" : "instructions/js/regex/unmatchable-caret.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnmatchableCaret.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a caret assertion '^' appears in a regular expression after another term that cannot match the empty string, then this assertion can never match, so the entire regular...",
+         "sourceRelativePath" : "RegExp/UnmatchableCaret.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unmatchable caret in regular expression"
+      },
+      {
+         "id" : "js/regex/unmatchable-dollar",
+         "instructionPath" : "instructions/js/regex/unmatchable-dollar.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnmatchableDollar.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If a dollar assertion '$' appears in a regular expression before another term that cannot match the empty string, then this assertion can never match, so the entire regular...",
+         "sourceRelativePath" : "RegExp/UnmatchableDollar.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "regular-expressions",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unmatchable dollar in regular expression"
+      },
+      {
+         "id" : "js/incomplete-hostname-regexp",
+         "instructionPath" : "instructions/js/incomplete-hostname-regexp.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteHostnameRegExp.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching a URL or hostname against a regular expression that contains an unescaped dot as part of the hostname might match more hostnames than expected.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteHostnameRegExp.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete regular expression for hostnames"
+      },
+      {
+         "id" : "js/incomplete-url-scheme-check",
+         "instructionPath" : "instructions/js/incomplete-url-scheme-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteUrlSchemeCheck.js",
+            "IncompleteUrlSchemeCheckGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Checking for the \"javascript:\" URL scheme without also checking for \"vbscript:\" and \"data:\" suggests a logic error or even a security vulnerability.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteUrlSchemeCheck.ql",
+         "tags" : [
+            "security",
+            "correctness",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-184"
+         ],
+         "title" : "Incomplete URL scheme check"
+      },
+      {
+         "id" : "js/incomplete-url-substring-sanitization",
+         "instructionPath" : "instructions/js/incomplete-url-substring-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteUrlSubstringSanitization_BAD1.js",
+            "IncompleteUrlSubstringSanitization_BAD2.js",
+            "IncompleteUrlSubstringSanitization_GOOD.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Security checks on the substrings of an unparsed URL are often vulnerable to bypassing.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteUrlSubstringSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete URL substring sanitization"
+      },
+      {
+         "id" : "js/incorrect-suffix-check",
+         "instructionPath" : "instructions/js/incorrect-suffix-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncorrectSuffixCheck.js",
+            "IncorrectSuffixCheckGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using indexOf to implement endsWith functionality is error-prone if the -1 case is not explicitly handled.",
+         "sourceRelativePath" : "Security/CWE-020/IncorrectSuffixCheck.ql",
+         "tags" : [
+            "security",
+            "correctness",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incorrect suffix check"
+      },
+      {
+         "id" : "js/missing-origin-check",
+         "instructionPath" : "instructions/js/missing-origin-check.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "MissingOriginCheckBad.js",
+            "MissingOriginCheckGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Missing origin verification in a `postMessage` handler allows any windows to send arbitrary data to the handler.",
+         "sourceRelativePath" : "Security/CWE-020/MissingOriginCheck.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-940"
+         ],
+         "title" : "Missing origin verification in `postMessage` handler"
+      },
+      {
+         "id" : "js/regex/missing-regexp-anchor",
+         "instructionPath" : "instructions/js/regex/missing-regexp-anchor.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "MissingRegExpAnchor_BAD.js",
+            "MissingRegExpAnchor_GOOD.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expressions without anchors can be vulnerable to bypassing.",
+         "sourceRelativePath" : "Security/CWE-020/MissingRegExpAnchor.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Missing regular expression anchor"
+      },
+      {
+         "id" : "js/overly-large-range",
+         "instructionPath" : "instructions/js/overly-large-range.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Overly permissive regular expression ranges match a wider range of characters than intended.",
+         "sourceRelativePath" : "Security/CWE-020/OverlyLargeRange.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Overly permissive regular expression range"
+      },
+      {
+         "id" : "js/untrusted-data-to-external-api",
+         "instructionPath" : "instructions/js/untrusted-data-to-external-api.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Data provided remotely is used in this external API without sanitization, which could be a security risk.",
+         "sourceRelativePath" : "Security/CWE-020/UntrustedDataToExternalAPI.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Untrusted data passed to external API"
+      },
+      {
+         "id" : "js/useless-regexp-character-escape",
+         "instructionPath" : "instructions/js/useless-regexp-character-escape.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UselessRegExpCharacterEscape_bad_1.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Prepending a backslash to an ordinary character in a string does not have any effect, and may make regular expressions constructed from this string behave unexpectedly.",
+         "sourceRelativePath" : "Security/CWE-020/UselessRegExpCharacterEscape.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Useless regular-expression character escape"
+      },
+      {
+         "id" : "js/path-injection",
+         "instructionPath" : "instructions/js/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TaintedPath.js",
+            "TaintedPathGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "Security/CWE-022/TaintedPath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "js/zipslip",
+         "instructionPath" : "instructions/js/zipslip.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ZipSlipBad.js",
+            "ZipSlipGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Extracting files from a malicious ZIP file, or similar type of archive, without validating that the destination file path is within the destination directory can allow an...",
+         "sourceRelativePath" : "Security/CWE-022/ZipSlip.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022"
+         ],
+         "title" : "Arbitrary file access during archive extraction (\"Zip Slip\")"
+      },
+      {
+         "id" : "js/template-object-injection",
+         "instructionPath" : "instructions/js/template-object-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TemplateObjectInjection.js",
+            "TemplateObjectInjection_fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Instantiating a template using a user-controlled object is vulnerable to local file read and potential remote code execution.",
+         "sourceRelativePath" : "Security/CWE-073/TemplateObjectInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-094"
+         ],
+         "title" : "Template Object Injection"
+      },
+      {
+         "id" : "js/command-line-injection",
+         "instructionPath" : "instructions/js/command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "Security/CWE-078/CommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Uncontrolled command line"
+      },
+      {
+         "id" : "js/indirect-command-line-injection",
+         "instructionPath" : "instructions/js/indirect-command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "indirect-command-injection.js",
+            "indirect-command-injection_fixed.js",
+            "indirect-command-injection_shellquote.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Forwarding command-line arguments to a child process executed within a shell may indirectly introduce command-line injection vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-078/IndirectCommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Indirect uncontrolled command line"
+      },
+      {
+         "id" : "js/second-order-command-line-injection",
+         "instructionPath" : "instructions/js/second-order-command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "second-order-command-injection.js",
+            "second-order-command-injection-fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using user-controlled data as arguments to some commands, such as git clone, can allow arbitrary commands to be executed.",
+         "sourceRelativePath" : "Security/CWE-078/SecondOrderCommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Second order command injection"
+      },
+      {
+         "id" : "js/shell-command-injection-from-environment",
+         "instructionPath" : "instructions/js/shell-command-injection-from-environment.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "shell-command-injection-from-environment.js",
+            "shell-command-injection-from-environment_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Building a shell command string with values from the enclosing environment may cause subtle bugs or vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-078/ShellCommandInjectionFromEnvironment.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Shell command built from environment values"
+      },
+      {
+         "id" : "js/shell-command-constructed-from-input",
+         "instructionPath" : "instructions/js/shell-command-constructed-from-input.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "unsafe-shell-command-construction.js",
+            "unsafe-shell-command-construction_fixed.js",
+            "unsafe-shell-command-construction_pipe.js",
+            "unsafe-shell-command-construction_pipe_fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "Security/CWE-078/UnsafeShellCommandConstruction.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Unsafe shell command constructed from library input"
+      },
+      {
+         "id" : "js/unnecessary-use-of-cat",
+         "instructionPath" : "instructions/js/unnecessary-use-of-cat.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "useless-cat.js",
+            "useless-cat-fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using the  `cat` process to read a file is unnecessarily complex, inefficient, unportable, and can lead to subtle bugs, or even security vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-078/UselessUseOfCat.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "maintainability",
+            "external/cwe/cwe-078"
+         ],
+         "title" : "Unnecessary use of `cat` process"
+      },
+      {
+         "id" : "js/xss-through-exception",
+         "instructionPath" : "instructions/js/xss-through-exception.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ExceptionXss.js",
+            "ExceptionXssAjv.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Reinterpreting text from an exception as HTML can lead to a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/ExceptionXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Exception text reinterpreted as HTML"
+      },
+      {
+         "id" : "js/reflected-xss",
+         "instructionPath" : "instructions/js/reflected-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReflectedXss.js",
+            "ReflectedXssGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to an HTTP response allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/ReflectedXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Reflected cross-site scripting"
+      },
+      {
+         "id" : "js/stored-xss",
+         "instructionPath" : "instructions/js/stored-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StoredXss.js",
+            "StoredXssGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using uncontrolled stored values in HTML allows for a stored cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/StoredXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Stored cross-site scripting"
+      },
+      {
+         "id" : "js/html-constructed-from-input",
+         "instructionPath" : "instructions/js/html-constructed-from-input.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "unsafe-html-construction.js",
+            "unsafe-html-construction_safe.js",
+            "unsafe-html-construction_sanitizer.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings to construct HTML might allow a malicious user to perform a cross-site scripting attack.",
+         "sourceRelativePath" : "Security/CWE-079/UnsafeHtmlConstruction.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Unsafe HTML constructed from library input"
+      },
+      {
+         "id" : "js/unsafe-jquery-plugin",
+         "instructionPath" : "instructions/js/unsafe-jquery-plugin.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsafeJQueryPlugin.js",
+            "UnsafeJQueryPlugin_safe.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A jQuery plugin that unintentionally constructs HTML from some of its options may be unsafe to use for clients.",
+         "sourceRelativePath" : "Security/CWE-079/UnsafeJQueryPlugin.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116",
+            "frameworks/jquery"
+         ],
+         "title" : "Unsafe jQuery plugin"
+      },
+      {
+         "id" : "js/xss",
+         "instructionPath" : "instructions/js/xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to the DOM allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/Xss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Client-side cross-site scripting"
+      },
+      {
+         "id" : "js/xss-through-dom",
+         "instructionPath" : "instructions/js/xss-through-dom.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XssThroughDom.js",
+            "XssThroughDomFixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Reinterpreting text from the DOM as HTML can lead to a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/XssThroughDom.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "DOM text reinterpreted as HTML"
+      },
+      {
+         "id" : "js/sql-injection",
+         "instructionPath" : "instructions/js/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building a database query from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089",
+            "external/cwe/cwe-090",
+            "external/cwe/cwe-943"
+         ],
+         "title" : "Database query built from user-controlled sources"
+      },
+      {
+         "id" : "js/code-injection",
+         "instructionPath" : "instructions/js/code-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Interpreting unsanitized user input as code allows a malicious user arbitrary code execution.",
+         "sourceRelativePath" : "Security/CWE-094/CodeInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Code injection"
+      },
+      {
+         "id" : "js/bad-code-sanitization",
+         "instructionPath" : "instructions/js/bad-code-sanitization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ImproperCodeSanitization.js",
+            "ImproperCodeSanitizationFixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Escaping code as HTML does not provide protection against code injection.",
+         "sourceRelativePath" : "Security/CWE-094/ImproperCodeSanitization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Improper code sanitization"
+      },
+      {
+         "id" : "js/unsafe-code-construction",
+         "instructionPath" : "instructions/js/unsafe-code-construction.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnsafeCodeConstruction.js",
+            "UnsafeCodeConstructionSafe.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using externally controlled strings to construct code may allow a malicious user to execute arbitrary code.",
+         "sourceRelativePath" : "Security/CWE-094/UnsafeCodeConstruction.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Unsafe code constructed from library input"
+      },
+      {
+         "id" : "js/unsafe-dynamic-method-access",
+         "instructionPath" : "instructions/js/unsafe-dynamic-method-access.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsafeDynamicMethodAccess.js",
+            "UnsafeDynamicMethodAccessGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Invoking user-controlled methods on certain objects can lead to remote code execution.",
+         "sourceRelativePath" : "Security/CWE-094/UnsafeDynamicMethodAccess.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094"
+         ],
+         "title" : "Unsafe dynamic method access"
+      },
+      {
+         "id" : "js/client-exposed-cookie",
+         "instructionPath" : "instructions/js/client-exposed-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ClientExposedCookieBad.js",
+            "ClientExposedCookieGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sensitive cookies set by a server can be read by the client if the `httpOnly` flag is not set.",
+         "sourceRelativePath" : "Security/CWE-1004/ClientExposedCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1004"
+         ],
+         "title" : "Sensitive server cookie exposed to the client"
+      },
+      {
+         "id" : "js/bad-tag-filter",
+         "instructionPath" : "instructions/js/bad-tag-filter.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadTagFilter.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching HTML tags using regular expressions is hard to do right, and can easily lead to security issues.",
+         "sourceRelativePath" : "Security/CWE-116/BadTagFilter.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-080",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-184",
+            "external/cwe/cwe-185",
+            "external/cwe/cwe-186"
+         ],
+         "title" : "Bad HTML filtering regexp"
+      },
+      {
+         "id" : "js/double-escaping",
+         "instructionPath" : "instructions/js/double-escaping.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DoubleEscaping.js",
+            "DoubleEscapingGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When escaping special characters using a meta-character like backslash or ampersand, the meta-character has to be escaped first to avoid double-escaping, and conversely it has to...",
+         "sourceRelativePath" : "Security/CWE-116/DoubleEscaping.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Double escaping or unescaping"
+      },
+      {
+         "id" : "js/incomplete-html-attribute-sanitization",
+         "instructionPath" : "instructions/js/incomplete-html-attribute-sanitization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteHtmlAttributeSanitization.js",
+            "IncompleteHtmlAttributeSanitizationGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Writing incompletely sanitized values to HTML attribute strings can lead to a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-116/IncompleteHtmlAttributeSanitization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete HTML attribute sanitization"
+      },
+      {
+         "id" : "js/incomplete-multi-character-sanitization",
+         "instructionPath" : "instructions/js/incomplete-multi-character-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A sanitizer that removes a sequence of characters may reintroduce the dangerous sequence.",
+         "sourceRelativePath" : "Security/CWE-116/IncompleteMultiCharacterSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-080",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Incomplete multi-character sanitization"
+      },
+      {
+         "id" : "js/incomplete-sanitization",
+         "instructionPath" : "instructions/js/incomplete-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteSanitization.js",
+            "IncompleteSanitizationGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A string transformer that does not replace or escape all occurrences of a meta-character may be ineffective.",
+         "sourceRelativePath" : "Security/CWE-116/IncompleteSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-080",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Incomplete string escaping or encoding"
+      },
+      {
+         "id" : "js/unsafe-html-expansion",
+         "instructionPath" : "instructions/js/unsafe-html-expansion.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnsafeHtmlExpansion.js",
+            "UnsafeHtmlExpansion-original.html",
+            "UnsafeHtmlExpansion-transformed.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using regular expressions to expand self-closing HTML tags may lead to cross-site scripting vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-116/UnsafeHtmlExpansion.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Unsafe expansion of self-closing HTML tag"
+      },
+      {
+         "id" : "js/log-injection",
+         "instructionPath" : "instructions/js/log-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled sources is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "Security/CWE-117/LogInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log injection"
+      },
+      {
+         "id" : "js/samesite-none-cookie",
+         "instructionPath" : "instructions/js/samesite-none-cookie.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "SameSiteCookieBad.js",
+            "SameSiteCookieGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sensitive cookies where the SameSite attribute is set to \"None\" can in some cases allow for Cross-Site Request Forgery (CSRF) attacks.",
+         "sourceRelativePath" : "Security/CWE-1275/SameSiteNoneCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1275"
+         ],
+         "title" : "Sensitive cookie without SameSite restrictions"
+      },
+      {
+         "id" : "js/tainted-format-string",
+         "instructionPath" : "instructions/js/tainted-format-string.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Using external input in format strings can lead to garbled output.",
+         "sourceRelativePath" : "Security/CWE-134/TaintedFormatString.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-134"
+         ],
+         "title" : "Use of externally-controlled format string"
+      },
+      {
+         "id" : "js/case-sensitive-middleware-path",
+         "instructionPath" : "instructions/js/case-sensitive-middleware-path.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CaseSensitiveMiddlewarePath.js",
+            "CaseSensitiveMiddlewarePathGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Middleware with case-sensitive paths do not protect endpoints with case-insensitive paths.",
+         "sourceRelativePath" : "Security/CWE-178/CaseSensitiveMiddlewarePath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-178"
+         ],
+         "title" : "Case-sensitive middleware path"
+      },
+      {
+         "id" : "js/file-access-to-http",
+         "instructionPath" : "instructions/js/file-access-to-http.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "FileAccessToHttp.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Directly sending file data in an outbound network request can indicate unauthorized information disclosure.",
+         "sourceRelativePath" : "Security/CWE-200/FileAccessToHttp.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-200"
+         ],
+         "title" : "File data in outbound network request"
+      },
+      {
+         "id" : "js/exposure-of-private-files",
+         "instructionPath" : "instructions/js/exposure-of-private-files.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PrivateFileExposure.js",
+            "PrivateFileExposureFixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Exposing a node_modules folder, or the project folder to the public, can cause exposure of private information.",
+         "sourceRelativePath" : "Security/CWE-200/PrivateFileExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-200",
+            "external/cwe/cwe-219",
+            "external/cwe/cwe-548"
+         ],
+         "title" : "Exposure of private files"
+      },
+      {
+         "id" : "js/cross-window-information-leak",
+         "instructionPath" : "instructions/js/cross-window-information-leak.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PostMessageStar.js",
+            "PostMessageStarGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "When sending sensitive information to another window using `postMessage`, the origin of the target window should be restricted to avoid unintentional information leaks.",
+         "sourceRelativePath" : "Security/CWE-201/PostMessageStar.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-201",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Cross-window communication with unrestricted target origin"
+      },
+      {
+         "id" : "js/stack-trace-exposure",
+         "instructionPath" : "instructions/js/stack-trace-exposure.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "StackTraceExposureBad.js",
+            "StackTraceExposureGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Propagating stack trace information to an external user can unintentionally reveal implementation details that are useful to an attacker for developing a subsequent exploit.",
+         "sourceRelativePath" : "Security/CWE-209/StackTraceExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-209",
+            "external/cwe/cwe-497"
+         ],
+         "title" : "Information exposure through a stack trace"
+      },
+      {
+         "id" : "js/disabling-certificate-validation",
+         "instructionPath" : "instructions/js/disabling-certificate-validation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DisablingCertificateValidation.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Disabling cryptographic certificate validation can cause security vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-295/DisablingCertificateValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295",
+            "external/cwe/cwe-297"
+         ],
+         "title" : "Disabling certificate validation"
+      },
+      {
+         "id" : "js/insecure-dependency",
+         "instructionPath" : "instructions/js/insecure-dependency.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "bad-package.json",
+            "good-package.json"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using unencrypted protocols to fetch dependencies can leave an application open to man-in-the-middle attacks.",
+         "sourceRelativePath" : "Security/CWE-300/InsecureDependencyResolution.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-300",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-494",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Dependency download using unencrypted communication channel"
+      },
+      {
+         "id" : "js/build-artifact-leak",
+         "instructionPath" : "instructions/js/build-artifact-leak.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "build-leak.js",
+            "build-leak-fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Including sensitive information in a build artifact can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/BuildArtifactLeak.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-315",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Storage of sensitive information in build artifact"
+      },
+      {
+         "id" : "js/clear-text-logging",
+         "instructionPath" : "instructions/js/clear-text-logging.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextLogging.js",
+            "CleartextLoggingGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Logging sensitive information without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/CleartextLogging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-359",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Clear-text logging of sensitive information"
+      },
+      {
+         "id" : "js/clear-text-storage-of-sensitive-data",
+         "instructionPath" : "instructions/js/clear-text-storage-of-sensitive-data.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextStorage.js",
+            "CleartextStorageGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Sensitive information stored without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/CleartextStorage.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-315",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Clear text storage of sensitive information"
+      },
+      {
+         "id" : "js/password-in-configuration-file",
+         "instructionPath" : "instructions/js/password-in-configuration-file.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Storing unencrypted passwords in configuration files is unsafe.",
+         "sourceRelativePath" : "Security/CWE-313/PasswordInConfigurationFile.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-256",
+            "external/cwe/cwe-260",
+            "external/cwe/cwe-313",
+            "external/cwe/cwe-522"
+         ],
+         "title" : "Password in configuration file"
+      },
+      {
+         "id" : "js/insufficient-key-size",
+         "instructionPath" : "instructions/js/insufficient-key-size.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Using a weak cryptographic key can allow an attacker to compromise security.",
+         "sourceRelativePath" : "Security/CWE-326/InsufficientKeySize.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-326"
+         ],
+         "title" : "Use of a weak cryptographic key"
+      },
+      {
+         "id" : "js/biased-cryptographic-random",
+         "instructionPath" : "instructions/js/biased-cryptographic-random.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "bad-random.js",
+            "bad-random-fixed.js",
+            "bad-random-fixed2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Some mathematical operations on random numbers can cause bias in the results and compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/BadRandomness.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Creating biased random numbers from a cryptographically secure source"
+      },
+      {
+         "id" : "js/weak-cryptographic-algorithm",
+         "instructionPath" : "instructions/js/weak-cryptographic-algorithm.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BrokenCryptoAlgorithm.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic algorithms can compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/BrokenCryptoAlgorithm.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328"
+         ],
+         "title" : "Use of a broken or weak cryptographic algorithm"
+      },
+      {
+         "id" : "js/insecure-randomness",
+         "instructionPath" : "instructions/js/insecure-randomness.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureRandomness.js",
+            "InsecureRandomness_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using a cryptographically weak pseudo-random number generator to generate a security-sensitive value may allow an attacker to predict what value will be generated.",
+         "sourceRelativePath" : "Security/CWE-338/InsecureRandomness.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-338"
+         ],
+         "title" : "Insecure randomness"
+      },
+      {
+         "id" : "js/cors-misconfiguration-for-credentials",
+         "instructionPath" : "instructions/js/cors-misconfiguration-for-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Misconfiguration of CORS HTTP headers allows for leaks of secret credentials.",
+         "sourceRelativePath" : "Security/CWE-346/CorsMisconfigurationForCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-346",
+            "external/cwe/cwe-639",
+            "external/cwe/cwe-942"
+         ],
+         "title" : "CORS misconfiguration for credentials transfer"
+      },
+      {
+         "id" : "js/jwt-missing-verification",
+         "instructionPath" : "instructions/js/jwt-missing-verification.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "missing-key-verification-bad.js",
+            "missing-key-verification-good.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The application does not verify the JWT payload with a cryptographic secret or public key.",
+         "sourceRelativePath" : "Security/CWE-347/MissingJWTKeyVerification.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-347"
+         ],
+         "title" : "JWT missing secret or public key verification"
+      },
+      {
+         "id" : "js/missing-token-validation",
+         "instructionPath" : "instructions/js/missing-token-validation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingCsrfMiddlewareBad.js",
+            "MissingCsrfMiddlewareGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using cookies without CSRF protection may allow malicious websites to submit requests on behalf of the user.",
+         "sourceRelativePath" : "Security/CWE-352/MissingCsrfMiddleware.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "Missing CSRF middleware"
+      },
+      {
+         "id" : "js/file-system-race",
+         "instructionPath" : "instructions/js/file-system-race.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "file-race-bad.js",
+            "file-race-good.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Separately checking the state of a file before operating on it may allow an attacker to modify the file between the two operations.",
+         "sourceRelativePath" : "Security/CWE-367/FileSystemRace.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-367"
+         ],
+         "title" : "Potential file system race condition"
+      },
+      {
+         "id" : "js/insecure-temporary-file",
+         "instructionPath" : "instructions/js/insecure-temporary-file.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "insecure-temporary-file.js",
+            "secure-temporary-file.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Creating a temporary file that is accessible by other users can lead to information disclosure and sometimes remote code execution.",
+         "sourceRelativePath" : "Security/CWE-377/InsecureTemporaryFile.ql",
+         "tags" : [
+            "external/cwe/cwe-377",
+            "external/cwe/cwe-378",
+            "security"
+         ],
+         "title" : "Insecure temporary file"
+      },
+      {
+         "id" : "js/session-fixation",
+         "instructionPath" : "instructions/js/session-fixation.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "SessionFixation.js",
+            "SessionFixationFixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Reusing an existing session as a different user could allow an attacker to access someone else's account by using their session.",
+         "sourceRelativePath" : "Security/CWE-384/SessionFixation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-384"
+         ],
+         "title" : "Failure to abandon session"
+      },
+      {
+         "id" : "js/resource-exhaustion-from-deep-object-traversal",
+         "instructionPath" : "instructions/js/resource-exhaustion-from-deep-object-traversal.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DeepObjectResourceExhaustion.js",
+            "DeepObjectResourceExhaustion_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Processing user-controlled object hierarchies inefficiently can lead to denial of service.",
+         "sourceRelativePath" : "Security/CWE-400/DeepObjectResourceExhaustion.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Resources exhaustion from deep object traversal"
+      },
+      {
+         "id" : "js/remote-property-injection",
+         "instructionPath" : "instructions/js/remote-property-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Allowing writes to arbitrary properties of an object may lead to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-400/RemotePropertyInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-250",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Remote property injection"
+      },
+      {
+         "id" : "js/missing-x-frame-options",
+         "instructionPath" : "instructions/js/missing-x-frame-options.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "missing-X-Frame-Options.js",
+            "X-Frame-Options.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If the 'X-Frame-Options' setting is not provided, a malicious user may be able to overlay their own UI on top of the site by using an iframe.",
+         "sourceRelativePath" : "Security/CWE-451/MissingXFrameOptions.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-451",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Missing X-Frame-Options HTTP header"
+      },
+      {
+         "id" : "js/unsafe-deserialization",
+         "instructionPath" : "instructions/js/unsafe-deserialization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Deserializing user-controlled data may allow attackers to execute arbitrary code.",
+         "sourceRelativePath" : "Security/CWE-502/UnsafeDeserialization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-502"
+         ],
+         "title" : "Deserialization of user-controlled data"
+      },
+      {
+         "id" : "js/hardcoded-data-interpreted-as-code",
+         "instructionPath" : "instructions/js/hardcoded-data-interpreted-as-code.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "HardcodedDataInterpretedAsCode.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Transforming hard-coded data (such as hexadecimal constants) into code to be executed is a technique often associated with backdoors and should be avoided.",
+         "sourceRelativePath" : "Security/CWE-506/HardcodedDataInterpretedAsCode.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-506"
+         ],
+         "title" : "Hard-coded data interpreted as code"
+      },
+      {
+         "id" : "js/sensitive-get-query",
+         "instructionPath" : "instructions/js/sensitive-get-query.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SensitiveGet.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Placing sensitive data in a GET request increases the risk of the data being exposed to an attacker.",
+         "sourceRelativePath" : "Security/CWE-598/SensitiveGetQuery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-598"
+         ],
+         "title" : "Sensitive data read from GET request"
+      },
+      {
+         "id" : "js/client-side-unvalidated-url-redirection",
+         "instructionPath" : "instructions/js/client-side-unvalidated-url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ClientSideUrlRedirect.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Client-side URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "Security/CWE-601/ClientSideUrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "Client-side URL redirect"
+      },
+      {
+         "id" : "js/server-side-unvalidated-url-redirection",
+         "instructionPath" : "instructions/js/server-side-unvalidated-url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ServerSideUrlRedirect.js",
+            "ServerSideUrlRedirectGood.js",
+            "ServerSideUrlRedirectGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Server-side URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "Security/CWE-601/ServerSideUrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "Server-side URL redirect"
+      },
+      {
+         "id" : "js/xxe",
+         "instructionPath" : "instructions/js/xxe.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Parsing user input as an XML document with external entity expansion is vulnerable to XXE attacks.",
+         "sourceRelativePath" : "Security/CWE-611/Xxe.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-611",
+            "external/cwe/cwe-827"
+         ],
+         "title" : "XML external entity expansion"
+      },
+      {
+         "id" : "js/clear-text-cookie",
+         "instructionPath" : "instructions/js/clear-text-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ClearTextCookieBad.js",
+            "ClearTextCookieGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sending sensitive information in a cookie without requring SSL encryption can expose the cookie to an attacker.",
+         "sourceRelativePath" : "Security/CWE-614/ClearTextCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-614",
+            "external/cwe/cwe-311",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-319"
+         ],
+         "title" : "Clear text transmission of sensitive cookie"
+      },
+      {
+         "id" : "js/host-header-forgery-in-email-generation",
+         "instructionPath" : "instructions/js/host-header-forgery-in-email-generation.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "HostHeaderPoisoningInEmailGeneration.js",
+            "HostHeaderPoisoningInEmailGenerationGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using the HTTP Host header to construct a link in an email can facilitate phishing attacks and leak password reset tokens.",
+         "sourceRelativePath" : "Security/CWE-640/HostHeaderPoisoningInEmailGeneration.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-640"
+         ],
+         "title" : "Host header poisoning in email generation"
+      },
+      {
+         "id" : "js/xpath-injection",
+         "instructionPath" : "instructions/js/xpath-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building an XPath expression from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-643/XpathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-643"
+         ],
+         "title" : "XPath injection"
+      },
+      {
+         "id" : "js/insecure-helmet-configuration",
+         "instructionPath" : "instructions/js/insecure-helmet-configuration.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "helmet_insecure.js",
+            "helmet_default.js",
+            "helmet_custom.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The Helmet middleware is used to set security-related HTTP headers in Express applications.",
+         "sourceRelativePath" : "Security/CWE-693/InsecureHelmet.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-693",
+            "external/cwe/cwe-1021"
+         ],
+         "title" : "Insecure configuration of Helmet security middleware"
+      },
+      {
+         "id" : "js/regex-injection",
+         "instructionPath" : "instructions/js/regex-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to inject an expression that could require exponential...",
+         "sourceRelativePath" : "Security/CWE-730/RegExpInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Regular expression injection"
+      },
+      {
+         "id" : "js/server-crash",
+         "instructionPath" : "instructions/js/server-crash.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "server-crash.BAD.js",
+            "server-crash.GOOD-A.js",
+            "server-crash.GOOD-B.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A server that can be forced to crash may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-730/ServerCrash.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-248",
+            "external/cwe/cwe-730"
+         ],
+         "title" : "Server crash"
+      },
+      {
+         "id" : "js/unvalidated-dynamic-method-call",
+         "instructionPath" : "instructions/js/unvalidated-dynamic-method-call.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnvalidatedDynamicMethodCall.js",
+            "UnvalidatedDynamicMethodCallGood.js",
+            "UnvalidatedDynamicMethodCallGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling a method with a user-controlled name may dispatch to an unexpected target, which could cause an exception.",
+         "sourceRelativePath" : "Security/CWE-754/UnvalidatedDynamicMethodCall.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-754"
+         ],
+         "title" : "Unvalidated dynamic method call"
+      },
+      {
+         "id" : "js/missing-rate-limiting",
+         "instructionPath" : "instructions/js/missing-rate-limiting.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingRateLimiting.js",
+            "MissingRateLimitingGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An HTTP request handler that performs expensive operations without restricting the rate at which operations can be carried out is vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-770/MissingRateLimiting.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-770",
+            "external/cwe/cwe-307",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Missing rate limiting"
+      },
+      {
+         "id" : "js/resource-exhaustion",
+         "instructionPath" : "instructions/js/resource-exhaustion.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Allocating objects or timers with user-controlled sizes or durations can cause resource exhaustion.",
+         "sourceRelativePath" : "Security/CWE-770/ResourceExhaustion.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-400",
+            "external/cwe/cwe-770"
+         ],
+         "title" : "Resource exhaustion"
+      },
+      {
+         "id" : "js/xml-bomb",
+         "instructionPath" : "instructions/js/xml-bomb.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Parsing user input as an XML document with arbitrary internal entity expansion is vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-776/XmlBomb.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-776",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "XML internal entity expansion"
+      },
+      {
+         "id" : "js/hardcoded-credentials",
+         "instructionPath" : "instructions/js/hardcoded-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HardcodedCredentialsHttpRequest.js",
+            "HardcodedCredentialsHttpRequestFixed.js",
+            "HardcodedCredentials.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Hard-coding credentials in source code may enable an attacker to gain unauthorized access.",
+         "sourceRelativePath" : "Security/CWE-798/HardcodedCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded credentials"
+      },
+      {
+         "id" : "js/user-controlled-bypass",
+         "instructionPath" : "instructions/js/user-controlled-bypass.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Conditions that the user controls are not suited for making security-related decisions.",
+         "sourceRelativePath" : "Security/CWE-807/ConditionalBypass.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-807",
+            "external/cwe/cwe-290"
+         ],
+         "title" : "User-controlled bypass of security check"
+      },
+      {
+         "id" : "js/different-kinds-comparison-bypass",
+         "instructionPath" : "instructions/js/different-kinds-comparison-bypass.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Comparing different kinds of HTTP request data may be a symptom of an insufficient security check.",
+         "sourceRelativePath" : "Security/CWE-807/DifferentKindsComparisonBypass.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-807",
+            "external/cwe/cwe-290"
+         ],
+         "title" : "Comparison of user-controlled data of different kinds"
+      },
+      {
+         "id" : "js/insecure-download",
+         "instructionPath" : "instructions/js/insecure-download.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "insecure-download.js",
+            "secure-download.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Downloading executables and other sensitive files over an insecure connection opens up for potential man-in-the-middle attacks.",
+         "sourceRelativePath" : "Security/CWE-829/InsecureDownload.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Download of sensitive file through insecure connection"
+      },
+      {
+         "id" : "js/functionality-from-untrusted-domain",
+         "instructionPath" : "instructions/js/functionality-from-untrusted-domain.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "polyfill-compromised.html",
+            "polyfill-trusted.html",
+            "polyfill-sri.html"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a resource from an untrusted or compromised domain makes your code vulnerable to receiving malicious code.",
+         "sourceRelativePath" : "Security/CWE-830/FunctionalityFromUntrustedDomain.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-830"
+         ],
+         "title" : "Untrusted domain used in script or other content"
+      },
+      {
+         "id" : "js/functionality-from-untrusted-source",
+         "instructionPath" : "instructions/js/functionality-from-untrusted-source.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "jquery-http-nocheck.html",
+            "jquery-https-check.html"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Including functionality from an untrusted source may allow an attacker to control the functionality and execute arbitrary code.",
+         "sourceRelativePath" : "Security/CWE-830/FunctionalityFromUntrustedSource.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-830"
+         ],
+         "title" : "Inclusion of functionality from an untrusted source"
+      },
+      {
+         "id" : "js/loop-bound-injection",
+         "instructionPath" : "instructions/js/loop-bound-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LoopBoundInjection.js",
+            "LoopBoundInjection_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Iterating over an object with a user-controlled .length property can cause indefinite looping.",
+         "sourceRelativePath" : "Security/CWE-834/LoopBoundInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-834",
+            "external/cwe/cwe-730"
+         ],
+         "title" : "Loop bound injection"
+      },
+      {
+         "id" : "js/type-confusion-through-parameter-tampering",
+         "instructionPath" : "instructions/js/type-confusion-through-parameter-tampering.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TypeConfusionThroughParameterTampering.js",
+            "TypeConfusionThroughParameterTampering_fixed.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Sanitizing an HTTP request parameter may be ineffective if the user controls its type.",
+         "sourceRelativePath" : "Security/CWE-843/TypeConfusionThroughParameterTampering.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-843"
+         ],
+         "title" : "Type confusion through parameter tampering"
+      },
+      {
+         "id" : "js/empty-password-in-configuration-file",
+         "instructionPath" : "instructions/js/empty-password-in-configuration-file.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Failing to set a password reduces the security of your code.",
+         "sourceRelativePath" : "Security/CWE-862/EmptyPasswordInConfigurationFile.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-258",
+            "external/cwe/cwe-862"
+         ],
+         "title" : "Empty password in configuration file"
+      },
+      {
+         "id" : "js/http-to-file-access",
+         "instructionPath" : "instructions/js/http-to-file-access.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "HttpToFileAccess.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Writing network data directly to the file system allows arbitrary file upload and might indicate a backdoor.",
+         "sourceRelativePath" : "Security/CWE-912/HttpToFileAccess.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-912",
+            "external/cwe/cwe-434"
+         ],
+         "title" : "Network data written to file"
+      },
+      {
+         "id" : "js/prototype-polluting-assignment",
+         "instructionPath" : "instructions/js/prototype-polluting-assignment.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Modifying an object obtained via a user-controlled property name may lead to accidental mutation of the built-in Object prototype, and possibly escalate to remote code execution...",
+         "sourceRelativePath" : "Security/CWE-915/PrototypePollutingAssignment.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-400",
+            "external/cwe/cwe-471",
+            "external/cwe/cwe-915"
+         ],
+         "title" : "Prototype-polluting assignment"
+      },
+      {
+         "id" : "js/prototype-pollution-utility",
+         "instructionPath" : "instructions/js/prototype-pollution-utility.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PrototypePollutingFunction.js",
+            "PrototypePollutingFunction_fixed.js",
+            "PrototypePollutingFunction_fixed2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Functions recursively assigning properties on objects may be the cause of accidental modification of a built-in prototype object.",
+         "sourceRelativePath" : "Security/CWE-915/PrototypePollutingFunction.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-400",
+            "external/cwe/cwe-471",
+            "external/cwe/cwe-915"
+         ],
+         "title" : "Prototype-polluting function"
+      },
+      {
+         "id" : "js/prototype-pollution",
+         "instructionPath" : "instructions/js/prototype-pollution.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PrototypePollutingMergeCall1.js",
+            "PrototypePollutingMergeCall_fixed.json",
+            "PrototypePollutingMergeCall2.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Recursively merging a user-controlled object into another object can allow an attacker to modify the built-in Object prototype, and possibly escalate to remote code execution or...",
+         "sourceRelativePath" : "Security/CWE-915/PrototypePollutingMergeCall.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-400",
+            "external/cwe/cwe-471",
+            "external/cwe/cwe-915"
+         ],
+         "title" : "Prototype-polluting merge call"
+      },
+      {
+         "id" : "js/insufficient-password-hash",
+         "instructionPath" : "instructions/js/insufficient-password-hash.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsufficientPasswordHash.js",
+            "InsufficientPasswordHash_fixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Creating a hash of a password with low computational effort makes the hash vulnerable to password cracking attacks.",
+         "sourceRelativePath" : "Security/CWE-916/InsufficientPasswordHash.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-916"
+         ],
+         "title" : "Use of password hash with insufficient computational effort"
+      },
+      {
+         "id" : "js/client-side-request-forgery",
+         "instructionPath" : "instructions/js/client-side-request-forgery.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ClientSideRequestForgeryBad.js",
+            "ClientSideRequestForgeryGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Making a client-to-server request with user-controlled data in the URL allows a request forgery attack against the client.",
+         "sourceRelativePath" : "Security/CWE-918/ClientSideRequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Client-side request forgery"
+      },
+      {
+         "id" : "js/request-forgery",
+         "instructionPath" : "instructions/js/request-forgery.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RequestForgeryBad.js",
+            "RequestForgeryGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Making a network request with user-controlled data in the URL allows for request forgery attacks.",
+         "sourceRelativePath" : "Security/CWE-918/RequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Server-side request forgery"
+      },
+      {
+         "id" : "js/cors-permissive-configuration",
+         "instructionPath" : "instructions/js/cors-permissive-configuration.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CorsPermissiveConfigurationBad.js",
+            "CorsPermissiveConfigurationGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Cross-origin resource sharing (CORS) policy allows overly broad access.",
+         "sourceRelativePath" : "Security/CWE-942/CorsPermissiveConfiguration.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-942"
+         ],
+         "title" : "Permissive CORS configuration"
+      },
+      {
+         "id" : "js/misleading-indentation-of-dangling-else",
+         "instructionPath" : "instructions/js/misleading-indentation-of-dangling-else.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DanglingElse.js",
+            "DanglingElseGood.js",
+            "DanglingElseGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The 'else' clause of an 'if' statement should be aligned with the 'if' it belongs to.",
+         "sourceRelativePath" : "Statements/DanglingElse.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "statistical",
+            "non-attributable",
+            "external/cwe/cwe-483"
+         ],
+         "title" : "Misleading indentation of dangling 'else'"
+      },
+      {
+         "id" : "js/single-run-loop",
+         "instructionPath" : "instructions/js/single-run-loop.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "EphemeralLoop.js",
+            "EphemeralLoopGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A loop that executes at most once is confusing and should be rewritten as a conditional.",
+         "sourceRelativePath" : "Statements/EphemeralLoop.ql",
+         "tags" : [
+            "readability"
+         ],
+         "title" : "Loop body executes at most once"
+      },
+      {
+         "id" : "js/ignore-array-result",
+         "instructionPath" : "instructions/js/ignore-array-result.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IgnoreArrayResult.js",
+            "IgnoreArrayResultFixed.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Ignoring the result of an array method that does not modify its receiver is generally an error.",
+         "sourceRelativePath" : "Statements/IgnoreArrayResult.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Ignoring result from pure array method"
+      },
+      {
+         "id" : "js/implicit-return",
+         "instructionPath" : "instructions/js/implicit-return.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ImplicitReturn.js",
+            "ImplicitReturnGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Functions where some execution paths return an explicit value while others \"fall off\" the end of the function and return 'undefined' are hard to maintain and use.",
+         "sourceRelativePath" : "Statements/ImplicitReturn.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Not all control paths return a value"
+      },
+      {
+         "id" : "js/inconsistent-loop-direction",
+         "instructionPath" : "instructions/js/inconsistent-loop-direction.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InconsistentLoopOrientation.js",
+            "InconsistentLoopOrientationGood.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A 'for' loop that increments its loop variable but checks it against a lower bound, or decrements its loop variable but checks it against an upper bound, will either stop...",
+         "sourceRelativePath" : "Statements/InconsistentLoopOrientation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-835"
+         ],
+         "title" : "Inconsistent direction of for loop"
+      },
+      {
+         "id" : "js/mixed-returns",
+         "instructionPath" : "instructions/js/mixed-returns.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "InconsistentReturn.js",
+            "InconsistentReturnGood.js"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A function should either always return an explicit value, or never return a value.",
+         "sourceRelativePath" : "Statements/InconsistentReturn.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Inconsistent return statements"
+      },
+      {
+         "id" : "js/label-in-switch",
+         "instructionPath" : "instructions/js/label-in-switch.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "LabelInCase.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A non-case label appearing in a switch statement that is textually aligned with a case label is confusing to read, or may even indicate a bug.",
+         "sourceRelativePath" : "Statements/LabelInCase.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Non-case label in switch statement"
+      },
+      {
+         "id" : "js/loop-iteration-skipped-due-to-shifting",
+         "instructionPath" : "instructions/js/loop-iteration-skipped-due-to-shifting.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LoopIterationSkippedDueToShifting.js",
+            "LoopIterationSkippedDueToShiftingGood.js",
+            "LoopIterationSkippedDueToShiftingGoodFilter.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Removing elements from an array while iterating over it can cause the loop to skip over some elements, unless the loop index is decremented accordingly.",
+         "sourceRelativePath" : "Statements/LoopIterationSkippedDueToShifting.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Loop iteration skipped due to shifting"
+      },
+      {
+         "id" : "js/misleading-indentation-after-control-statement",
+         "instructionPath" : "instructions/js/misleading-indentation-after-control-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MisleadingIndentationAfterControlStmt.js",
+            "MisleadingIndentationAfterControlStmtGood.js",
+            "MisleadingIndentationAfterControlStmtGood2.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The body of a control statement should have appropriate indentation to clarify which statements it controls and which ones it does not control.",
+         "sourceRelativePath" : "Statements/MisleadingIndentationAfterControlStmt.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "statistical",
+            "non-attributable",
+            "external/cwe/cwe-483"
+         ],
+         "title" : "Misleading indentation after control statement"
+      },
+      {
+         "id" : "js/nested-loops-with-same-variable",
+         "instructionPath" : "instructions/js/nested-loops-with-same-variable.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "NestedLoopsSameVariable.js",
+            "NestedLoopsSameVariableGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Nested loops in which the iteration variable is the same for each loop are difficult to understand.",
+         "sourceRelativePath" : "Statements/NestedLoopsSameVariable.ql",
+         "tags" : [
+            "maintainability",
+            "correctness"
+         ],
+         "title" : "Nested loops with same variable"
+      },
+      {
+         "id" : "js/useless-assignment-in-return",
+         "instructionPath" : "instructions/js/useless-assignment-in-return.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ReturnAssignsLocal.js",
+            "ReturnAssignsLocalGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a local variable in a return statement is useless, since the variable will immediately go out of scope and its value is lost.",
+         "sourceRelativePath" : "Statements/ReturnAssignsLocal.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Return statement assigns local variable"
+      },
+      {
+         "id" : "js/return-outside-function",
+         "instructionPath" : "instructions/js/return-outside-function.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ReturnOutsideFunction.htm",
+            "ReturnOutsideFunctionGood.htm"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A 'return' statement appearing outside a function will cause an error when it is executed.",
+         "sourceRelativePath" : "Statements/ReturnOutsideFunction.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Return statement outside function"
+      },
+      {
+         "id" : "js/unused-loop-variable",
+         "instructionPath" : "instructions/js/unused-loop-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousUnusedLoopIterationVariable.js"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A loop iteration variable is unused, which suggests an error.",
+         "sourceRelativePath" : "Statements/SuspiciousUnusedLoopIterationVariable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unused loop iteration variable"
+      },
+      {
+         "id" : "js/unreachable-statement",
+         "instructionPath" : "instructions/js/unreachable-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnreachableStatement.js",
+            "UnreachableStatementGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Unreachable statements are often indicative of missing code or latent bugs and should be avoided.",
+         "sourceRelativePath" : "Statements/UnreachableStatement.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unreachable statement"
+      },
+      {
+         "id" : "js/use-of-returnless-function",
+         "instructionPath" : "instructions/js/use-of-returnless-function.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UseOfReturnlessFunction.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using the return value of a function that does not return an expression is indicative of a mistake.",
+         "sourceRelativePath" : "Statements/UseOfReturnlessFunction.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of returnless function"
+      },
+      {
+         "id" : "js/useless-comparison-test",
+         "instructionPath" : "instructions/js/useless-comparison-test.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UselessComparisonTest.js",
+            "UselessComparisonTestGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A comparison that always evaluates to true or always evaluates to false may indicate faulty logic and dead code.",
+         "sourceRelativePath" : "Statements/UselessComparisonTest.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Useless comparison test"
+      },
+      {
+         "id" : "js/trivial-conditional",
+         "instructionPath" : "instructions/js/trivial-conditional.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UselessConditional.js",
+            "UselessConditionalGood.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a conditional expression always evaluates to true or always evaluates to false, this suggests incomplete code or a logic error.",
+         "sourceRelativePath" : "Statements/UselessConditional.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Useless conditional"
+      },
+      {
+         "id" : "js/vue/arrow-method-on-vue-instance",
+         "instructionPath" : "instructions/js/vue/arrow-method-on-vue-instance.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ArrowMethodOnVueInstance.js"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An arrow method on a Vue instance doesn't have its `this` variable bound to the Vue instance.",
+         "sourceRelativePath" : "Vue/ArrowMethodOnVueInstance.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "frameworks/vue"
+         ],
+         "title" : "Arrow method on Vue instance"
+      },
+      {
+         "id" : "js/duplicate-function",
+         "instructionPath" : "instructions/js/duplicate-function.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another function that shares a lot of code with this function.",
+         "sourceRelativePath" : "external/DuplicateFunction.ql",
+         "tags" : [
+            "testability",
+            "useless-code",
+            "maintainability",
+            "statistical",
+            "non-attributable",
+            "duplicate-code"
+         ],
+         "title" : "Duplicate function"
+      },
+      {
+         "id" : "js/duplicate-script",
+         "instructionPath" : "instructions/js/duplicate-script.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another script that shares a lot of code with this script.",
+         "sourceRelativePath" : "external/DuplicateToplevel.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "statistical",
+            "non-attributable",
+            "duplicate-code"
+         ],
+         "title" : "Duplicate script"
+      },
+      {
+         "id" : "js/similar-function",
+         "instructionPath" : "instructions/js/similar-function.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another function that shares a lot of code with this function.",
+         "sourceRelativePath" : "external/SimilarFunction.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "statistical",
+            "non-attributable",
+            "duplicate-code"
+         ],
+         "title" : "Similar function"
+      },
+      {
+         "id" : "js/similar-script",
+         "instructionPath" : "instructions/js/similar-script.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another script that shares a lot of code with this script.",
+         "sourceRelativePath" : "external/SimilarToplevel.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "statistical",
+            "non-attributable",
+            "duplicate-code"
+         ],
+         "title" : "Similar script"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:33:57Z",
+   "language" : "javascript"
+}

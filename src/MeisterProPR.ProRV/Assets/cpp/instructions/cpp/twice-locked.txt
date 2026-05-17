@@ -1,0 +1,45 @@
+Review focus: Mutex locked twice
+
+What to look for:
+- Calling the lock method of a mutex twice in succession might cause a deadlock.
+- Mutexes come in two flavors: recursive and non-recursive. For example, the C++ mutex library provides both`std::mutex`and`std::recursive_mutex`. A non-recursive mutex cannot be locked until it has been unlocked by its previous owner, even if it is already owned by the current thread. Deadlock is often caused by a thread attempting to lock the same mutex twice, usually in a recursive algorithm.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TwiceLockedBad.cpp`):
+```
+class C {
+  std::mutex mutex;
+public:
+  // BAD: recursion causes deadlock.
+  int f(int n) {
+    mutex.lock();
+    int result = (n == 0) ? 1 : n*f(n-1);
+    mutex.unlock();
+    return result;
+  }
+};
+```
+- Reference example (`TwiceLockedGood.cpp`):
+```
+class C {
+  std::mutex mutex;
+  int f_impl(int n) {
+    return (n == 0) ? 1 : n*f_impl(n-1);
+  }
+public:
+  // GOOD: recursion is delegated to f_impl.
+  int f(int n) {
+    mutex.lock();
+    int result = f_impl(n);
+    mutex.unlock();
+    return result;
+  }
+};
+```

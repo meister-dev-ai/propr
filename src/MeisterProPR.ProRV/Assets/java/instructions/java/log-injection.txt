@@ -1,0 +1,12 @@
+Review focus: Log Injection
+
+What to look for:
+- Building log entries from user-controlled data may allow insertion of forged log entries by malicious users.
+- If unsanitized user input is written to a log entry, a malicious user may be able to forge new log entries. Forgery can occur if a user provides some input creating the appearance of multiple log entries. This can include unescaped new-line characters, or HTML or other markup.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

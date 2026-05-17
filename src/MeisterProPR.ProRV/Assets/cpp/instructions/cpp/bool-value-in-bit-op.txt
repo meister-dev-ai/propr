@@ -1,0 +1,30 @@
+Review focus: Boolean value in bitwise operation
+
+What to look for:
+- A Boolean value (i.e.
+- This rule finds Boolean values (i.e. expressions that will always have the value 0 or 1) which are used in a bit-wise context. Due to the restricted range of Boolean values, only the lowest bit could possibly be set, and thus applying a bit operation is rarely what is intended. Violations are often indicative of a typo or a misunderstanding of operator precedence. Another common source of defects is using the bitwise AND operator instead of logical AND.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BoolValueInBitOp.cpp`):
+```
+if (!flags & SOME_BIT) { //wrong: '!' has higher precedence than '&', so this
+                         // is bracketed as '(!flags) & SOME_BIT', and does not
+                         // check whether a particular bit is set.
+    // ...
+}
+
+if ((p != NULL) & p->f()) { //wrong: The use of '&' rather than '&&' will still
+                            // de-reference the pointer even if it is NULL.
+    // ...
+}
+
+int bits = (s > 8) & 0xff; //wrong: Invalid attempt to get the 8 most significant
+                           // bits of a short.
+```

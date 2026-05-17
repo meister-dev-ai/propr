@@ -1,0 +1,44 @@
+Review focus: Non-overriding method
+
+What to look for:
+- A method looks like it should override a virtual method from a base type, but does not actually do so.
+- It is generally very easy to make sure you are overriding the method you intend in C# - you use the`override`keyword and the compiler will detect any errors you make. However, it is still possible to add methods that appear to override something but do not override because they do not use the`override`keyword or are misspelt. Methods of this type are confusing to other programmers and may act unexpectedly.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonOverridingMethodBad.cs`):
+```
+class Bad
+{
+    class Super
+    {
+        public virtual void Foo() { }
+    }
+
+    class Sub : Super
+    {
+        public void Foo() { }
+    }
+}
+```
+- Reference example (`NonOverridingMethodGood.cs`):
+```
+class Good
+{
+    class Super
+    {
+        public virtual void Foo() { }
+    }
+
+    class Sub : Super
+    {
+        public override void Foo() { }
+    }
+}
+```

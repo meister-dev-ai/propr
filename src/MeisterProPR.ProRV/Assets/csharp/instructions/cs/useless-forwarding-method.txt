@@ -1,0 +1,53 @@
+Review focus: Pointless forwarding method
+
+What to look for:
+- A method forwards calls to another method of the same name that is not called independently.
+- If a class contains two distinct methods of the same name such that:
+- one of them is only ever called from the other
+- and the calling method of the two only makes calls to the callee
+- and the calling method makes no other calls then the calling method is no more than a forwarding method for the callee. Forwarding methods are difficult to keep track of and can make public APIs more complicated.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`PointlessForwardingMethod.cs`):
+```
+class PointlessForwardingMethod
+{
+    public static void Print(string firstName, string lastName)
+    {
+        Print(firstName + " " + lastName);
+    }
+
+    public static void Print(string fullName)
+    {
+        Console.WriteLine("Pointless forwarding methods are bad, " + fullName + "...");
+    }
+
+    public static void Main(string[] args)
+    {
+        Print("John", "Doe");
+    }
+}
+```
+- Reference example (`PointlessForwardingMethodFix.cs`):
+```
+class PointlessForwardingMethodFix
+{
+    public static void Print(string firstName, string lastName)
+    {
+        string fullName = firstName + " " + lastName;
+        Console.WriteLine("Pointless forwarding methods are bad, " + fullName + "...");
+    }
+
+    public static void Main(string[] args)
+    {
+        Print("John", "Doe");
+    }
+}
+```

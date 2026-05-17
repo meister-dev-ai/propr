@@ -1,0 +1,41 @@
+Review focus: Unused index variable
+
+What to look for:
+- Iterating over an array but not using the index variable to access array elements may indicate a typo or logic error.
+- If the loop variable of a`for`loop ranges over the indices of an array, that variable would normally be used as an array index in the body of the loop. If, instead, the loop body only refers to array elements at constant indices, this may indicate a logic error or leftover testing code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedIndexVariable.js`):
+```
+function sum(xs) {
+  var res = 0;
+  for(var i=0; i<xs.length; ++i)
+    res += xs[0]; // BAD: should be xs[i]
+  return res;
+}
+```
+- Reference example (`UnusedIndexVariableGood.js`):
+```
+function sum(xs) {
+  var res = 0;
+  for(var i=0; i<xs.length; ++i)
+    res += xs[i];
+  return res;
+}
+```
+- Reference example (`UnusedIndexVariableGood2.js`):
+```
+function sum(xs) {
+  var res = 0;
+  for(var x of xs)
+    res += x;
+  return res;
+}
+```

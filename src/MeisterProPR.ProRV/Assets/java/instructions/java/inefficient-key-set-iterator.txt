@@ -1,0 +1,12 @@
+Review focus: Inefficient use of key set iterator
+
+What to look for:
+- Iterating through the values of a map using the key set is inefficient.
+- Java's Collections Framework provides several different ways of iterating the contents of a map. You can retrieve the set of keys, the collection of values, or the set of "entries" (which are, in effect, key/value pairs). The choice of iterator can affect performance. For example, it is considered bad practice to iterate the key set of a map if the body of the loop performs a map lookup on each retrieved key anyway.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

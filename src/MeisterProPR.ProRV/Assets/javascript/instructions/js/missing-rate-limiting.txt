@@ -1,0 +1,46 @@
+Review focus: Missing rate limiting
+
+What to look for:
+- An HTTP request handler that performs expensive operations without restricting the rate at which operations can be carried out is vulnerable to denial-of-service attacks.
+- HTTP request handlers should not perform expensive operations such as accessing the file system, executing an operating system command or interacting with a database without limiting the rate at which requests are accepted. Otherwise, the application becomes vulnerable to denial-of-service attacks where an attacker can cause the application to crash or become unresponsive by issuing a large number of requests at the same time.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingRateLimiting.js`):
+```
+var express = require('express');
+var app = express();
+
+app.get('/:path', function(req, res) {
+  let path = req.params.path;
+  if (isValidPath(path))
+    res.sendFile(path);
+});
+```
+- Reference example (`MissingRateLimitingGood.js`):
+```
+var express = require('express');
+var app = express();
+
+// set up rate limiter: maximum of five requests per minute
+var RateLimit = require('express-rate-limit');
+var limiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per windowMs
+});
+
+// apply rate limiter to all requests
+app.use(limiter);
+
+app.get('/:path', function(req, res) {
+  let path = req.params.path;
+  if (isValidPath(path))
+    res.sendFile(path);
+});
+```

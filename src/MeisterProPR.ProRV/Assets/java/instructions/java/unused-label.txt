@@ -1,0 +1,12 @@
+Review focus: Unused label
+
+What to look for:
+- An unused label for a loop or 'switch' statement is either redundant or indicates incorrect 'break' or 'continue' statements.
+- Loop and`switch`statements can be labeled. These labels can serve as targets for`break`or`continue`statements, to specify which loop or`switch`statement they refer to. Apart from serving as such jump targets, the labels have no effect on program behavior, which means that having an unused label is suspicious.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

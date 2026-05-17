@@ -1,0 +1,19 @@
+Review focus: 'exec' used
+
+What to look for:
+- The 'exec' statement or function is used which could cause arbitrary code to be executed.
+- Using`exec`may introduce a security vulnerability into your program unless you ensure that the data passed to the statement is neutralized.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ExecUsed.py`):
+```
+to_execute = get_untrusted_code()
+exec to_execute
+```

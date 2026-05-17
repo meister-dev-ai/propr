@@ -1,0 +1,28 @@
+Review focus: Conflicting variable initialization
+
+What to look for:
+- If a variable is declared and initialized twice inside the same variable declaration statement, the second initialization immediately overwrites the first one.
+- If a variable is declared and initialized twice inside the same variable declaration statement, the second initialization immediately overwrites the first one. This is confusing at best, and probably indicates an underlying bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ClobberingVarInit.js`):
+```
+for (var iter in Iterator(aExtraHeaders)) {
+    var key = iter[0], key = iter[1];
+    xhr.setRequestHeader(key, value);
+}
+```
+- Reference example (`ClobberingVarInitGood.js`):
+```
+for (var iter in Iterator(aExtraHeaders)) {
+    var key = iter[0], value = iter[1];
+    xhr.setRequestHeader(key, value);
+}
+```

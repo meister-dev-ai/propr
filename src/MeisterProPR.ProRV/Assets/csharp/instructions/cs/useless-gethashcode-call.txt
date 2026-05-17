@@ -1,0 +1,28 @@
+Review focus: Useless call to GetHashCode()
+
+What to look for:
+- Calling 'GetHashCode()' on integer types is redundant because the method always returns the original value.
+- The method`GetHashCode()`on an integer simply returns the original value of the integer. This method call is therefore redundant, inefficient, and obscures the logic of the hash function. Several of the built-in types have this behavior, including`int`,`uint`,`short`,`ushort`,`long`,`ulong`,`byte`and`sbyte`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IntGetHashCode.cs`):
+```
+public override int GetHashCode()
+{
+    return row.GetHashCode() ^ col.GetHashCode();
+}
+```
+- Reference example (`IntGetHashCodeFix.cs`):
+```
+public override int GetHashCode()
+{
+    return unchecked(row * 16777619 + col);
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Dead enum constant
+
+What to look for:
+- Dead enum constants add unnecessary complexity.
+- Enum constants that are never used at runtime are redundant and should be removed. An enum constant is considered dead if at runtime it is never used, or only used in comparisons. Any enum constant which is not dead is considered to be "live". An enum constant that is only used in a comparison is considered dead because the comparison will always produce the same result. This is because no variable holds the value of the enum constant, so the comparison of any variable against the constant will always return the same result.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

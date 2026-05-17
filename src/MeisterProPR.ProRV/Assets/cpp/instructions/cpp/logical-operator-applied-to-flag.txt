@@ -1,0 +1,20 @@
+Review focus: Short-circuiting operator applied to flag
+
+What to look for:
+- A short-circuiting logical operator is applied to what looks like a flag.
+- This rule finds a short-circuiting logical operator that is applied to what looks like a bit-mask. This may be a typo for a bitwise operator. Bit-masks are assumed to be constant operands whose value is a power of 2, except 1 and 0, since these could be legitimate truth values. Hexadecimal and octal literals are also considered bit masks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShortCircuitBitMask.cpp`):
+```
+unsigned int new_mask = old_mask || 0x0100; //wrong, || logical operator just returns 1 or 0
+
+unsigned int new_mask = old_mask | 0x0100; //right, | is a bit-mask operator
+```

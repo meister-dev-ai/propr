@@ -1,0 +1,51 @@
+Review focus: Stored cross-site scripting
+
+What to look for:
+- Using uncontrolled stored values in HTML allows for a stored cross-site scripting vulnerability.
+- Directly using externally-controlled stored values (for example, file names or database contents) to create HTML content without properly sanitizing the input first, allows for a cross-site scripting vulnerability. This kind of vulnerability is also called stored cross-site scripting, to distinguish it from other types of cross-site scripting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`StoredXss.go`):
+```
+package main
+
+import (
+	"io"
+	"net/http"
+	"os"
+)
+
+func ListFiles(w http.ResponseWriter, r *http.Request) {
+	files, _ := os.ReadDir(".")
+
+	for _, file := range files {
+		io.WriteString(w, file.Name()+"\n")
+	}
+}
+```
+- Reference example (`StoredXssGood.go`):
+```
+package main
+
+import (
+	"html"
+	"io"
+	"net/http"
+	"os"
+)
+
+func ListFiles1(w http.ResponseWriter, r *http.Request) {
+	files, _ := os.ReadDir(".")
+
+	for _, file := range files {
+		io.WriteString(w, html.EscapeString(file.Name())+"\n")
+	}
+}
+```

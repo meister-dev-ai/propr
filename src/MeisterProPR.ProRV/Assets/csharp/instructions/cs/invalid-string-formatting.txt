@@ -1,0 +1,80 @@
+Review focus: Invalid string formatting
+
+What to look for:
+- Calling 'string.Format()' with either an invalid format string or incorrect number of arguments may result in dropped arguments or a 'System.FormatException'.
+- When using string formatting methods (such as`string.Format()`), the following should be taken into account:
+- The formatting string must be formatted correctly, otherwise the exception`System.FormatException`will be thrown.
+- All passed arguments should be used by the formatting string, otherwise such arguments will be ignored.
+- Missing arguments will result in a`System.FormatException`exception being thrown.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`FormatInvalidBad.cs`):
+```
+using System;
+
+class Bad1
+{
+    string GenerateEmptyClass(string c)
+    {
+        return string.Format("class {0} { }", "C");
+    }
+}
+```
+- Reference example (`FormatInvalidGood.cs`):
+```
+using System;
+
+class Good1
+{
+    string GenerateEmptyClass(string c)
+    {
+        return string.Format("class {0} {{ }}", "C");
+    }
+}
+```
+- Reference example (`FormatUnusedArgumentBad.cs`):
+```
+using System;
+
+class Bad2
+{
+    void M(Exception ex)
+    {
+        Console.WriteLine("Error processing file: {0}", ex, ex.HResult);
+        Console.WriteLine("Error processing file: {1} ({1})", ex, ex.HResult);
+        Console.WriteLine("Error processing file: %s (%d)", ex, ex.HResult);
+    }
+}
+```
+- Reference example (`FormatMissingArgumentBad.cs`):
+```
+using System;
+
+class Bad3
+{
+    void Hello(string first, string last)
+    {
+        Console.WriteLine("Hello {0} {1}", first);
+        Console.WriteLine("Hello {1} {2}", first, last);
+    }
+}
+```
+- Reference example (`FormatMissingArgumentGood.cs`):
+```
+using System;
+
+class Good3
+{
+    void Hello(string first, string last)
+    {
+        Console.WriteLine("Hello {0} {1}", first, last);
+    }
+}
+```

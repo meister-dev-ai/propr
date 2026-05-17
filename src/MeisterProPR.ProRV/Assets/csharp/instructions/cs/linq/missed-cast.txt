@@ -1,0 +1,81 @@
+Review focus: Missed opportunity to use Cast
+
+What to look for:
+- The intent of a foreach loop that immediately casts its iteration variable to another type and then never uses the iteration variable again can often be better expressed using...
+- Casts are often used when you iterate over a collection of elements of a type that is known to contain only elements of a different type (possibly more specific). For example,`List`might refer to a collection of instances of`Dog`, a class derived from`Animal`. Programmers often write a loop to iterate over the collection and cast each`Animal`in turn to`Dog`before using it
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedCastOpportunity.cs`):
+```
+class MissedCastOpportunity
+{
+    class Animal { }
+
+    class Dog : Animal
+    {
+        private string name;
+
+        public Dog(string name)
+        {
+            this.name = name;
+        }
+
+        public void Woof()
+        {
+            Console.WriteLine("Woof! My name is " + name + ".");
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> lst = new List<Animal> { new Dog("Rover"),
+            new Dog("Fido"), new Dog("Basil") };
+
+        foreach (Animal a in lst)
+        {
+            Dog d = (Dog)a;
+            d.Woof();
+        }
+    }
+}
+```
+- Reference example (`MissedCastOpportunityFix.cs`):
+```
+class MissedCastOpportunityFix
+{
+    class Animal { }
+
+    class Dog : Animal
+    {
+        private string name;
+
+        public Dog(string name)
+        {
+            this.name = name;
+        }
+
+        public void Woof()
+        {
+            Console.WriteLine("Woof! My name is " + name + ".");
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> lst = new List<Animal> { new Dog("Rover"),
+            new Dog("Fido"), new Dog("Basil") };
+
+        foreach (Dog d in lst.Cast<Dog>())
+        {
+            d.Woof();
+        }
+    }
+}
+```

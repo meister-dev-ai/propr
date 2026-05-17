@@ -1,0 +1,38 @@
+Review focus: Unnecessary 'else' clause in loop
+
+What to look for:
+- An 'else' clause in a 'for' or 'while' statement that does not contain a 'break' is redundant.
+- The`else`clause of a loop (either a`for`or a`while`statement) executes immediately after the loop terminates normally. If there is a`break`statement in the loop body, then the`else`clause is skipped. If there is no`break`statement, then the`else`clause will always be executed after the loop, unless it exits with a`return`or`raise`. Therefore, if there is no`break`statement in the loop body then the`else`clause can be replaced with unindented code. Generally the use of`else`clauses should be avoided where possible, as they are likely to be misunderstood.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnnecessaryElseClause.py`):
+```
+def pointless_else(container):
+    for item in container:
+        if of_interest(item):
+            return item
+    else:
+        raise NotFoundException()
+
+def no_else(container):
+    for item in container:
+        if of_interest(item):
+            return item
+    raise NotFoundException()
+
+def with_break(container):
+    for item in container:
+        if of_interest(item):
+            found = item
+            break
+    else:
+        raise NotFoundException()
+    return found
+```

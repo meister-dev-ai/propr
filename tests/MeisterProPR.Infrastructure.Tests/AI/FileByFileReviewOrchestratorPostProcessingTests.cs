@@ -59,7 +59,7 @@ public class FileByFileReviewOrchestratorPostProcessingTests
             ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
             "File-by-file baseline",
             ReviewStrategy.FileByFile,
-            [ReviewPipelineProfileProvider.DispatchStageFamilyId],
+            [FileByFileProRvPrefilterStage.StageIdConstant],
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileSpeculativeCommentFilterStage.StageIdConstant,

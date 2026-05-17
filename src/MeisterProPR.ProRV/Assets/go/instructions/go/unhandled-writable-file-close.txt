@@ -1,0 +1,93 @@
+Review focus: Writable file handle closed without error handling
+
+What to look for:
+- Errors which occur when closing a writable file handle may result in data loss if the data could not be successfully flushed.
+- Data written to a file handle may not immediately be flushed to the underlying storage medium by the operating system. Often, the data may be cached in memory until the handle is closed, or until a later point after that. Only calling`os.File.Sync`gives a reasonable guarantee that the data is flushed. Therefore, write errors may not occur until`os.File.Close`or`os.File.Sync`are called. If either is called and any errors returned by them are discarded, then the program may be unaware that data loss occurred.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnhandledCloseWritableHandleNotDeferred.go`):
+```
+package main
+
+import (
+	"os"
+)
+
+func example() error {
+	f, err := os.OpenFile("file.txt", os.O_WRONLY|os.O_CREATE, 0666)
+
+	if err != nil {
+		return err
+	}
+
+	if _, err := f.WriteString("Hello"); err != nil {
+		f.Close()
+		return err
+	}
+
+	f.Close()
+
+	return nil
+}
+```
+- Reference example (`UnhandledCloseWritableHandle.go`):
+```
+package main
+
+import (
+	"os"
+)
+
+func example() error {
+	f, err := os.OpenFile("file.txt", os.O_WRONLY|os.O_CREATE, 0666)
+
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	if _, err := f.WriteString("Hello"); err != nil {
+		return err
+	}
+
+	return nil
+}
+```
+- Reference example (`UnhandledCloseWritableHandleGood.go`):
+```
+package main
+
+import (
+	"os"
+)
+
+func example() (exampleError error) {
+	f, err := os.OpenFile("file.txt", os.O_WRONLY|os.O_CREATE, 0666)
+
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		// try to close the file; if an error occurs, set the error returned by `example`
+		// to that error, but only if `WriteString` didn't already set it to something first
+		if err := f.Close(); exampleError == nil && err != nil {
+			exampleError = err
+		}
+	}()
+
+	if _, err := f.WriteString("Hello"); err != nil {
+		exampleError = err
+	}
+
+	return
+}
+```

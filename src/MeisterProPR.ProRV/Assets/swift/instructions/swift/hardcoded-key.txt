@@ -1,0 +1,44 @@
+Review focus: Hard-coded encryption key
+
+What to look for:
+- Using hardcoded keys for encryption is not secure, because potential attackers can easily guess them.
+- Hardcoded keys should not be used for creating encryption ciphers. Data encrypted using hardcoded keys are more vulnerable to the possibility of recovering them.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HardcodedEncryptionKey.swift`):
+```
+func encrypt(padding : Padding) {
+	// ...
+
+	// BAD: Using hardcoded keys for encryption
+	let key: Array<UInt8> = [0x2a, 0x3a, 0x80, 0x05]
+	let keyString = "this is a constant string"
+	let ivString = getRandomIV()
+	_ = try AES(key: key, blockMode: CBC(AES.randomIV(AES.blockSize)), padding: padding)
+	_ = try AES(key: keyString, iv: ivString)
+	_ = try Blowfish(key: key, blockMode: CBC(Blowfish.randomIV(Blowfish.blockSize)), padding: padding)
+	_ = try Blowfish(key: keyString, iv: ivString)
+
+
+	// GOOD: Using randomly generated keys for encryption
+	var key = [Int8](repeating: 0, count: 10)
+	let status = SecRandomCopyBytes(kSecRandomDefault, key.count - 1, &key)
+	if status == errSecSuccess {
+		let keyString = String(cString: key)
+		let ivString = getRandomIV()
+		_ = try AES(key: key, blockMode: CBC(AES.randomIV(AES.blockSize)), padding: padding)
+		_ = try AES(key: keyString, iv: ivString)
+		_ = try Blowfish(key: key, blockMode: CBC(Blowfish.randomIV(Blowfish.blockSize)), padding: padding)
+		_ = try Blowfish(key: keyString, iv: ivString)
+	}
+
+	// ...
+}
+```

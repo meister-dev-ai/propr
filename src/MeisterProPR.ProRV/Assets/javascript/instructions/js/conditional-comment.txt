@@ -1,0 +1,24 @@
+Review focus: Conditional comments
+
+What to look for:
+- Conditional comments are an IE-specific feature and not portable.
+- Conditional comments are only supported in Internet Explorer and should be avoided for portability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ConditionalComments.js`):
+```
+/*@cc_on
+  @if (@_jscript_version >= 6)
+    console.log("You're running a new version of IE.");
+  @else
+    console.log("You're running an old version of IE.");
+  @end
+  @*/
+```

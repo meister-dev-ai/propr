@@ -1,0 +1,12 @@
+Review focus: Start of thread in constructor
+
+What to look for:
+- Starting a thread within a constructor may cause the thread to start before any subclass constructor has completed its initialization, causing unexpected results.
+- Starting a thread within a constructor may cause unexpected results. If the class is extended, the thread may start before the subclass constructor has completed its initialization, which may not be intended.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,50 @@
+Review focus: Overwriting attribute in super-class or sub-class
+
+What to look for:
+- Assignment to self attribute overwrites attribute previously defined in subclass or superclass `__init__` method.
+- Subclasses should not set attributes that are set in the superclass. Doing so may violate invariants in the superclass.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OverwritingAttributeInSuperClass.py`):
+```
+#Attribute set in both superclass and subclass
+class C(object):
+
+    def __init__(self):
+        self.var = 0
+
+class D(C):
+
+    def __init__(self):
+        self.var = 1 # self.var will be overwritten
+        C.__init__(self)
+
+class E(object):
+
+    def __init__(self):
+        self.var = 0 # self.var will be overwritten
+
+class F(E):
+
+    def __init__(self):
+        E.__init__(self)
+        self.var = 1
+
+#Fixed version -- Pass explicitly as a parameter
+class G(object):
+
+    def __init__(self, var = 0):
+        self.var = var
+
+class H(G):
+
+    def __init__(self):
+        G.__init__(self, 1)
+```

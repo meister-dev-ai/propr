@@ -1,0 +1,52 @@
+Review focus: Virtual call from constructor or destructor
+
+What to look for:
+- Virtual functions should not be invoked from a constructor or destructor of the same class.
+- This rule finds calls to virtual functions from a constructor or destructor that may resolve to a different function than was intended. When instantiating a derived class, the resolution of a virtual function call depends on the type that defines the constructor/destructor that is currently running, not the class that is being instantiated. This is to prevent the calling of functions in the derived class that rely on fields declared in the derived class. The values of such fields are undefined until the constructor of the derived class is invoked after the constructor of the base class. Values declared in the derived class are likewise destructed prior to invocation of the destructor of the base class. The indicated function call is a call to a virtual function in a constructor or destructor, which will most likely not call the intended function, or if correct would be difficult to interpret without knowledge of the class' inheritance graph.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 71.1.cpp`):
+```
+class Base {
+protected:
+    Resource* resource;
+public:
+    virtual void init() {
+        resource = createResource();
+    }
+    virtual void release() {
+        freeResource(resource);
+    }
+};
+
+class Derived: public Base {
+    virtual void init() {
+        resource = createResourceV2();
+    }
+    virtual void release() {
+        freeResourceV2(resource);
+    }
+};
+
+Base::Base() {
+    this->init();
+}
+Base::~Base() {
+    this->release();
+}
+
+int f() {
+    // this will call Base::Base() and then Derived::Derived(), but this->init()
+    // inBase::Base() will resolve to Base::init(), not Derived::init()
+    // The reason for this is that when Base::Base is called, the object being
+    // created is still of type Base (including the vtable)
+    Derived* d = new Derived();
+}
+```

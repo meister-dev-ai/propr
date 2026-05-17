@@ -1,0 +1,80 @@
+Review focus: Call to obsolete method
+
+What to look for:
+- Calls to methods marked as [Obsolete] should be replaced because the method is no longer maintained and may be removed in the future.
+- Methods with the`[Obsolete]`attribute are obsolete and should not be used. Obsolete methods are no longer supported and maintained, may not work correctly, and may be removed in the future.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CallToObsoleteMethodBad.cs`):
+```
+using System;
+
+class Bad
+{
+    void M()
+    {
+        Logger.Log("Hello, World!");
+    }
+
+    static class Logger
+    {
+        [Obsolete("Use Log(LogLevel level, string s) instead")]
+        public static void Log(string s)
+        {
+            // ...
+        }
+
+        public static void Log(LogLevel level, string s)
+        {
+            // ...
+        }
+    }
+
+    enum LogLevel
+    {
+        Info,
+        Warning,
+        Error
+    }
+}
+```
+- Reference example (`CallToObsoleteMethodGood.cs`):
+```
+using System;
+
+class Good
+{
+    void M()
+    {
+        Logger.Log(LogLevel.Info, "Hello, World!");
+    }
+
+    static class Logger
+    {
+        [Obsolete("Use Log(LogLevel level, string s) instead")]
+        public static void Log(string s)
+        {
+            // ...
+        }
+
+        public static void Log(LogLevel level, string s)
+        {
+            // ...
+        }
+    }
+
+    enum LogLevel
+    {
+        Info,
+        Warning,
+        Error
+    }
+}
+```

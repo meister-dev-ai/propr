@@ -1,0 +1,68 @@
+Review focus: Use of default ToString()
+
+What to look for:
+- Calling the default implementation of 'ToString' returns a value that is unlikely to be what you expect.
+- Calling`System.Object`'s (or`System.ValueType`'s)`ToString`method on a value returns the fully qualified name of the type of that value. In most cases this is not useful, or what was intended. This rule finds explicit and implicit calls to the default`ToString`methods.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DefaultToStringBad.cs`):
+```
+using System;
+
+class Bad
+{
+    static void Main(string[] args)
+    {
+        var p = new Person("Eric Arthur Blair");
+        Console.WriteLine("p: " + p);
+
+        var ints = new int[] { 1, 2, 3 };
+        Console.WriteLine("ints: " + ints);
+    }
+
+    class Person
+    {
+        private string Name;
+
+        public Person(string name)
+        {
+            this.Name = name;
+        }
+    }
+}
+```
+- Reference example (`DefaultToStringGood.cs`):
+```
+using System;
+
+class Good
+{
+    static void Main(string[] args)
+    {
+        var p = new Person("Eric Arthur Blair");
+        Console.WriteLine("p: " + p);
+
+        var ints = new int[] { 1, 2, 3 };
+        Console.WriteLine("ints: " + string.Join(", ", ints));
+    }
+
+    class Person
+    {
+        private string Name;
+
+        public Person(string name)
+        {
+            this.Name = name;
+        }
+
+        public override string ToString() => Name;
+    }
+}
+```

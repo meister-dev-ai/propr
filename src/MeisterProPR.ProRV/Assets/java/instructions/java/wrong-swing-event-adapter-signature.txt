@@ -1,0 +1,12 @@
+Review focus: Bad implementation of an event Adapter
+
+What to look for:
+- In a class that extends a Swing or Abstract Window Toolkit event adapter, an event handler that does not have exactly the same name as the event handler that it overrides means...
+- Event adapters in Swing (and Abstract Window Toolkit) provide a convenient way for programmers to implement event listeners. However, care must be taken to get the names of the overridden methods right, or the event handlers will not be called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

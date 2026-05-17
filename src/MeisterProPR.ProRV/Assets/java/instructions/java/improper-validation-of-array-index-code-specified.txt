@@ -1,0 +1,12 @@
+Review focus: Improper validation of code-specified array index
+
+What to look for:
+- Using a code-specified value as an index to an array, without proper validation, can lead to index out of bound exceptions.
+- Using a hard-coded or randomly provided value as the index to an array access can cause that array access to throw an`ArrayIndexOutOfBoundsException`if the value is outside the bounds of that array. This problem occurs when a literal value, or a value generated using the`Random`, is used as an index for an array access operation. If one or more of the range of values produced by the random operation, or the fixed value of the literal, is outside the bounds of the array then this can cause an`ArrayIndexOutOfBoundsException`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

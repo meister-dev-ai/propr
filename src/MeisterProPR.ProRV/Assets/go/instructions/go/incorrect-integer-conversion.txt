@@ -1,0 +1,91 @@
+Review focus: Incorrect conversion between integer types
+
+What to look for:
+- Converting the result of `strconv.Atoi`, `strconv.ParseInt`, and `strconv.ParseUint` to integer types of smaller bit size can produce unexpected values.
+- If a string is parsed into an int using`strconv.Atoi`, and subsequently that int is converted into another integer type of a smaller size, the result can produce unexpected values. This also applies to the results of`strconv.ParseInt`and`strconv.ParseUint`when the specified size is larger than the size of the type that number is converted to.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`IncorrectIntegerConversion.go`):
+```
+package main
+
+import (
+	"strconv"
+)
+
+func parseAllocateBad1(wanted string) int32 {
+	parsed, err := strconv.Atoi(wanted)
+	if err != nil {
+		panic(err)
+	}
+	return int32(parsed)
+}
+func parseAllocateBad2(wanted string) int32 {
+	parsed, err := strconv.ParseInt(wanted, 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return int32(parsed)
+}
+```
+- Reference example (`IncorrectIntegerConversionGood.go`):
+```
+package main
+
+import (
+	"math"
+	"strconv"
+)
+
+func main() {
+
+}
+
+const DefaultAllocate int32 = 256
+
+func parseAllocateGood1(desired string) int32 {
+	parsed, err := strconv.Atoi(desired)
+	if err != nil {
+		return DefaultAllocate
+	}
+	// GOOD: check for lower and upper bounds
+	if parsed > 0 && parsed <= math.MaxInt32 {
+		return int32(parsed)
+	}
+	return DefaultAllocate
+}
+func parseAllocateGood2(desired string) int32 {
+	// GOOD: parse specifying the bit size
+	parsed, err := strconv.ParseInt(desired, 10, 32)
+	if err != nil {
+		return DefaultAllocate
+	}
+	return int32(parsed)
+}
+
+func parseAllocateGood3(wanted string) int32 {
+	parsed, err := strconv.ParseInt(wanted, 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	return int32(parsed)
+}
+func parseAllocateGood4(wanted string) int32 {
+	parsed, err := strconv.ParseInt(wanted, 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	// GOOD: check for lower and uppper bounds
+	if parsed > 0 && parsed <= math.MaxInt32 {
+		return int32(parsed)
+	}
+	return DefaultAllocate
+}
+```

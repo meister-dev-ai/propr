@@ -47,7 +47,7 @@ public sealed class AgenticFileByFileReviewOrchestratorQualityFilterTests
             ReviewPipelineProfileProvider.AgenticExperimentalProfileId,
             "Agentic experimental",
             ReviewStrategy.AgenticFileByFile,
-            [ReviewPipelineProfileProvider.DispatchStageFamilyId],
+            [AgenticProRvPrefilterStage.StageIdConstant],
             [
                 AgenticSpeculativeCommentFilterStage.StageIdConstant,
                 AgenticInfoCommentStripStage.StageIdConstant,

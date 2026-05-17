@@ -1,0 +1,25 @@
+Review focus: Use of a cryptographic algorithm with insufficient key size
+
+What to look for:
+- Using cryptographic algorithms with too small a key size can allow an attacker to compromise security.
+- Using cryptographic algorithms with a small key size can leave data vulnerable to being decrypted. Many cryptographic algorithms provided by cryptography libraries can be configured with key sizes that are vulnerable to brute force attacks. Using such a key size means that an attacker may be able to easily decrypt the encrypted data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`InsufficientKeySize.c`):
+```
+void encrypt_with_openssl(EVP_PKEY_CTX *ctx) {
+
+  // BAD: only 1024 bits for an RSA key
+  EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 1024);
+
+  // GOOD: 2048 bits for an RSA key
+  EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048);
+}
+```

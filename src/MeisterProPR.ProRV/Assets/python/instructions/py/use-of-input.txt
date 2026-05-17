@@ -1,0 +1,12 @@
+Review focus: 'input' function used in Python 2
+
+What to look for:
+- The built-in function 'input' is used which, in Python 2, can allow arbitrary code to be run.
+- In Python 2, a call to the`input()`function,`input(prompt)`is equivalent to`eval(raw_input(prompt))`. Evaluating user input without any checking can be a serious security flaw.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

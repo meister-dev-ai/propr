@@ -1,0 +1,12 @@
+Review focus: Deserialization of user-controlled data
+
+What to look for:
+- Deserializing user-controlled data may allow attackers to execute arbitrary code.
+- Deserializing untrusted data using any deserialization framework that allows the construction of arbitrary serializable objects is easily exploitable and in many cases allows an attacker to execute arbitrary code. Even before a deserialized object is returned to the caller of a deserialization method a lot of code may have been executed, including static initializers, constructors, and finalizers. Automatic deserialization of fields means that an attacker may craft a nested combination of objects on which the executed initialization code may have unforeseen effects, such as the execution of arbitrary code. There are many different serialization frameworks. This query currently supports Kryo, XmlDecoder, XStream, SnakeYaml, JYaml, JsonIO, YAMLBeans, HessianBurlap, Castor, Burlap, Jackson, Jabsorb, Jodd JSON, Flexjson, Gson, JMS, and Java IO serialization through`ObjectInputStream`/`ObjectOutputStream`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

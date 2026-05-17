@@ -1,0 +1,83 @@
+Review focus: Deserialization of untrusted data
+
+What to look for:
+- Calling an unsafe deserializer with data controlled by an attacker can lead to denial of service and other security problems.
+- Deserializing an object from untrusted input may result in security problems, such as denial of service or remote code execution.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnsafeDeserializationUntrustedInputBad.cs`):
+```
+using System.Web.UI.WebControls;
+using System.Web.Script.Serialization;
+
+class Bad
+{
+    public static object Deserialize(TextBox textBox)
+    {
+        JavaScriptSerializer sr = new JavaScriptSerializer(new SimpleTypeResolver());
+        // BAD
+        return sr.DeserializeObject(textBox.Text);
+    }
+}
+```
+- Reference example (`UnsafeDeserializationUntrustedInputGood.cs`):
+```
+using System.Web.UI.WebControls;
+using System.Web.Script.Serialization;
+
+class Good
+{
+    public static object Deserialize(TextBox textBox)
+    {
+        JavaScriptSerializer sr = new JavaScriptSerializer();
+        // GOOD: no unsafe type resolver
+        return sr.DeserializeObject(textBox.Text);
+    }
+}
+```
+- Reference example (`UnsafeDeserializationUntrustedInputTypeBad.cs`):
+```
+using System.Runtime.Serialization.Json;
+using System.IO;
+using System;
+
+class BadDataContractJsonSerializer
+{
+    public static object Deserialize(string type, Stream s)
+    {
+        // BAD: stream and type are potentially untrusted
+        var ds = new DataContractJsonSerializer(Type.GetType(type));
+        return ds.ReadObject(s);
+    }
+}
+```
+- Reference example (`UnsafeDeserializationUntrustedInputTypeGood.cs`):
+```
+using System.Runtime.Serialization.Json;
+using System.IO;
+using System;
+
+class Poco
+{
+    public int Count;
+
+    public string Comment;
+}
+
+class GoodDataContractJsonSerializer
+{
+    public static Poco Deserialize(Stream s)
+    {
+        // GOOD: while stream is potentially untrusted, the instantiated type is hardcoded
+        var ds = new DataContractJsonSerializer(typeof(Poco));
+        return (Poco)ds.ReadObject(s);
+    }
+}
+```

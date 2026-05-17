@@ -1,0 +1,42 @@
+Review focus: Duplicate 'if' condition
+
+What to look for:
+- If two conditions in an 'if'-'else if' chain are identical, the second condition will never hold.
+- If two conditions in an 'if'-'else if' chain are identical, the second condition will never hold. This most likely indicates a copy-paste error where the first condition was copied and then not properly adjusted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateCondition.go`):
+```
+package main
+
+func controller(msg string) {
+	if msg == "start" {
+		start()
+	} else if msg == "start" {
+		stop()
+	} else {
+		panic("Message not understood.")
+	}
+}
+```
+- Reference example (`DuplicateConditionGood.go`):
+```
+package main
+
+func controllerGood(msg string) {
+	if msg == "start" {
+		start()
+	} else if msg == "stop" {
+		stop()
+	} else {
+		panic("Message not understood.")
+	}
+}
+```

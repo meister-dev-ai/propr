@@ -1,0 +1,50 @@
+Review focus: Class should be a context manager
+
+What to look for:
+- Making a class a context manager allows instances to be used in a 'with' statement.
+- If a class has a`close()`or similar method to release resources, then it should be made a context manager. Using a context manager allows instances of the class to be used in the`with`statement, improving code size and readability. This is a simpler and more reliable method than implementing just a`__del__`method.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShouldBeContextManager.py`):
+```
+class remotelock(object):     # Resources can be released using __del__
+
+    def __init__(self, repo):
+        self.repo = repo
+
+    def release(self):
+        self.repo.unlock()
+        self.repo = None
+
+    def __del__(self):
+        if self.repo:
+            self.release()
+
+
+class remotelock2(object):     # Resources can be released using a with statement
+
+    def __init__(self, repo):
+        self.repo = repo
+
+    def __enter__(self):
+        return self
+
+    def release(self):
+        self.repo.unlock()
+        self.repo = None
+        
+    def __del__(self):
+        if self.repo:
+            self.release()
+
+    def __exit__(self, exct_type, exce_value, traceback):
+        if self.repo:
+            self.release()
+```

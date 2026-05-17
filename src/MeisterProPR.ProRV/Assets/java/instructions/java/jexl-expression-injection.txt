@@ -1,0 +1,12 @@
+Review focus: Expression language injection (JEXL)
+
+What to look for:
+- Evaluation of a user-controlled JEXL expression may lead to arbitrary code execution.
+- Java EXpression Language (JEXL) is a simple expression language provided by the Apache Commons JEXL library. The syntax is close to a mix of ECMAScript and shell-script. The language allows invocation of methods available in the JVM. If a JEXL expression is built using attacker-controlled data, and then evaluated, then it may allow the attacker to run arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

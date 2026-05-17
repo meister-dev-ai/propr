@@ -1,0 +1,39 @@
+Review focus: Array constant vulnerable to change
+
+What to look for:
+- Array constants are mutable and can be changed by malicious code or by accident.
+- Arrays might be made`static readonly`to prevent their contents from being changed. This doesn't have the desired effect because arrays are mutable. The`readonly`modifier prevents the array from being replaced by a new array but it does not prevent the contents of the array from being changed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StaticArrayBad.cs`):
+```
+class Bad
+{
+    public static readonly string[] Foo = { "hello", "world" };
+    public static void Main(string[] args)
+    {
+        Foo[0] = "goodbye";
+    }
+}
+```
+- Reference example (`StaticArrayGood.cs`):
+```
+using System.Collections.ObjectModel;
+
+class Good
+{
+    public static readonly ReadOnlyCollection<string> Foo
+        = new ReadOnlyCollection<string>(new string[] { "hello", "world" });
+    public static void Main(string[] args)
+    {
+
+    }
+}
+```

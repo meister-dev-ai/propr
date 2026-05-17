@@ -1,0 +1,12 @@
+Review focus: Duplicate script
+
+What to look for:
+- There is another script that shares a lot of code with this script.
+- Duplicate scripts with identical or very similar contents indicate poorly structured code that is hard to maintain. The artificially inflated amount of code hinders comprehension, and ranges of similar but subtly different lines can mask the real purpose or intention behind a function. Duplicate scripts can also suffer from update anomalies, where only one of several copies of the code is updated to address a defect or add a feature, causing them to slowly evolve apart.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

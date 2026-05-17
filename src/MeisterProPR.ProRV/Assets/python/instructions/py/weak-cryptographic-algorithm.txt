@@ -1,0 +1,31 @@
+Review focus: Use of a broken or weak cryptographic algorithm
+
+What to look for:
+- Using broken or weak cryptographic algorithms can compromise security.
+- Using broken or weak cryptographic algorithms may compromise security guarantees such as confidentiality, integrity, and authenticity. Many cryptographic algorithms are known to be weak or flawed. The security guarantees of a system often rely on the underlying cryptography, so using a weak algorithm can have severe consequences. For example:
+- If a weak encryption algorithm is used, an attacker may be able to decrypt sensitive data.
+- If a weak algorithm is used for digital signatures, an attacker may be able to forge signatures and impersonate legitimate users. This query alerts on any use of a weak cryptographic algorithm that is not a hashing algorithm. Use of broken or weak cryptographic hash functions are handled by the`py/weak-sensitive-data-hashing`query.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`broken_crypto.py`):
+```
+from Crypto.Cipher import DES, AES
+
+cipher = DES.new(SECRET_KEY)
+
+def send_encrypted(channel, message):
+    channel.send(cipher.encrypt(message)) # BAD: weak encryption
+
+
+cipher = AES.new(SECRET_KEY)
+
+def send_encrypted(channel, message):
+    channel.send(cipher.encrypt(message)) # GOOD: strong encryption
+```

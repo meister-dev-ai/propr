@@ -1,0 +1,75 @@
+Review focus: Recursive call to operator==
+
+What to look for:
+- A call to 'operator==' is recursive: often this is due to a failed attempt to perform a reference equality comparison.
+- When writing an`operator==`, it is common to want to check whether or not an operand is null or check if both operands refer to the same object. Attempting to do this using`==`will not work as it will simply call the overridden`operator==`that is being defined.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RecursiveOperatorEquals.cs`):
+```
+class Year
+{
+    private int year;
+    private bool bc;
+
+    public Year(int i)
+    {
+        year = Math.Abs(i);
+        bc = i < 0;
+    }
+
+    public static bool operator ==(Year lhs, Year rhs)
+    {
+        // Both of these checks against null call operator== recursively.
+        // They were probably intended to be checks for reference equality.
+        if (lhs == null || rhs == null)
+        {
+            return false;
+        }
+
+        return lhs.year == rhs.year && lhs.bc == rhs.bc;
+    }
+
+    public static bool operator !=(Year lhs, Year rhs)
+    {
+        return !(lhs == rhs);
+    }
+}
+```
+- Reference example (`RecursiveOperatorEqualsFix.cs`):
+```
+class Year
+{
+    private int year;
+    private bool bc;
+
+    public Year(int i)
+    {
+        year = Math.Abs(i);
+        bc = i < 0;
+    }
+
+    public static bool operator ==(Year lhs, Year rhs)
+    {
+        // Either of these alternative approaches works.
+        if (ReferenceEquals(lhs, null) || (object)rhs == null)
+        {
+            return false;
+        }
+
+        return lhs.year == rhs.year && lhs.bc == rhs.bc;
+    }
+
+    public static bool operator !=(Year lhs, Year rhs)
+    {
+        return !(lhs == rhs);
+    }
+}
+```

@@ -1,0 +1,38 @@
+Review focus: Cleartext storage of sensitive information in a local database
+
+What to look for:
+- Storing sensitive information in a non-encrypted database can expose it to an attacker.
+- Sensitive information that is stored unencrypted in a database is accessible to an attacker who gains access to that database. For example, the information could be accessed by any process or user in a rooted device, or exposed through another vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextStorageDatabase.swift`):
+```
+import CryptoKit
+
+private func encrypt(_ text: String, _ encryptionKey: SymmetricKey) -> String {
+	let sealedBox = try! AES.GCM.seal(Data(text.utf8), using: encryptionKey)
+	return sealedBox.combined!.base64EncodedString()
+}
+
+func storeMyData(databaseObject : NSManagedObject, faveSong : String, creditCardNo : String, encryptionKey: SymmetricKey) {
+	// ...
+
+	// GOOD: not sensitive information
+	databaseObject.setValue(faveSong, forKey: "myFaveSong")
+
+	// BAD: sensitive information saved in cleartext
+	databaseObject.setValue(creditCardNo, forKey: "myCreditCardNo")
+
+	// GOOD: encrypted sensitive information saved
+	databaseObject.setValue(encrypt(creditCardNo, encryptionKey), forKey: "myCreditCardNo")
+
+	// ...
+}
+```

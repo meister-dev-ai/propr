@@ -1,0 +1,12 @@
+Review focus: Missing space in string literal
+
+What to look for:
+- Joining strings at compile-time to construct a string literal so that two words are concatenated without a separating space usually indicates a text error.
+- Splitting a long string literal over multiple lines can often aid readability, but this also makes it difficult to notice whether a space is missing where the strings are concatenated.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

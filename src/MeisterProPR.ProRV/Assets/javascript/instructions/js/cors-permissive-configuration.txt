@@ -1,0 +1,56 @@
+Review focus: Permissive CORS configuration
+
+What to look for:
+- Cross-origin resource sharing (CORS) policy allows overly broad access.
+- A server can use CORS (Cross-Origin Resource Sharing) to relax the restrictions imposed by the Same-Origin Policy, allowing controlled, secure cross-origin requests when necessary. A server with an overly permissive CORS configuration may inadvertently expose sensitive data or enable CSRF attacks, which allow attackers to trick users into performing unwanted operations on websites they're authenticated to.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CorsPermissiveConfigurationBad.js`):
+```
+import { ApolloServer } from 'apollo-server';
+var https = require('https'),
+    url = require('url');
+
+var server = https.createServer(function () { });
+
+server.on('request', function (req, res) {
+    // BAD: origin is too permissive
+    const server_1 = new ApolloServer({
+        cors: { origin: true }
+    });
+
+    let user_origin = url.parse(req.url, true).query.origin;
+    // BAD: CORS is controlled by user
+    const server_2 = new ApolloServer({
+        cors: { origin: user_origin }
+    });
+});
+```
+- Reference example (`CorsPermissiveConfigurationGood.js`):
+```
+import { ApolloServer } from 'apollo-server';
+var https = require('https'),
+    url = require('url');
+
+var server = https.createServer(function () { });
+
+server.on('request', function (req, res) {
+    // GOOD: origin is restrictive
+    const server_1 = new ApolloServer({
+        cors: { origin: false }
+    });
+
+    let user_origin = url.parse(req.url, true).query.origin;
+    // GOOD: user data is properly sanitized
+    const server_2 = new ApolloServer({
+        cors: { origin: (user_origin === "https://allowed1.com" || user_origin === "https://allowed2.com") ? user_origin : false }
+    });
+});
+```

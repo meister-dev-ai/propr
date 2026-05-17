@@ -1,0 +1,41 @@
+Review focus: Maybe undefined class attribute
+
+What to look for:
+- Accessing an attribute of `self` that is not initialized in the `__init__` method may cause an AttributeError at runtime
+- A possibly non-existent attribute of`self`is accessed in a method. The attribute is set in another method of the class, but may be uninitialized if the method that uses the attribute is called before the one that sets it. This may result in an`AttributeError`at run time.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MaybeUndefinedClassAttribute.py`):
+```
+class Spam:
+
+    def __init__(self):
+        self.spam = 'spam, spam, spam'
+
+    def set_eggs(eggs):
+        self.eggs = eggs
+
+    def __str__(self):
+        return '%s and %s' % (self.spam, self.eggs) # Maybe uninitialized attribute 'eggs'
+
+#Fixed version
+
+class Spam:
+
+    def __init__(self):
+        self.spam = 'spam, spam, spam'
+        self.eggs = None
+
+    def set_eggs(eggs):
+        self.eggs = eggs
+
+    def __str__(self):
+        return '%s and %s' % (self.spam, self.eggs) # OK
+```

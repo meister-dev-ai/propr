@@ -1,0 +1,66 @@
+Review focus: Cookie 'Secure' attribute is not set to true
+
+What to look for:
+- Cookies without the `Secure` flag may be sent in cleartext.
+- Cookies without the`Secure`flag set may be transmitted using HTTP instead of HTTPS. This leaves them vulnerable to being read by a third party attacker. If a sensitive cookie such as a session key is intercepted this way, it would allow the attacker to perform actions on a user's behalf.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`secureflagcore.cs`):
+```
+class MyController : Controller
+{
+    void Login()
+    {
+        var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions() { Secure = true };
+        Response.Cookies.Append("auth", "secret", cookieOptions);
+    }
+}
+```
+- Reference example (`cookiepolicyoptions.cs`):
+```
+public class Startup
+{
+    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    {
+        app.UseCookiePolicy(new CookiePolicyOptions()
+        {
+            Secure = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always,
+            HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always
+        });
+    }
+}
+```
+- Reference example (`secureflag.cs`):
+```
+class MyController : Controller
+{
+    void Login()
+    {
+        var cookie = new System.Web.HttpCookie("cookieName") { Secure = true };
+    }
+}
+```
+- Reference example (`Web.config`):
+```
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <system.web>
+    <authentication>
+      <forms
+        requireSSL="true"
+        ... />
+    </authentication>
+    <httpCookies
+        requireSSL="true"
+        ... />
+  </system.web>
+</configuration>
+```

@@ -1,0 +1,96 @@
+Review focus: LDAP query built from user-controlled sources
+
+What to look for:
+- Building an LDAP query from user-controlled sources is vulnerable to insertion of malicious LDAP code by the user.
+- If an LDAP query or DN is built using string concatenation or string formatting, and the components of the concatenation include user input without any proper sanitization, a user is likely to be able to run malicious LDAP queries.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`example_bad1.py`):
+```
+from flask import request, Flask
+import ldap
+
+
+@app.route("/normal")
+def normal():
+    unsafe_dc = request.args['dc']
+    unsafe_filter = request.args['username']
+
+    dn = "dc={}".format(unsafe_dc)
+    search_filter = "(user={})".format(unsafe_filter)
+
+    ldap_connection = ldap.initialize("ldap://127.0.0.1")
+    user = ldap_connection.search_s(
+        dn, ldap.SCOPE_SUBTREE, search_filter)
+```
+- Bad example (`example_bad2.py`):
+```
+from flask import request, Flask
+import ldap3
+
+
+@app.route("/normal")
+def normal():
+    unsafe_dc = request.args['dc']
+    unsafe_filter = request.args['username']
+
+    dn = "dc={}".format(unsafe_dc)
+    search_filter = "(user={})".format(unsafe_filter)
+
+    srv = ldap3.Server('ldap://127.0.0.1')
+    conn = ldap3.Connection(srv, user=dn, auto_bind=True)
+    conn.search(dn, search_filter)
+```
+- Good example (`example_good1.py`):
+```
+from flask import request, Flask
+import ldap
+import ldap.filter
+import ldap.dn
+
+
+@app.route("/normal")
+def normal():
+    unsafe_dc = request.args['dc']
+    unsafe_filter = request.args['username']
+
+    safe_dc = ldap.dn.escape_dn_chars(unsafe_dc)
+    safe_filter = ldap.filter.escape_filter_chars(unsafe_filter)
+
+    dn = "dc={}".format(safe_dc)
+    search_filter = "(user={})".format(safe_filter)
+
+    ldap_connection = ldap.initialize("ldap://127.0.0.1")
+    user = ldap_connection.search_s(
+        dn, ldap.SCOPE_SUBTREE, search_filter)
+```
+- Good example (`example_good2.py`):
+```
+from flask import request, Flask
+import ldap3
+from ldap3.utils.dn import escape_rdn
+from ldap3.utils.conv import escape_filter_chars
+
+
+@app.route("/normal")
+def normal():
+    unsafe_dc = request.args['dc']
+    unsafe_filter = request.args['username']
+
+    safe_dc = escape_rdn(unsafe_dc)
+    safe_filter = escape_filter_chars(unsafe_filter)
+
+    dn = "dc={}".format(safe_dc)
+    search_filter = "(user={})".format(safe_filter)
+
+    srv = ldap3.Server('ldap://127.0.0.1')
+    conn = ldap3.Connection(srv, user=dn, auto_bind=True)
+    conn.search(dn, search_filter)
+```

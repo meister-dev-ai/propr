@@ -1,0 +1,14 @@
+Review focus: Inner class could be static
+
+What to look for:
+- A non-static nested class keeps a reference to the enclosing object, which makes the nested class bigger and may cause a memory leak.
+- Nested classes allow logical grouping of related concerns, increasing encapsulation and readability. However, there is a potential disadvantage when using them that you should be aware of. Any non-static nested class implicitly holds onto its "enclosing instance". This means that:
+- The nested class has an implicitly defined field. The field holds a reference to the instance of the enclosing class that constructed the nested class.
+- The nested class's constructors have an implicit parameter. The parameter is used for passing in the instance of the enclosing class. A reference to the instance is then stored in the field mentioned above. Often, this is useful and necessary, because non-static nested class instances have access to instance state on their enclosing classes. However, if this instance state is not needed by the nested class, this makes nested class instances larger than necessary, and hidden references to the enclosing classes are often the source of subtle memory leaks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

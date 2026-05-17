@@ -1,0 +1,14 @@
+Review focus: Unsafe resource fetching in Android WebView
+
+What to look for:
+- JavaScript rendered inside WebViews can access protected application files and web resources from any origin exposing them to attack.
+- Android WebViews that allow externally controlled URLs to be loaded, and whose JavaScript interface is enabled, are potentially vulnerable to cross-site scripting and sensitive resource disclosure attacks. A`WebView`whose`WebSettings`object has called`setAllowFileAccessFromFileURLs(true)`or`setAllowUniversalAccessFromFileURLs(true)`must not load any untrusted web content. Enabling these settings allows malicious scripts loaded in a`file://`context to launch cross-site scripting attacks, accessing arbitrary local files including WebView cookies, session tokens, private app data or even credentials used on arbitrary web sites. This query detects the following two scenarios:
+- A vulnerability introduced by WebViews when JavaScript is enabled and remote inputs are allowed.
+- A more severe vulnerability when "allow cross-origin resource access" is also enabled. This setting was deprecated in API level 30 (Android 11), but most devices are still affected, especially since some Android phones are updated slowly or no longer updated at all.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

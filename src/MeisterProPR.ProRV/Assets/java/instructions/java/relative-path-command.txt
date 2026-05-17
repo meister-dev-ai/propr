@@ -1,0 +1,12 @@
+Review focus: Executing a command with a relative path
+
+What to look for:
+- Executing a command with a relative path is vulnerable to malicious changes in the PATH environment variable.
+- When a command is executed with a relative path, the runtime uses the PATH environment variable to find which executable to run. Therefore, any user who can change the PATH environment variable can cause the software to run a different, malicious executable.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

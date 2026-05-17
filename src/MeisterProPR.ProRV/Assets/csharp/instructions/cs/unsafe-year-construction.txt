@@ -1,0 +1,45 @@
+Review focus: Unsafe year argument for 'DateTime' constructor
+
+What to look for:
+- Constructing a 'DateTime' struct by setting the year argument to an increment or decrement of the year of a different 'DateTime' struct.
+- When creating a`System.DateTime`object by setting the year, month, and day in the constructor by performing an arithmetic operation on a different`DateTime`object, there is a risk that the date you are setting is invalid. On a leap year, such code may throw an`ArgumentOutOfRangeException`with a message of`"Year, Month, and Day parameters describe an unrepresentable DateTime."`
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnsafeYearConstructionBad.cs`):
+```
+using System;
+public class UnsafeYearConstructionBad
+{
+    public UnsafeYearConstructionBad()
+    {
+        DateTime Start;
+        DateTime End;
+        var now = DateTime.UtcNow;
+        // the base-date +/- n years may not be a valid date.
+        Start = new DateTime(now.Year - 1, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
+        End = new DateTime(now.Year + 1, now.Month, now.Day, 0, 0, 1, DateTimeKind.Utc);
+    }
+}
+```
+- Reference example (`UnsafeYearConstructionGood.cs`):
+```
+using System;
+public class UnsafeYearConstructionGood
+{
+    public UnsafeYearConstructionGood()
+    {
+        DateTime Start;
+        DateTime End;
+        var now = DateTime.UtcNow;
+        Start = now.AddYears(-1).Date;
+        End = now.AddYears(-1).Date.AddSeconds(1);
+    }
+}
+```

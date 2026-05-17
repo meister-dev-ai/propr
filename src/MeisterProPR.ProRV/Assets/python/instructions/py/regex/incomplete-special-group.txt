@@ -1,0 +1,27 @@
+Review focus: Missing part of special group in regular expression
+
+What to look for:
+- Incomplete special groups are parsed as normal groups and are unlikely to match the intended strings.
+- One of the problems with using regular expressions is that almost any sequence of characters is a valid pattern. This means that it is easy to omit a necessary character and still have a valid regular expression. Omitting a character in a named capturing group is a specific case which can dramatically change the meaning of a regular expression.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingPartSpecialGroup.py`):
+```
+import re
+matcher = re.compile(r'(P<name>[\w]+)')
+
+def only_letters(text):
+    m = matcher.match(text)
+    if m:
+        print("Letters are: " + m.group('name'))
+
+#Fix the pattern by adding the missing '?'
+fixed_matcher = re.compile(r'(?P<name>[\w]+)')
+```

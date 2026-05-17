@@ -1,0 +1,28 @@
+Review focus: Bad 'ctor' initialization
+
+What to look for:
+- Calling functions in the Rust std library from a ctor or dtor function is not safe.
+- Calling functions and methods in the Rust`std`library from a`#[ctor]`or`#[dtor]`function is not safe. This is because the`std`library only guarantees stability and portability between the beginning and the end of`main`, whereas`#[ctor]`functions are called before`main`, and`#[dtor]`functions are called after it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`BadCtorInitializationBad.rs`):
+```
+#[ctor::ctor]
+fn bad_example() {
+    println!("Hello, world!"); // BAD: the println! macro calls std library functions
+}
+```
+- Reference example (`BadCtorInitializationGood.rs`):
+```
+#[ctor::ctor]
+fn good_example() {
+    libc_print::libc_println!("Hello, world!"); // GOOD: libc-print does not use the std library
+}
+```

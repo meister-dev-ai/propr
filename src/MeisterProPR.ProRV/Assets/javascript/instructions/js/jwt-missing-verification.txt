@@ -1,0 +1,32 @@
+Review focus: JWT missing secret or public key verification
+
+What to look for:
+- The application does not verify the JWT payload with a cryptographic secret or public key.
+- Applications decoding JSON Web Tokens (JWT) may be misconfigured due to the`None`algorithm. The`None`algorithm is selected by calling the`verify()`function with a falsy value instead of a cryptographic secret or key. The`None`algorithm disables the integrity enforcement of a JWT payload and may allow a malicious actor to make unintended changes to a JWT payload leading to critical security issues like privilege escalation.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`missing-key-verification-bad.js`):
+```
+const jwt = require("jsonwebtoken");
+
+const secret = "my-secret-key";
+
+var token = jwt.sign({ foo: 'bar' }, secret, { algorithm: "none" })
+jwt.verify(token, false, { algorithms: ["HS256", "none"] })
+```
+- Good example (`missing-key-verification-good.js`):
+```
+const jwt = require("jsonwebtoken");
+
+const secret = "my-secret-key";
+
+var token = jwt.sign({ foo: 'bar' }, secret, { algorithm: "HS256" }) 
+jwt.verify(token, secret, { algorithms: ["HS256", "none"] })
+```

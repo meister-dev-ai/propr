@@ -1,0 +1,30 @@
+Review focus: Large object passed by value
+
+What to look for:
+- An object larger than 64 bytes is passed by value to a function.
+- This rule finds parameters greater than (for example) 64 bytes in size that are passed by value to function calls. It is not good practice to put large objects on the stack, as widespread use of this anti-pattern throughout a software project can easily lead to stack overflows. Performance-wise, the initial copy to the stack is more likely than not to be more expensive than any cost due to indirection caused accessing the object through a pointer. In terms of security, an overrun on an array in an object copied to the stack is a much greater risk than one that happens on the heap. In C++, there is the added cost of calling the constructor and destructor of the object being passed as well as those of any other objects that it (recursively) contains.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LargeParameter.cpp`):
+```
+typedef struct Names {
+    char first[100];
+    char last[100];
+} Names;
+
+int doFoo(Names n) { //wrong: n is passed by value (meaning the entire structure
+                     //is copied onto the stack, instead of just a pointer)
+    ...
+}
+
+int doBar(const Names &n) { //better, only a reference is passed
+    ...
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Encoding error
+
+What to look for:
+- Encoding errors cause failures at runtime and prevent analysis of the code.
+- Encoding errors prevent a module being evaluated and thus imported. An attempt to import a module with an invalid encoding will fail; a`SyntaxError`will be raised. Note that in Python 2, the default encoding is ASCII. The existence of an encoding error in a module may suggest other problems as well. Either the module is never imported in practice and could be deleted or a`try`statement around the import is mistakenly discarding the`SyntaxError`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

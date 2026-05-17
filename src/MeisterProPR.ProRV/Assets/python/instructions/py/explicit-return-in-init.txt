@@ -1,0 +1,21 @@
+Review focus: `__init__` method returns a value
+
+What to look for:
+- Explicitly returning a value from an `__init__` method will raise a TypeError.
+- The`__init__`method of a class is used to initialize new objects, not create them. As such, it should not return any value. Returning`None`is correct in the sense that no runtime error will occur, but it suggests that the returned value is meaningful, which it is not.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ExplicitReturnInInit.py`):
+```
+class ExplicitReturnInInit(object):
+    def __init__(self, i):
+        self.i = i
+        return self
+```

@@ -1,0 +1,25 @@
+Review focus: Potentially unsafe call to strncat
+
+What to look for:
+- Calling 'strncat' with an incorrect size argument may result in a buffer overflow.
+- The standard library function`strncat`appends a source string to a target string. The third argument defines the maximum number of characters to append and should be less than or equal to the remaining space in the destination buffer. Calls of the form`strncat(dest, src, strlen(dest))`or`strncat(dest, src, sizeof(dest))`set the third argument to the entire size of the destination buffer. Executing a call of this type may cause a buffer overflow unless the buffer is known to be empty. Similarly, calls of the form`strncat(dest, src, sizeof (dest) - strlen (dest))`allow one byte to be written outside the`dest`buffer. Buffer overflows can lead to anything from a segmentation fault to a security vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousCallToStrncat.cpp`):
+```
+strncat(dest, src, strlen(dest)); //wrong: should use remaining size of dest
+
+strncat(dest, src, sizeof(dest)); //wrong: should use remaining size of dest. 
+                                  //Also fails if dest is a pointer and not an array.
+ 
+strncat(dest, source, sizeof(dest) - strlen(dest)); // wrong: writes a zero byte past the `dest` buffer.
+
+strncat(dest, source, sizeof(dest) - strlen(dest) - 1); // correct: reserves space for the zero byte.
+```

@@ -1,0 +1,45 @@
+Review focus: Missed opportunity to use Select
+
+What to look for:
+- The intent of a foreach loop that immediately maps its iteration variable to another variable and then never uses the iteration variable again can often be better expressed using...
+- It is common to see loops that immediately compute a value from their iteration variable and then never use the iteration variable again in the rest of the loop (see example below). The intent of such loops is arguably not to iterate over the original sequence at all, but to iterate over the sequence that results from transforming the original sequence in some manner.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedSelectOpportunity.cs`):
+```
+class MissedSelectOpportunity
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = Enumerable.Range(1, 5).ToList();
+
+        foreach (int i in lst)
+        {
+            int j = i * i;
+            Console.WriteLine(j);
+        }
+    }
+}
+```
+- Reference example (`MissedSelectOpportunityFix.cs`):
+```
+class MissedSelectOpportunityFix
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = Enumerable.Range(1, 5).ToList();
+
+        foreach (int j in lst.Select(i => i * i))
+        {
+            Console.WriteLine(j);
+        }
+    }
+}
+```

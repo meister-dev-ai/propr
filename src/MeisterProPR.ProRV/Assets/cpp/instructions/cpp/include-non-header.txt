@@ -1,0 +1,20 @@
+Review focus: Include header files only
+
+What to look for:
+- The #include pre-processor directive should only be used to include header files.
+- This rule finds`#include`pre-processor directives that include a non-header (*.h, *.hpp) file. The exception is header files that define template classes or functions. These header files can include the implementation files, which are then considered to be part of the header file. Including source files can create unnecessarily large object files, and would also expose the entirety of the implementation instead of just its interface (especially in C with its limited set of scoping keywords). An exception to these rules are files that contain template definitions. These files can include`.c`and`.cpp`files that contain the implementation of the template. No code is actually generated for templates until they are used, and so their definition (not just the declaration) has to be included in any file that uses the template.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 32.cpp`):
+```
+#include <iostream.h> //correct: iostream.h is a header file
+#include "implementation.c" //wrong: include header files only
+...
+```

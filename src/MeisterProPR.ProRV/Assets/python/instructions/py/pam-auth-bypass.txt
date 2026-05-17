@@ -1,0 +1,64 @@
+Review focus: PAM authorization bypass due to incorrect usage
+
+What to look for:
+- Not using `pam_acct_mgmt` after `pam_authenticate` to check the validity of a login can lead to authorization bypass.
+- Using only a call to`pam_authenticate`to check the validity of a login can lead to authorization bypass vulnerabilities. A`pam_authenticate`only verifies the credentials of a user. It does not check if a user has an appropriate authorization to actually login. This means a user with an expired login or a password can still access the system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`PamAuthorizationBad.py`):
+```
+libpam                    = CDLL(find_library("pam"))
+
+pam_authenticate          = libpam.pam_authenticate
+pam_authenticate.restype  = c_int
+pam_authenticate.argtypes = [PamHandle, c_int]
+
+def authenticate(username, password, service='login'):
+    def my_conv(n_messages, messages, p_response, app_data):
+        """
+        Simple conversation function that responds to any prompt where the echo is off with the supplied password
+        """
+        ...
+
+    handle = PamHandle()
+    conv   = PamConv(my_conv, 0)
+    retval = pam_start(service, username, byref(conv), byref(handle))
+
+    retval = pam_authenticate(handle, 0)
+    return retval == 0
+```
+- Reference example (`PamAuthorizationGood.py`):
+```
+libpam                    = CDLL(find_library("pam"))
+
+pam_authenticate          = libpam.pam_authenticate
+pam_authenticate.restype  = c_int
+pam_authenticate.argtypes = [PamHandle, c_int]
+
+pam_acct_mgmt          = libpam.pam_acct_mgmt
+pam_acct_mgmt.restype  = c_int
+pam_acct_mgmt.argtypes = [PamHandle, c_int]
+
+def authenticate(username, password, service='login'):
+    def my_conv(n_messages, messages, p_response, app_data):
+        """
+        Simple conversation function that responds to any prompt where the echo is off with the supplied password
+        """
+        ...
+
+    handle = PamHandle()
+    conv   = PamConv(my_conv, 0)
+    retval = pam_start(service, username, byref(conv), byref(handle))
+
+    retval = pam_authenticate(handle, 0)
+    if retval == 0:
+        retval = pam_acct_mgmt(handle, 0)
+    return retval == 0
+```

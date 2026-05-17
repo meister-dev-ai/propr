@@ -1,0 +1,12 @@
+Review focus: Dubious NULL check
+
+What to look for:
+- The address of a field (except the first) will never be NULL, so it is misleading, at best, to check for that case.
+- The expression`&foo->bar`gets the address of`foo`'s member`bar`, which is the address of`foo`plus the offset of the`bar`member. If said offset is non-zero, then the expression`&foo->bar`only equals`NULL`when the address of`foo`is negative. While this is not impossible, it can only happen if`foo`is a negative integer explicitly cast to a pointer, or if`foo`is a pointer into kernel-mode address space. As neither of these cases are particularly likely, the`NULL`-check is dubious.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

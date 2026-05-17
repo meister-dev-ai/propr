@@ -1,0 +1,66 @@
+Review focus: Use of insecure HostKeyCallback implementation
+
+What to look for:
+- Detects insecure SSL client configurations with an implementation of the `HostKeyCallback` that accepts all host keys.
+- The`ClientConfig`specifying the configuration for establishing a SSH connection has a field`HostKeyCallback`that must be initialized with a function that validates the host key returned by the server. Not properly verifying the host key returned by a server provides attackers with an opportunity to perform a Machine-in-the-Middle (MitM) attack. A successful attack can compromise the confidentiality and integrity of the information communicated with the server. The`ssh`package provides the predefined callback`InsecureIgnoreHostKey`that can be used during development and testing. It accepts any provided host key. This callback, or a semantically similar callback, should not be used in production code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`InsecureHostKeyCallbackExample.go`):
+```
+package main
+
+import (
+	"golang.org/x/crypto/ssh"
+	"net"
+)
+
+func main() {}
+
+func insecureIgnoreHostKey() {
+	_ = &ssh.ClientConfig{
+		User:            "username",
+		Auth:            []ssh.AuthMethod{nil},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+}
+
+func insecureHostKeyCallback() {
+	_ = &ssh.ClientConfig{
+		User: "username",
+		Auth: []ssh.AuthMethod{nil},
+		HostKeyCallback: ssh.HostKeyCallback(
+			func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+				return nil
+			}),
+	}
+}
+```
+- Reference example (`SecureHostKeyCallbackExample.go`):
+```
+package main
+
+import (
+	"golang.org/x/crypto/ssh"
+	"io/ioutil"
+)
+
+func main() {}
+
+func secureHostKeyCallback() {
+	publicKeyBytes, _ := ioutil.ReadFile("allowed_hostkey.pub")
+	publicKey, _ := ssh.ParsePublicKey(publicKeyBytes)
+
+	_ = &ssh.ClientConfig{
+		User:            "username",
+		Auth:            []ssh.AuthMethod{nil},
+		HostKeyCallback: ssh.FixedHostKey(publicKey),
+	}
+}
+```

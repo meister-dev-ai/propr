@@ -1,0 +1,107 @@
+Review focus: Class does not implement Equals(object)
+
+What to look for:
+- The class does not implement the 'Equals(object)' method, which can cause unexpected behavior.
+- When the class of the object on which`Equals(object)`is called does not define its own`Equals(object)`method, an`Equals(object)`method defined in one of its base classes will be called instead. In the worst case, the`Equals(object)`method of`System.Object`will be called, resulting in a reference equality check. This is probably not what was intended. Classes that implement the`==`operator should also override the`Equals(object)`method, because otherwise the two forms of equality will behave differently, leading to unexpected behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ClassDoesNotImplementEqualsBad.cs`):
+```
+using System;
+
+class Bad
+{
+    class Car
+    {
+        protected string make;
+        protected string model;
+
+        public Car(string make, string model)
+        {
+            this.make = make;
+            this.model = model;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Car c && c.GetType() == typeof(Car))
+                return make == c.make && model == c.model;
+            return false;
+        }
+    }
+
+    class GasolineCar : Car
+    {
+        protected bool unleaded;
+
+        public GasolineCar(string make, string model, bool unleaded) : base(make, model)
+        {
+            this.unleaded = unleaded;
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        var car1 = new GasolineCar("Ford", "Focus", true);
+        var car2 = new GasolineCar("Ford", "Focus", false);
+        Console.WriteLine("car1 " + (car1.Equals(car2) ? "does" : "does not") + " equal car2.");
+    }
+}
+```
+- Reference example (`ClassDoesNotImplementEqualsGood.cs`):
+```
+using System;
+
+class Good
+{
+    class Car
+    {
+        protected string make;
+        protected string model;
+
+        public Car(string make, string model)
+        {
+            this.make = make;
+            this.model = model;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Car c && c.GetType() == typeof(Car))
+                return make == c.make && model == c.model;
+            return false;
+        }
+    }
+
+    class GasolineCar : Car
+    {
+        protected bool unleaded;
+
+        public GasolineCar(string make, string model, bool unleaded) : base(make, model)
+        {
+            this.unleaded = unleaded;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is GasolineCar gc && gc.GetType() == typeof(GasolineCar))
+                return make == gc.make && model == gc.model && unleaded == gc.unleaded;
+            return false;
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        var car1 = new GasolineCar("Ford", "Focus", true);
+        var car2 = new GasolineCar("Ford", "Focus", false);
+        Console.WriteLine("car1 " + (car1.Equals(car2) ? "does" : "does not") + " equal car2.");
+    }
+}
+```

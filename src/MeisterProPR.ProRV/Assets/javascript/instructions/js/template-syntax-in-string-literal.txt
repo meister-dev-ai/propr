@@ -1,0 +1,30 @@
+Review focus: Template syntax in string literal
+
+What to look for:
+- A string literal appears to use template syntax but is not quoted with backticks.
+- Template literals are strings enclosed with backticks (``). These may contain placeholder expressions with the syntax ${..}, which are evaluated at runtime and inserted as part of the string. Ordinary string literals may be enclosed by single ('') or double quotes (""), and the placeholder syntax ${..} has no special meaning in these. In files that make use of template literals, it is hard to distinguish actual template literals from ordinary strings that happen to contain placeholder syntax. This is often the result of mistyping the quotes on a template literal.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TemplateSyntaxInStringLiteral.js`):
+```
+log.info(`Connecting to ${id}`)
+let connection = openConnection(id)
+if (!connection) {
+  log.error('Could not connect to ${id}')
+}
+```
+- Reference example (`TemplateSyntaxInStringLiteralGood.js`):
+```
+log.info(`Connecting to ${id}`)
+let connection = openConnection(id)
+if (!connection) {
+  log.error(`Could not connect to ${id}`)
+}
+```

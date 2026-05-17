@@ -1,0 +1,45 @@
+Review focus: Equals should not apply "as"
+
+What to look for:
+- Implementations of 'Equals' should not use "as" to test the type of the argument, but rather call GetType().
+- The method signature of`Equals`takes an object as an argument. It is therefore common to test whether the parameter is of the same type as the object that`Equals`is being called on. This should not be done using`as`and then checking for null because this technique does not limit the argument to being the exact same type as the object. It will not return null if the argument is a subtype of the object's type. As an exception to the rule, it is acceptable to use`as`when your class is sealed, because the concern about subclassing does not then apply. That said, it is probably best to avoid it even then, because sealed classes can sometimes become unsealed later - it's sensible to try and avoid potential problems down the line.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EqualsUsesAs.cs`):
+```
+class EqualsUsesAs
+{
+    class BaseClass
+    {
+        public override bool Equals(object obj)
+        {
+            BaseClass objBase = obj as BaseClass;
+            return objD != null;
+        }
+    }
+
+    class DClass : BaseClass
+    {
+        public override bool Equals(object obj)
+        {
+            DClass objD = obj as DClass;
+            return objD != null;
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        BaseClass b = new BaseClass();
+        DClass d = new DClass();
+        Console.WriteLine("b " + (b.Equals(d) ? "does" : "does not") + " equal d.");
+        Console.WriteLine("d " + (d.Equals(b) ? "does" : "does not") + " equal b.");
+    }
+}
+```

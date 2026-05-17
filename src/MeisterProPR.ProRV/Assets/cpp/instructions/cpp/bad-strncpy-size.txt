@@ -1,0 +1,39 @@
+Review focus: Possibly wrong buffer size in string copy
+
+What to look for:
+- Calling 'strncpy' with the size of the source buffer as the third argument may result in a buffer overflow.
+- The standard library function`strncpy`copies a source string to a destination buffer. The third argument defines the maximum number of characters to copy and should be less than or equal to the size of the destination buffer. Calls of the form`strncpy(dest, src, strlen(src))`or`strncpy(dest, src, sizeof(src))`incorrectly set the third argument to the size of the source buffer. Executing a call of this type may cause a buffer overflow. Buffer overflows can lead to anything from a segmentation fault to a security vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StrncpyFlippedArgsBad.cpp`):
+```
+char src[256];
+char dest1[128];
+
+...
+
+strncpy(dest1, src, sizeof(src)); // wrong: size of dest should be used
+
+char *dest2 = (char *)malloc(sz1 + sz2 + sz3);
+strncpy(dest2, src, strlen(src)); // wrong: size of dest should be used
+```
+- Reference example (`StrncpyFlippedArgsGood.cpp`):
+```
+char src[256];
+char dest1[128];
+
+...
+
+strncpy(dest1, src, sizeof(dest1)); // correct
+
+size_t destSize = sz1 + sz2 + sz3;
+char *dest2 = (char *)malloc(destSize);
+strncpy(dest2, src, destSize); // correct
+```

@@ -1,0 +1,26 @@
+Review focus: Uncontrolled allocation size
+
+What to look for:
+- Allocating memory with a size controlled by an external user can result in arbitrary amounts of memory being allocated.
+- This code allocates memory using a size value based on user input, with no apparent bound on its magnitude being established. This allows for arbitrary amounts of memory to be allocated. If the allocation size is calculated by multiplying user input by a`sizeof`expression, the multiplication can overflow. When an integer multiplication overflows in C, the result wraps around and can be much smaller than intended. A later attempt to write data into the allocated memory can then be out of bounds.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedAllocationSize.c`):
+```
+int factor = atoi(getenv("BRANCHING_FACTOR"));
+
+// BAD: This can allocate too little memory if factor is very large due to overflow.
+char **root_node = (char **) malloc(factor * sizeof(char *));
+
+// GOOD: Prevent overflow and unbounded allocation size by checking the input.
+if (factor > 0 && factor <= 1000) {
+    char **root_node = (char **) malloc(factor * sizeof(char *));
+}
+```

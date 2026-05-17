@@ -1,0 +1,48 @@
+Review focus: Local scope variable shadows member
+
+What to look for:
+- A local scope variable that shadows a member with the same name can be confusing, and can result in logic errors.
+- Naming a local variable or parameter after an existing member in the same class is confusing. It could lead to accesses or assignments to the local variable that should have been to the corresponding member.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LocalScopeVariableShadowsMemberBad.cs`):
+```
+using System.Windows.Forms;
+
+class Bad
+{
+    private string title;
+    private string name;
+
+    public void DisplayDetails()
+    {
+        var title = "Person Details";
+        var message = "Title: " + title + "\nName: " + name;
+        MessageBox.Show(message, title);
+    }
+}
+```
+- Reference example (`LocalScopeVariableShadowsMemberGood.cs`):
+```
+using System.Windows.Forms;
+
+class Good
+{
+    private string title;
+    private string name;
+
+    public void DisplayDetails()
+    {
+        var boxTitle = "Person Details";
+        var message = "Title: " + title + "\nName: " + name;
+        MessageBox.Show(message, boxTitle);
+    }
+}
+```

@@ -1,0 +1,48 @@
+Review focus: Potentially uninitialized local variable
+
+What to look for:
+- Reading from a local variable that has not been assigned to will typically yield garbage.
+- A local non-static variable of a non-class type has an undefined value before it is initialized. For example, it is incorrect to rely on an uninitialized integer to have the value`0`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UninitializedLocal.cpp`):
+```
+int absWrong(int i) {
+	int j;
+	if (i > 0) {
+		j = i;
+	} else if (i < 0) {
+		j = -i;
+	}
+	return j; // wrong: j may not be initialized before use
+}
+
+int absCorrect1(int i) {
+	int j = 0;
+	if (i > 0) {
+		j = i;
+	} else if (i < 0) {
+		j = -i;
+	}
+	return j; // correct: j always initialized before use
+}
+
+int absCorrect2(int i) {
+	int j;
+	if (i > 0) {
+		j = i;
+	} else if (i < 0) {
+		j = -i;
+	} else {
+		j = 0;
+	}
+	return j; // correct: j always initialized before use
+}
+```

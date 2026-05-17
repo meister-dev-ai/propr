@@ -1,0 +1,16 @@
+Review focus: Hub classes
+
+What to look for:
+- Hub classes, which are classes that use, and are used by, many other classes, are complex and difficult to change without affecting the rest of the system.
+- A hub class is a class that depends on many other classes, and on which many other classes depend. For the purposes of this rule, a dependency is any use of one class in another. Examples include:
+- Using another class as the declared type of a variable or field
+- Using another class as an argument type for a method
+- Using another class as a superclass in the`extends`declaration
+- Calling a method defined in the class A class can be regarded as a hub class when both the incoming dependencies and the outgoing source dependencies are particularly high. (Outgoing source dependencies are dependencies on other source classes, rather than library classes like`java.lang.Object`.) It is undesirable to have many hub classes because they are extremely difficult to maintain. This is because many other classes depend on a hub class, and so the other classes have to be tested and possibly adapted after each change to the hub class. Also, when one of a hub class's direct dependencies changes, the behavior of the hub class and all of its dependencies has to be checked and possibly adapted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

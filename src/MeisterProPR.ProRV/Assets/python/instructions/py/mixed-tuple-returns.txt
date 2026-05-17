@@ -1,0 +1,32 @@
+Review focus: Returning tuples with varying lengths
+
+What to look for:
+- A function that potentially returns tuples of different lengths may indicate a problem.
+- A common pattern for functions returning multiple arguments is to return a single tuple containing said arguments. If the function has multiple return points, care must be taken to ensure that the tuples returned have the same length.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnConsistentTupleSizes.py`):
+```
+def sum_length_product1(l):
+    if l == []:
+        return 0, 0                              # this tuple has the wrong length
+    else:
+        val = l[0]
+        restsum, restlength, restproduct = sum_length_product1(l[1:])
+        return restsum + val, restlength + 1, restproduct * val
+
+def sum_length_product2(l):
+    if l == []:
+        return 0, 0, 1                           # this tuple has the correct length
+    else:
+        val = l[0]
+        restsum, restlength, restproduct = sum_length_product2(l[1:])
+        return restsum + val, restlength + 1, restproduct * val
+```

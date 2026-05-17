@@ -1,0 +1,12 @@
+Review focus: Non-serializable field
+
+What to look for:
+- A non-transient field in a serializable class must also be serializable otherwise it causes the class to fail to serialize with a 'NotSerializableException'.
+- If a serializable class is serialized using the default Java serialization mechanism, each non-static, non-transient field in the class must also be serializable. Otherwise, the class generates a`java.io.NotSerializableException`as its fields are written out by`ObjectOutputStream.writeObject`. As an exception, classes that define their own`readObject`and`writeObject`methods can have fields that are not themselves serializable. The`readObject`and`writeObject`methods are responsible for encoding any state in those fields that needs to be serialized.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

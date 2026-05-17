@@ -326,6 +326,44 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
     }
 
     [Fact]
+    public async Task CreateAiConnection_WithDisabledOptionalProRvPrefilterWithoutModel_Returns201()
+    {
+        var client = this.CreateAuthorizedClient();
+        var payload = new
+        {
+            displayName = "Primary Profile",
+            providerKind = "azureOpenAi",
+            baseUrl = "https://my-openai.openai.azure.com/",
+            auth = new
+            {
+                mode = "apiKey",
+                apiKey = "secret-api-key",
+            },
+            discoveryMode = "manualOnly",
+            configuredModels = new[]
+            {
+                BuildConfiguredModel("gpt-4o"),
+                BuildConfiguredModel("text-embedding-3-large", true),
+            },
+            purposeBindings = new object[]
+            {
+                new { purpose = "reviewDefault", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                new { purpose = "memoryReconsideration", remoteModelId = "gpt-4o", protocolMode = "auto", isEnabled = true },
+                new { purpose = "embeddingDefault", remoteModelId = "text-embedding-3-large", protocolMode = "embeddings", isEnabled = true },
+                new { purpose = "proRvPrefilter", protocolMode = "auto", isEnabled = false },
+            },
+        };
+
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections", payload);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var created = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+        Assert.NotNull(created);
+        Assert.DoesNotContain(created.PurposeBindings, binding => binding.Purpose == AiPurpose.ProRVPrefilter);
+    }
+
+    [Fact]
     public async Task ActivateAiConnection_WithUnverifiedProfile_Returns400()
     {
         var created = await this.SeedConnectionAsync("Primary Profile", verify: false);

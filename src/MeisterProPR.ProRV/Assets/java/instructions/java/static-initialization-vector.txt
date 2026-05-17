@@ -1,0 +1,12 @@
+Review focus: Using a static initialization vector for encryption
+
+What to look for:
+- An initialization vector (IV) used for ciphers of certain modes (such as CBC or GCM) should be unique and unpredictable, to maximize encryption and prevent dictionary attacks.
+- When a cipher is used in certain modes such as CBC or GCM, it requires an initialization vector (IV). Under the same secret key, IVs should be unique and ideally unpredictable. If the same IV is used with the same secret key, then the same plaintext results in the same ciphertext. This can let an attacker learn if the same data pieces are transferred or stored, or help the attacker run a dictionary attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

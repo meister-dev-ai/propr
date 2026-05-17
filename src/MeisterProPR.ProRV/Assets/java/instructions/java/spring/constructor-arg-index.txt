@@ -1,0 +1,12 @@
+Review focus: Use constructor-arg types instead of index
+
+What to look for:
+- Using a type name instead of an index number in a Spring 'constructor-arg' element improves readability.
+- Using type matching instead of index matching in a Spring`constructor-arg`element produces a more readable bean definition and is less vulnerable to being broken by a change to the constructor of the bean's underlying class. Index matching should be used only if type matching is not sufficient to remove ambiguity in the constructor arguments.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

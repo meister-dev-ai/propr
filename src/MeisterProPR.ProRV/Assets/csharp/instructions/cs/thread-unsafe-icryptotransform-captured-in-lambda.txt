@@ -1,0 +1,64 @@
+Review focus: Thread-unsafe capturing of an ICryptoTransform object
+
+What to look for:
+- An instance of a class that either implements or has a field of type System.Security.Cryptography.ICryptoTransform is being captured by a lambda, and used in what seems to be a...
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ThreadUnSafeICryptoTransformLambdaBad.cs`):
+```
+public static void RunThreadUnSafeICryptoTransformLambdaBad()
+{
+    const int threadCount = 4;
+    // This local variable for a hash object is going to be shared across multiple threads
+    var sha1 = SHA1.Create();
+    var b = new Barrier(threadCount);
+    Action start = () => {
+        b.SignalAndWait();
+        for (int i = 0; i < 1000; i++)
+        {
+            var pwd = Guid.NewGuid().ToString();
+            var bytes = Encoding.UTF8.GetBytes(pwd);
+            // This call may fail, or return incorrect results
+            sha1.ComputeHash(bytes);
+        }
+    };
+    var threads = Enumerable.Range(0, threadCount)
+                            .Select(_ => new ThreadStart(start))
+                            .Select(x => new Thread(x))
+                            .ToList();
+    foreach (var t in threads) t.Start();
+    foreach (var t in threads) t.Join();
+}
+```
+- Reference example (`ThreadUnSafeICryptoTransformLambdaGood.cs`):
+```
+public static void RunThreadUnSafeICryptoTransformLambdaFixed()
+{
+    const int threadCount = 4;
+    var b = new Barrier(threadCount);
+    Action start = () => {
+        b.SignalAndWait();
+        // The hash object is no longer shared
+        for (int i = 0; i < 1000; i++)
+        {
+            var sha1 = SHA1.Create();
+            var pwd = Guid.NewGuid().ToString();
+            var bytes = Encoding.UTF8.GetBytes(pwd);
+            sha1.ComputeHash(bytes);
+        }
+    };
+    var threads = Enumerable.Range(0, threadCount)
+                            .Select(_ => new ThreadStart(start))
+                            .Select(x => new Thread(x))
+                            .ToList();
+    foreach (var t in threads) t.Start();
+    foreach (var t in threads) t.Join();
+}
+```

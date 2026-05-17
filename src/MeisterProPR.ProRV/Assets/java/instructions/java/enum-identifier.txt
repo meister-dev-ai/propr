@@ -1,0 +1,12 @@
+Review focus: String 'enum' used as identifier
+
+What to look for:
+- Using 'enum' as an identifier makes the code incompatible with Java 5 and later.
+- Enumerations, or enums, were introduced in Java 5, with the keyword`enum`. Code written before this may use`enum`as an identifier. To compile such code, you must compile it with a command such as`javac -source 1.4 ...`. However, this means that you cannot use any new features that are provided in Java 5 and later.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,23 @@
+Review focus: Too few arguments in formatting call
+
+What to look for:
+- A string formatting operation, such as '"{0}: {1}, {2}".format(a,b)', where the number of values to be formatted is too few for the format string will raise an IndexError.
+- A formatting expression, that is an expression of the form`the_format.format(args)`or`format(the_format, args)`, must have sufficient arguments to match the format. Otherwise, an`IndexError`will be raised.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WrongNumberArgumentsFor3101Format.py`):
+```
+def unsafe_format():
+    the_format = "{} {} {}"
+    if unlikely_condition():
+        return the_format.format(1, 2)
+    else:
+        return the_format.format(1, 2, 3)
+```

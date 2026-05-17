@@ -1,0 +1,30 @@
+Review focus: Returning stack-allocated memory
+
+What to look for:
+- A function returns a pointer to a stack-allocated region of memory.
+- This rule finds return statements that return pointers to an object allocated on the stack. The lifetime of a stack allocated memory location only lasts until the function returns, and the contents of that memory become undefined after that. Clearly, using a pointer to stack memory after the function has already returned will have undefined results.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ReturnStackAllocatedMemoryBad.cpp`):
+```
+Record *mkRecord(int value) {
+	Record myRecord(value);
+
+	return &myRecord; // BAD: returns a pointer to `myRecord`, which is a stack-allocated object.
+}
+```
+- Reference example (`ReturnStackAllocatedMemoryGood.cpp`):
+```
+Record *mkRecord(int value) {
+	Record *myRecord = new Record(value);
+
+	return myRecord; // GOOD: returns a pointer to a `myRecord`, which is a heap-allocated object.
+}
+```

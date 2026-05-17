@@ -1,0 +1,60 @@
+Review focus: Open URL redirect
+
+What to look for:
+- Open URL redirection based on unvalidated user input may cause redirection to malicious web sites.
+- Directly incorporating user input into a URL redirect request without validating the input can facilitate phishing attacks. In these attacks, unsuspecting users can be redirected to a malicious site that looks very similar to the real site they intend to visit, but is controlled by the attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`OpenUrlRedirect.go`):
+```
+package main
+
+import (
+	"net/http"
+)
+
+func serve() {
+	http.HandleFunc("/redir", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		http.Redirect(w, r, r.Form.Get("target"), 302)
+	})
+}
+```
+- Reference example (`OpenUrlRedirectGood.go`):
+```
+package main
+
+import (
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+func serve1() {
+	http.HandleFunc("/redir", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		targetUrl := r.Form.Get("target")
+		// replace all backslashes with forward slashes before parsing the URL
+		targetUrl = strings.ReplaceAll(targetUrl, "\\", "/")
+
+		target, err := url.Parse(targetUrl)
+		if err != nil {
+			// ...
+		}
+
+		if target.Hostname() == "" {
+			// GOOD: check that it is a local redirect
+			http.Redirect(w, r, target.String(), 302)
+		} else {
+			w.WriteHeader(400)
+		}
+	})
+}
+```

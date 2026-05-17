@@ -1,0 +1,64 @@
+Review focus: Server-side URL redirect
+
+What to look for:
+- Server-side URL redirection based on unvalidated user input may cause redirection to malicious web sites.
+- Directly incorporating user input into a URL redirect request without validating the input can facilitate phishing attacks. In these attacks, unsuspecting users can be redirected to a malicious site that looks very similar to the real site they intend to visit, but which is controlled by the attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ServerSideUrlRedirect.js`):
+```
+const app = require("express")();
+
+app.get("/redirect", function (req, res) {
+  // BAD: a request parameter is incorporated without validation into a URL redirect
+  res.redirect(req.query["target"]);
+});
+```
+- Reference example (`ServerSideUrlRedirectGood.js`):
+```
+const app = require("express")();
+
+const VALID_REDIRECT = "http://cwe.mitre.org/data/definitions/601.html";
+
+app.get("/redirect", function (req, res) {
+  // GOOD: the request parameter is validated against a known fixed string
+  let target = req.query["target"];
+  if (VALID_REDIRECT === target) {
+    res.redirect(target);
+  } else {
+    res.redirect("/");
+  }
+});
+```
+- Reference example (`ServerSideUrlRedirectGood2.js`):
+```
+const app = require("express")();
+
+function isLocalUrl(path) {
+  try {
+    return (
+      // TODO: consider substituting your own domain for example.com
+      new URL(path, "https://example.com").origin === "https://example.com"
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+app.get("/redirect", function (req, res) {
+  // GOOD: check that we don't redirect to a different host
+  let target = req.query["target"];
+  if (isLocalUrl(target)) {
+    res.redirect(target);
+  } else {
+    res.redirect("/");
+  }
+});
+```

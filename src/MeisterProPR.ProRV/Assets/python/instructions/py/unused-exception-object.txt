@@ -1,0 +1,32 @@
+Review focus: Unused exception object
+
+What to look for:
+- An exception object is created, but is not used.
+- Creating a new exception object is no different from creating any other object. The exception needs to be raised to have an effect.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedExceptionObject.py`):
+```
+def do_action_forgotten_raise(action):
+    if action == "go":
+        start()
+    elif action == "stop":
+        stop()
+    else:
+        ValueError(action)
+
+def do_action(action):
+    if action == "go":
+        start()
+    elif action == "stop":
+        stop()
+    else:
+        raise ValueError(action)
+```

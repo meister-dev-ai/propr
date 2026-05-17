@@ -1,0 +1,12 @@
+Review focus: Syntax error
+
+What to look for:
+- Syntax errors cause failures at runtime and prevent analysis of the code.
+- Syntax errors prevent a module being evaluated and thus imported. An attempt to import a module with invalid syntax will fail; a`SyntaxError`will be raised. A common cause of syntax errors is the difference in syntax between Python 2 and Python 3. In particular, a syntax error may be alerted if a Python 3 file is assumed to be compatible with Python 2 (or vice versa). Explicitly specifying the expected Python version can help prevent this. The existence of a syntax error in a module may suggest other problems as well. Either the module is never imported in practice and could be deleted or a`try`statement around the import is mistakenly discarding the`SyntaxError`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

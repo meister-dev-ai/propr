@@ -1,0 +1,55 @@
+Review focus: Potentially incorrect Equals(...) signature
+
+What to look for:
+- The declaring type of a method with signature 'Equals(T)' does not implement 'Equals(object)'.
+- The intent of defining an`Equals(object)`method on a class is generally to ensure that instances of that class are compared using it, both in client code and in library code. The standard`Equals(object)`method has an`object`parameter, so`Equals(T)`methods where`T`is not`object`, will often not be used in favor of`Equals(object)`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectEqualsSignatureBad.cs`):
+```
+using System;
+
+class Bad
+{
+    private int id;
+
+    public Bad(int Id)
+    {
+        this.id = Id;
+    }
+
+    public bool Equals(Bad b) =>
+      this.id == b.id;
+}
+```
+- Reference example (`IncorrectEqualsSignatureGood.cs`):
+```
+using System;
+
+class Good
+{
+    private int id;
+
+    public Good(int Id)
+    {
+        this.id = Id;
+    }
+
+    public bool Equals(Good g) =>
+      this.id == g.id;
+
+    public override bool Equals(object o)
+    {
+        if (o is Good g && g.GetType() == typeof(Good))
+            return this.Equals(g);
+        return false;
+    }
+}
+```

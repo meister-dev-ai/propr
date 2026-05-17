@@ -1,0 +1,37 @@
+Review focus: Default version of SSL/TLS may be insecure
+
+What to look for:
+- Leaving the SSL/TLS version unspecified may result in an insecure default protocol being used.
+- The`ssl.wrap_socket`function defaults to an insecure version of SSL/TLS when no specific protocol version is specified. This may leave the connection vulnerable to attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`insecure_default_protocol.py`):
+```
+import ssl
+import socket
+
+# Using the deprecated ssl.wrap_socket method
+ssl.wrap_socket(socket.socket())
+
+# Using SSLContext
+context = ssl.SSLContext()
+```
+- Reference example (`secure_default_protocol.py`):
+```
+import ssl
+
+# Using flags to restrict the protocol
+context = ssl.SSLContext()
+context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+
+# Declaring a minimum version to restrict the protocol
+context = ssl.create_default_context()
+context.minimum_version = ssl.TLSVersion.TLSv1_2
+```

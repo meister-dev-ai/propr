@@ -1,0 +1,28 @@
+Review focus: Access to let-bound variable in temporal dead zone
+
+What to look for:
+- Accessing a let-bound variable before its declaration will lead to a runtime error on ECMAScript 2015-compatible platforms.
+- The scope of a variable declared with`let`is its innermost enclosing block statement, loop or function. Unlike variables declared with`var`, variables declared with`let`are not hoisted to the top of their scope, giving rise to a region of code where the variable is in scope, but not declared yet. Accessing a`let`-bound variable inside this so-called "temporal dead zone" is permitted by some legacy implementations, but is illegal in ECMAScript 2015.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TemporalDeadZone.js`):
+```
+function f() {
+    x = 23;
+    let x;
+}
+```
+- Reference example (`TemporalDeadZoneGood.js`):
+```
+function f() {
+    let x;
+    x = 23;
+}
+```

@@ -1,0 +1,40 @@
+Review focus: Rethrowing exception variable
+
+What to look for:
+- Throwing the exception variable will lose the original stack information.
+- Rethrowing an exception variable will lose the stack trace in the original exception, and replace it with the stack trace from the`throw`statement. This will make debugging the root cause of the exception more difficult, for example if the stack trace is written to a log file.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RethrowException.cs`):
+```
+try
+{
+  Run();
+status = Status.Success;
+}
+catch (Exception ex)
+{
+  status = Status.UnexpectedException;
+  throw ex;    // BAD
+}
+```
+- Reference example (`RethrowExceptionFix.cs`):
+```
+try
+{
+  Run();
+status = Status.Success;
+}
+catch
+{
+  status = Status.UnexpectedException;
+  throw;    // GOOD
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Constant interface anti-pattern
+
+What to look for:
+- Implementing an interface (or extending an abstract class) only to put a number of constant definitions into scope is considered bad practice.
+- Definitions of constants (meaning static, final fields) should be placed in an appropriate class where they belong logically. However, it is usually bad practice to implement an interface (or extend an abstract class) only to put a number of constant definitions into scope.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

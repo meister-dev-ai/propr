@@ -1,0 +1,12 @@
+Review focus: Use of externally-controlled format string
+
+What to look for:
+- Using external input in format strings can lead to garbled output.
+- Methods like`Kernel.printf`accept a format string that is used to format the remaining arguments by providing inline format specifiers. If the format string contains unsanitized input from an untrusted source, then that string may contain unexpected format specifiers that cause garbled output or throw an exception.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

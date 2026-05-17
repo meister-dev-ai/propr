@@ -1,0 +1,59 @@
+Review focus: Cookie 'HttpOnly' attribute is not set to true
+
+What to look for:
+- Sensitive cookies without the `HttpOnly` property set are accessible by client-side scripts such as JavaScript.
+- Cookies without the`HttpOnly`flag set are accessible to client-side scripts such as JavaScript running in the same origin. In case of a Cross-Site Scripting (XSS) vulnerability, the cookie can be stolen by a malicious script. If a sensitive cookie does not need to be accessed directly by client-side JS, the`HttpOnly`flag should be set.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`httponlyflagcore.cs`):
+```
+class MyController : Controller
+{
+    void Login()
+    {
+        var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions() { HttpOnly = true };
+        Response.Cookies.Append("auth", "secret", cookieOptions);
+    }
+}
+```
+- Reference example (`cookiepolicyoptions.cs`):
+```
+public class Startup
+{
+    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    {
+        app.UseCookiePolicy(new CookiePolicyOptions()
+        {
+            Secure = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always,
+            HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always
+        });
+    }
+}
+```
+- Reference example (`httponlyflag.cs`):
+```
+class MyController : Controller
+{
+    void Login()
+    {
+        var cookie = new System.Web.HttpCookie("cookieName") { HttpOnly = true };
+    }
+}
+```
+- Reference example (`Web.config`):
+```
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <system.web>
+    <httpCookies httpOnlyCookies="true"/>
+  </system.web>
+</configuration>
+```

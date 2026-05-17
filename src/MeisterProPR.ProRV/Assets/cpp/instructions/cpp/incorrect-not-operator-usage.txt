@@ -1,0 +1,36 @@
+Review focus: Incorrect 'not' operator usage
+
+What to look for:
+- Usage of a logical-not (!) operator as an operand for a bit-wise operation.
+- This rule finds logical-not operator usage as an operator for in a bit-wise operation. Due to the nature of logical operation result value, only the lowest bit could possibly be set, and it is unlikely to be intent in bitwise operations. Violations are often indicative of a typo, using a logical-not (`!`) operator instead of the bit-wise not (`~`) operator. This rule is restricted to analyze bit-wise and (`&`) and bit-wise or (`|`) operation in order to provide better precision. This rule ignores instances where a double negation (`!!`) is explicitly used as the operator of the bitwise operation, as this is a commonly used as a mechanism to normalize an integer value to either 1 or 0. NOTE: It is not recommended to use this rule in kernel code or older C code as it will likely find several false positive instances.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectNotOperatorUsage.cpp`):
+```
+#define FLAGS   0x4004
+
+void f_warning(int i)
+{
+    // BAD: the usage of the logical not operator in this case is unlikely to be correct
+    // as the output is being used as an operator for a bit-wise and operation
+    if (i & !FLAGS)
+    {
+        // code
+    }
+}
+
+void f_fixed(int i)
+{
+    if (i & ~FLAGS) // GOOD: Changing the logical not operator for the bit-wise not operator would fix this logic
+    {
+        // code
+    }
+}
+```

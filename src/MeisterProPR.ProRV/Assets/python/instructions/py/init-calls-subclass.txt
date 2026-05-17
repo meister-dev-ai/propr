@@ -1,0 +1,67 @@
+Review focus: `__init__` method calls overridden method
+
+What to look for:
+- Calling a method from `__init__` that is overridden by a subclass may result in a partially initialized instance being observed.
+- When initializing an instance of the class in the class'`__init__`method, calls tha are made using the instance may receive an instance of the class that is not yet fully initialized. When a method called in an initializer is overridden in a subclass, the subclass method receives the instance in a potentially unexpected state. Fields that would be initialized after the call, including potentially in the subclass'`__init__`method, will not be initialized. This may lead to runtime errors, as well as make the code more difficult to maintain, as future changes may not be aware of which fields would not be initialized.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InitCallsSubclassMethodBad.py`):
+```
+class Super(object):
+
+    def __init__(self, arg):
+        self._state = "Not OK"
+        self.set_up(arg) # BAD: This method is overridden, so `Sub.set_up` receives a partially initialized instance.
+        self._state = "OK"
+
+    def set_up(self, arg):
+        "Do some setup"
+        self.a = 2
+
+class Sub(Super):
+
+    def __init__(self, arg):
+        super().__init__(arg)
+        self.important_state = "OK"
+
+    def set_up(self, arg):
+        super().set_up(arg)
+        "Do some more setup"
+        # BAD: at this point `self._state` is set to `"Not OK"`, and `self.important_state` is not initialized.
+        if self._state == "OK":
+            self.b = self.a + 2
+```
+- Reference example (`InitCallsSubclassMethodGood.py`):
+```
+class Super(object):
+
+    def __init__(self, arg):
+        self._state = "Not OK"
+        self.super_set_up(arg) # GOOD: This isn't overriden. Instead, additional setup the subclass needs is called by the subclass' `__init__ method.`
+        self._state = "OK"
+
+    def super_set_up(self, arg):
+        "Do some setup"
+        self.a = 2
+
+
+class Sub(Super):
+
+    def __init__(self, arg):
+        super().__init__(arg)
+        self.sub_set_up(self, arg)
+        self.important_state = "OK"
+
+
+    def sub_set_up(self, arg):
+        "Do some more setup"
+        if self._state == "OK":
+            self.b = self.a + 2
+```

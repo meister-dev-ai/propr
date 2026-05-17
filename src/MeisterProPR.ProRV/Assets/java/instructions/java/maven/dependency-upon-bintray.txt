@@ -1,0 +1,12 @@
+Review focus: Depending upon JCenter/Bintray as an artifact repository
+
+What to look for:
+- Using a deprecated artifact repository may eventually give attackers access for a supply chain attack.
+- Bintray and JCenter are shutting down on February 1st, 2022. Relying upon repositories that are deprecated or scheduled to be shutdown can have unintended consequences; for example, artifacts being resolved from a different artifact server or a total failure of the CI build. When artifact repositories are left unmaintained for a long period of time, vulnerabilities may emerge. Theoretically, this could allow attackers to inject malicious code into the artifacts that you are resolving and infect build artifacts that are being produced. This can be used by attackers to perform a supply chain attack against your project's users.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

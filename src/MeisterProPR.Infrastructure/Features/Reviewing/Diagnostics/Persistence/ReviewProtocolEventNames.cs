@@ -9,6 +9,7 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 /// </summary>
 public static class ReviewProtocolEventNames
 {
+    public const string ReviewPipelineProfileApplied = "review_pipeline_profile_applied";
     public const string ReviewStrategySelected = "review_strategy_selected";
     public const string AgenticFilePlanCreated = "agentic_file_plan_created";
     public const string AgenticFileInvestigationLaunched = "agentic_file_investigation_launched";
@@ -32,6 +33,12 @@ public static class ReviewProtocolEventNames
     public const string CommentRelevanceEvaluatorDegraded = "comment_relevance_evaluator_degraded";
     public const string CommentRelevanceFilterSelectionFallback = "comment_relevance_filter_selection_fallback";
     public const string CommentRelevanceEvaluatorAiCall = "ai_call_comment_relevance_evaluator";
+    public const string ProRVPrefilterAiCall = "ai_call_prorv_prefilter";
+    public const string ProRVPrefilterStarted = "prorv_prefilter_started";
+    public const string ProRVPrefilterSkipped = "prorv_prefilter_skipped";
+    public const string ProRVPrefilterCompleted = "prorv_prefilter_completed";
+    public const string ProRVPrefilterFailed = "prorv_prefilter_failed";
+    public const string ProRVFocusedGuidanceApplied = "prorv_focused_guidance_applied";
     public const string ReviewFindingGateSummary = "review_finding_gate_summary";
     public const string ReviewFindingGateDecision = "review_finding_gate_decision";
     public const string VerificationClaimsExtracted = "verification_claims_extracted";

@@ -1,0 +1,21 @@
+Review focus: Too many arguments to formatting function
+
+What to look for:
+- A printf-like function called with too many arguments will ignore the excess arguments and output less than might have been intended.
+- Each call to the`printf`function, or a related function, should include the number of arguments defined by the format. Passing the function more arguments than required is usually harmless from a security perspective but indicates that different behavior was intended.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TooManyFormatArguments.cpp`):
+```
+void log_connection_attempt(const char *user_name, char char *ip_address) {
+  // This does not print `ip_address`.
+  fprintf(stderr, "Connection attempted by '%s'\n", user_name, ip_address);
+}
+```

@@ -9422,7 +9422,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -10640,6 +10640,36 @@ export interface components {
             errorMessage?: string | null;
             isDegraded?: boolean;
         };
+        /** @description Follow-up visibility metadata for one file-linked protocol pass. */
+        ProtocolFollowUpDto: {
+            used?: boolean;
+            triggerFamily?: string | null;
+            completedSuccessfully?: boolean;
+            dependencyRecorded?: boolean;
+        };
+        /** @description ProRV prefilter execution visibility metadata for one protocol pass. */
+        ProtocolProRvPrefilterDto: {
+            selected?: boolean;
+            executionState?: string | null;
+            stageId?: string | null;
+            reason?: string | null;
+            runtimeSource?: string | null;
+            modelId?: string | null;
+            language?: string | null;
+            prefilterStatus?: string | null;
+            /** Format: int32 */
+            guidanceCount?: number;
+            aiCallRecorded?: boolean;
+        };
+        /** @description Repeated-judgment visibility metadata for one protocol pass. */
+        ProtocolRepeatedJudgmentDto: {
+            findingId?: string | null;
+            evidenceSetId?: string | null;
+            agreementState?: string | null;
+            recommendedDisposition?: string | null;
+            usedSameEvidenceSet?: boolean;
+            reasonCodes?: string[] | null;
+        };
         /** @description Carries one final review comment attributable to a protocol pass. */
         ProtocolReviewCommentDto: {
             /** @description Repository-relative file path, when available. */
@@ -10889,6 +10919,7 @@ export interface components {
             fileOutcome?: components["schemas"]["ProtocolFileOutcomeDto"];
             followUp?: components["schemas"]["ProtocolFollowUpDto"];
             repeatedJudgment?: components["schemas"]["ProtocolRepeatedJudgmentDto"];
+            proRvPrefilter?: components["schemas"]["ProtocolProRvPrefilterDto"];
         };
         /** @description Response for the job result endpoint, combining status metadata with the review result. */
         ReviewJobResultDto: {

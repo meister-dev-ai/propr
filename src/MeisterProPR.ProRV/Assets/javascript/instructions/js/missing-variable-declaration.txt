@@ -1,0 +1,30 @@
+Review focus: Missing variable declaration
+
+What to look for:
+- If a variable is not declared as a local variable, it becomes a global variable by default, which may be unintentional and could lead to unexpected behavior.
+- In JavaScript, if a variable is used in a function but not declared as a local variable, it becomes a global variable by default. This can have unintended consequences: unlike local variables, global variables can be read and modified by all functions. If different functions use the same global variable, they may end up overwriting each others values, leading to subtle and difficult to diagnose bugs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingVarDecl.js`):
+```
+function f(a) {
+	var sum = 0;
+	for (i=0; i<a.length; ++i)
+		sum += g(a[i]);
+	return sum;
+}
+
+function g(b) {
+	var prod = 1;
+	for (i=0; i<b.length; ++i)
+		prod *= b[i];
+	return prod;
+}
+```

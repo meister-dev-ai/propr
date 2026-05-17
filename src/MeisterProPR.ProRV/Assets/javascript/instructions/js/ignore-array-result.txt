@@ -1,0 +1,30 @@
+Review focus: Ignoring result from pure array method
+
+What to look for:
+- Ignoring the result of an array method that does not modify its receiver is generally an error.
+- The`concat`,`join`and`slice`methods are pure and do not modify any of the inputs or the array the method is called on. It is therefore generally an error to ignore the return value from a call to one of these methods.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IgnoreArrayResult.js`):
+```
+var arr = [1,2,3];
+
+function extend(others) {
+	arr.concat(others);
+}
+```
+- Reference example (`IgnoreArrayResultFixed.js`):
+```
+var arr = [1,2,3];
+
+function extend(others) {
+	arr = arr.concat(others);
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Direct state mutation
+
+What to look for:
+- Mutating the state of a React component directly may lead to lost updates.
+- React components have a`state`property. This property contains data associated with the component that may change over time. Although properties of the state object can be read freely, they should not be updated directly, since such modifications could be overwritten by asynchronous updates performed by`setState`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

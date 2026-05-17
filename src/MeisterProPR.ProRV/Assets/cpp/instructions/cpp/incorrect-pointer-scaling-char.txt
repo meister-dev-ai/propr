@@ -1,0 +1,31 @@
+Review focus: Suspicious pointer scaling to char
+
+What to look for:
+- Implicit scaling of pointer arithmetic expressions can cause buffer overflow conditions.
+- Casting arbitrary pointers into char* and then accessing their contents should be done with care. The results may not be portable. This query finds pointer arithmetic expressions where a pointer to char (or similar) is dereferenced even though the underlying value is of a type larger than char.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectPointerScalingChar.cpp`):
+```
+char example1(int i) {
+  int intArray[5] = { 1, 2, 3, 4, 5 };
+  char *charPointer = (char *)intArray;
+  // BAD: the pointer arithmetic uses type char*, so the offset
+  // is not scaled by sizeof(int).
+  return *(charPointer + i);
+}
+
+int example2(int i) {
+  int intArray[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+  int *intPointer = intArray;
+  // GOOD: the offset is automatically scaled by sizeof(int).
+  return *(intPointer + i);
+}
+```

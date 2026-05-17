@@ -1,0 +1,35 @@
+Review focus: Useless ?? expression
+
+What to look for:
+- The null-coalescing operator is intended to help provide special handling for the case when a variable is null - its two operands should always do different things.
+- It is rare, but not impossible, to write a null-coalescing expression whose left and right operands both do the same thing. The consequences are typically unfortunate - since a null-coalescing expression is generally used to do something special when a variable is null, failing to handle that (evidently expected) case often leads to a`NullReferenceException`, either immediately or later in the program's execution.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UselessNullCoalescingExpression.cs`):
+```
+class UselessNullCoalescingExpression
+{
+    private static Random generator;
+
+    private static int RandomNumber()
+    {
+        // This should probably have said "generator ?? new Random()".
+        generator = generator ?? generator;
+        return generator.Next();
+    }
+
+    static void Main(string[] args)
+    {
+        Console.WriteLine(RandomNumber());
+        Console.WriteLine(RandomNumber());
+        Console.WriteLine(RandomNumber());
+    }
+}
+```

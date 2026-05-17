@@ -1,0 +1,25 @@
+Review focus: Non-exception in 'except' clause
+
+What to look for:
+- An exception handler specifying a non-exception type will never handle any exception.
+- If the class specified in an`except`handler (within a`try`statement) is not a legal exception class, then it will never match a raised exception and never be executed Legal exception classes are:
+- Any old-style classes (Python 2 only)
+- Any subclass of the builtin class`BaseException`However, it recommended that you only use subclasses of the builtin class`Exception`(which is itself a subclass of`BaseException`).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IllegalExceptionHandlerType.py`):
+```
+def handle_int():
+    try:
+        raise_int()
+    #This will not cause an exception, but it will be ignored
+    except int:
+        print("This will never be printed")
+```

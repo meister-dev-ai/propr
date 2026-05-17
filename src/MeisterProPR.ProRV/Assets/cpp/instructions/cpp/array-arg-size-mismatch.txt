@@ -1,0 +1,29 @@
+Review focus: Array argument size mismatch
+
+What to look for:
+- Finds function calls where the size of an array being passed is smaller than the array size of the declared parameter.
+- This rule looks for function calls where the size of the array being passed is smaller than the size of the declared array parameter for the function. This is most likely going to lead to memory accesses that are beyond the bounds of the passed array. The size of the array being passed is very likely wrong as it does not match that of the function's parameter.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ArrayArgSizeMismatch.cpp`):
+```
+//Function foo's array parameter has a specified size
+void foo(int a[10]) {
+	int i = 0;
+	for (i = 0; i <10; i++) {
+		a[i] = i * 2;
+	}
+}
+
+...
+
+int my_arr[5];
+foo(my_arr); //my_arr is smaller than foo's array parameter, and will cause access to memory outside its bounds
+```

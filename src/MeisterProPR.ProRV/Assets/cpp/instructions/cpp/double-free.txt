@@ -1,0 +1,76 @@
+Review focus: Potential double free
+
+What to look for:
+- Freeing a resource more than once can lead to undefined behavior and cause memory corruption.
+- Deallocating memory more than once can lead to a double-free vulnerability. This can be exploited to corrupt the allocator's internal data structures, which can lead to denial-of-service attacks by crashing the program, or security vulnerabilities, by allowing an attacker to overwrite arbitrary memory locations.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`DoubleFreeBad.cpp`):
+```
+int* f() {
+	int *buff = malloc(SIZE*sizeof(int));
+	do_stuff(buff);
+	free(buff);
+	int *new_buffer = malloc(SIZE*sizeof(int));
+	free(buff); // BAD: If new_buffer is assigned the same address as buff,
+              // the memory allocator will free the new buffer memory region,
+              // leading to use-after-free problems and memory corruption.
+	return new_buffer;
+}
+```
+- Reference example (`DoubleFreeGood.cpp`):
+```
+int* f() {
+	int *buff = malloc(SIZE*sizeof(int));
+	do_stuff(buff);
+	free(buff); // GOOD: buff is only freed once.
+	int *new_buffer = malloc(SIZE*sizeof(int));
+	return new_buffer;
+}
+```
+- Reference example (`DoubleFreeBad2.cpp`):
+```
+void g() {
+	MyTask *task = nullptr;
+
+	try
+	{
+		task = new MyTask;
+
+		...
+
+		delete task;
+
+		...
+	} catch (...) {
+		delete task; // BAD: potential double-free
+	}
+}
+```
+- Reference example (`DoubleFreeGood2.cpp`):
+```
+void g() {
+	MyTask *task = nullptr;
+
+	try
+	{
+		task = new MyTask;
+
+		...
+
+		delete task;
+		task = nullptr;
+
+		...
+	} catch (...) {
+		delete task; // GOOD: harmless if task is NULL
+	}
+}
+```

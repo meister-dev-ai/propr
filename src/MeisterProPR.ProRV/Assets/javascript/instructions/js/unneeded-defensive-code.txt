@@ -1,0 +1,55 @@
+Review focus: Unneeded defensive code
+
+What to look for:
+- Defensive code that guards against a situation that never happens is not needed.
+- Defensive code can prevent unforeseen circumstances from causing fatal program behaviors. A common defensive code pattern is to guard against dereferencing the values`null`or`undefined`. However, if the situation that some defensive code guards against never can occur, then the defensive code serves no purpose and can safely be removed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`UnneededDefensiveProgramming1_bad.js`):
+```
+function cleanupLater(delay, cb) {
+    setTimeout(function() {
+        cleanup();
+        if (cb) { // BAD: useless check, `cb` is always truthy
+            cb();
+        }
+    }, delay)
+}
+
+cleanupLater(1000, function(){console.log("Cleanup done")});
+```
+- Good example (`UnneededDefensiveProgramming1_good.js`):
+```
+function cleanupLater(delay, cb) {
+    setTimeout(function() {
+        cleanupNow();
+        // GOOD: no need to guard the invocation
+        cb();
+    }, delay)
+}
+
+cleanupLater(function(){console.log("Cleanup done")});
+```
+- Bad example (`UnneededDefensiveProgramming2_bad.js`):
+```
+function setSafeStringProp(o, prop, v) {
+    // BAD: `v == null` is useless
+    var safe = v == undefined || v == null? '': v;
+    o[prop] = safe;
+}
+```
+- Good example (`UnneededDefensiveProgramming2_good.js`):
+```
+function setSafeStringProp(o, prop, v) {
+    // GOOD: `v == undefined` handles both `undefined` and `null`
+    var safe = v == undefined? '': v;
+    o[prop] = safe;
+}
+```

@@ -1,0 +1,31 @@
+Review focus: Nested 'if' statements can be combined
+
+What to look for:
+- Nested 'if' statements can be simplified by combining them using '&&'.
+- It is unnecessary to nest`if`statements when neither of them has an`else`part. The code can be written more simply by combining the statements into a single`if`statement.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedIf.cs`):
+```
+if(connection.Status == Connected)
+{
+  if(!connection.Authenticated)
+  {
+    connection.SendAuthRequest();
+  }
+}
+```
+- Reference example (`NestedIfFix.cs`):
+```
+if(connection.Status == Connected && !connection.Authenticated)
+{
+  connection.SendAuthRequest();
+}
+```

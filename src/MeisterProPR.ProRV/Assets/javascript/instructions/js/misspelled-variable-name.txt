@@ -1,0 +1,26 @@
+Review focus: Misspelled variable name
+
+What to look for:
+- Misspelling a variable name implicitly introduces a global variable, which may not lead to a runtime error, but is likely to give wrong results.
+- If a reference to a local variable is accidentally misspelled, it will be interpreted as a reference to an implicitly declared global variable, which may indicate a bug. Even if this is intentional, it should be avoided as it makes the code hard to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MisspelledVariableName.js`):
+```
+function selectElements(ids) {
+    for (var i=0, length=ids.length; i<lenght; ++i) {
+        var id = ids[i];
+        if (id) {
+            var element = document.getElementById(id);
+            element.className += " selected";
+        }
+    }
+}
+```

@@ -1,0 +1,66 @@
+Review focus: Loop body executes at most once
+
+What to look for:
+- A loop that executes at most once is confusing and should be rewritten as a conditional.
+- If the body of a loop can only execute at most once, then the whole loop is equivalent to an`if`conditional. This is confusing for readers, and may even indicate a logic error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EphemeralLoop.js`):
+```
+function nextToken(reader){
+  var c = reader.read(), token = null;
+
+  while (c) {
+    switch(c) {
+    case "/":
+      if(reader.peek() == "*")
+        token = commentToken(reader, c, startLine, startCol);
+      else
+        token = charToken(reader, c, startLine, startCol);
+      break;
+    case '"':
+    case "'":
+      token = stringToken(c, startLine, startCol);
+      break;
+    default:
+      token = charToken(reader, c, startLine, startCol);
+    }
+
+    break;
+  }
+
+  return token;
+}
+```
+- Reference example (`EphemeralLoopGood.js`):
+```
+function nextToken(reader){
+  var c = reader.read(), token = null;
+
+  if (c) {
+    switch(c) {
+    case "/":
+      if(reader.peek() == "*")
+        token = commentToken(reader, c, startLine, startCol);
+      else
+        token = charToken(reader, c, startLine, startCol);
+      break;
+    case '"':
+    case "'":
+      token = stringToken(c, startLine, startCol);
+      break;
+    default:
+      token = charToken(reader, c, startLine, startCol);
+    }
+  }
+
+  return token;
+}
+```

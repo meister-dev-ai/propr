@@ -1,0 +1,31 @@
+Review focus: Use of a print statement at module level
+
+What to look for:
+- Using a print statement at module scope (except when guarded by `if __name__ == '__main__'`) will cause surprising output when the module is imported.
+- Using`print`statements in level scope may result in surprising output at import time. This in turn means that other code cannot safely import the module in question if the program may only write real output to standard out.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TopLevelPrint.py`):
+```
+try:
+    import fast_system as system
+except ImportError:
+    print ("Cannot import fast system, falling back on slow system")
+    import slow_system as system
+
+#Fixed version
+import logging
+
+try:
+    import fast_system as system
+except ImportError:
+    logging.info("Cannot import fast system, falling back on slow system")
+    import slow_system as system
+```

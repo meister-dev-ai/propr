@@ -8,6 +8,8 @@ using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJ
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
@@ -69,6 +71,7 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
                 FileOutcome = ResolveFileOutcome(job, protocol),
                 FollowUp = ResolveFollowUp(protocol),
                 RepeatedJudgment = ResolveRepeatedJudgment(protocol),
+                ProRvPrefilter = ResolveProRvPrefilter(protocol),
             })
             .ToList()
             .AsReadOnly();
@@ -241,6 +244,171 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
         return latestDecision;
     }
 
+    private static ProtocolProRvPrefilterDto? ResolveProRvPrefilter(ReviewJobProtocol protocol)
+    {
+        const string notSelected = "not_selected";
+        const string skipped = "skipped";
+        const string completed = "completed";
+        const string failed = "failed";
+
+        var executionState = notSelected;
+        string? stageId = null;
+        string? reason = null;
+        string? runtimeSource = null;
+        string? modelId = null;
+        string? language = null;
+        string? prefilterStatus = null;
+        var guidanceCount = 0;
+        var selected = false;
+        var aiCallRecorded = false;
+        var guidanceApplied = false;
+        string? appliedPromptKind = null;
+        IReadOnlyList<string> appliedGuidanceIds = [];
+
+        foreach (var evt in protocol.Events)
+        {
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewPipelineProfileApplied, StringComparison.Ordinal))
+            {
+                if (GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(FileByFileProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal) ||
+                    GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(AgenticProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal))
+                {
+                    selected = true;
+                }
+            }
+
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterAiCall, StringComparison.Ordinal))
+            {
+                aiCallRecorded = true;
+                if (TryGetString(evt.SystemPrompt, "modelId", out var aiCallModelId) && !string.IsNullOrWhiteSpace(aiCallModelId))
+                {
+                    modelId ??= aiCallModelId;
+                }
+
+                if (TryGetString(evt.SystemPrompt, "runtimeSource", out var aiCallRuntimeSource) && !string.IsNullOrWhiteSpace(aiCallRuntimeSource))
+                {
+                    runtimeSource ??= aiCallRuntimeSource;
+                }
+
+                if (TryGetString(evt.InputTextSample, "status", out var aiCallStatus) && !string.IsNullOrWhiteSpace(aiCallStatus))
+                {
+                    prefilterStatus ??= aiCallStatus;
+                }
+
+                if (TryGetString(evt.InputTextSample, "language", out var aiCallLanguage) && !string.IsNullOrWhiteSpace(aiCallLanguage))
+                {
+                    language ??= aiCallLanguage;
+                }
+
+                if (TryGetString(evt.InputTextSample, "stageId", out var aiCallStageId) && !string.IsNullOrWhiteSpace(aiCallStageId))
+                {
+                    stageId ??= aiCallStageId;
+                }
+
+                if (!string.IsNullOrWhiteSpace(evt.Error))
+                {
+                    reason ??= evt.Error;
+                }
+            }
+
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVFocusedGuidanceApplied, StringComparison.Ordinal))
+            {
+                if (TryGetBoolean(evt.InputTextSample, "applied", out var applied))
+                {
+                    guidanceApplied = applied;
+                }
+
+                if (TryGetString(evt.InputTextSample, "promptKind", out var promptKind) && !string.IsNullOrWhiteSpace(promptKind))
+                {
+                    appliedPromptKind = promptKind;
+                }
+
+                var ids = GetStringArray(evt.OutputSummary, "guidanceIds");
+                if (ids.Count > 0)
+                {
+                    appliedGuidanceIds = ids;
+                }
+            }
+
+            if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterStarted, StringComparison.Ordinal) &&
+                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal) &&
+                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal) &&
+                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            selected = true;
+            if (TryGetString(evt.InputTextSample, "stageId", out var eventStageId) && !string.IsNullOrWhiteSpace(eventStageId))
+            {
+                stageId = eventStageId;
+            }
+
+            if (TryGetString(evt.OutputSummary, "runtimeSource", out var eventRuntimeSource) && !string.IsNullOrWhiteSpace(eventRuntimeSource))
+            {
+                runtimeSource = eventRuntimeSource;
+            }
+
+            if (TryGetString(evt.OutputSummary, "modelId", out var eventModelId) && !string.IsNullOrWhiteSpace(eventModelId))
+            {
+                modelId = eventModelId;
+            }
+
+            if (TryGetString(evt.OutputSummary, "language", out var eventLanguage) && !string.IsNullOrWhiteSpace(eventLanguage))
+            {
+                language = eventLanguage;
+            }
+
+            if (TryGetString(evt.OutputSummary, "proRvStatus", out var eventPrefilterStatus) && !string.IsNullOrWhiteSpace(eventPrefilterStatus))
+            {
+                prefilterStatus = eventPrefilterStatus;
+            }
+
+            if (TryGetInt32(evt.OutputSummary, "guidanceCount", out var parsedGuidanceCount))
+            {
+                guidanceCount = parsedGuidanceCount;
+            }
+
+            if (!string.IsNullOrWhiteSpace(evt.Error))
+            {
+                reason = evt.Error;
+            }
+
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal))
+            {
+                executionState = skipped;
+                if (TryGetString(evt.OutputSummary, "reason", out var skipReason) && !string.IsNullOrWhiteSpace(skipReason))
+                {
+                    reason = skipReason;
+                }
+            }
+            else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal))
+            {
+                executionState = completed;
+            }
+            else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
+            {
+                executionState = failed;
+            }
+        }
+
+        return selected || aiCallRecorded
+            ? new ProtocolProRvPrefilterDto(
+                selected,
+                executionState,
+                stageId,
+                reason,
+                runtimeSource,
+                modelId,
+                language,
+                prefilterStatus,
+                guidanceCount,
+                aiCallRecorded,
+                guidanceApplied,
+                appliedPromptKind,
+                appliedGuidanceIds)
+            : null;
+    }
+
     private static bool TryGetTriggerFamilyFromPlan(string? json, out string? triggerFamily)
     {
         triggerFamily = null;
@@ -352,6 +520,30 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
         catch (JsonException)
         {
             return [];
+        }
+    }
+
+    private static bool TryGetInt32(string? json, string propertyName, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty(propertyName, out var property))
+            {
+                return false;
+            }
+
+            return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out value);
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 }

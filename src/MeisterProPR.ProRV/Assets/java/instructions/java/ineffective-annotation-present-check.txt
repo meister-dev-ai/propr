@@ -1,0 +1,12 @@
+Review focus: AnnotationPresent check
+
+What to look for:
+- If an annotation has not been annotated with a 'RUNTIME' retention policy, checking for its presence at runtime is not possible.
+- To be able to use the`isAnnotationPresent`method on an`AnnotatedElement`at runtime, an annotation must be explicitly annotated with a`RUNTIME`retention policy. Otherwise, the annotation is not retained at runtime and cannot be observed using reflection.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

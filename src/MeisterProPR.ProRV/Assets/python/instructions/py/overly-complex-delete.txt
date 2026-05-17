@@ -1,0 +1,40 @@
+Review focus: Overly complex `__del__` method
+
+What to look for:
+- `__del__` methods may be called at arbitrary times, perhaps never called at all, and should be simple.
+- The`__del__`method exists to release any resources held by an object when that object is deleted. The`__del__`is called only by the garbage collector which may call it after an indefinite delay or never. Consequently,`__del__`method should not be relied on to release resources, such as file descriptors. Rather, these resources should be released explicitly. The existence of a complex`__del__`method suggests that this is the main or only way to release resources associated with the object.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OverlyComplexDelMethod.py`):
+```
+#Relies on __del__ being called by the garbage collector.
+class CachedPreferencesFile
+
+    ...
+
+    def __del__(self):
+        for key, value in self.preferences.items():
+            self.write_pair(key, value)
+        self.backing.close()
+
+
+#Better version
+class CachedPreferencesFile
+
+    ...
+
+    def close(self):
+        for key, value in self.preferences.items():
+            self.write_pair(key, value)
+        self.backing.close()
+
+    def __del__(self):
+        self.close()
+```

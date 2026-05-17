@@ -1,0 +1,36 @@
+Review focus: JavaScript Injection
+
+What to look for:
+- Evaluating JavaScript code containing a substring from a remote source may lead to remote code execution.
+- Evaluating JavaScript that contains a substring from a remote origin may lead to remote code execution. Code written by an attacker can execute unauthorized actions, including exfiltration of local data through a third party web service.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`UnsafeJsEvalBad.swift`):
+```
+let webview: WKWebView
+let remoteData = try String(contentsOf: URL(string: "http://example.com/evil.json")!)
+
+...
+
+_ = try await webview.evaluateJavaScript("console.log(" + remoteData + ")") // BAD
+```
+- Good example (`UnsafeJsEvalGood.swift`):
+```
+let webview: WKWebView
+let remoteData = try String(contentsOf: URL(string: "http://example.com/evil.json")!)
+
+...
+
+_ = try await webview.callAsyncJavaScript(
+    "console.log(data)",
+    arguments: ["data": remoteData], // GOOD
+    contentWorld: .page
+)
+```

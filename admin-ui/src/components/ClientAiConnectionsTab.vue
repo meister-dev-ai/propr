@@ -446,13 +446,14 @@ const providerOptions: Array<{ value: AiProviderKind; label: string }> = [
   { value: 'liteLlm', label: 'LiteLLM' },
 ]
 
-const purposeOptions: Array<{ value: AiPurpose; label: string; description: string }> = [
-  { value: 'reviewDefault', label: 'Review Default', description: 'Primary review generation and mentions.' },
-  { value: 'reviewLowEffort', label: 'Review Low Effort', description: 'Low-complexity file review.' },
-  { value: 'reviewMediumEffort', label: 'Review Medium Effort', description: 'Medium-complexity file review.' },
-  { value: 'reviewHighEffort', label: 'Review High Effort', description: 'High-complexity review and synthesis.' },
-  { value: 'memoryReconsideration', label: 'Memory Reconsideration', description: 'Thread-memory reconsideration calls.' },
-  { value: 'embeddingDefault', label: 'Embedding Default', description: 'Embedding generation for memory and ProCursor.' },
+const purposeOptions: Array<{ value: AiPurpose; label: string; description: string; defaultEnabled: boolean }> = [
+  { value: 'reviewDefault', label: 'Review Default', description: 'Primary review generation and mentions.', defaultEnabled: true },
+  { value: 'proRvPrefilter', label: 'ProRV Prefilter', description: 'Optional focused-review guidance prefilter.', defaultEnabled: false },
+  { value: 'reviewLowEffort', label: 'Review Low Effort', description: 'Low-complexity file review.', defaultEnabled: true },
+  { value: 'reviewMediumEffort', label: 'Review Medium Effort', description: 'Medium-complexity file review.', defaultEnabled: true },
+  { value: 'reviewHighEffort', label: 'Review High Effort', description: 'High-complexity review and synthesis.', defaultEnabled: true },
+  { value: 'memoryReconsideration', label: 'Memory Reconsideration', description: 'Thread-memory reconsideration calls.', defaultEnabled: true },
+  { value: 'embeddingDefault', label: 'Embedding Default', description: 'Embedding generation for memory and ProCursor.', defaultEnabled: true },
 ]
 
 const protocolOptionLabels: Record<AiProtocolMode, string> = {
@@ -575,7 +576,7 @@ const makeBindingDefaults = (): EditableBinding[] => purposeOptions.map((option)
   purpose: option.value,
   configuredModelId: '',
   protocolMode: option.value === 'embeddingDefault' ? 'embeddings' : 'auto',
-  isEnabled: true,
+  isEnabled: option.defaultEnabled,
 }))
 
 const resetEditor = () => {

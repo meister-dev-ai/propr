@@ -1,0 +1,12 @@
+Review focus: Boxed variable is never null
+
+What to look for:
+- Using a boxed type for a variable that is never assigned 'null' hinders readability because it implies that 'null' is a potential value.
+- In Java all of the primitive types have boxed counterparts. The boxed types are objects and can therefore be`null`, whereas the primitive types can never be`null`. The names of the primitive and boxed types are similar except that primitive types start with a lower-case letter and boxed types start with an upper-case letter (also, for`char`and`int`the names of the boxed types are slightly longer, namely`Character`and`Integer`). Because the names are so similar and because Java performs automatic boxing and unboxing conversions, they can easily be confused. Furthermore, using a boxed type where a primitive type was intended leads to both readability issues and potentially superfluous allocation of objects.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

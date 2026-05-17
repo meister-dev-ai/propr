@@ -1,0 +1,25 @@
+Review focus: Failure to use HTTPS URLs
+
+What to look for:
+- Non-HTTPS connections can be intercepted by third parties.
+- Constructing URLs with the HTTP protocol can lead to unsecured connections.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UseOfHttp.cpp`):
+```
+void openUrl(char *url)
+{
+	// ...
+}
+
+openUrl("http://example.com"); // BAD
+
+openUrl("https://example.com"); // GOOD: Opening a connection to a URL using HTTPS enforces SSL.
+```

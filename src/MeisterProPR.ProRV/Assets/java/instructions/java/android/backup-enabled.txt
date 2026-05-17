@@ -1,0 +1,12 @@
+Review focus: Application backup allowed
+
+What to look for:
+- Allowing application backups may allow an attacker to extract sensitive data.
+- In the Android manifest file, you can use the`android:allowBackup`attribute of the`application`element to define whether the application will have automatic backups or not. If your application uses any sensitive data, you should disable automatic backups to prevent attackers from extracting it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

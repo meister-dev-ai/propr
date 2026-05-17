@@ -1,0 +1,26 @@
+Review focus: Constant in conditional expression or statement
+
+What to look for:
+- The conditional is always true or always false
+- Using a constant value as a test in a conditional statement renders the statement pointless as only one branch will be run regardless of any other factors.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ConstantInConditional.py`):
+```
+if True:
+    print "True is true!"
+
+def limit(l):
+    if l < -100:
+        l = -100
+    if 1 > 100:
+        l = 100
+    return l
+```

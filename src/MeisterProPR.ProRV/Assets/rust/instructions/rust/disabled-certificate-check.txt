@@ -1,0 +1,36 @@
+Review focus: Disabled TLS certificate check
+
+What to look for:
+- An application that disables TLS certificate checking is more vulnerable to man-in-the-middle attacks.
+- The`danger_accept_invalid_certs`option on TLS connectors and HTTP clients controls whether certificate verification is performed. If this option is set to`true`, the client will accept any certificate, making it susceptible to man-in-the-middle attacks. Similarly, the`danger_accept_invalid_hostnames`option controls whether hostname verification is performed. If this option is set to`true`, the client will accept any valid certificate regardless of the site that certificate is for, again making it susceptible to man-in-the-middle attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`DisabledCertificateCheckBad.rs`):
+```
+// BAD: Disabling certificate validation in Rust
+
+let _client = reqwest::Client::builder()
+    .danger_accept_invalid_certs(true) // disables certificate validation
+    .build()
+    .unwrap();
+```
+- Reference example (`DisabledCertificateCheckGood.rs`):
+```
+// GOOD: Certificate validation is enabled (default)
+
+let _client = reqwest::Client::builder()
+    .danger_accept_invalid_certs(false) // certificate validation enabled explicitly
+    .build()
+    .unwrap();
+
+let _client = native_tls::TlsConnector::builder() // certificate validation enabled by default
+    .build()
+    .unwrap();
+```

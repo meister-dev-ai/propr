@@ -1,0 +1,36 @@
+Review focus: Accepting unknown SSH host keys when using Paramiko
+
+What to look for:
+- Accepting unknown host keys can allow man-in-the-middle attacks.
+- In the Secure Shell (SSH) protocol, host keys are used to verify the identity of remote hosts. Accepting unknown host keys may leave the connection open to man-in-the-middle attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`paramiko_host_key.py`):
+```
+from paramiko.client import SSHClient, AutoAddPolicy, RejectPolicy
+
+def unsafe_connect():
+    client = SSHClient()
+    client.set_missing_host_key_policy(AutoAddPolicy)
+    client.connect("example.com")
+
+    # ... interaction with server
+
+    client.close()
+
+def safe_connect():
+    client = SSHClient()
+    client.set_missing_host_key_policy(RejectPolicy)
+    client.connect("example.com")
+
+    # ... interaction with server
+
+    client.close()
+```

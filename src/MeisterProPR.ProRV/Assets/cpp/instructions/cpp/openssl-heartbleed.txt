@@ -1,0 +1,43 @@
+Review focus: Use of a version of OpenSSL with Heartbleed
+
+What to look for:
+- Using an old version of OpenSSL can allow remote attackers to retrieve portions of memory.
+- Earlier versions of the popular OpenSSL library suffer from a buffer overflow in its "heartbeat" code. Because of the location of the problematic code, this vulnerability is often called "Heartbleed". Software that includes a copy of OpenSSL should be sure to use a current version of the library. If it uses an older version, it will be vulnerable to any network site it connects with.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OpenSslHeartbleed.c`):
+```
+int
+tls1_process_heartbeat(SSL *s)
+    {
+    unsigned char *p = &s->s3->rrec.data[0], *pl;
+    unsigned short hbtype;
+    unsigned int payload;
+ 
+    /* ... */
+ 
+    hbtype = *p++;
+    n2s(p, payload);
+    pl = p;
+ 
+    /* ... */
+ 
+    if (hbtype == TLS1_HB_REQUEST)
+            {
+            /* ... */
+            memcpy(bp, pl, payload);  // BAD: overflow here
+            /* ... */
+            }
+ 
+ 
+    /* ... */
+ 
+    }
+```

@@ -1,0 +1,47 @@
+Review focus: Generic catch clause
+
+What to look for:
+- Catching all exceptions with a generic catch clause may be overly broad, which can make errors harder to diagnose.
+- Catching all exceptions with a generic catch clause may be overly broad. This can make errors harder to diagnose when exceptions are caught unintentionally.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CatchOfGenericException.cs`):
+```
+double reciprocal(double input)
+{
+    try
+    {
+        return 1 / input;
+    }
+    catch
+    {
+        // division by zero, return 0
+        return 0;
+    }
+}
+```
+- Reference example (`CatchOfGenericExceptionFix.cs`):
+```
+double reciprocal(double input)
+{
+    try
+    {
+        return 1 / input;
+    }
+    catch (DivideByZeroException)
+    {
+        return 0;
+    }
+    catch (OverflowException)
+    {
+        return double.MaxValue;
+    }
+}
+```

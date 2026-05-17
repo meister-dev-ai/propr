@@ -1,0 +1,12 @@
+Review focus: EJB uses server socket
+
+What to look for:
+- An EJB should not attempt to listen to or accept connections on a socket, or use a socket for multicast.
+- The Enterprise JavaBeans 3.0 core specification, Section 21.1.2, states: An enterprise bean must not attempt to listen on a socket, accept connections on a socket, or use a socket for multicast. The EJB architecture allows an enterprise bean instance to be a network socket client, but it does not allow it to be a network server. Allowing the instance to become a network server would conflict with the basic function of the enterprise bean&mdash;to serve the EJB clients.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

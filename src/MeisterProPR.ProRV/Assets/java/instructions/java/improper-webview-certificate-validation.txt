@@ -1,0 +1,18 @@
+Review focus: Android `WebView` that accepts all certificates
+
+What to look for:
+- Trusting all certificates allows an attacker to perform a machine-in-the-middle attack.
+- If the`onReceivedSslError`method of an Android`WebViewClient`always calls`proceed`on the given`SslErrorHandler`, it trusts any certificate. This allows an attacker to perform a machine-in-the-middle attack against the application, therefore breaking any security Transport Layer Security (TLS) gives. An attack might look like this:
+- The vulnerable application connects to`https://example.com`.
+- The attacker intercepts this connection and presents a valid, self-signed certificate for`https://example.com`.
+- The vulnerable application calls the`onReceivedSslError`method to check whether it should trust the certificate.
+- The`onReceivedSslError`method of your`WebViewClient`calls`SslErrorHandler.proceed`.
+- The vulnerable application accepts the certificate and proceeds with the connection since your`WevViewClient`trusted it by proceeding.
+- The attacker can now read the data your application sends to`https://example.com`and/or alter its replies while the application thinks the connection is secure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

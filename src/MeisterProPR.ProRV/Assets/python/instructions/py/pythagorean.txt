@@ -1,0 +1,29 @@
+Review focus: Pythagorean calculation with sub-optimal numerics
+
+What to look for:
+- Calculating the length of the hypotenuse using the standard formula may lead to overflow.
+- Calculating the length of the hypotenuse using the standard formula`c = sqrt(a**2 + b**2)`may lead to overflow if the two other sides are both very large. Even though`c`will not be much bigger than`max(a, b)`, either`a**2`or`b**2`(or both) will. Thus, the calculation could overflow, even though the result is well within representable range.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`Pythagorean.py`):
+```
+# We know that a^2 + b^2 = c^2, and wish to use this to compute c
+from math import sqrt, hypot
+
+a = 3e154 # a^2 > 1e308
+b = 4e154 # b^2 > 1e308
+# with these, c = 5e154 which is less that 1e308
+
+def longSideDirect():
+    return sqrt(a**2 + b**2) # this will overflow
+
+def longSideBuiltin():
+    return hypot(a, b) # better to use built-in function
+```

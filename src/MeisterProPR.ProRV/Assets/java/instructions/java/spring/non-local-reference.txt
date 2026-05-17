@@ -1,0 +1,12 @@
+Review focus: Use local refs when referring to beans in the same file
+
+What to look for:
+- Using local references when referring to Spring beans in the same file allows reference errors to be detected during XML parsing.
+- If at all possible, refer to Spring beans in the same XML file using local references, that is``. This requires that the bean being referenced is in the same XML file, and is named using the`id`attribute. Using local references has the advantage of allowing reference errors to be detected during XML parsing, instead of during deployment or instantiation. From the Spring Framework Reference documentation on`idref`elements: [Using the`idref`tag in a`property`element] is preferable to [using the bean name in the property's`value`attribute], because using the`idref`tag allows the container to validate at deployment time that the referenced, named bean actually exists. In the second variation, no validation is performed on the value that is passed to the [`name`] property of the client bean. Typos are only discovered (with most likely fatal results) when the client bean is actually instantiated. If the client bean is a prototype bean, this typo and the resulting exception may only be discovered long after the container is deployed. Additionally, if the referenced bean is in the same XML unit, and the bean name is the bean`id`, you can use the`local`attribute, which allows the XML parser itself to validate the bean`id`earlier, at XML document parse time.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

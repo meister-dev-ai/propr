@@ -1,0 +1,32 @@
+Review focus: List comprehension variable used in enclosing scope
+
+What to look for:
+- Using the iteration variable of a list comprehension in the enclosing scope will result in different behavior between Python 2 and 3 and is confusing.
+- In Python 2 list comprehensions are evaluated in the enclosing scope, which means that the iteration variable of a list comprehension is visible outside of the list comprehension. In Python 3 the iteration variable is no longer visible in the enclosing scope. Code that uses the value of a list comprehension iteration variable after the list comprehension has finished will behave differently under Python 2 and Python 3.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LeakingListComprehension.py`):
+```
+def two_or_three():
+    x = 3
+    [0 for x in range(3)]
+    return x # Will return 2 in Python 2 and 3 in Python 3.
+
+print(two_or_three())
+```
+- Reference example (`LeakingListComprehensionFixed.py`):
+```
+def just_three():
+    x = 3
+    [0 for y in range(3)]
+    return x # Will return always return 3.
+
+print(just_three())
+```

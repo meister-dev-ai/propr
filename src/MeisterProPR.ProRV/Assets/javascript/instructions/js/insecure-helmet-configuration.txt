@@ -1,0 +1,42 @@
+Review focus: Insecure configuration of Helmet security middleware
+
+What to look for:
+- The Helmet middleware is used to set security-related HTTP headers in Express applications.
+- Helmet is a collection of middleware functions for securing Express apps. It sets various HTTP headers to guard against common web vulnerabilities. This query detects Helmet misconfigurations that can lead to security vulnerabilities, specifically:
+- Disabling frame protection
+- Disabling Content Security Policy Content Security Policy (CSP) helps spot and prevent injection attacks such as Cross-Site Scripting (XSS). Removing frame protections exposes an application to attacks such as clickjacking, where an attacker can trick a user into clicking on a button or link on a targeted page when they intended to click on the page carrying out the attack. Users of the query can extend the set of required Helmet features by adding additional checks for them, using CodeQL data extensions in a CodeQL model pack. See`CUSTOMIZING.md`in the query source for more information.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`helmet_insecure.js`):
+```
+const helmet = require('helmet');
+
+app.use(helmet({
+    frameguard: false,
+    contentSecurityPolicy: false
+}));
+```
+- Reference example (`helmet_default.js`):
+```
+app.use(helmet());
+```
+- Reference example (`helmet_custom.js`):
+```
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                "script-src": ["'self'", "example.com"],
+                "style-src": null,
+            },
+        },
+    })
+);
+```

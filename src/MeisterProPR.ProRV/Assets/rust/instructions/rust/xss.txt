@@ -1,0 +1,62 @@
+Review focus: Cross-site scripting
+
+What to look for:
+- Writing user input directly to a webpage allows for a cross-site scripting vulnerability.
+- Directly writing user input (for example, an HTTP request parameter) to a webpage, without properly sanitizing the input first, allows for a cross-site scripting vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`XSSBad.rs`):
+```
+use actix_web::{web, HttpResponse, Result};
+
+// BAD: User input is directly included in HTML response without sanitization
+async fn vulnerable_handler(path: web::Path<String>) -> impl Responder {
+    let user_input = path.into_inner();
+
+    let html = format!(
+        r#"
+        <!DOCTYPE html>
+        <html>
+        <head><title>Welcome</title></head>
+        <body>
+            <h1>Hello, {}!</h1>
+        </body>
+        </html>
+        "#,
+        user_input
+    );
+
+    Html::new(html) // Unsafe: User input included directly in the response
+}
+```
+- Reference example (`XSSGood.rs`):
+```
+use actix_web::{web, HttpResponse, Result};
+
+// GOOD: Manual HTML encoding using an `html_escape::encode_text` function
+async fn safe_handler_with_encoding(path: web::Path<String>) -> impl Responder {
+    let user_input = path.into_inner();
+    let escaped_input = html_escape::encode_text(&user_input);
+    let html = format!(
+        r#"
+        <!DOCTYPE html>
+        <html>
+        <head><title>Welcome</title></head>
+        <body>
+            <h1>Hello, {}!</h1>
+        </body>
+        </html>
+        "#,
+        escaped_input
+    );
+
+    Html::new(html) // Safe: user input is HTML-encoded
+}
+```

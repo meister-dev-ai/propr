@@ -1,0 +1,12 @@
+Review focus: Missing JWT signature check
+
+What to look for:
+- Failing to check the Json Web Token (JWT) signature may allow an attacker to forge their own tokens.
+- A JSON Web Token (JWT) consists of three parts: header, payload, and signature. The`io.jsonwebtoken.jjwt`library is one of many libraries used for working with JWTs. It offers different methods for parsing tokens like`parse`,`parseClaimsJws`, and`parsePlaintextJws`. The last two correctly verify that the JWT is properly signed. This is done by computing the signature of the combination of header and payload and comparing the locally computed signature with the signature part of the JWT. Therefore it is necessary to provide the`JwtParser`with a key that is used for signature validation. Unfortunately the`parse`method accepts a JWT whose signature is empty although a signing key has been set for the parser. This means that an attacker can create arbitrary JWTs that will be accepted if this method is used.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

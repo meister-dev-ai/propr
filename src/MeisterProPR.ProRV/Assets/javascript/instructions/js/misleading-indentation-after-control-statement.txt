@@ -1,0 +1,33 @@
+Review focus: Misleading indentation after control statement
+
+What to look for:
+- The body of a control statement should have appropriate indentation to clarify which statements it controls and which ones it does not control.
+- Loop bodies and the 'then' and 'else' branches of`if`statements can either be block statements delimited by curly braces, or simple statements. In the latter case, special care must be taken to correctly indent statements to indicate whether or not they belong to the body of the loop or the`if`statement. In particular, the statement immediately after the loop or`if`statement should not be indented by the same amount as the body to avoid misunderstanding of the control flow structure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MisleadingIndentationAfterControlStmt.js`):
+```
+if (afraid())
+	scream();
+	runAway();
+```
+- Reference example (`MisleadingIndentationAfterControlStmtGood.js`):
+```
+if (afraid()) {
+	scream();
+	runAway();
+}
+```
+- Reference example (`MisleadingIndentationAfterControlStmtGood2.js`):
+```
+if (afraid())
+	scream();
+runAway();
+```

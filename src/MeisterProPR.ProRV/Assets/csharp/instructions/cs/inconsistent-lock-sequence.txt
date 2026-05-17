@@ -1,0 +1,88 @@
+Review focus: Inconsistent lock sequence
+
+What to look for:
+- Locking in an inconsistent sequence can lead to deadlock.
+- Locks held concurrently should be locked in a consistent sequence, otherwise the program can deadlock. This rule detects nested`lock`statements that lock variables in a different sequence in different parts of the program.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LockOrderBad.cs`):
+```
+using System;
+using System.Threading;
+
+class Deadlock
+{
+    private readonly Object lock1 = new Object();
+    private readonly Object lock2 = new Object();
+
+    public void thread1()
+    {
+        lock (lock1)
+        {
+            Console.Out.WriteLine("Thread 1 acquired lock1");
+            Thread.Sleep(10);
+            Console.Out.WriteLine("Thread 1 waiting on lock2");
+            lock (lock2)    // Deadlock here
+            {
+            }
+        }
+    }
+
+    public void thread2()
+    {
+        lock (lock2)
+        {
+            Console.Out.WriteLine("Thread 2 acquired lock2");
+            Thread.Sleep(10);
+            Console.Out.WriteLine("Thread 2 waiting on lock1");
+            lock (lock1)    // Deadlock here
+            {
+            }
+        }
+    }
+}
+```
+- Reference example (`LockOrderGood.cs`):
+```
+using System;
+using System.Threading;
+
+class DeadlockFixed
+{
+    private readonly Object lock1 = new Object();
+    private readonly Object lock2 = new Object();
+
+    public void thread1()
+    {
+        lock (lock1)
+        {
+            Console.Out.WriteLine("Thread 1 acquired lock1");
+            Thread.Sleep(10);
+            Console.Out.WriteLine("Thread 1 waiting on lock2");
+            lock (lock2)
+            {
+            }
+        }
+    }
+
+    public void thread2()
+    {
+        lock (lock1)    // Fixed
+        {
+            Console.Out.WriteLine("Thread 2 acquired lock1");
+            Thread.Sleep(10);
+            Console.Out.WriteLine("Thread 2 waiting on lock2");
+            lock (lock2)    // Fixed
+            {
+            }
+        }
+    }
+}
+```

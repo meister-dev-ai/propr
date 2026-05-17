@@ -1,0 +1,31 @@
+Review focus: Disabling certificate validation
+
+What to look for:
+- Disabling cryptographic certificate validation can cause security vulnerabilities.
+- Certificate validation is the standard authentication method of a secure TLS connection. Without it, there is no guarantee about who the other party of a TLS connection is, making man-in-the-middle attacks more likely to occur When testing software that uses TLS connections, it may be useful to disable the certificate validation temporarily. But disabling it in production environments is strongly discouraged, unless an alternative method of authentication is used.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DisablingCertificateValidation.js`):
+```
+let https = require("https");
+
+https.request(
+  {
+    hostname: "secure.my-online-bank.com",
+    port: 443,
+    method: "POST",
+    path: "send-confidential-information",
+    rejectUnauthorized: false // BAD
+  },
+  response => {
+    // ... communicate with secure.my-online-bank.com
+  }
+);
+```

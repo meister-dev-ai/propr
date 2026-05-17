@@ -1,0 +1,43 @@
+Review focus: Jinja2 templating with autoescape=False
+
+What to look for:
+- Using jinja2 templates with 'autoescape=False' can cause a cross-site scripting vulnerability.
+- Cross-site scripting (XSS) attacks can occur if untrusted input is not escaped. This applies to templates as well as code. The`jinja2`templates may be vulnerable to XSS if the environment has`autoescape`set to`False`. Unfortunately,`jinja2`sets`autoescape`to`False`by default. Explicitly setting`autoescape`to`True`when creating an`Environment`object will prevent this.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`jinja2.py`):
+```
+from flask import Flask, request, make_response, escape
+from jinja2 import Environment, select_autoescape, FileSystemLoader
+
+app = Flask(__name__)
+loader = FileSystemLoader( searchpath="templates/" )
+
+unsafe_env = Environment(loader=loader)
+safe1_env = Environment(loader=loader, autoescape=True)
+safe2_env = Environment(loader=loader, autoescape=select_autoescape())
+
+def render_response_from_env(env):
+    name = request.args.get('name', '')
+    template = env.get_template('template.html')
+    return make_response(template.render(name=name))
+
+@app.route('/unsafe')
+def unsafe():
+    return render_response_from_env(unsafe_env)
+
+@app.route('/safe1')
+def safe1():
+    return render_response_from_env(safe1_env)
+
+@app.route('/safe2')
+def safe2():
+    return render_response_from_env(safe2_env)
+```

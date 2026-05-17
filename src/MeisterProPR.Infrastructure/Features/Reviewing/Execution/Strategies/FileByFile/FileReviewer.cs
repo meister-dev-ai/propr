@@ -1,15 +1,18 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
@@ -30,7 +33,8 @@ internal sealed partial class FileReviewer(
     IAiRuntimeResolver? aiRuntimeResolver,
     CommentRelevanceFilterExecutor? commentRelevanceFilterExecutor,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders,
-    LocalReviewVerificationExecutor? localReviewVerificationExecutor)
+    LocalReviewVerificationExecutor? localReviewVerificationExecutor,
+    IReviewPipelineProfileProvider? pipelineProfileProvider)
 {
     public async Task ReviewAsync(
         ReviewJob job,
@@ -95,7 +99,20 @@ internal sealed partial class FileReviewer(
                 tier,
                 tierModelId,
                 tierClient,
-                effectiveClient);
+                effectiveClient,
+                []);
+
+            var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
+            fileContext = await this.RunDispatchPipelineAsync(
+                job,
+                file,
+                fileResult,
+                fileContext,
+                protocolId,
+                pipelineProfile,
+                ct);
+
+            await RecordFocusedGuidanceUsageAsync(protocolRecorder, protocolId, file.Path, fileContext, "per_file_review", ct);
 
             var result = await this.ReviewFileCoreAsync(
                 filePr,
@@ -111,7 +128,7 @@ internal sealed partial class FileReviewer(
                 protocolId,
                 reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
 
-            result = await this.RunReviewResultPipelineAsync(pipelineState, result, ct);
+            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
 
             await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
 
@@ -157,7 +174,8 @@ internal sealed partial class FileReviewer(
         FileComplexityTier tier,
         string? tierModelId,
         IChatClient? tierClient,
-        IChatClient effectiveClient)
+        IChatClient effectiveClient,
+        IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
         var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
@@ -188,6 +206,7 @@ internal sealed partial class FileReviewer(
             {
                 ComplexityTier = tier,
                 MaxIterationsOverride = maxIterationsOverride,
+                FocusedReviewGuidance = focusedReviewGuidance,
             },
             ExclusionRules = baseContext.ExclusionRules,
             DismissedPatterns = baseContext.DismissedPatterns,
@@ -212,6 +231,7 @@ internal sealed partial class FileReviewer(
     private async Task<ReviewResult> RunReviewResultPipelineAsync(
         ReviewResultPipelineState state,
         ReviewResult result,
+        ReviewPipelineProfile pipelineProfile,
         CancellationToken ct)
     {
         if (perFilePipeline is not null)
@@ -225,6 +245,7 @@ internal sealed partial class FileReviewer(
                     state.ProtocolId,
                     null,
                     result),
+                pipelineProfile.PerFileStageIds,
                 ct);
             result = pipelineContext.ReviewResult ?? result;
         }
@@ -237,6 +258,117 @@ internal sealed partial class FileReviewer(
         result = await this.ApplyMemoryReconsiderationStageAsync(state, result, ct);
         result = NormalizeCommentAnchors(result);
         return await this.ApplyLocalVerificationStageAsync(state, result, ct);
+    }
+
+    private async Task<ReviewSystemContext> RunDispatchPipelineAsync(
+        ReviewJob job,
+        ChangedFile file,
+        ReviewFileResult fileResult,
+        ReviewSystemContext fileContext,
+        Guid? protocolId,
+        ReviewPipelineProfile pipelineProfile,
+        CancellationToken ct)
+    {
+        if (perFilePipeline is null || pipelineProfile.DispatchStageIds.Count == 0)
+        {
+            return fileContext;
+        }
+
+        var pipelineContext = await perFilePipeline.ExecuteAsync(
+            new PerFileReviewContext(
+                job,
+                file,
+                fileResult,
+                fileContext,
+                protocolId,
+                null,
+                null),
+            pipelineProfile.DispatchStageIds,
+            ct);
+
+        return pipelineContext.FileReviewContext;
+    }
+
+    private static ReviewPipelineProfile ResolvePipelineProfile(
+        ReviewJob job,
+        IReviewPipelineProfileProvider? pipelineProfileProvider)
+    {
+        if (pipelineProfileProvider is null)
+        {
+            return new ReviewPipelineProfile(
+                ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
+                "File-by-file baseline",
+                ReviewStrategy.FileByFile,
+                [FileByFileProRvPrefilterStage.StageIdConstant],
+                [
+                    FileByFileConfidenceFloorStage.StageIdConstant,
+                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                    FileByFileInfoCommentStripStage.StageIdConstant,
+                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                true);
+        }
+
+        var profiles = pipelineProfileProvider.GetProfiles(ReviewStrategy.FileByFile);
+        if (!string.IsNullOrWhiteSpace(job.ReviewPipelineProfileId))
+        {
+            var selected = profiles.FirstOrDefault(profile => string.Equals(profile.ProfileId, job.ReviewPipelineProfileId, StringComparison.Ordinal));
+            if (selected is not null)
+            {
+                return selected;
+            }
+        }
+
+        return profiles.FirstOrDefault(profile => profile.IsBaseline)
+               ?? profiles.FirstOrDefault()
+               ?? new ReviewPipelineProfile(
+                   ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
+                   "File-by-file baseline",
+                   ReviewStrategy.FileByFile,
+                   [FileByFileProRvPrefilterStage.StageIdConstant],
+                   [
+                       FileByFileConfidenceFloorStage.StageIdConstant,
+                       FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                       FileByFileInfoCommentStripStage.StageIdConstant,
+                       FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                   ],
+                   [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                   true);
+    }
+
+    private static async Task RecordFocusedGuidanceUsageAsync(
+        IProtocolRecorder protocolRecorder,
+        Guid? protocolId,
+        string filePath,
+        ReviewSystemContext fileContext,
+        string promptKind,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var guidance = fileContext.PerFileHint?.FocusedReviewGuidance ?? [];
+        await protocolRecorder.RecordProRvEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    promptKind,
+                    applied = guidance.Count > 0,
+                    guidanceCount = guidance.Count,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    guidanceIds = guidance.Select(item => item.Id).ToArray(),
+                }),
+            null,
+            ct);
     }
 
     private async Task<ReviewResult> ApplyCommentRelevanceFilterStageAsync(

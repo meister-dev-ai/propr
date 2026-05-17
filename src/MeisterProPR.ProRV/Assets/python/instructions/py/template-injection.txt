@@ -1,0 +1,84 @@
+Review focus: Server Side Template Injection
+
+What to look for:
+- Using user-controlled data to create a template can lead to remote code execution or cross site scripting.
+- A template from a server templating engine such as Jinja constructed from user input can allow the user to execute arbitrary code using certain template features. It can also allow for cross-site scripting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`JinjaBad.py`):
+```
+from django.urls import path
+from django.http import HttpResponse
+from jinja2 import Template, escape
+
+
+def a(request):
+    template = request.GET['template']
+
+    # BAD: Template is constructed from user input. 
+    t = Template(template)
+
+    name = request.GET['name']
+    html = t.render(name=escape(name))
+    return HttpResponse(html)
+
+
+urlpatterns = [
+    path('a', a),
+]
+```
+- Reference example (`template_exploit.txt`):
+```
+{% for s in ().__class__.__base__.__subclasses__() %}{% if "warning" in s.__name__ %}{{s()._module.__builtins__['__import__']('os').system('cat /etc/passwd') }}{% endif %}{% endfor %}
+```
+- Reference example (`JinjaGoodParam.py`):
+```
+from django.urls import path
+from django.http import HttpResponse
+from jinja2 import Template, escape
+
+
+def a(request):
+    # GOOD: Template is a constant, not constructed from user input
+    t = Template("Hello, {{name}}!")
+
+    name = request.GET['name']
+    html = t.render(name=escape(name))
+    return HttpResponse(html)
+
+
+urlpatterns = [
+    path('a', a),
+]
+```
+- Reference example (`JinjaGoodSandbox.py`):
+```
+from django.urls import path
+from django.http import HttpResponse
+from jinja2 import escape
+from jinja2.sandbox import SandboxedEnvironment
+
+
+def a(request):
+    env = SandboxedEnvironment()
+    template = request.GET['template']
+
+    # GOOD: A sandboxed environment is used to construct the template. 
+    t = env.from_string(template)
+
+    name = request.GET['name']
+    html = t.render(name=escape(name))
+    return HttpResponse(html)
+
+
+urlpatterns = [
+    path('a', a),
+]
+```

@@ -1,0 +1,48 @@
+Review focus: Impossible interface nil check
+
+What to look for:
+- Comparing a non-nil interface value to nil may indicate a logic error.
+- Interface values in Go are type tagged, that is, they are essentially pairs of the form`(value, type)`, where`value`is a non-interface value with the given`type`. Such a pair is never`nil`, even if`value`is`nil`. In particular, if a non-interface value`v`is assigned to a variable`x`whose type is an interface, then`x`will never be`nil`, regardless of`v`. Comparing`x`to`nil`is pointless, and may indicate a misunderstanding of Go interface values or some other underlying bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImpossibleInterfaceNilCheck.go`):
+```
+package main
+
+import "fmt"
+
+func fetch(url string) (string, *RequestError)
+
+func niceFetch(url string) {
+	var s string
+	var e error
+	s, e = fetch(url)
+	if e != nil {
+		fmt.Printf("Unable to fetch URL: %v\n", e)
+	} else {
+		fmt.Printf("URL contents: %s\n", s)
+	}
+}
+```
+- Reference example (`ImpossibleInterfaceNilCheckGood.go`):
+```
+package main
+
+import "fmt"
+
+func niceFetchGood(url string) {
+	s, e := fetch(url)
+	if e != nil {
+		fmt.Printf("Unable to fetch URL: %v\n", e)
+	} else {
+		fmt.Printf("URL contents: %s\n", s)
+	}
+}
+```

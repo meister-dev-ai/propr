@@ -1,0 +1,45 @@
+Review focus: Comparison of narrow type with wide type in loop condition
+
+What to look for:
+- Comparisons between types of different widths in a loop condition can cause the loop to behave unexpectedly.
+- In a loop condition, comparison of a value of a narrow type with a value of a wide type may result in unexpected behavior if the wider value is sufficiently large (or small). This is because the narrower value may overflow. This can lead to an infinite loop.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ComparisonWithWiderType.c`):
+```
+void main(int argc, char **argv) {
+	uint32_t big_num = INT32_MAX;
+	char buf[big_num];
+	int16_t bytes_received = 0;
+	int max_get = INT16_MAX + 1;
+
+	// BAD: 'bytes_received' is compared with a value of a wider type.
+	// 'bytes_received' overflows before  reaching 'max_get',
+	// causing an infinite loop
+	while (bytes_received < max_get)
+		bytes_received += get_from_input(buf, bytes_received);
+	}
+
+	uint32_t bytes_received = 0;
+
+	// GOOD: 'bytes_received2' has a type  at least as wide as 'max_get'
+	while (bytes_received < max_get) {
+		bytes_received += get_from_input(buf, bytes_received);
+	}
+
+}
+
+
+int getFromInput(char *buf, short pos) {
+	// write to buf
+	// ...
+	return 1;
+}
+```

@@ -1,0 +1,15 @@
+Review focus: Use of Cloneable interface
+
+What to look for:
+- Using the 'Cloneable' interface is bad practice.
+- Copying an object using the`Cloneable`interface and the`Object.clone`method is error-prone. This is because the`Cloneable`interface and the`clone`method are unusual:
+- The`Cloneable`interface has no methods. Its only use is to trigger different behavior of`Object.clone`.
+- -`Object.clone`is protected.
+- -`Object.clone`creates a shallow copy without calling a constructor. The first two points mean that a programmer must do two things to get a useful implementation of`clone`: first, make the class implement`Cloneable`to change the behavior of`Object.clone`so that it makes a copy instead of throwing a`CloneNotSupportedException`; second, override`clone`to make it public, to allow it to be called. Another consequence of`Cloneable`not having any methods is that it does not say anything about an object that implements it, which means that you cannot perform a polymorphic clone operation. The third point,`Object.clone`creating a shallow copy, is the most serious one. A shallow copy shares internal state with the original object. This includes private fields that the programmer might not be aware of. A change to the internal state of the original object could affect the copy, and conversely the opposite is true, which could easily lead to unexpected behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

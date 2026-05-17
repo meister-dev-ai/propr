@@ -1,0 +1,42 @@
+Review focus: Missing Dispose call on local IDisposable
+
+What to look for:
+- Methods that create objects of type 'IDisposable' should call 'Dispose' on those objects, otherwise unmanaged resources may not be released.
+- Objects whose type implements`IDisposable`should be disposed of by calling`Dispose`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NoDisposeCallOnLocalIDisposableBad.cs`):
+```
+using System;
+using System.IO;
+
+class Bad
+{
+    long GetLength(string file)
+    {
+        var stream = new FileStream(file, FileMode.Open);
+        return stream.Length;
+    }
+}
+```
+- Reference example (`NoDisposeCallOnLocalIDisposableGood.cs`):
+```
+using System;
+using System.IO;
+
+class Good
+{
+    long GetLength(string file)
+    {
+        using (var stream = new FileStream(file, FileMode.Open))
+            return stream.Length;
+    }
+}
+```

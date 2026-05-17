@@ -1,0 +1,59 @@
+Review focus: Conflicting attributes in base classes
+
+What to look for:
+- When a class subclasses multiple base classes and more than one base class defines the same attribute, attribute overriding may result in unexpected behavior by instances of this...
+- When a class subclasses multiple base classes, attribute lookup is performed from left to right amongst the base classes. This form of attribute lookup is called "method resolution order" and is a solution to the diamond inheritance problem where several base classes override a method in a shared superclass. Unfortunately, this means that if more than one base class defines the same attribute, the leftmost base class will effectively override the attribute of the rightmost base class, even though the leftmost base class is not a subclass of the rightmost base class. Unless the methods in question are designed for inheritance, using`super`, then this implicit overriding may not be the desired behavior. Even if it is the desired behavior it makes the code hard to understand and maintain.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ConflictingAttributesInBaseClasses.py`):
+```
+class TCPServer(object):
+    
+    def process_request(self, request, client_address):
+        self.do_work(request, client_address)
+        self.shutdown_request(request)
+
+    
+class ThreadingMixIn:
+    """Mix-in class to handle each request in a new thread."""
+
+    def process_request(self, request, client_address):
+        """Start a new thread to process the request."""
+        t = threading.Thread(target = self.do_work, args = (request, client_address))
+        t.daemon = self.daemon_threads
+        t.start()
+
+class ThreadingTCPServer(ThreadingMixIn, TCPServer): pass
+```
+- Reference example (`ConflictingAttributesInBaseClasses_Fixed.py`):
+```
+#Fixed by overriding. This does not change behavior, but makes it explicit and comprehensible.
+class ThreadingTCPServerOverriding(ThreadingMixIn, TCPServer):
+    
+    def process_request(self, request, client_address):
+        #process_request forwards to do_work, so it is OK to call ThreadingMixIn.process_request directly
+        ThreadingMixIn.process_request(self, request, client_address)
+        
+
+#Fixed by separating threading functionality from request handling.
+class ThreadingMixIn:
+    """Mix-in class to help with threads."""
+
+    def do_job_in_thread(self, job, args):
+        """Start a new thread to do the job"""
+        t = threading.Thread(target = job, args = args)
+        t.start()
+
+class ThreadingTCPServerChangedHierarchy(ThreadingMixIn, TCPServer):
+    
+    def process_request(self, request, client_address):
+        """Start a new thread to process the request."""
+        self.do_job_in_thread(self.do_work,  (request, client_address))
+```

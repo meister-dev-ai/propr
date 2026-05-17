@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -34,7 +35,8 @@ internal sealed partial class AgenticFileReviewer(
     IAiRuntimeResolver? aiRuntimeResolver,
     CommentRelevanceFilterExecutor? commentRelevanceFilterExecutor,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders,
-    LocalReviewVerificationExecutor? localReviewVerificationExecutor)
+    LocalReviewVerificationExecutor? localReviewVerificationExecutor,
+    IReviewPipelineProfileProvider? pipelineProfileProvider)
 {
     public async Task<IReadOnlyList<CandidateReviewFinding>> ReviewAsync(
         ReviewJob job,
@@ -98,7 +100,21 @@ internal sealed partial class AgenticFileReviewer(
                 tier,
                 tierModelId,
                 tierClient,
-                effectiveClient);
+                effectiveClient,
+                []);
+
+            var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
+            await this.RecordPipelineProfileAsync(protocolId, file.Path, pipelineProfile, ct);
+            fileContext = await this.RunDispatchPipelineAsync(
+                job,
+                file,
+                fileResult,
+                fileContext,
+                protocolId,
+                pipelineProfile,
+                ct);
+
+            await this.RecordFocusedGuidanceUsageAsync(protocolId, file.Path, fileContext, "agentic_file_planning", ct);
 
             fileContext = await this.EnrichContextWithAgenticArtifactsAsync(job, pr, filePr, file, fileContext, effectiveClient, ct);
 
@@ -118,7 +134,7 @@ internal sealed partial class AgenticFileReviewer(
                 protocolId,
                 reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
 
-            result = await this.RunReviewResultPipelineAsync(pipelineState, result, ct);
+            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
 
             var survivingAgenticCandidateFindings = fileContext.PerFileHint?.VerifiedAgenticCandidateFindings ?? [];
 
@@ -163,7 +179,8 @@ internal sealed partial class AgenticFileReviewer(
         FileComplexityTier tier,
         string? tierModelId,
         IChatClient? tierClient,
-        IChatClient effectiveClient)
+        IChatClient effectiveClient,
+        IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
         var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
@@ -194,6 +211,7 @@ internal sealed partial class AgenticFileReviewer(
             {
                 ComplexityTier = tier,
                 MaxIterationsOverride = maxIterationsOverride,
+                FocusedReviewGuidance = focusedReviewGuidance,
             },
             ExclusionRules = baseContext.ExclusionRules,
             DismissedPatterns = baseContext.DismissedPatterns,
@@ -940,6 +958,7 @@ internal sealed partial class AgenticFileReviewer(
     private async Task<ReviewResult> RunReviewResultPipelineAsync(
         ReviewResultPipelineState state,
         ReviewResult result,
+        ReviewPipelineProfile pipelineProfile,
         CancellationToken ct)
     {
         if (perFilePipeline is not null)
@@ -953,6 +972,7 @@ internal sealed partial class AgenticFileReviewer(
                     state.ProtocolId,
                     null,
                     result),
+                pipelineProfile.PerFileStageIds,
                 ct);
             result = pipelineContext.ReviewResult ?? result;
         }
@@ -965,6 +985,149 @@ internal sealed partial class AgenticFileReviewer(
         result = await this.ApplyMemoryReconsiderationStageAsync(state, result, ct);
         result = NormalizeCommentAnchors(result);
         return await this.ApplyLocalVerificationStageAsync(state, result, ct);
+    }
+
+    private async Task<ReviewSystemContext> RunDispatchPipelineAsync(
+        ReviewJob job,
+        ChangedFile file,
+        ReviewFileResult fileResult,
+        ReviewSystemContext fileContext,
+        Guid? protocolId,
+        ReviewPipelineProfile pipelineProfile,
+        CancellationToken ct)
+    {
+        if (perFilePipeline is null || pipelineProfile.DispatchStageIds.Count == 0)
+        {
+            return fileContext;
+        }
+
+        var pipelineContext = await perFilePipeline.ExecuteAsync(
+            new PerFileReviewContext(
+                job,
+                file,
+                fileResult,
+                fileContext,
+                protocolId,
+                null,
+                null),
+            pipelineProfile.DispatchStageIds,
+            ct);
+
+        return pipelineContext.FileReviewContext;
+    }
+
+    private async Task RecordPipelineProfileAsync(
+        Guid? protocolId,
+        string filePath,
+        ReviewPipelineProfile pipelineProfile,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.ReviewPipelineProfileApplied,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    profileId = pipelineProfile.ProfileId,
+                    strategy = pipelineProfile.Strategy.ToString(),
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    pipelineProfile.ProfileId,
+                    pipelineProfile.DispatchStageIds,
+                    pipelineProfile.PerFileStageIds,
+                    pipelineProfile.FinalizationStageIds,
+                }),
+            null,
+            ct);
+    }
+
+    private async Task RecordFocusedGuidanceUsageAsync(
+        Guid? protocolId,
+        string filePath,
+        ReviewSystemContext fileContext,
+        string promptKind,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var guidance = fileContext.PerFileHint?.FocusedReviewGuidance ?? [];
+        await protocolRecorder.RecordProRvEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    promptKind,
+                    applied = guidance.Count > 0,
+                    guidanceCount = guidance.Count,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    guidanceIds = guidance.Select(item => item.Id).ToArray(),
+                }),
+            null,
+            ct);
+    }
+
+    private static ReviewPipelineProfile ResolvePipelineProfile(
+        ReviewJob job,
+        IReviewPipelineProfileProvider? pipelineProfileProvider)
+    {
+        if (pipelineProfileProvider is null)
+        {
+            return new ReviewPipelineProfile(
+                ReviewPipelineProfileProvider.AgenticBaselineProfileId,
+                "Agentic baseline",
+                ReviewStrategy.AgenticFileByFile,
+                [AgenticProRvPrefilterStage.StageIdConstant],
+                [
+                    AgenticConfidenceFloorStage.StageIdConstant,
+                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                    AgenticInfoCommentStripStage.StageIdConstant,
+                    AgenticVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                true);
+        }
+
+        var profiles = pipelineProfileProvider.GetProfiles(ReviewStrategy.AgenticFileByFile);
+        if (!string.IsNullOrWhiteSpace(job.ReviewPipelineProfileId))
+        {
+            var selected = profiles.FirstOrDefault(profile => string.Equals(profile.ProfileId, job.ReviewPipelineProfileId, StringComparison.Ordinal));
+            if (selected is not null)
+            {
+                return selected;
+            }
+        }
+
+        return profiles.FirstOrDefault(profile => profile.IsBaseline)
+               ?? profiles.FirstOrDefault()
+               ?? new ReviewPipelineProfile(
+                   ReviewPipelineProfileProvider.AgenticBaselineProfileId,
+                   "Agentic baseline",
+                   ReviewStrategy.AgenticFileByFile,
+                   [AgenticProRvPrefilterStage.StageIdConstant],
+                   [
+                       AgenticConfidenceFloorStage.StageIdConstant,
+                       AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                       AgenticInfoCommentStripStage.StageIdConstant,
+                       AgenticVagueSuggestionFilterStage.StageIdConstant,
+                   ],
+                   [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                   true);
     }
 
     private async Task<ReviewResult> ApplyCommentRelevanceFilterStageAsync(

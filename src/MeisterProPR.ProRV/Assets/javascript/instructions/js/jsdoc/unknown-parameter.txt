@@ -1,0 +1,29 @@
+Review focus: JSDoc tag for non-existent parameter
+
+What to look for:
+- A JSDoc 'param' tag that refers to a non-existent parameter is confusing and may indicate badly maintained code.
+- JSDoc comments for functions and constructors should use the`@param`tag to describe the available parameters. Wrong or outdated parameter names in`@param`tags make the documentation difficult to read, and may indicate badly maintained code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`JSDocForNonExistentParameter.js`):
+```
+/**
+ * A message.
+ *
+ * @constructor
+ * 
+ * @param {string} title The title of the message.
+ * @param {string} text  The body text of the message.
+ */
+function Message(title, body) {
+    this.title = title;
+    this.body = body;
+}
+```

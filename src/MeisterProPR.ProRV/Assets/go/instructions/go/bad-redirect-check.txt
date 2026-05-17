@@ -1,0 +1,36 @@
+Review focus: Bad redirect check
+
+What to look for:
+- A redirect check that checks for a leading slash but not two leading slashes or a leading slash followed by a backslash is incomplete.
+- Redirect URLs should be checked to ensure that user input cannot cause a site to redirect to arbitrary domains. This is often done with a check that the redirect URL begins with a slash, which most of the time is an absolute redirect on the same host. However, browsers interpret URLs beginning with`//`or`/\`as absolute URLs. For example, a redirect to`//example.com`will redirect to`https://example.com`. Thus, redirect checks must also check the second character of redirect URLs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`BadRedirectCheck.go`):
+```
+package main
+
+func sanitizeUrl(redir string) string {
+	if len(redir) > 0 && redir[0] == '/' {
+		return redir
+	}
+	return "/"
+}
+```
+- Reference example (`BadRedirectCheckGood.go`):
+```
+package main
+
+func sanitizeUrl1(redir string) string {
+	if len(redir) > 1 && redir[0] == '/' && redir[1] != '/' && redir[1] != '\\' {
+		return redir
+	}
+	return "/"
+}
+```

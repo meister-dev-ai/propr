@@ -1,0 +1,79 @@
+Review focus: Use of constant `state` value in OAuth 2.0 URL
+
+What to look for:
+- Using a constant value for the `state` in the OAuth 2.0 URL makes the application susceptible to CSRF attacks.
+- OAuth 2.0 clients must implement CSRF protection for the redirection URI, which is typically accomplished by including a "state" value that binds the request to the user's authenticated state. The Go OAuth 2.0 library allows you to specify a "state" value which is then included in the auth code URL. That state is then provided back by the remote authentication server in the redirect callback, from where it must be validated. Failure to do so makes the client susceptible to an CSRF attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ConstantOauth2StateBad.go`):
+```
+package main
+
+import (
+	"golang.org/x/oauth2"
+)
+
+func main() {}
+
+var stateStringVar = "state"
+
+func badWithStringLiteralState() {
+	conf := &oauth2.Config{
+		ClientID:     "YOUR_CLIENT_ID",
+		ClientSecret: "YOUR_CLIENT_SECRET",
+		Scopes:       []string{"SCOPE1", "SCOPE2"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://provider.com/o/oauth2/auth",
+			TokenURL: "https://provider.com/o/oauth2/token",
+		},
+	}
+
+	url := conf.AuthCodeURL(stateStringVar)
+	// ...
+}
+```
+- Reference example (`ConstantOauth2StateBetter.go`):
+```
+package main
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"net/http"
+
+	"golang.org/x/oauth2"
+)
+
+func betterWithVariableStateReturned(w http.ResponseWriter) {
+	conf := &oauth2.Config{
+		ClientID:     "YOUR_CLIENT_ID",
+		ClientSecret: "YOUR_CLIENT_SECRET",
+		Scopes:       []string{"SCOPE1", "SCOPE2"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://provider.com/o/oauth2/auth",
+			TokenURL: "https://provider.com/o/oauth2/token",
+		},
+	}
+
+	state := generateStateOauthCookie(w)
+	url := conf.AuthCodeURL(state)
+	_ = url
+	// ...
+}
+func generateStateOauthCookie(w http.ResponseWriter) string {
+	b := make([]byte, 128)
+	rand.Read(b)
+	// TODO: save the state string to cookies or HTML storage,
+	// and bind it to the authenticated status of the user.
+	state := base64.URLEncoding.EncodeToString(b)
+
+	return state
+}
+```

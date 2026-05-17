@@ -1,0 +1,46 @@
+Review focus: Unreachable statement
+
+What to look for:
+- Unreachable statements are often indicative of missing code or latent bugs and should be avoided.
+- An unreachable statement often indicates missing code or a latent bug and should be examined carefully.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnreachableStatement.go`):
+```
+package main
+
+func mul(xs []int) int {
+	res := 1
+	for i := 0; i < len(xs); i++ {
+		x := xs[i]
+		res *= x
+		if res == 0 {
+		}
+		return 0
+	}
+	return res
+}
+```
+- Reference example (`UnreachableStatementGood.go`):
+```
+package main
+
+func mulGood(xs []int) int {
+	res := 1
+	for i := 0; i < len(xs); i++ {
+		x := xs[i]
+		res *= x
+		if res == 0 {
+			return 0
+		}
+	}
+	return res
+}
+```

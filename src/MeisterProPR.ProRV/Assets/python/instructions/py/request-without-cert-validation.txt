@@ -1,0 +1,36 @@
+Review focus: Request without certificate validation
+
+What to look for:
+- Making a request without certificate validation can allow man-in-the-middle attacks.
+- Encryption is key to the security of most, if not all, online communication. Using Transport Layer Security (TLS) can ensure that communication cannot be interrupted by an interloper. For this reason, it is unwise to disable the verification that TLS provides. Functions in the`requests`module provide verification by default, and it is only when explicitly turned off using`verify=False`that no verification occurs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`make_request.py`):
+```
+import requests
+
+#Unsafe requests
+
+requests.get('https://semmle.com', verify=False) # UNSAFE
+requests.get('https://semmle.com', verify=0) # UNSAFE
+
+#Various safe options
+
+requests.get('https://semmle.com', verify=True) # Explicitly safe
+requests.get('https://semmle.com', verify="/path/to/cert/")
+requests.get('https://semmle.com') # The default is to verify.
+
+#Wrapper to ensure safety
+
+def make_safe_request(url, verify_cert):
+    if not verify_cert:
+        raise Exception("Trying to make unsafe request")
+    return requests.get(url, verify_cert)
+```

@@ -1,0 +1,30 @@
+Review focus: 'requireSSL' attribute is not set to true
+
+What to look for:
+- Omitting the 'requireSSL' attribute allows data to be transmitted insecurely using HTTP.
+- Sensitive data that is transmitted using HTTP is vulnerable to being read by a third party. By default, web forms and cookies are sent via HTTP, not HTTPS. This setting can be changed by setting the`requireSSL`attribute to`"true"`in`Web.config`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`Web.config`):
+```
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <system.web>
+    <authentication>
+      <forms
+        requireSSL="true"
+        ... />
+    </authentication>
+    <httpCookies
+        requireSSL="true"
+        ... />
+  </system.web>
+</configuration>
+```

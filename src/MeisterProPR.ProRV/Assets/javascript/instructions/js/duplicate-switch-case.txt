@@ -1,0 +1,44 @@
+Review focus: Duplicate switch case
+
+What to look for:
+- If two cases in a switch statement have the same label, the second case will never be executed.
+- In JavaScript, cases in a switch statement can have arbitrary expressions as their labels. The interpreter does not check that these expressions are all different. At runtime, if two cases in a switch statement have the same label, the second case will never be executed. This most likely indicates a copy-paste error where the first case was copied and then not properly adjusted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateSwitchCase.js`):
+```
+function controller(msg) {
+	switch (msg) {
+	case 'start':
+		start();
+		break;
+	case 'start':
+		stop();
+		break;
+	default:
+		throw new Error("Message not understood.");
+	}
+}
+```
+- Reference example (`DuplicateSwitchCaseGood.js`):
+```
+function controller(msg) {
+	switch (msg) {
+	case 'start':
+		start();
+		break;
+	case 'stop':
+		stop();
+		break;
+	default:
+		throw new Error("Message not understood.");
+	}
+}
+```

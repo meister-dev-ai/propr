@@ -1,0 +1,12 @@
+Review focus: Equals method does not inspect argument type
+
+What to look for:
+- An implementation of 'equals' that does not check the type of its argument may lead to failing casts.
+- An implementation of`equals`must be able to handle an argument of any type, to avoid failing casts. Therefore, the implementation should inspect the type of its argument to see if the argument can be safely cast to the class in which the`equals`method is declared.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

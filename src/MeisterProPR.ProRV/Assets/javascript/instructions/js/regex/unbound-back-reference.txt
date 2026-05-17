@@ -1,0 +1,18 @@
+Review focus: Unbound back reference
+
+What to look for:
+- Regular expression escape sequences of the form '\n', where 'n' is a positive number greater than the number of capture groups in the regular expression, are not allowed by the...
+- In regular expressions, back references can be used to refer back to the result of a previously matched capture group. The ECMAScript standard forbids back references of the form '\n', where 'n' is a positive number greater than the number of capture groups in the regular expression. While many browsers allow such references and interpret them as normal character escapes instead, this behavior is non-standard and should not be relied on. It can also be a source of bugs if the regular expression is changed later on, since the character escape may then start matching newly introduced capture groups.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnboundBackref.js`):
+```
+/^(?:\s+)\w+\1$/;
+```

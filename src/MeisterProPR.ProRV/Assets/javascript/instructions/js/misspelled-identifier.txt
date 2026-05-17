@@ -1,0 +1,24 @@
+Review focus: Misspelled identifier
+
+What to look for:
+- Misspelled identifiers make code harder to read and understand.
+- Misspelled identifiers make code harder to read and understand. In a dynamically typed language like JavaScript, they may also indicate a bug where a reference to a property was accidentally misspelled. Note that this rule does not flag misspellings of local variable names, which are instead highlighted by the rule 'Misspelled variable name'.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MisspelledIdentifier.js`):
+```
+for (var i=1; i<ids.lenght; ++i) {
+    var id = ids[i];
+    if (id) {
+        var element = document.getElementById(id);
+        element.className += " selected";
+    }
+}
+```

@@ -1,0 +1,21 @@
+Review focus: Too few arguments to formatting function
+
+What to look for:
+- Calling a printf-like function with too few arguments can be a source of security issues.
+- Each call to the`printf`function, or a related function, should include the number of arguments defined by the format. Passing the function more arguments than required is harmless (although it may be indicative of other defects). However, passing the function fewer arguments than are defined by the format can be a security vulnerability since the function will process the next item on the stack as the missing arguments. This might lead to an information leak if a sensitive value from the stack is printed. It might cause a crash if a value on the stack is interpreted as a pointer and leads to accessing unmapped memory. Finally, it may lead to a follow-on vulnerability if an attacker can use this problem to cause the output string to be too long or have unexpected contents.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WrongNumberOfFormatArguments.cpp`):
+```
+int main() {
+  printf("%d, %s\n", 42); // Will crash or print garbage
+  return 0;
+}
+```

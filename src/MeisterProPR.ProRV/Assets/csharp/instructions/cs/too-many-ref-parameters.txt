@@ -1,0 +1,80 @@
+Review focus: Too many 'ref' parameters
+
+What to look for:
+- Methods with large numbers of 'ref' parameters can be hard to understand - consider using a wrapper object instead.
+- Whilst passing method arguments using`ref`is occasionally a sensible thing to do (the canonical example is when writing a 'swap' method), overusing reference parameters can make methods needlessly difficult to understand and call. Methods end up relying on their parameters being correctly initialized elsewhere and can have problems such as aliasing (when two parameters refer to the same object). They can be difficult to call because the references must refer to l-values (rather than temporary objects), so additional objects must be created to hold the results of the call. Their results can also be difficult to forward to other methods.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TooManyRefParametersBad.cs`):
+```
+using System;
+
+class Bad
+{
+    private static void PopulateDetails(ref string name, ref string address, ref string tel)
+    {
+        name = "Foo";
+        address = "23 Bar Street";
+        tel = "01234 567890";
+    }
+
+    private static void PrintDetails(string name, string address, string tel)
+    {
+        Console.WriteLine("Name: " + name);
+        Console.WriteLine("Address: " + address);
+        Console.WriteLine("Tel.: " + tel);
+    }
+
+    static void Main(string[] args)
+    {
+        string name = null, address = null, tel = null;
+        PopulateDetails(ref name, ref address, ref tel);
+        PrintDetails(name, address, tel);
+    }
+}
+```
+- Reference example (`TooManyRefParametersGood.cs`):
+```
+using System;
+
+class Good
+{
+    class Details
+    {
+        public string Name { get; private set; }
+        public string Address { get; private set; }
+        public string Tel { get; private set; }
+
+        public Details(string name, string address, string tel)
+        {
+            Name = name;
+            Address = address;
+            Tel = tel;
+        }
+    }
+
+    private static Details PopulateDetails()
+    {
+        return new Details("Foo", "23 Bar Street", "01234 567890");
+    }
+
+    private static void PrintDetails(Details details)
+    {
+        Console.WriteLine("Name: " + details.Name);
+        Console.WriteLine("Address: " + details.Address);
+        Console.WriteLine("Tel.: " + details.Tel);
+    }
+
+    static void Main(string[] args)
+    {
+        PrintDetails(PopulateDetails());
+    }
+}
+```

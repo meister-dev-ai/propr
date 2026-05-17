@@ -1,0 +1,12 @@
+Review focus: Hard-coded Japanese era start date in struct
+
+What to look for:
+- Japanese era changes can lead to code behaving differently.
+- When eras change, date and time conversions that rely on a hard-coded era start date need to be reviewed. Conversions relying on Japanese dates in the current era can produce an ambiguous date. The values for the current Japanese era dates should be read from a source that will be updated, such as the Windows registry.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

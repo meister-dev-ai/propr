@@ -1,0 +1,34 @@
+Review focus: Code injection
+
+What to look for:
+- Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.
+- Directly evaluating user input (for example, an HTTP request parameter) as code without properly sanitizing the input first allows an attacker arbitrary code execution. This can occur when user input is passed to code that interprets it as an expression to be evaluated, such as`eval`or`exec`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`code_injection.py`):
+```
+urlpatterns = [
+    # Route to code_execution
+    url(r'^code-ex1$', code_execution_bad, name='code-execution-bad'),
+    url(r'^code-ex2$', code_execution_good, name='code-execution-good')
+]
+
+def code_execution(request):
+    if request.method == 'POST':
+        first_name = base64.decodestring(request.POST.get('first_name', ''))
+        #BAD -- Allow user to define code to be run.
+        exec("setname('%s')" % first_name)
+
+def code_execution(request):
+    if request.method == 'POST':
+        first_name = base64.decodestring(request.POST.get('first_name', ''))
+        #GOOD --Call code directly
+        setname(first_name)
+```

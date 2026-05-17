@@ -1,0 +1,36 @@
+Review focus: Untrusted network-to-host usage
+
+What to look for:
+- Using the result of a network-to-host byte order function, such as ntohl, as an array bound or length value without checking it may result in buffer overflows or other...
+- Data received over a network connection may be received in a different byte order than the byte order used by the local host, making the data difficult to process. To address this, data received over the wire is usually converted to host byte order by a call to a network-to-host byte order function, such as`ntohl`. The use of a network-to-host byte order function is therefore a good indicator that the returned value is unvalidated data retrieved from the network, and should not be used without further validation. In particular, the returned value should not be used as an array index or array length value without validation, as this could result in a buffer overflow vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`NtohlArrayNoBound-bad.cpp`):
+```
+int get_number_from_network();
+
+int process_network(int[] buff, int buffSize) {
+  int i = ntohl(get_number_from_network());
+  return buff[i];
+}
+```
+- Good example (`NtohlArrayNoBound-good.cpp`):
+```
+uint32_t get_number_from_network();
+
+int process_network(int[] buff, uint32_t buffSize) {
+  uint32_t i = ntohl(get_number_from_network());
+  if (i < buffSize) {
+    return buff[i];
+  } else {
+    return -1;
+  }
+}
+```

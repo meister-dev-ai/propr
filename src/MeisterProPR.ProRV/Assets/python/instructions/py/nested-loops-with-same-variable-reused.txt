@@ -1,0 +1,32 @@
+Review focus: Nested loops with same variable reused after inner loop body
+
+What to look for:
+- Redefining a variable in an inner loop and then using the variable in an outer loop causes unexpected behavior.
+- In Python variables have function-wide scope which means that if two variables have the same name in the same scope, they are in fact one variable. Consequently, nested loops in which the target variables have the same name in fact share a single variable. Such loops are difficult to understand as the inner loop will modify the target variable of the outer loop. This may lead to unexpected behavior if the loop variable is used after the inner loop has terminated.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedLoopsSameVariableWithReuse.py`):
+```
+def largest_elements(l):
+    for x in l:
+        maxnum = 0
+        for x in x:
+            maxnum = max(x, maxnum)
+        # The outer loop variable x has now been overwritten by the inner loop.
+        print "The largest element in the list", x, "is", maxnum
+
+
+def largest_elements_correct(l):
+    for x in l:
+        maxnum = 0
+        for y in x:
+            maxnum = max(y, maxnum)
+        print "The largest element in the list", x, "is", maxnum
+```

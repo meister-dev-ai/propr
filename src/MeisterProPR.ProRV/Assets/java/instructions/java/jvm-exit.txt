@@ -1,0 +1,12 @@
+Review focus: Forcible JVM termination
+
+What to look for:
+- Calling 'System.exit', 'Runtime.halt', or 'Runtime.exit' may make code harder to reuse and prevent important cleanup steps from running.
+- Calling one of the methods`System.exit`,`Runtime.halt`, and`Runtime.exit`immediately terminates the Java Virtual Machine (JVM), effectively killing all threads without giving any of them a chance to perform cleanup actions or recover. As such, it is a dangerous thing to do: firstly, it can terminate the entire program inadvertently, and secondly, it can prevent important resources from being released or program state from being written to disk consistently. It is sometimes considered acceptable to call`System.exit`from a program's`main`method in order to indicate the overall exit status of the program. The`main`method should be the primary place where exit conditions are handled, as it represents the natural termination point of the application. Such calls are an exception to this rule.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

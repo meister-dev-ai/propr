@@ -1,0 +1,12 @@
+Review focus: Android WebView JavaScript settings
+
+What to look for:
+- Enabling JavaScript execution in a WebView can result in cross-site scripting attacks.
+- Enabling JavaScript in an Android WebView allows the execution of JavaScript code in the context of the running application. This creates a cross-site scripting vulnerability. For example, if your application's WebView allows for visiting web pages that you do not trust, it is possible for an attacker to lead the user to a page which loads malicious JavaScript. You can enable or disable Javascript execution using the`setJavaScriptEnabled`method of the settings of a WebView.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

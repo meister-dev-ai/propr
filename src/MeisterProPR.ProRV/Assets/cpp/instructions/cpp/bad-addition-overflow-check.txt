@@ -1,0 +1,27 @@
+Review focus: Bad check for overflow of integer addition
+
+What to look for:
+- Checking for overflow of integer addition by comparing against one of the arguments of the addition does not work when the result of the addition is automatically promoted to a...
+- Checking for overflow of integer addition needs to be done with care, because automatic type promotion can prevent the check from working as intended, with the same value (`true`or`false`) always being returned.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadAdditionOverflowCheckExample1.cpp`):
+```
+bool checkOverflow(unsigned short x, unsigned short y) {
+  // BAD: comparison is always false due to type promotion
+  return (x + y < x);  
+}
+```
+- Reference example (`BadAdditionOverflowCheckExample2.cpp`):
+```
+bool checkOverflow(unsigned short x, unsigned short y) {
+  return ((unsigned short)(x + y) < x);  // GOOD: explicit cast
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Useless null check
+
+What to look for:
+- Checking whether an expression is null when that expression cannot possibly be null is useless.
+- Sometimes you can guarantee that a particular variable will never be null. For example when that variable has just been assigned a newly created object or is the exception caught by a`catch`clause. A null check on such a variable is misleading, and can potentially indicate a logic error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

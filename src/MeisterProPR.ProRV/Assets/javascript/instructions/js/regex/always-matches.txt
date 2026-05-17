@@ -1,0 +1,26 @@
+Review focus: Regular expression always matches
+
+What to look for:
+- Regular expression tests that always find a match indicate dead code or a logic error
+- There are several built-in JavaScript functions that search for a regular expression match within a string, such as`RegExp.prototype.test`and`String.prototype.search`. If the regular expression is not anchored, it only needs to match a substring of the input and won't necessarily match the whole string. If the regular expression being searched for accepts the empty string, this means it can match an empty substring anywhere in the input string, and will thus always find a match. In this case, testing if a match exists is redundant and indicates dead code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RegExpAlwaysMatches.js`):
+```
+if (!/[a-z0-9]*/.test(id)) {
+    throw new Error("Invalid id: " + id);
+}
+```
+- Reference example (`RegExpAlwaysMatchesGood.js`):
+```
+if (!/^[a-z0-9]*$/.test(id)) {
+    throw new Error("Invalid id: " + id);
+}
+```

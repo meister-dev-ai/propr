@@ -1,0 +1,22 @@
+Review focus: Call to memory access function may overflow buffer
+
+What to look for:
+- Incorrect use of a function that accesses a memory buffer may read or write data past the end of that buffer.
+- The software uses a function to access a memory buffer in a way that may read or write data past the end of that buffer. This may result in software instability, improper access to or corruption of sensitive information, or code execution by an attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OverflowBuffer.c`):
+```
+const char *message = "Hello";
+char password[32];
+char buffer[256];
+
+memcpy(buffer, message, 256);
+```

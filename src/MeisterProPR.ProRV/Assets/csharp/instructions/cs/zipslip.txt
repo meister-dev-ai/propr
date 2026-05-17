@@ -1,0 +1,49 @@
+Review focus: Arbitrary file access during archive extraction ("Zip Slip")
+
+What to look for:
+- Extracting files from a malicious ZIP file, or similar type of archive, without validating that the destination file path is within the destination directory can allow an...
+- Extracting files from a malicious zip file, or similar type of archive, is at risk of directory traversal attacks if filenames from the archive are not properly validated. Zip archives contain archive entries representing each file in the archive. These entries include a file path for the entry, but these file paths are not restricted and may contain unexpected special elements such as the directory traversal element (`..`). If these file paths are used to create a filesystem path, then a file operation may happen in an unexpected location. This can result in sensitive information being revealed or deleted, or an attacker being able to influence behavior by modifying unexpected files. For example, if a zip file contains a file entry`..\sneaky-file`, and the zip file is extracted to the directory`c:\output`, then naively combining the paths would result in an output file path of`c:\output\..\sneaky-file`, which would cause the file to be written to`c:\sneaky-file`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ZipSlipBad.cs`):
+```
+using System.IO;
+using System.IO.Compression;
+
+class Bad
+{
+    public static void WriteToDirectory(ZipArchiveEntry entry,
+                                        string destDirectory)
+    {
+        string destFileName = Path.Combine(destDirectory, entry.FullName);
+        entry.ExtractToFile(destFileName);
+    }
+}
+```
+- Reference example (`ZipSlipGood.cs`):
+```
+using System.IO;
+using System.IO.Compression;
+
+class Good
+{
+    public static void WriteToDirectory(ZipArchiveEntry entry,
+                                        string destDirectory)
+    {
+        string destFileName = Path.GetFullPath(Path.Combine(destDirectory, entry.FullName));
+        string fullDestDirPath = Path.GetFullPath(destDirectory + Path.DirectorySeparatorChar);
+        if (!destFileName.StartsWith(fullDestDirPath)) {
+            throw new System.InvalidOperationException("Entry is outside the target dir: " +
+                                                                                 destFileName);
+        }
+        entry.ExtractToFile(destFileName);
+    }
+}
+```

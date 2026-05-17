@@ -1,0 +1,38 @@
+Review focus: Use of string after lifetime ends
+
+What to look for:
+- If the value of a call to 'c_str' outlives the underlying object it may lead to unexpected behavior.
+- Calling`c_str`on a`std::string`object returns a pointer to the underlying character array. When the`std::string`object is destroyed, the pointer returned by`c_str`is no longer valid. If the pointer is used after the`std::string`object is destroyed, then the behavior is undefined. Typically, this problem occurs when a`std::string`is returned by a function call (or overloaded operator) by value, and the result is not immediately stored in a variable by value or reference in a way that extends the lifetime of the temporary object. The resulting temporary`std::string`object is destroyed at the end of the containing expression statement, along with any memory returned by a call to`c_str`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseOfStringAfterLifetimeEndsBad.cpp`):
+```
+#include <string>
+void work(const char*);
+
+// BAD: the concatenated string is deallocated when `c_str` returns. So `work`
+// is given a pointer to invalid memory.
+void work_with_combined_string_bad(std::string s1, std::string s2) {
+  const char* combined_string = (s1 + s2).c_str();
+  work(combined_string);
+}
+```
+- Reference example (`UseOfStringAfterLifetimeEndsGood.cpp`):
+```
+#include <string>
+void work(const char*);
+
+// GOOD: the concatenated string outlives the call to `work`. So the pointer
+// obtainted from `c_str` is valid.
+void work_with_combined_string_good(std::string s1, std::string s2) {
+  auto combined_string = s1 + s2;
+  work(combined_string.c_str());
+}
+```

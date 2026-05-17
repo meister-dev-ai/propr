@@ -1,0 +1,27 @@
+Review focus: Complex condition
+
+What to look for:
+- Boolean expressions should not be too deeply nested.
+- Very complex conditions are hard to understand and therefore are a source of a lot of defects.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ComplexCondition.cs`):
+```
+class Complex
+{
+    static bool foo(bool a, bool b, bool c, bool d, bool e, bool f, bool g)
+    {
+        bool x = a || b || c || d || e || f || g; // OK
+        bool y = a && b || !(b && c) || !(d && e) && !(f && g); // NOT OK
+        bool z = (a && b || (b && c)) && ((d && e) || (f && g)); // NOT OK
+        return x && y && z; // OK
+    }
+}
+```

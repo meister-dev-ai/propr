@@ -1,0 +1,30 @@
+Review focus: Whitespace contradicts operator precedence
+
+What to look for:
+- Nested expressions where the formatting contradicts the grouping enforced by operator precedence are difficult to read and may indicate a bug.
+- Nested expressions where the spacing around operators suggests a different grouping than that imposed by the Go operator precedence rules are problematic: they could indicate a bug where the author of the code misunderstood the precedence rules. Even if there is no a bug, the spacing could be confusing to people who read the code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WhitespaceContradictsPrecedence.go`):
+```
+package main
+
+func isBitSetBad(x int, pos uint) bool {
+	return x&1<<pos != 0
+}
+```
+- Reference example (`WhitespaceContradictsPrecedenceGood.go`):
+```
+package main
+
+func isBitSetGood(x int, pos uint) bool {
+	return x&(1<<pos) != 0
+}
+```

@@ -1,0 +1,30 @@
+Review focus: Binding a socket to all network interfaces
+
+What to look for:
+- Binding a socket to all interfaces opens it up to traffic from any IPv4 address and is therefore associated with security risks.
+- Sockets can be used to communicate with other machines on a network. You can use the (IP address, port) pair to define the access restrictions for the socket you create. When using the built-in Python`socket`module (for instance, when building a message sender service or an FTP server data transmitter), one has to bind the port to some interface. When you bind the port to all interfaces using`0.0.0.0`as the IP address, you essentially allow it to accept connections from any IPv4 address provided that it can get to the socket via routing. Binding to all interfaces is therefore associated with security risks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`BindToAllInterfaces.py`):
+```
+import socket
+
+# binds to all interfaces, insecure
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('0.0.0.0', 31137))
+
+# binds to all interfaces, insecure
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 4040))
+
+# binds only to a dedicated interface, secure
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('84.68.10.12', 8080))
+```

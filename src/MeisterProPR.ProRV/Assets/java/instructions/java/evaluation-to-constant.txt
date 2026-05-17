@@ -1,0 +1,17 @@
+Review focus: Expression always evaluates to the same value
+
+What to look for:
+- An expression that always evaluates to the same value, but which has a non-constant subexpression, indicates a mistake.
+- Some expressions always evaluate to the same result, no matter what their subexpressions are:
+- -`x * 0`always evaluates to`0`.
+- -`x % 1`always evaluates to`0`.
+- -`x & 0`always evaluates to`0`.
+- -`x || true`always evaluates to`true`.
+- -`x && false`always evaluates to`false`. Whenever`x`is not constant, such an expression is often a mistake.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

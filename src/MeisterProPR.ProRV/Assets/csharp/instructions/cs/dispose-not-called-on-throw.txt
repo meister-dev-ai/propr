@@ -1,0 +1,56 @@
+Review focus: Dispose may not be called if an exception is thrown during execution
+
+What to look for:
+- Methods that create objects of type 'IDisposable' should call 'Dispose()' on those objects, even during exceptional circumstances, otherwise unmanaged resources may not be...
+- If an exception is thrown between the allocation of an`IDisposable`object and a`Dispose()`call on that object, and the`Dispose()`call is not within a`catch`or`finally`block, then the`Dispose()`call may not execute.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DisposeNotCalledOnExceptionBad.cs`):
+```
+using System;
+using System.Data.SqlClient;
+
+class Bad
+{
+    public SqlDataReader GetAllCustomers()
+    {
+        var conn = new SqlConnection("connection string");
+        conn.Open();
+
+        var cmd = new SqlCommand("SELECT * FROM Customers", conn);
+        var ret = cmd.ExecuteReader();
+
+        cmd.Dispose();
+        conn.Dispose();
+
+        return ret;
+    }
+}
+```
+- Reference example (`DisposeNotCalledOnExceptionGood.cs`):
+```
+using System;
+using System.Data.SqlClient;
+
+class Good
+{
+    public SqlDataReader GetAllCustomers()
+    {
+        using (var conn = new SqlConnection("connection string"))
+        {
+            conn.Open();
+            using (var cmd = new SqlCommand("SELECT * FROM Customers", conn))
+            {
+                return cmd.ExecuteReader();
+            }
+        }
+    }
+}
+```

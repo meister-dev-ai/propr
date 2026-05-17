@@ -1,0 +1,14 @@
+Review focus: Confusing method names because of overriding
+
+What to look for:
+- A method that would override another method but does not, because the name is capitalized differently, is confusing and may be a mistake.
+- If a method that would override another method but does not because the name is capitalized differently, there are two possibilities:
+- The programmer intends the method to override the other method, and the difference in capitalization is a typographical error.
+- The programmer does not intend the method to override the other method, in which case the similarity of the names is very confusing.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

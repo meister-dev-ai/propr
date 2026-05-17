@@ -1,0 +1,28 @@
+Review focus: Returned pointer not checked
+
+What to look for:
+- Dereferencing an untested value from a function that can return null may lead to undefined behavior.
+- This query finds pointer dereferences that use a pointer returned from a function which may return NULL. Always check your pointers for NULL-ness before dereferencing them. Dereferencing a null pointer and attempting to modify its contents can lead to anything from a segmentation fault to corruption of important system data (for example, the interrupt table in some architectures).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingNullTest.cpp`):
+```
+typedef struct {
+	char name[100];
+	int status;
+} person;
+
+void f() {
+	person* buf = NULL;
+	buf = malloc(sizeof(person));
+
+	(*buf).status = 0; //access to buf before it was checked for NULL
+}
+```

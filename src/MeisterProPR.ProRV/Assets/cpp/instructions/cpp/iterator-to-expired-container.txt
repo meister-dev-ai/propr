@@ -1,0 +1,46 @@
+Review focus: Iterator to expired container
+
+What to look for:
+- Using an iterator owned by a container whose lifetime has expired may lead to unexpected behavior.
+- Using an iterator owned by a container after the lifetime of the container has expired can lead to undefined behavior. This is because the iterator may be invalidated when the container is destroyed, and dereferencing an invalidated iterator is undefined behavior. These problems can be hard to spot due to C++'s complex rules for temporary object lifetimes and their extensions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IteratorToExpiredContainerExtendedLifetime.cpp`):
+```
+#include <vector>
+
+std::vector<int> get_vector();
+
+void use(int);
+
+void lifetime_of_temp_extended() {
+  for(auto x : get_vector()) {
+    use(x); // GOOD: The lifetime of the vector returned by `get_vector()` is extended until the end of the loop.
+  }
+}
+
+// Writes the the values of `v` to an external log and returns it unchanged.
+const std::vector<int>& log_and_return_argument(const std::vector<int>& v);
+
+void lifetime_of_temp_not_extended() {
+  for(auto x : log_and_return_argument(get_vector())) {
+    use(x); // BAD: The lifetime of the vector returned by `get_vector()` is not extended, and the behavior is undefined.
+  }
+}
+```
+- Reference example (`IteratorToExpiredContainerExtendedLifetime-fixed.cpp`):
+```
+void fixed_lifetime_of_temp_not_extended() {
+  auto&& v = get_vector();
+  for(auto x : log_and_return_argument(v)) {
+    use(x); // GOOD: The lifetime of the container returned by `get_vector()` has been extended to the lifetime of `v`.
+  }
+}
+```

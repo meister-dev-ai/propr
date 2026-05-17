@@ -1,0 +1,22 @@
+Review focus: Lossy pointer cast
+
+What to look for:
+- A pointer type is converted to a smaller integer type.
+- This rule finds expressions of pointer type which are (implicitly or explicitly) converted to an integer type of smaller size. This results in truncation of the most significant bits of the larger integer type. Such conversions are highly non-portable, since the relative size of integer and pointer types may differ between architectures. For example, while on a 32-bit architecture both type`int`and type`char*`are four bytes wide, the latter occupies eight bytes on a 64-bit machine.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LossyPointerCast.cpp`):
+```
+void f(char *p) {
+	int my_ptr = p; //Wrong: pointer assigned to int, would be incorrect if sizeof(char*) 
+	                //is larger than sizeof(int)
+	//...
+}
+```

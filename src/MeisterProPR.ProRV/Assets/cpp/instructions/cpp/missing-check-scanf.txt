@@ -1,0 +1,34 @@
+Review focus: Missing return-value check for a 'scanf'-like function
+
+What to look for:
+- Failing to check that a call to 'scanf' actually writes to an output variable can lead to unexpected behavior at reading time.
+- This query finds calls of scanf-like functions with missing or improper return-value checking. Specifically, the query flags uses of variables that may have been modified by scanf and subsequently are used without being guarded by a correct return-value check. A proper check is one that ensures that the corresponding scanf has returned (at least) a certain minimum constant. Functions in the scanf family return either EOF (a negative value) in case of IO failure, or the number of items successfully read from the input. Consequently, a simple check that the return value is truthy (nonzero) is not enough. This query has medium precision because, in the current implementation, it takes a strict stance on unguarded uses of output variables, and flags them as problematic even if they have already been initialized.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`MissingCheckScanf.cpp`):
+```
+{
+  int i, j, r;
+
+  r = scanf("%d %d", &i, &j);
+
+  use(i); // BAD: i is not guarded
+
+  if (r >= 1) {
+    use(i); // GOOD: i is guarded correctly
+    use(j); // BAD: j is guarded incorrectly
+  }
+
+  if (r != 2)
+    return;
+
+  use(j); // GOOD: j is guarded correctly
+}
+```

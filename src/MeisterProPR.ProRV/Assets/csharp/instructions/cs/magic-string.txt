@@ -1,0 +1,35 @@
+Review focus: Magic strings
+
+What to look for:
+- 'Magic constants' should be avoided: if a nontrivial constant is used repeatedly, it should be encapsulated into a const variable or macro definition.
+- This rule finds strings that are used multiple times that should possibly be constants instead. Named constants make it easier to determine the purpose of the string and make the string easy to change if it is used more than once.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MagicConstantsString.cs`):
+```
+class MagicConstantsString
+{
+    public static void send(string ip, string message)
+    {
+        // ...
+    }
+
+    public static void testmessage()
+    {
+        send("127.0.0.1", "test message");
+    }
+
+    public static void Main(string[] args)
+    {
+        testmessage();
+        send("127.0.0.1", "hello world");
+    }
+}
+```

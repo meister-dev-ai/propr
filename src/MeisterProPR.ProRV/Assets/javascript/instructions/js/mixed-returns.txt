@@ -1,0 +1,30 @@
+Review focus: Inconsistent return statements
+
+What to look for:
+- A function should either always return an explicit value, or never return a value.
+- Since JavaScript programs are not statically type checked, it is acceptable for a function to return values of different types under different circumstances. In particular, a function can sometimes return the special value`undefined`, while at other times it returns, say, a number. If this is the desired behavior, it should be documented by explicitly returning`undefined`or an expression that evaluates to`undefined`(such as`void 0`) rather than using a return statement without an explicit return value.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InconsistentReturn.js`):
+```
+function solve_quad(a, b, c) {
+	if (a === 0 || b*b < 4*a*c)
+		return;
+	return (-b + Math.sqrt(b*b - 4*a*c))/(2*a);
+}
+```
+- Reference example (`InconsistentReturnGood.js`):
+```
+function solve_quad(a, b, c) {
+	if (a === 0 || b*b < 4*a*c)
+		return void 0;
+	return (-b + Math.sqrt(b*b - 4*a*c))/(2*a);
+}
+```

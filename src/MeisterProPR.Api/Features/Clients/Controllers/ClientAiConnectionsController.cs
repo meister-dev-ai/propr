@@ -355,7 +355,7 @@ public sealed partial class ClientAiConnectionsController(
     {
         var binding = connection.PurposeBindings.FirstOrDefault(candidate => candidate.Purpose == purpose && candidate.IsEnabled);
 
-        if (binding is not null || !IsReviewEffortOverride(purpose))
+        if (binding is not null || !UsesReviewDefaultFallback(purpose))
         {
             return binding;
         }
@@ -364,9 +364,9 @@ public sealed partial class ClientAiConnectionsController(
             candidate.Purpose == AiPurpose.ReviewDefault && candidate.IsEnabled);
     }
 
-    private static bool IsReviewEffortOverride(AiPurpose purpose)
+    private static bool UsesReviewDefaultFallback(AiPurpose purpose)
     {
-        return purpose is AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
+        return purpose is AiPurpose.ProRVPrefilter or AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
     }
 
     private AiConnectionWriteRequestDto? TryBuildWriteRequest(CreateAiConnectionRequest request)
@@ -639,6 +639,13 @@ public sealed partial class ClientAiConnectionsController(
             if (!seenPurposes.Add(requestBinding.Purpose))
             {
                 this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' is duplicated.");
+                continue;
+            }
+
+            if (!requestBinding.IsEnabled &&
+                (!requestBinding.ConfiguredModelId.HasValue || requestBinding.ConfiguredModelId.Value == Guid.Empty) &&
+                string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
+            {
                 continue;
             }
 

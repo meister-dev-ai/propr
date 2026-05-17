@@ -1,0 +1,60 @@
+Review focus: Incorrect allocation-error handling
+
+What to look for:
+- Mixing up the failure conditions of 'operator new' and 'operator new(std::nothrow)' can result in unexpected behavior.
+- Different overloads of the`new`operator handle allocation failures in different ways. If`new T`fails for some type`T`, it throws a`std::bad_alloc`exception, but`new(std::nothrow) T`returns a null pointer. If the programmer does not use the corresponding method of error handling, allocation failure may go unhandled and could cause the program to behave in unexpected ways.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectAllocationErrorHandling.cpp`):
+```
+// BAD: the allocation will throw an unhandled exception
+// instead of returning a null pointer.
+void bad1(std::size_t length) noexcept {
+  int* dest = new int[length];
+  if(!dest) {
+    return;
+  }
+  std::memset(dest, 0, length);
+  // ...
+}
+
+// BAD: the allocation won't throw an exception, but
+// instead return a null pointer.
+void bad2(std::size_t length) noexcept {
+  try {
+    int* dest = new(std::nothrow) int[length];
+    std::memset(dest, 0, length);
+    // ...
+  } catch(std::bad_alloc&) {
+    // ...
+  }
+}
+
+// GOOD: the allocation failure is handled appropriately.
+void good1(std::size_t length) noexcept {
+  try {
+    int* dest = new int[length];
+    std::memset(dest, 0, length);
+    // ...
+  } catch(std::bad_alloc&) {
+    // ...
+  }
+}
+
+// GOOD: the allocation failure is handled appropriately.
+void good2(std::size_t length) noexcept {
+  int* dest = new(std::nothrow) int[length];
+  if(!dest) {
+    return;
+  }
+  std::memset(dest, 0, length);
+  // ...
+}
+```

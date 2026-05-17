@@ -1,0 +1,37 @@
+Review focus: Uncontrolled data used in OS command
+
+What to look for:
+- Using user-supplied data in an OS command, without neutralizing special elements, can make code vulnerable to command injection.
+- The code passes user input as part of a call to`system`or`popen`without escaping special elements. It generates a command line using`sprintf`, with the user-supplied data directly passed as a formatting argument. This leaves the code vulnerable to attack by command injection.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExecTainted.c`):
+```
+int main(int argc, char** argv) {
+  char *userName = argv[2];
+  
+  {
+    // BAD: a string from the user is injected directly into
+    // a command line.
+    char command1[1000] = {0};
+    sprintf(command1, "userinfo -v \"%s\"", userName);
+    system(command1);
+  }
+
+  {
+    // GOOD: the user string is encoded by a library routine.
+    char userNameQuoted[1000] = {0};
+    encodeShellString(userNameQuoted, 1000, userName); 
+    char command2[1000] = {0};
+    sprintf(command2, "userinfo -v %s", userNameQuoted);
+    system(command2);
+  }
+}
+```

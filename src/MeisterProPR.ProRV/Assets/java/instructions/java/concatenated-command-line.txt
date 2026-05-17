@@ -1,0 +1,12 @@
+Review focus: Building a command line with string concatenation
+
+What to look for:
+- Using concatenated strings in a command line is vulnerable to malicious insertion of special characters in the strings.
+- Code that builds a command line by concatenating strings that have been entered by a user allows the user to execute malicious code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

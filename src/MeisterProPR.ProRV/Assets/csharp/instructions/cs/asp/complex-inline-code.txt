@@ -1,0 +1,47 @@
+Review focus: Complex inline code
+
+What to look for:
+- Embedding complex inline code makes .aspx pages more difficult to maintain.
+- ASP.NET allows arbitrary amounts of code to be embedded into a page. If that code is lengthy, then the overall page can be harder to read. The code itself does not fully benefit from IDE features, and the HTML content of the page is harder to read due to being obstructed by the code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ComplexInlineCodeBad.aspx`):
+```
+<%@ Page Language="C#" %>
+
+<html>
+<body>
+<%
+  if (builder == null)
+    builder = ec.GetTemporaryLocal (type);
+
+  if (builder.LocalType.IsByRef) {
+    //
+    // if is_address, than this is just the address anyways,
+    // so we just return this.
+    //
+    ec.Emit (Response, OpCodes.Ldloc, builder);
+  } else {
+    ec.Emit (Response, OpCodes.Ldloca, builder);
+  }
+%>
+</body>
+</html>
+```
+- Reference example (`ComplexInlineCodeGood.aspx`):
+```
+<%@ Page Language="C#" %>
+
+<html>
+<body>
+<%= emitLoad() %>
+</body>
+</html>
+```

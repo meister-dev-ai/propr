@@ -1,0 +1,41 @@
+Review focus: Unused field
+
+What to look for:
+- Finds private fields that seem to never be used, or solely used from dead methods
+- This rule finds private fields that seem to never be used. Dead fields are often deprecated pieces of code, and should be removed as they may increase object code size, decrease code maintainability, and create the possibility of misuse. This query not only spots private fields that are not directly accessed, but also private fields that are solely accessed from methods which are themselves dead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedField.cs`):
+```
+class UnusedField1
+{
+    string name;  // BAD
+    string email;
+
+    public string GetName()
+    {
+        return email;
+    }
+    public string GetEmail()
+    {
+        return email;
+    }
+}
+
+class UnusedField2
+{
+    string name; // BAD
+
+    private string GetName()
+    {
+        return name;
+    }
+}
+```

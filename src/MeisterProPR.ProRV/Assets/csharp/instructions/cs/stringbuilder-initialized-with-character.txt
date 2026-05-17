@@ -1,0 +1,42 @@
+Review focus: Character passed to StringBuilder constructor
+
+What to look for:
+- A character value is passed to the constructor of 'StringBuilder'.
+- Passing a character to the constructor of`StringBuilder`is probably intended to insert the character into the string. In fact, however, the character value is converted to an integer and interpreted as the internal buffer's initial capacity, so the character value is not inserted into the string.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`StringBuilderCharInit.cs`):
+```
+public override string ToString()
+{
+    var str = new StringBuilder('('); // BAD: Character value.
+    for (int i = 0; i < values.Length; ++i)
+    {
+        if (i > 0) str.Append(',');
+        str.Append(values[i]);
+    }
+    str.Append(')');
+    return str.ToString();
+}
+```
+- Reference example (`StringBuilderCharInitFix.cs`):
+```
+public override string ToString()
+{
+    var str = new StringBuilder("("); // GOOD: String value.
+    for (int i = 0; i < values.Length; ++i)
+    {
+        if (i > 0) str.Append(',');
+        str.Append(values[i]);
+    }
+    str.Append(')');
+    return str.ToString();
+}
+```

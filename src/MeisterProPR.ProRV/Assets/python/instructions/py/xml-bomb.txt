@@ -1,0 +1,40 @@
+Review focus: XML internal entity expansion
+
+What to look for:
+- Parsing user input as an XML document with arbitrary internal entity expansion is vulnerable to denial-of-service attacks.
+- Parsing untrusted XML files with a weakly configured XML parser may be vulnerable to denial-of-service (DoS) attacks exploiting uncontrolled internal entity expansion. In XML, so-called internal entities are a mechanism for introducing an abbreviation for a piece of text or part of a document. When a parser that has been configured to expand entities encounters a reference to an internal entity, it replaces the entity by the data it represents. The replacement text may itself contain other entity references, which are expanded recursively. This means that entity expansion can increase document size dramatically. If untrusted XML is parsed with entity expansion enabled, a malicious attacker could submit a document that contains very deeply nested entity definitions, causing the parser to take a very long time or use large amounts of memory. This is sometimes called an XML bomb attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`XmlBombBad.py`):
+```
+from flask import Flask, request
+import xml.etree.ElementTree as ET
+
+app = Flask(__name__)
+
+@app.post("/upload")
+def upload():
+    xml_src = request.get_data()
+    doc = ET.fromstring(xml_src)
+    return ET.tostring(doc)
+```
+- Reference example (`XmlBombGood.py`):
+```
+from flask import Flask, request
+import defusedxml.ElementTree as ET
+
+app = Flask(__name__)
+
+@app.post("/upload")
+def upload():
+    xml_src = request.get_data()
+    doc = ET.fromstring(xml_src)
+    return ET.tostring(doc)
+```

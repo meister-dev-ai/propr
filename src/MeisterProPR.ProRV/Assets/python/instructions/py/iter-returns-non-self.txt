@@ -1,0 +1,30 @@
+Review focus: Iterator does not return self from `__iter__` method
+
+What to look for:
+- Iterator does not return self from `__iter__` method, violating the iterator protocol.
+- Iterator classes (classes defining a`__next__`method) should have an`__iter__`method that returns the iterator itself. This ensures that the object is also an iterable; and behaves as expected when used anywhere an iterator or iterable is expected, such as in`for`loops.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IterReturnsNonSelf.py`):
+```
+class MyRange(object):
+    def __init__(self, low, high):
+        self.current = low
+        self.high = high
+
+    def __iter__(self):
+        return (self.current, self.high) # BAD: does not return `self`.
+
+    def __next__(self):
+        if self.current > self.high:
+            return None
+        self.current += 1
+        return self.current - 1
+```

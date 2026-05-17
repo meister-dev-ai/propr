@@ -1,0 +1,31 @@
+Review focus: Constructor with default arguments will be used as a copy constructor
+
+What to look for:
+- Constructors with default arguments should not be signature-compatible with a copy constructor when their default arguments are taken into account.
+- Multi-parameter constructors with default arguments can be signature-compatible with a copy constructor when their default arguments are taken into account. An example would be a constructor for`X`of the form`X(const X& rhs, int i = 0)`. A compiler will use such a constructor as a copy constructor in preference to the default member-wise copy constructor that it would otherwise generate. Since this is usually not what was intended, constructors of the form often do not provide the right semantics for copying objects of the class, making them potentially dangerous.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 77.1.cpp`):
+```
+struct X {
+    //This struct will have a compiler-generated copy constructor
+    X(const X&, int);
+    ...
+};
+
+//However, if this is declared later, it will override the compiler-generated
+//constructor
+X::X(const X& x, int i =0) {
+    this-> i = i; //uses the i parameter, instead of x.i
+}
+
+C c(1);
+C cCopy = c; //would take i to be 0, instead of just copying c(1)
+```

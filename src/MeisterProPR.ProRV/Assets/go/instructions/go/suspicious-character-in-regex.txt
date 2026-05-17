@@ -1,0 +1,48 @@
+Review focus: Suspicious characters in a regular expression
+
+What to look for:
+- If a literal bell character or backspace appears in a regular expression, the start of text or word boundary may have been intended.
+- When a character in a string literal or regular expression literal is preceded by a backslash, it is interpreted as part of an escape sequence. For example, the escape sequence`\n`in a string literal corresponds to a single`newline`character, and not the`\`and`n`characters. There are two Go escape sequences that could produce surprising results. First,`regexp.Compile("\a")`matches the bell character, whereas`regexp.Compile("\\A")`matches the start of text and`regexp.Compile("\\a")`is a Vim (but not Go) regular expression matching any alphabetic character. Second,`regexp.Compile("\b")`matches a backspace, whereas`regexp.Compile("\\b")`matches the start of a word. Confusing one for the other could lead to a regular expression passing or failing much more often than expected, with potential security consequences. Note this is less of a problem than in some other languages because in Go, only valid escape sequences are accepted, both in an ordinary string (for example,`s := "\k"`will not compile as there is no such escape sequence) and in regular expressions (for example,`regexp.MustCompile("\\k")`will panic as`\k`does not refer to a character class or other special token according to Go's regular expression grammar).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`SuspiciousCharacterInRegexp.go`):
+```
+package main
+
+import "regexp"
+
+func broken(hostNames []byte) string {
+	var hostRe = regexp.MustCompile("\bforbidden.host.org")
+	if hostRe.Match(hostNames) {
+		return "Must not target forbidden.host.org"
+	} else {
+		// This will be reached even if hostNames is exactly "forbidden.host.org",
+		// because the literal backspace is not matched
+		return ""
+	}
+}
+```
+- Reference example (`SuspiciousCharacterInRegexpGood.go`):
+```
+package main
+
+import "regexp"
+
+func fixed(hostNames []byte) string {
+	var hostRe = regexp.MustCompile(`\bforbidden.host.org`)
+	if hostRe.Match(hostNames) {
+		return "Must not target forbidden.host.org"
+	} else {
+		// hostNames definitely doesn't contain a word "forbidden.host.org", as "\\b"
+		// is the start-of-word anchor, not a literal backspace.
+		return ""
+	}
+}
+```

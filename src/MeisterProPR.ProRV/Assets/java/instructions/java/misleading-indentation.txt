@@ -1,0 +1,12 @@
+Review focus: Misleading indentation
+
+What to look for:
+- If a control structure does not use braces, misleading indentation makes it difficult to see which statements are within its scope.
+- A control structure (an`if`statement or a loop) has a body that is either a block of statements surrounded by curly braces or a single statement. If you omit braces, it is particularly important to ensure that the indentation of the code matches the control flow of the code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

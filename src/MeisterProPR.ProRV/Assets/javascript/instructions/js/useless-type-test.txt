@@ -1,0 +1,24 @@
+Review focus: Useless type test
+
+What to look for:
+- Comparing the result of a typeof test against a string other than 'undefined', 'boolean', 'number', 'string', 'object', 'function' or 'symbol' is useless, since this comparison...
+- In ECMAScript 5, the`typeof`operator returns one of the following six type tags:`"undefined"`,`"boolean"`,`"number"`,`"string"`,`"object"`,`"function"`. In ECMAScript 2015, it may additionally return`"symbol"`, while on older versions of Internet Explorer it may return`"unknown"`or`"date"`in certain situations. Comparing it against any other string literal is therefore useless.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadTypeof.js`):
+```
+if (typeof a === 'array')
+	console.log("It's an array!");
+```
+- Reference example (`BadTypeofGood.js`):
+```
+if (Array.isArray(a))
+	console.log("It's an array!");
+```

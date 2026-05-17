@@ -1,0 +1,22 @@
+Review focus: Malformed id attribute
+
+What to look for:
+- If the id of an HTML attribute is malformed, its interpretation may be browser-dependent.
+- According to the HTML5 standard, the value of the`id`attribute of an element must contain at least one character, and must not contain any space characters. ID attributes that do not conform to this restriction may be interpreted differently by different browsers, and may indicate a misunderstanding on the part of the developer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MalformedIdAttribute.html`):
+```
+<div id="heading important">An important heading</div>
+```
+- Reference example (`MalformedIdAttributeGood.html`):
+```
+<div class="heading important">An important heading</div>
+```

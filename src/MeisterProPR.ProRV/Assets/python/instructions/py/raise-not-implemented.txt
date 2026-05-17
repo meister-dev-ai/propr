@@ -1,0 +1,25 @@
+Review focus: Raising `NotImplemented`
+
+What to look for:
+- Using `NotImplemented` as an exception will result in a type error.
+- The constant`NotImplemented`is not an`Exception`, but is often confused for`NotImplementedError`. If it is used as an exception, such as in`raise NotImplemented`or`raise NotImplemented("message")`, a`TypeError`will be raised rather than the expected`NotImplemented`. This may make debugging more difficult.`NotImplemented`should only be used as a special return value for implementing special methods such as`__lt__`. Code that is not intended to be called should raise`NotImplementedError`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NotImplemented.py`):
+```
+class Abstract(object):
+
+    def wrong(self):
+        # Will raise a TypeError
+        raise NotImplemented()
+
+    def right(self):
+        raise NotImplementedError()
+```

@@ -1,0 +1,64 @@
+Review focus: Property value is not used when setting a property
+
+What to look for:
+- Ignoring the value assigned to a property is potentially confusing and can lead to unexpected results.
+- Ignoring the value assigned to a property causes confusion and can lead to unexpected results. A user of the class would expect different results depending on the value assigned to the property, but when the value is ignored, then this does not happen. There are generally three situations where this occurs:
+- The property is not intended to be assigned to. In this case, the caller expects the assignment to have some effect, but it does not.
+- The property represents a particular state using a`bool`. In this case, the caller might expect that setting the property to`false`would have a different effect than setting it to`true`.
+- The property is virtual or overridden. In this case, it is possible for some of the derived classes to use the property, but other classes to ignore it. For this reason, virtual and overridden properties are excluded from the results.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedPropertyValue.cs`):
+```
+class Window
+{
+    const int screenWidth = 1280;
+    int x0, x1;
+
+    public int Width
+    {
+        get { return x1 - x0; }
+
+        // BAD: Setter has no effect
+        set { }
+    }
+
+    public bool FullWidth
+    {
+        get { return x0 == 0 && x1 == screenWidth; }
+
+        // BAD: This is confusing if value==false
+        set { x0 = 0; x1 = screenWidth; }
+    }
+}
+```
+- Reference example (`UnusedPropertyValueFix.cs`):
+```
+class Window
+{
+    const int screenWidth = 1280;
+    int x0, x1;
+
+    public int Width
+    {
+        get { return x1 - x0; }
+    }
+
+    public bool IsFullWidth
+    {
+        get { return x0 == 0 && x1 == screenWidth; }
+    }
+
+    public void MakeFullWidth()
+    {
+        x0 = 0; x1 = screenWidth;
+    }
+}
+```

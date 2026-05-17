@@ -1,0 +1,59 @@
+Review focus: Non-standard exception raised in special method
+
+What to look for:
+- Raising a non-standard exception in a special method alters the expected interface of that method.
+- User-defined classes interact with the Python virtual machine via special methods (also called "magic methods"). For example, for a class to support addition it must implement the`__add__`and`__radd__`special methods. When the expression`a + b`is evaluated, the Python virtual machine will call`type(a).__add__(a, b)`, and if that is not implemented it will call`type(b).__radd__(b, a)`. Since the virtual machine calls these special methods for common expressions, users of the class will expect these operations to raise standard exceptions. For example, users would expect that the expression`a.b`may raise an`AttributeError`if the object`a`does not have an attribute`b`. If a`KeyError`were raised instead, then this would be unexpected and may break code that expected an`AttributeError`, but not a`KeyError`. Therefore, if a method is unable to perform the expected operation then its response should conform to the standard protocol, described below.
+- Attribute access,`a.b`(`__getattr__`): Raise`AttributeError`.
+- Arithmetic operations,`a + b`(`__add__`): Do not raise an exception, return`NotImplemented`instead.
+- Indexing,`a[b]`(`__getitem__`): Raise`KeyError`or`IndexError`.
+- Hashing,`hash(a)`(`__hash__`): Should not raise an exception. Use`__hash__ = None`to indicate that an object is unhashable rather than raising an exception.
+- Equality methods,`a == b`(`__eq__`): Never raise an exception, always return`True`or`False`.
+- Ordering comparison methods,`a < b`(`__lt__`): Raise a`TypeError`if the objects cannot be ordered.
+- Most others: If the operation is never supported, the method often does not need to be implemented at all; otherwise a`TypeError`should be raised.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectRaiseInSpecialMethod.py`):
+```
+class A:
+    def __init__(self, a):
+        self.a = a 
+
+    def __add__(self, other):
+        # BAD: Should return NotImplemented instead of raising
+        if not isinstance(other,A):
+            raise TypeError(f"Cannot add A to {other.__class__}")
+        return A(self.a + other.a)
+
+class B:
+    def __init__(self, a):
+        self.a = a 
+
+    def __add__(self, other):
+        # GOOD: Returning NotImplemented allows for the operation to fallback to other implementations to allow other classes to support adding to B.
+        if not isinstance(other,B):
+            return NotImplemented
+        return B(self.a + other.a)
+```
+- Reference example (`IncorrectRaiseInSpecialMethod2.py`):
+```
+class C:
+    def __getitem__(self, idx):
+        if self.idx < 0:
+            # BAD: Should raise a KeyError or IndexError instead.
+            raise ValueError("Invalid index")
+        return self.lookup(idx)
+```
+- Reference example (`IncorrectRaiseInSpecialMethod3.py`):
+```
+class D:
+    def __hash__(self):
+        # BAD: Use `__hash__ = None` instead.
+        raise NotImplementedError(f"{self.__class__} is unhashable.")
+```

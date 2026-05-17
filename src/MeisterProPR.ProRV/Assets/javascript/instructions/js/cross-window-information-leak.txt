@@ -1,0 +1,22 @@
+Review focus: Cross-window communication with unrestricted target origin
+
+What to look for:
+- When sending sensitive information to another window using `postMessage`, the origin of the target window should be restricted to avoid unintentional information leaks.
+- The`window.postMessage`method allows different windows or iframes to communicate directly, even if they were loaded from different origins, circumventing the usual same-origin policy. The sender of the message can restrict the origin of the receiver by specifying a target origin. If the receiver window does not come from this origin, the message is not sent. Alternatively, the sender can specify a target origin of`'*'`, which means that any origin is acceptable and the message is always sent. This feature should not be used if the message being sent contains sensitive data such as user credentials: the target window may have been loaded from a malicious site, to which the data would then become available.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`PostMessageStar.js`):
+```
+window.parent.postMessage(userName, '*');
+```
+- Reference example (`PostMessageStarGood.js`):
+```
+window.parent.postMessage(userName, 'https://github.com');
+```

@@ -1,0 +1,24 @@
+Review focus: Dead code due to goto or break statement
+
+What to look for:
+- A goto or break statement is followed by unreachable code.
+- Code immediately following a`goto`or`break`statement will not be executed, unless there is a label or switch case. When the code is necessary, this leads to logical errors or resource leaks. If the code is unnecessary, it may confuse readers.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadCodeGoto.cpp`):
+```
+goto err1;
+free(pointer); // BAD: this line is unreachable
+err1: return -1;
+
+free(pointer); // GOOD: this line is reachable
+goto err2;
+err2: return -1;
+```

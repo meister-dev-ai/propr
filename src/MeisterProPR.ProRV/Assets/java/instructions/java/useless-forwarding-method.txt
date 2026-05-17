@@ -1,0 +1,17 @@
+Review focus: Pointless forwarding method
+
+What to look for:
+- A method forwards calls to another method of the same name that is not called independently.
+- If a class contains two distinct methods of the same name such that:
+- One method is only ever called from the other method.
+- The calling method calls only the other method and nothing else. Then the first method is no more than a forwarding method for the second and the two methods can probably be merged. There are several advantages to doing this:
+- It reduces the cognitive overhead involved in keeping track of the various different overloaded forms of a method.
+- If both methods are public, it simplifies the API of their containing class, making it more discoverable to other programmers.
+- It makes it clearer to other programmers that certain methods are called and other methods are not.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,31 @@
+Review focus: Weak encryption
+
+What to look for:
+- Finds uses of encryption algorithms that are weak and obsolete
+- Weak encryption algorithms provide very little security. For example DES encryption uses keys of 56 bits only, and no longer provides sufficient protection for sensitive data. TripleDES should also be deprecated for very sensitive data: Although it improves on DES by using 168-bit long keys, it provides in fact at most 112 bits of security.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WeakEncryption.cs`):
+```
+class WeakEncryption
+{
+    public static byte[] encryptString()
+    {
+        SymmetricAlgorithm serviceProvider = new DESCryptoServiceProvider();
+        byte[] key = { 16, 22, 240, 11, 18, 150, 192, 21 };
+        serviceProvider.Key = key;
+        ICryptoTransform encryptor = serviceProvider.CreateEncryptor();
+
+        String message = "Hello World";
+        byte[] messageB = System.Text.Encoding.ASCII.GetBytes(message);
+        return encryptor.TransformFinalBlock(messageB, 0, messageB.Length);
+    }
+}
+```

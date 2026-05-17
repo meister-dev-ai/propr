@@ -1,0 +1,12 @@
+Review focus: Annotation is extended or implemented
+
+What to look for:
+- Extending or implementing an annotation is unlikely to be what the programmer intends.
+- Although an annotation type is a special kind of interface that can be implemented by a concrete class, this is not its intended use. It is more likely that an annotation type should be used to annotate a class.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,12 @@
+Review focus: Type mismatch on container access
+
+What to look for:
+- Calling container access methods such as 'Collection.contains' or 'Map.get' with an object of a type that is incompatible with the corresponding container element type is...
+- The`contains`method of the`Collection`interface has an argument of type`Object`. Therefore, you can try to check if an object of any type is a member of a collection, regardless of the collection's element type. However, although you can call`contains`with an argument of a different type than that of the collection, it is unlikely that the collection actually contains an object of this type. Similar considerations apply to other container access methods, such as`Map.get`, where the argument may also have type`Object`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

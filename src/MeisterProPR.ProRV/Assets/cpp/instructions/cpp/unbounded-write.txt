@@ -1,0 +1,26 @@
+Review focus: Unbounded write
+
+What to look for:
+- Buffer write operations that do not control the length of data written may overflow.
+- The program performs a buffer copy or write operation with no upper limit on the size of the copy. An unexpectedly long input that reaches this code will cause the buffer to overflow. In addition to causing program instability, techniques exist which may allow an attacker to use this vulnerability to execute arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnboundedWrite.c`):
+```
+void congratulateUser(const char *userName)
+{
+	char buffer[80];
+
+	// BAD: this could overflow the buffer if the UserName is long
+	sprintf(buffer, "Congratulations, %s!", userName);
+
+	MessageBox(hWnd, buffer, "New Message", MB_OK);
+}
+```

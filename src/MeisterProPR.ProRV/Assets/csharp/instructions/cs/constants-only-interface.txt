@@ -1,0 +1,33 @@
+Review focus: Abstract class only declares common constants
+
+What to look for:
+- Constants should be placed in a class where they belong logically, rather than in an abstract class containing just constants.
+- Definitions of constants should be placed in an appropriate class where they belong logically. It is usually bad practice to define an abstract class purely to hold a number of constant definitions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NoConstantsOnlyBad.cs`):
+```
+using System;
+
+class Bad
+{
+    abstract class MathConstants
+    {
+        public static readonly double Pi = 3.14;
+    }
+
+    class Circle : MathConstants
+    {
+        private double radius;
+
+        public double Area() => Math.Pow(radius, 2) * Pi;
+    }
+}
+```

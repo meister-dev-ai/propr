@@ -1,0 +1,28 @@
+Review focus: Class has same name as super class
+
+What to look for:
+- Finds classes that have the same name as their super class; this may be confusing.
+- This rule identifies a class that has the same name as a class it extends. This is likely to cause confusion.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SameNameAsSuper.cs`):
+```
+class Players
+{
+    private ArrayList playerList;
+    class ArrayList : System.Collections.ArrayList
+    {
+        public String GetBestThree()
+        {
+            return "1st: " + this[0] + "\n 2nd:" + this[1] + "\n 3rd:" + this[2];
+        }
+    }
+}
+```

@@ -1,0 +1,54 @@
+Review focus: Prototype-polluting function
+
+What to look for:
+- Functions recursively assigning properties on objects may be the cause of accidental modification of a built-in prototype object.
+- Most JavaScript objects inherit the properties of the built-in`Object.prototype`object. Prototype pollution is a type of vulnerability in which an attacker is able to modify`Object.prototype`. Since most objects inherit from the compromised`Object.prototype`, the attacker can use this to tamper with the application logic, and often escalate to remote code execution or cross-site scripting. One way to cause prototype pollution is through use of an unsafe merge or extend function to recursively copy properties from one object to another, or through the use of a deep assignment function to assign to an unverified chain of property names. Such a function has the potential to modify any object reachable from the destination object, and the built-in`Object.prototype`is usually reachable through the special properties`__proto__`and`constructor.prototype`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`PrototypePollutingFunction.js`):
+```
+function merge(dst, src) {
+    for (let key in src) {
+        if (!src.hasOwnProperty(key)) continue;
+        if (isObject(dst[key])) {
+            merge(dst[key], src[key]);
+        } else {
+            dst[key] = src[key];
+        }
+    }
+}
+```
+- Reference example (`PrototypePollutingFunction_fixed.js`):
+```
+function merge(dst, src) {
+    for (let key in src) {
+        if (!src.hasOwnProperty(key)) continue;
+        if (dst.hasOwnProperty(key) && isObject(dst[key])) {
+            merge(dst[key], src[key]);
+        } else {
+            dst[key] = src[key];
+        }
+    }
+}
+```
+- Reference example (`PrototypePollutingFunction_fixed2.js`):
+```
+function merge(dst, src) {
+    for (let key in src) {
+        if (!src.hasOwnProperty(key)) continue;
+        if (key === "__proto__" || key === "constructor") continue;
+        if (isObject(dst[key])) {
+            merge(dst[key], src[key]);
+        } else {
+            dst[key] = src[key];
+        }
+    }
+}
+```

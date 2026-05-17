@@ -1,0 +1,33 @@
+Review focus: Insecure SQL connection
+
+What to look for:
+- Using an SQL Server connection without enforcing encryption is a security vulnerability.
+- SQL Server connections where the client is not enforcing the encryption in transit are susceptible to multiple attacks, including a man-in-the-middle, that would potentially compromise the user credentials and/or the TDS session.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`InsecureSQLConnectionBad.cs`):
+```
+using System.Data.SqlClient;
+
+// BAD, Encrypt not specified
+string connectString =
+    "Server=1.2.3.4;Database=Anything;Integrated Security=true;";
+SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectString);
+var conn = new SqlConnection(builder.ConnectionString);
+```
+- Reference example (`InsecureSQLConnectionGood.cs`):
+```
+using System.Data.SqlClient;
+
+string connectString =
+    "Server=1.2.3.4;Database=Anything;Integrated Security=true;;Encrypt=true;";
+SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectString);
+var conn = new SqlConnection(builder.ConnectionString);
+```

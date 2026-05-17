@@ -1,0 +1,29 @@
+Review focus: Overloaded assignment does not return 'this'
+
+What to look for:
+- An assignment operator should return a reference to *this.
+- This rule finds assignment operator definitions that do not return a reference to`this`. The reference to`this`is required for an assignment expression to have a meaningful value (i.e. so that expressions like`a = b = 3`would work correctly). Not returning a reference to`this`would give the assignment expression an unexpected value, most likely causing such chained assignments to fail. Both the standard library types and the built-in types behave in this manner, and the default behavior of the assignment operator is an almost universal assumption of all developers that it is unwise to change it considerably. If the desired behavior is significantly different from that of the default assignment operator, it may be better to define a separate function instead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 82.cpp`):
+```
+class B {
+	B& operator=(const B& other) {
+		... //incorrect, does not return a reference to this
+	}
+};
+
+class C {
+	C& operator=(const C& other) {
+		...
+		return *this; //correct, returns reference to this
+	}
+};
+```

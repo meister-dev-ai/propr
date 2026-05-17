@@ -1,0 +1,80 @@
+Review focus: Insecure Direct Object Reference
+
+What to look for:
+- Using user input to control which object is modified without proper authorization checks allows an attacker to modify arbitrary objects.
+- Resources like comments or user profiles can be accessed and modified through an action method. To target a certain resource, the action method accepts an ID parameter pointing to that specific resource. If the methods do not check that the current user is authorized to access the specified resource, an attacker can access a resource by guessing or otherwise determining the linked ID parameter.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WebFormsExample.cs`):
+```
+// BAD - Any user can access this method.
+    protected void btn1_Click(object sender, EventArgs e) {
+        string commentId = Request.QueryString["Id"];
+        Comment comment = getCommentById(commentId);
+        comment.Body = inputCommentBody.Text;
+    }
+
+    // GOOD - The user ID is verified.
+    protected void btn2_Click(object sender, EventArgs e) {
+        string commentId = Request.QueryString["Id"];
+        Comment comment = getCommentById(commentId);
+        if (comment.AuthorName == User.Identity.Name){
+            comment.Body = inputCommentBody.Text;
+        }
+    }
+```
+- Reference example (`MVCExample.cs`):
+```
+public class CommentController : Controller {
+    private readonly IAuthorizationService _authorizationService;
+    private readonly IDocumentRepository _commentRepository;
+
+    public CommentController(IAuthorizationService authorizationService,
+                              ICommentRepository commentRepository)
+    {
+        _authorizationService = authorizationService;
+        _commentRepository = commentRepository;
+    }
+
+    // BAD: Any user can access this.
+    public async Task<IActionResult> Edit1(int commentId, string text) {
+        Comment comment = _commentRepository.Find(commentId);
+        
+        comment.Text = text;
+
+        return View();
+    }
+
+    // GOOD: An authorization check is made.
+    public async Task<IActionResult> Edit2(int commentId, string text) {
+        Comment comment = _commentRepository.Find(commentId);
+        
+        var authResult = await _authorizationService.AuthorizeAsync(User, Comment, "EditPolicy");
+
+        if (authResult.Succeeded) {
+            comment.Text = text;
+            return View();
+        }
+        else {
+            return ForbidResult();
+        }
+    }
+
+    // GOOD: Only users with the `admin` role can access this method.
+    [Authorize(Roles="admin")]
+    public async Task<IActionResult> Edit3(int commentId, string text) {
+        Comment comment = _commentRepository.Find(commentId);
+        
+        comment.Text = text;
+
+        return View();
+    }
+}
+```

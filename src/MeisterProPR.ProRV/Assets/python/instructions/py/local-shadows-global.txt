@@ -1,0 +1,27 @@
+Review focus: Global shadowed by local variable
+
+What to look for:
+- Defining a local variable with the same name as a global variable makes the global variable unusable within the current scope and makes the code more difficult to read.
+- Python statements can access variables in both the local namespace and in the global namespace. When a local and a global variable have the same name, the local variable "shadows" or "hides" the global variable. When the variable is referenced, the variable with local scope is used unless you explicitly use the`global`statement to reference the global variable. This can lead to confusion as a reader of the code may expect the variable to refer to a global.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShadowGlobal.py`):
+```
+var = 2              # Global variable
+
+def test2():
+    def print_var():
+        var = 3 
+        print var    # Local variable which "shadows" the global variable
+    print_var()      # making it more difficult to determine which "var"
+    print var        # is referenced
+
+test2()
+```

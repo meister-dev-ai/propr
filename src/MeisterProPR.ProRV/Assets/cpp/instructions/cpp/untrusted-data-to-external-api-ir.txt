@@ -1,0 +1,46 @@
+Review focus: Untrusted data passed to external API
+
+What to look for:
+- Data provided remotely is used in this external API without sanitization, which could be a security risk.
+- Using unsanitized untrusted data in an external API can cause a variety of security issues. This query reports external APIs that use untrusted data. The results are not filtered, so you can audit all examples. The query provides data for security reviews of the application and you can also use it to identify external APIs that should be modeled as either taint steps, or sinks for specific problems. An external API is defined as a call to a function that is not defined in the source code, and is not modeled as a taint step in the default taint library. External APIs may be from the C++ standard library, third-party dependencies or from internal dependencies. The query reports uses of untrusted data in either the qualifier or as one of the arguments of external APIs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExternalAPISinkExample.cpp`):
+```
+#include <cstdio>
+
+void do_get(FILE* request, FILE* response) {
+  char page[1024];
+  fgets(page, 1024, request);
+
+  char buffer[1024];
+  strcat(buffer, "The page \"");
+  strcat(buffer, page);
+  strcat(buffer, "\" was not found.");
+
+  fputs(buffer, response);
+}
+```
+- Reference example (`ExternalAPITaintStepExample.cpp`):
+```
+#include <cstdio>
+
+void do_get(FILE* request, FILE* response) {
+  char user_id[1024];
+  fgets(user_id, 1024, request);
+
+  char buffer[1024];
+  strcat(buffer, "SELECT * FROM user WHERE user_id='");
+  strcat(buffer, user_id);
+  strcat(buffer, "'");
+
+  // ...
+}
+```

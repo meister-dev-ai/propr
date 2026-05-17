@@ -1,0 +1,19 @@
+Review focus: Useless regular-expression character escape
+
+What to look for:
+- Prepending a backslash to an ordinary character in a string does not have any effect, and may make regular expressions constructed from this string behave unexpectedly.
+- When a character in a string literal or regular expression literal is preceded by a backslash, it is interpreted as part of an escape sequence. For example, the escape sequence`\n`in a string literal corresponds to a single`newline`character, and not the`\`and`n`characters. However, not all characters change meaning when used in an escape sequence. In this case, the backslash just makes the character appear to mean something else, and the backslash actually has no effect. For example, the escape sequence`\k`in a string literal just means`k`. Such superfluous escape sequences are usually benign, and do not change the behavior of the program. The set of characters that change meaning when in escape sequences is different for regular expression literals and string literals. This can be problematic when a regular expression literal is turned into a regular expression that is built from one or more string literals. The problem occurs when a regular expression escape sequence loses its special meaning in a string literal.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`UselessRegExpCharacterEscape_bad_1.js`):
+```
+let regex = new RegExp('(^\s*)my-marker(\s*$)'),
+    isMyMarkerText = regex.test(text);
+```

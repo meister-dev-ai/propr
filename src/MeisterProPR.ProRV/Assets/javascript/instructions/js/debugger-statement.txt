@@ -1,0 +1,29 @@
+Review focus: Use of debugger statement
+
+What to look for:
+- The 'debugger' statement should not be used in production code.
+- The`debugger`statement should only be used during debugging, and should not appear in production code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DebuggerStatement.js`):
+```
+function qsort(a) {
+    if (a.length == 0) return [];
+ 
+    var left = [], right = [], pivot = a[0];
+ 
+    for (var i = 1; i < a.length; i++) {
+    	debugger;
+        a[i] < pivot ? left.push(a[i]) : right.push(a[i]);
+    }
+ 
+    return qsort(left).concat(pivot, qsort(right));
+}
+```

@@ -97,7 +97,8 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IAiRuntimeResolver>(),
             sp.GetService<CommentRelevanceFilterExecutor>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
-            sp.GetService<LocalReviewVerificationExecutor>()));
+            sp.GetService<LocalReviewVerificationExecutor>(),
+            sp.GetService<IReviewPipelineProfileProvider>()));
         services.AddScoped<AgenticFileReviewer>(sp => new AgenticFileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),
@@ -111,7 +112,8 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IAiRuntimeResolver>(),
             sp.GetService<CommentRelevanceFilterExecutor>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
-            sp.GetService<LocalReviewVerificationExecutor>()));
+            sp.GetService<LocalReviewVerificationExecutor>(),
+            sp.GetService<IReviewPipelineProfileProvider>()));
         services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),

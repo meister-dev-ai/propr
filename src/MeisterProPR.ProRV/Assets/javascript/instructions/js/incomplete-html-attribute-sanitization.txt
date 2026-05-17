@@ -1,0 +1,38 @@
+Review focus: Incomplete HTML attribute sanitization
+
+What to look for:
+- Writing incompletely sanitized values to HTML attribute strings can lead to a cross-site scripting vulnerability.
+- Sanitizing untrusted input for HTML meta-characters is a common technique for preventing cross-site scripting attacks. Usually, this is done by escaping``,`&`and`"`. However, the context in which the sanitized value is used decides the characters that need to be sanitized. As a consequence, some programs only sanitize``since those are the most common dangerous characters. The lack of sanitization for`"`is problematic when an incompletely sanitized value is used as an HTML attribute in a string that later is parsed as HTML.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`IncompleteHtmlAttributeSanitization.js`):
+```
+var app = require('express')();
+
+app.get('/user/:id', function(req, res) {
+	let id = req.params.id;
+	id = id.replace(/<|>/g, ""); // BAD
+	let userHtml = `<div data-id="${id}">${getUserName(id) || "Unknown name"}</div>`;
+	// ...
+	res.send(prefix + userHtml + suffix);
+});
+```
+- Reference example (`IncompleteHtmlAttributeSanitizationGood.js`):
+```
+var app = require('express')();
+
+app.get('/user/:id', function(req, res) {
+	let id = req.params.id;
+	id = id.replace(/<|>|&|"/g, ""); // GOOD
+	let userHtml = `<div data-id="${id}">${getUserName(id) || "Unknown name"}</div>`;
+	// ...
+	res.send(prefix + userHtml + suffix);
+});
+```

@@ -1,0 +1,42 @@
+Review focus: Reflected cross-site scripting
+
+What to look for:
+- Writing user input directly to an HTTP response allows for a cross-site scripting vulnerability.
+- Directly writing user input (for example, an HTTP request parameter) to an HTTP response without properly sanitizing the input first, allows for a cross-site scripting vulnerability. This kind of vulnerability is also called reflected cross-site scripting, to distinguish it from other types of cross-site scripting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ReflectedXss.js`):
+```
+var app = require('express')();
+
+app.get('/user/:id', function(req, res) {
+  if (!isValidUserId(req.params.id))
+    // BAD: a request parameter is incorporated without validation into the response
+    res.send("Unknown user: " + req.params.id);
+  else
+    // TODO: do something exciting
+    ;
+});
+```
+- Reference example (`ReflectedXssGood.js`):
+```
+var escape = require('escape-html');
+
+var app = require('express')();
+
+app.get('/user/:id', function(req, res) {
+  if (!isValidUserId(req.params.id))
+    // GOOD: request parameter is sanitized before incorporating it into the response
+    res.send("Unknown user: " + escape(req.params.id));
+  else
+    // TODO: do something exciting
+    ;
+});
+```

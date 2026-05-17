@@ -1,0 +1,38 @@
+Review focus: Self assignment
+
+What to look for:
+- Assigning a variable to itself has no effect.
+- Assigning a variable to itself typically indicates a mistake such as a missing qualifier or a misspelled variable name.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SelfAssignment.go`):
+```
+package main
+
+type Rect struct {
+	x, y, width, height int
+}
+
+func (r *Rect) setWidth(width int) {
+	r.width = width
+}
+
+func (r *Rect) setHeight(height int) {
+	height = height
+}
+```
+- Reference example (`SelfAssignmentGood.go`):
+```
+package main
+
+func (r *Rect) setHeightGood(height int) {
+	r.height = height
+}
+```

@@ -1,0 +1,55 @@
+Review focus: Missing error check
+
+What to look for:
+- When a function returns a pointer alongside an error value, one should normally assume that the pointer may be nil until either the pointer or error has been checked.
+- When a function call returns two values, a pointer and a (subtype of) error, it is conventional to assume that the pointer might be nil until either the pointer or error value has been checked. If the pointer is dereferenced without a check, an unexpected nil pointer dereference panic may occur.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingErrorCheck.go`):
+```
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func user(input string) {
+
+	ptr, err := os.Open(input)
+	// BAD: ptr is dereferenced before either it or `err` has been checked.
+	fmt.Printf("Opened %v\n", *ptr)
+	if err != nil {
+		fmt.Printf("Bad input: %s\n", input)
+	}
+
+}
+```
+- Reference example (`MissingErrorCheckGood.go`):
+```
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func user(input string) {
+
+	ptr, err := os.Open(input)
+	if err != nil {
+		fmt.Printf("Bad input: %s\n", input)
+		return
+	}
+	// GOOD: `err` has been checked before `ptr` is used
+	fmt.Printf("Result was %v\n", *ptr)
+
+}
+```

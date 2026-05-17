@@ -1,0 +1,12 @@
+Review focus: Serializable but no void constructor
+
+What to look for:
+- A non-serializable, immediate superclass of a serializable class that does not itself declare an accessible, no-argument constructor causes deserialization to fail.
+- A serializable class that is a subclass of a non-serializable class cannot be deserialized if its superclass does not declare a no-argument constructor. The Java serialization framework uses the no-argument constructor when it initializes the object instance that is created during deserialization. Deserialization fails with an`InvalidClassException`if its superclass does not declare a no-argument constructor. The Java Development Kit API documentation states: To allow subtypes of non-serializable classes to be serialized, the subtype may assume responsibility for saving and restoring the state of the supertype's public, protected, and (if accessible) package fields. The subtype may assume this responsibility only if the class it extends has an accessible no-arg constructor to initialize the class's state. It is an error to declare a class`Serializable`if this is not the case. The error will be detected at runtime.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

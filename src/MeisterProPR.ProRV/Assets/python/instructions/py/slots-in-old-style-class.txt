@@ -1,0 +1,37 @@
+Review focus: `__slots__` in old-style class
+
+What to look for:
+- Overriding the class dictionary by declaring `__slots__` is not supported by old-style classes.
+- The ability to override the class dictionary using a`__slots__`declaration is supported only by new-style classes. When you add a`__slots__`declaration to an old-style class it just creates a class attribute called`__slots__`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SlotsInOldStyleClass.py`):
+```
+class Point:
+
+    __slots__ = [ '_x', '_y' ] # Incorrect: 'Point' is an old-style class.
+                               # No slots are created.
+                               # Instances of Point have an attribute dictionary.
+
+    def __init__(self, x, y):
+        self._x = x
+        self._y = y
+
+
+class Point2(object):
+
+    __slots__ = [ '_x', '_y' ] # Correct: 'Point2' is an new-style class
+                               # Two slots '_x' and '_y' are created.
+                               # Instances of Point2 have no attribute dictionary.
+
+    def __init__(self, x, y):
+        self._x = x
+        self._y = y
+```

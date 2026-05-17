@@ -1,0 +1,34 @@
+Review focus: Insecure randomness
+
+What to look for:
+- Using a cryptographically weak pseudo-random number generator to generate a security-sensitive value may allow an attacker to predict what value will be generated.
+- Using a cryptographically weak pseudo-random number generator to generate a security-sensitive value, such as a password, makes it easier for an attacker to predict the value. Pseudo-random number generators generate a sequence of numbers that only approximates the properties of random numbers. The sequence is not truly random because it is completely determined by a relatively small set of initial values, the seed. If the random number generator is cryptographically weak, then this sequence may be easily predictable through outside observations.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`InsecureRandomness.js`):
+```
+function insecurePassword() {
+    // BAD: the random suffix is not cryptographically secure
+    var suffix = Math.random();
+    var password = "myPassword" + suffix;
+    return password;
+}
+```
+- Reference example (`InsecureRandomness_fixed.js`):
+```
+function securePassword() {
+    // GOOD: the random suffix is cryptographically secure
+    var suffix = window.crypto.getRandomValues(new Uint32Array(1))[0];
+    var password = "myPassword" + suffix;
+    
+    // GOOD: if a random value between 0 and 1 is desired
+    var secret = window.crypto.getRandomValues(new Uint32Array(1))[0] * Math.pow(2,-32);
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Use of default toString()
+
+What to look for:
+- Calling the default implementation of 'toString' returns a value that is unlikely to be what you expect.
+- In most cases, calling the default implementation of`toString`in`java.lang.Object`is not what is intended when a string representation of an object is required. The output of the default`toString`method consists of the class name of the object as well as the object's hashcode, which is usually not what was intended. This rule includes explicit and implicit calls to`toString`that resolve to`java.lang.Object.toString`, particularly calls that are used in print or log statements.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

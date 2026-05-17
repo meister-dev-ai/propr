@@ -1,0 +1,38 @@
+Review focus: Cleartext storage of sensitive information in an application preference store
+
+What to look for:
+- Storing sensitive information in a non-encrypted store can expose it to an attacker.
+- Sensitive information that is stored unencrypted in an application preference store, such as the user defaults database or the iCloud-backed ubiquitous key-value store, is accessible to an attacker who gains access to that data store. For example, the information could be accessed by any process or user in a rooted device, by compromised app extensions, or could be exposed through another vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextStoragePreferences.swift`):
+```
+import CryptoKit
+
+private func encrypt(_ text: String, _ encryptionKey: SymmetricKey) -> String {
+	let sealedBox = try! AES.GCM.seal(Data(text.utf8), using: encryptionKey)
+	return sealedBox.combined!.base64EncodedString()
+}
+
+func storeMyData(faveSong : String, creditCardNo : String, encryptionKey: SymmetricKey) {
+	// ...
+
+	// GOOD: not sensitive information
+	UserDefaults.standard.set(faveSong, forKey: "myFaveSong")
+
+	// BAD: sensitive information saved in cleartext
+	UserDefaults.standard.set(creditCardNo, forKey: "myCreditCardNo")
+
+	// GOOD: encrypted sensitive information saved
+	UserDefaults.standard.set(encrypt(creditCardNo, encryptionKey), forKey: "myCreditCardNo")
+
+	// ...
+}
+```

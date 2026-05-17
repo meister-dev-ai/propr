@@ -1,0 +1,50 @@
+Review focus: Untrusted domain used in script or other content
+
+What to look for:
+- Using a resource from an untrusted or compromised domain makes your code vulnerable to receiving malicious code.
+- Content Delivery Networks (CDNs) are used to deliver content to users quickly and efficiently. However, they can change hands or be operated by untrustworthy owners, risking the security of the sites that use them. Some CDN domains are operated by entities that have used CDNs to deliver malware, which this query identifies. For example,`polyfill.io`was a popular JavaScript CDN, used to support new web browser standards on older browsers. In February 2024 the domain was sold, and in June 2024 it was publicised that the domain had been used to serve malicious scripts. It was taken down later in that month, leaving a window where sites that used the service could have been compromised. The same operator runs several other CDNs, undermining trust in those too. Including a resource from an untrusted source or using an untrusted channel may allow an attacker to include arbitrary code in the response. When including an external resource (for example, a`script`element) on a page, it is important to ensure that the received data is not malicious. Even when`https`is used, an untrustworthy operator might deliver malware. See the [`CUSTOMIZING.md`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-830/CUSTOMIZING.md) file in the source code for this query for information on how to extend the list of untrusted domains used by this query.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`polyfill-compromised.html`):
+```
+<html>
+    <head>
+        <title>Polyfill.io demo</title>
+        <script src="https://cdn.polyfill.io/v2/polyfill.min.js" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        ...
+    </body>
+</html>
+```
+- Reference example (`polyfill-trusted.html`):
+```
+<html>
+    <head>
+        <title>Polyfill demo - Cloudflare hosted with pinned version (but no integrity checking, since it is dynamically generated)</title>
+        <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?version=4.8.0" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        ...
+    </body>
+</html>
+```
+- Reference example (`polyfill-sri.html`):
+```
+<html>
+    <head>
+        <title>Polyfill demo - Cloudflare hosted with pinned version (with integrity checking for a *very limited* browser set - just an example!)</title>
+        <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?version=4.8.0" integrity="sha384-i0IGVuZBkKZqwXTD4CH4kcksIbFx7WKFMdxN8zUhLFHpLdELF0ym0jxa6UvLhW8/ sha384-3d4jRKquKl90C9aFG+eH4lPJmtbPHgACWHrp+VomFOxF8lzx2jxqeYkhpRg18UWC" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        ...
+    </body>
+</html>
+```

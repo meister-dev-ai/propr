@@ -1,0 +1,59 @@
+Review focus: Lock may not be released
+
+What to look for:
+- A lock that is acquired one or more times without a matching number of unlocks may cause a deadlock.
+- When a thread acquires a lock it must make sure to unlock it again; failing to do so can lead to deadlocks. If a lock allows a thread to acquire it multiple times, for example`std::recursive_mutex`, then the number of locks must match the number of unlocks in order to fully release the lock.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnreleasedLockBad.cpp`):
+```
+std::mutex mutex;
+int fun() {
+	mutex.lock();
+	bool succeeded = doWork();
+	if (!succeeded) {
+		// BAD: this does not release the mutex
+		return -1
+	}
+	mutex.unlock();
+	return 1;
+}
+```
+- Reference example (`UnreleasedLockGood.cpp`):
+```
+class RAII_Mutex
+{
+	std::mutex lock;
+public:
+	RAII_Mutex(mutex m) : lock(m)
+	{
+		lock.lock();
+	}
+
+	~RAII_Mutex()
+	{
+		lock.unlock();
+	}
+};
+
+
+std::mutex mutex;
+int fun() {
+	RAII_Mutex(mutex);
+
+	bool succeeded = doWork();
+	if (!succeeded) {
+		// GOOD: the RAII_Mutex is destroyed, releasing the lock
+		return -1
+	}
+	
+	return 1;
+}
+```

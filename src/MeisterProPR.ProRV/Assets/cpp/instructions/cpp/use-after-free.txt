@@ -1,0 +1,27 @@
+Review focus: Potential use after free
+
+What to look for:
+- An allocated memory block is used after it has been freed.
+- This rule finds accesses through a pointer of a memory location that has already been freed (i.e. through a dangling pointer). Such memory blocks have already been released to the dynamic memory manager, and modifying them can lead to anything from a segfault to memory corruption that would cause subsequent calls to the dynamic memory manager to behave erratically, to a possible security vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UseAfterFree.cpp`):
+```
+void f() {
+	char* buf = new char[SIZE];
+	...
+	if (error) {
+		delete buf; //error handling has freed the buffer
+	}
+	...
+	log_contents(buf); //but it is still used here for logging
+	...
+}
+```

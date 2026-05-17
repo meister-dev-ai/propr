@@ -1,0 +1,12 @@
+Review focus: XSLT transformation with user-controlled stylesheet
+
+What to look for:
+- Performing an XSLT transformation with user-controlled stylesheets can lead to information disclosure or execution of arbitrary code.
+- XSLT (Extensible Stylesheet Language Transformations) is a language for transforming XML documents into other XML documents or other formats. Processing unvalidated XSLT stylesheets can allow attackers to read arbitrary files from the filesystem or to execute arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

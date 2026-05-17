@@ -5,6 +5,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.ProRV.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution.DependencyInjection;
@@ -24,6 +25,10 @@ public sealed class ReviewingExecutionServiceCollectionExtensionsTests
         Assert.Equal(ServiceLifetime.Scoped, GetLifetime<AgenticReviewSynthesisExecutor>(services));
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<AgenticCandidateFindingFactory>(services));
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<QualityFilterExecutor>(services));
+        Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IProRVPrefilter>(services));
+        Assert.Equal(
+            ServiceLifetime.Scoped,
+            services.Single(descriptor => descriptor.ImplementationType == typeof(FileByFileProRvPrefilterStage)).Lifetime);
     }
 
     [Fact]
@@ -44,7 +49,7 @@ public sealed class ReviewingExecutionServiceCollectionExtensionsTests
         services.AddReviewingExecution();
 
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IReviewPipelineProfileProvider>(services));
-        Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IReviewPipeline<PerFileReviewContext>>(services));
+        Assert.Equal(ServiceLifetime.Scoped, GetLifetime<IReviewPipeline<PerFileReviewContext>>(services));
     }
 
     private static ServiceLifetime GetLifetime<TService>(IServiceCollection services)

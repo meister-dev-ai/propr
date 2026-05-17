@@ -1,0 +1,40 @@
+Review focus: Inconsistent CompareTo and Equals
+
+What to look for:
+- If a class implements 'IComparable.CompareTo' but does not override 'Equals', the two can be inconsistent.
+- When an ordering is introduced on instances of a class by making the class implement the`IComparable`interface, it is sensible to ensure that for all instances`c1`and`c2`,`c1.CompareTo(c2) == 0`&hArr;`c1.Equals(c2)`. Classes that implement`IComparable.CompareTo`but inherit`Equals`, rather than overriding it to match the`CompareTo`implementation, generally violate this assumption, which can lead to confusion when the class is used. If the type implements IComparable, it should override Equals. - Microsoft: Guidelines for Overloading Equals() and Operator ==
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InconsistentCompareTo.cs`):
+```
+class InconsistentCompareTo
+{
+    class Age : IComparable<Age>
+    {
+        private int age;
+        public Age(int age)
+        {
+            this.age = age;
+        }
+        public int CompareTo(Age rhs)
+        {
+            return age.CompareTo(rhs.age);
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        Age a1 = new Age(22);
+        Age a2 = new Age(22);
+        Console.WriteLine("Comparing a1 with a2: " + a1.CompareTo(a2));
+        Console.WriteLine("a1 equals a2: " + a1.Equals(a2));
+    }
+}
+```

@@ -1,0 +1,22 @@
+Review focus: Use of AngularJS markup in URL-valued attribute
+
+What to look for:
+- Using AngularJS markup in an HTML attribute that references a URL (such as 'href' or 'src') may cause the browser to send a request with an invalid URL.
+- Using AngularJS markup (that is, AngularJS expressions enclosed in double curly braces) in HTML attributes that reference URLs is not recommended: the browser may attempt to fetch the URL before the AngularJS compiler evaluates the markup, resulting in a request for an invalid URL. While this is not a serious problem, it can degrade user experience, since the page may, for example, display broken image links while loading.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseNgSrc.html`):
+```
+<img src="#/resources/pics/{{item._id}}">
+```
+- Reference example (`UseNgSrcGood.html`):
+```
+<img ng-src="#/resources/pics/{{item._id}}">
+```

@@ -1,0 +1,12 @@
+Review focus: Confusing overloading of methods
+
+What to look for:
+- Overloaded methods that have the same number of parameters, where each pair of corresponding parameter types is convertible by casting or autoboxing, may be confusing.
+- Overloaded method declarations that have the same number of parameters may be confusing if none of the corresponding pairs of parameter types is substantially different. A pair of parameter types A and B is substantially different if A cannot be cast to B and B cannot be cast to A. If the parameter types are not substantially different then the programmer may assume that the method with parameter type A is called when in fact the method with parameter type B is called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

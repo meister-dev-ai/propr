@@ -1,0 +1,12 @@
+Review focus: Left shift by more than the type width
+
+What to look for:
+- Left-shifting an integer by more than its type width indicates a mistake.
+- The maximum shift distance used for left-shift operations is determined by the promoted type of its left-hand side. When the promoted type is`int`only the lowest 5 bits of the right-hand side are used as the shift distance. When the promoted type is`long`the lowest 6 bits of the right-hand side are used.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

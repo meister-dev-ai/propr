@@ -1,0 +1,66 @@
+Review focus: XML injection
+
+What to look for:
+- Building an XML document from user-controlled sources is vulnerable to insertion of malicious code by the user.
+- The APIs provided by the .NET libraries for XML manipulation allow the insertion of "raw" text at a specified point in an XML document. If user input is passed to this API, it could allow a malicious user to add extra content that could corrupt or supersede existing content, or enable unintended additional functionality.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`XMLInjectionBad.cs`):
+```
+using System;
+using System.Security;
+using System.Web;
+using System.Xml;
+
+public class XMLInjectionHandler : IHttpHandler {
+  public void ProcessRequest(HttpContext ctx) {
+    string employeeName = ctx.Request.QueryString["employeeName"];
+
+    using (XmlWriter writer = XmlWriter.Create("employees.xml"))
+    {
+        writer.WriteStartDocument();
+
+        // BAD: Insert user input directly into XML
+        writer.WriteRaw("<employee><name>" + employeeName + "</name></employee>");
+
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+  }
+}
+```
+- Reference example (`XMLInjectionGood.cs`):
+```
+using System;
+using System.Security;
+using System.Web;
+using System.Xml;
+
+public class XMLInjectionHandler : IHttpHandler {
+  public void ProcessRequest(HttpContext ctx) {
+    string employeeName = ctx.Request.QueryString["employeeName"];
+
+    using (XmlWriter writer = XmlWriter.Create("employees.xml"))
+    {
+        writer.WriteStartDocument();
+
+        // GOOD: Escape user input before inserting into string
+        writer.WriteRaw("<employee><name>" + SecurityElement.Escape(employeeName) + "</name></employee>");
+
+        // GOOD: Use standard API, which automatically encodes values
+        writer.WriteStartElement("Employee");
+        writer.WriteElementString("Name", employeeName);
+        writer.WriteEndElement();
+
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+  }
+```

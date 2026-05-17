@@ -1,0 +1,15 @@
+Review focus: Dead class
+
+What to look for:
+- Dead classes add unnecessary complexity.
+- Classes that are never used at runtime are redundant and should be removed. Classes are considered dead if at runtime:
+- No methods declared in the class, or a sub-type, are called.
+- No fields declared in the class, or a sub-type, are read.
+- The class is never constructed. Any class which is not dead is considered to be "live". Nested classes are considered and listed separately, as a live nested class within a dead outer class can be moved to a separate file, allowing the outer class to be deleted. A special exception is made for "namespace classes". A namespace class is used only to group static fields, methods and nested classes - it is never instantiated, has no public constructor and has no instance methods. If a class is considered to be a namespace class, then it is live if at least one of the static members of that class is live - including static nested classes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

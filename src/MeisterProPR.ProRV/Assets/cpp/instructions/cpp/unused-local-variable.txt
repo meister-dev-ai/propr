@@ -1,0 +1,22 @@
+Review focus: Unused local variable
+
+What to look for:
+- A local variable that is never called or accessed may be an indication that the code is incomplete or has a typo.
+- This rule finds local variables that are never accessed after declaration. Unused variables should be removed to increase readability and avoid misuse.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedLocals.cpp`):
+```
+{
+	int x = 0; //x is unused
+	int y = 0;
+	cout << y;
+}
+```

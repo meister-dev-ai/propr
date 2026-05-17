@@ -8,6 +8,23 @@ using MeisterProPR.Domain.ValueObjects;
 namespace MeisterProPR.Application.ValueObjects;
 
 /// <summary>
+///     One focused review-guidance item injected into a per-file review prompt.
+/// </summary>
+/// <param name="Id">Stable guidance identifier.</param>
+/// <param name="Title">Human-readable title.</param>
+/// <param name="ShortDescription">Compact description of the concern.</param>
+/// <param name="Instruction">Detailed what-to-look-for guidance.</param>
+/// <param name="Reason">Short diff-grounded reason from the prefilter stage.</param>
+/// <param name="Score">Relative ranking score from 0 to 100.</param>
+public sealed record FocusedReviewGuidanceItem(
+    string Id,
+    string Title,
+    string ShortDescription,
+    string Instruction,
+    string Reason,
+    int Score);
+
+/// <summary>
 ///     Carries per-file review framing metadata for the AI review core.
 ///     When <see cref="ReviewSystemContext.PerFileHint" /> is non-null,
 ///     <c>ToolAwareAiReviewCore</c> uses <c>BuildPerFileSystemPrompt</c> and
@@ -35,6 +52,11 @@ public sealed record PerFileReviewHint(
     ///     Derived from the per-tier iteration limits based on <see cref="ComplexityTier" />.
     /// </summary>
     public int? MaxIterationsOverride { get; init; }
+
+    /// <summary>
+    ///     Optional focused review guidance generated from ProRV's diff-based prefilter stage.
+    /// </summary>
+    public IReadOnlyList<FocusedReviewGuidanceItem> FocusedReviewGuidance { get; init; } = [];
 
     /// <summary>
     ///     Optional Stage A plan for agentic file-by-file review mode.

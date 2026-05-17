@@ -1,0 +1,28 @@
+Review focus: Signature mismatch in overriding method
+
+What to look for:
+- Overriding a method without ensuring that both methods accept the same number and type of parameters has the potential to cause an error when there is a mismatch.
+- When the signature of a method of a base class and a method of a subclass that overrides it don't match, a call to the base class method may not be a valid call to the subclass method, and thus raise an exception if an instance of the subclass is passed instead. If following the Liskov Substitution Principle, in which an instance of a subclass should be usable in every context as though it were an instance of the base class, this behavior breaks the principle.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SignatureOverriddenMethod.py`):
+```
+class Base:
+    def runsource(self, source, filename="<input>"):
+        ...
+    
+    
+class Sub(Base):
+    def runsource(self, source): # BAD: Does not match the signature of overridden method.
+        ... 
+
+def run(obj: Base):
+    obj.runsource("source", filename="foo.txt")
+```

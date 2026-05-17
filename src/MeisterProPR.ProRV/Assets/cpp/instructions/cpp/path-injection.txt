@@ -1,0 +1,77 @@
+Review focus: Uncontrolled data used in path expression
+
+What to look for:
+- Accessing paths influenced by users can allow an attacker to access unexpected resources.
+- Accessing paths controlled by users can allow an attacker to access unexpected resources. This can result in sensitive information being revealed or deleted, or an attacker being able to influence behavior by modifying unexpected files. Paths that are naively constructed from data controlled by a user may be absolute paths, or may contain unexpected special characters such as "..". Such a path could point anywhere on the file system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedPath.c`):
+```
+int main(int argc, char** argv) {
+  char *userAndFile = argv[2];
+  
+  {
+    char fileBuffer[PATH_MAX];
+    snprintf(fileBuffer, sizeof(fileBuffer), "/home/%s", userAndFile);
+    // BAD: a string from the user is used in a filename
+    fopen(fileBuffer, "wb+");
+  }
+}
+```
+- Reference example (`TaintedPathNormalize.c`):
+```
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char** argv) {
+    char *fileName = argv[2];
+    // Check for invalid sequences in the user input
+    if (strstr(fileName , "..") || strchr(fileName , '/') || strchr(fileName , '\\')) {
+        printf("Invalid filename.\n");
+        return 1;
+    }
+
+    char fileBuffer[PATH_MAX];
+    snprintf(fileBuffer, sizeof(fileBuffer), "/home/user/files/%s", fileName);
+    // GOOD: We know that the filename is safe and stays within the public folder
+    FILE *file = fopen(fileBuffer, "wb+");
+}
+```
+- Reference example (`TaintedPathFolder.c`):
+```
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char** argv) {
+    char *userAndFile = argv[2];
+    const char *baseDir = "/home/user/public/";
+    char fullPath[PATH_MAX];
+
+    // Attempt to concatenate the base directory and the user-supplied path
+    snprintf(fullPath, sizeof(fullPath), "%s%s", baseDir, userAndFile);
+
+    // Resolve the absolute path, normalizing any ".." or "."
+    char *resolvedPath = realpath(fullPath, NULL);
+    if (resolvedPath == NULL) {
+        perror("Error resolving path");
+        return 1;
+    }
+
+    // Check if the resolved path starts with the base directory
+    if (strncmp(baseDir, resolvedPath, strlen(baseDir)) != 0) {
+        free(resolvedPath);
+        return 1;
+    }
+
+    // GOOD: Path is within the intended directory
+    FILE *file = fopen(resolvedPath, "wb+");
+    free(resolvedPath);
+}
+```

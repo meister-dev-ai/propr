@@ -1,0 +1,24 @@
+Review focus: Unused parameter
+
+What to look for:
+- Unused parameters make functions hard to read and hard to use, and should be removed.
+- Unused function parameters make code harder to maintain and use. Clients that are unaware that the parameter is unused may perform nontrivial computations to compute a value that is ultimately unused. Even if the parameter is known to be unused, passing in default values such as`null`or`undefined`makes the code hard to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedParameter.js`):
+```
+function f(x, y) {
+	var _y = expensiveComputation(x);
+	use(x, _y);
+}
+
+var x = 42;
+f(x, expensiveComputation(x));
+```

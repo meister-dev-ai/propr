@@ -1,0 +1,61 @@
+Review focus: Missing function level access control
+
+What to look for:
+- Sensitive actions should have authorization checks to prevent them from being used by malicious actors.
+- Sensitive actions, such as editing or deleting content, or accessing admin pages, should have authorization checks to ensure that they cannot be used by malicious actors.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WebForms.cs`):
+```
+class ProfilePage : System.Web.UI.Page {
+    // BAD: No authorization is used
+    protected void btn1_Edit_Click(object sender, EventArgs e) {
+        ...
+    }
+
+    // GOOD: `User.IsInRole` checks the current user's role.
+    protected void btn2_Delete_Click(object sender, EventArgs e) {
+        if (!User.IsInRole("admin")) {
+            return;
+        }
+        ...
+    }
+}
+```
+- Reference example (`Web.config`):
+```
+<?xml version="1.0"?>
+
+<configuration xmlns:xdt="http://schemas.microsoft.com/XML-Document-Transform">
+  <location path="User/Profile">
+    <system.web>
+      <authorization>
+        <deny users="?" />
+      </authorization>
+    </system.web>
+  </location>
+</configuration>
+```
+- Reference example (`MVC.cs`):
+```
+public class ProfileController : Controller {
+
+    // BAD: No authorization is used.
+    public ActionResult Edit(int id) {
+        ...
+    }
+
+    // GOOD: The `Authorize` attribute is used.
+    [Authorize]
+    public ActionResult Delete(int id) {
+        ...
+    }
+}
+```

@@ -1,0 +1,26 @@
+Review focus: Use of goto
+
+What to look for:
+- Using the goto statement complicates function control flow and hinders program understanding.
+- Code should be restricted to very simple control flow constructs; in particular, the goto statement should not be used. Simpler control flow translates into stronger capabilities for analysis and often results in improved code clarity.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseOfGoto.c`):
+```
+int matching; int i;
+for (i = 0; i < numItems; i++) {
+	if (items[i] == item) {
+		matching = i;
+		goto found; // Problematic 'goto': Use 'break' instead.
+	}
+}
+found:
+// ... use 'matching' ...
+```

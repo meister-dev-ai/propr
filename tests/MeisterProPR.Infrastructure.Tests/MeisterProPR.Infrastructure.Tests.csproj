@@ -36,6 +36,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\MeisterProPR.Infrastructure\MeisterProPR.Infrastructure.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterProPR.ProRV\MeisterProPR.ProRV.csproj"/>
         <ProjectReference Include="..\..\src\MeisterProPR.ProCursor\MeisterProPR.ProCursor.csproj"/>
     </ItemGroup>
 

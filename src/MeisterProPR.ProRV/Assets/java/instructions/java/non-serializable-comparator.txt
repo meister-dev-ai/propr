@@ -1,0 +1,12 @@
+Review focus: Non-serializable comparator
+
+What to look for:
+- A comparator that is passed to an ordered collection (for example, a treemap) must be serializable, otherwise the collection fails to serialize at run-time.
+- A class that implements`java.util.Comparator`and is used to construct a sorted collection needs to be serializable. An ordered collection (such as a`java.util.TreeMap`) that is constructed using a comparator serializes successfully only if the comparator is serializable. The`Collection`s in the Java Standard Library that require a comparator (`TreeSet`,`TreeMap`,`PriorityQueue`) all call`ObjectOutputStream.defaultWriteObject`, which tries to serialize every non-static, non-transient field in the class. As the comparator is stored in a field in these collections, the attempt to serialize a non-serializable comparator throws a`java.io.NotSerializableException`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

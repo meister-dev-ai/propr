@@ -1,0 +1,12 @@
+Review focus: Assignment in return statement
+
+What to look for:
+- Assigning to a local variable in a 'return' statement has no effect.
+- An assignment is an expression. The value of an assignment expression is the value assigned to the variable. This can be useful, for example, when initializing two or more variables at once (for example,`a = b = 0;`). However, assigning to a local variable in the expression of a return statement is redundant because that value can never be read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

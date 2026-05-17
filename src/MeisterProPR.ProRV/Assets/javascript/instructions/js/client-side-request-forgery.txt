@@ -1,0 +1,32 @@
+Review focus: Client-side request forgery
+
+What to look for:
+- Making a client-to-server request with user-controlled data in the URL allows a request forgery attack against the client.
+- Directly incorporating user input in the URL of an outgoing HTTP request can enable a request forgery attack, in which the request is altered to target an unintended API endpoint or resource. A client-side forged request may perform an unwanted action affecting the victim's account, or may lead to cross-site scripting if the request response is handled in an unsafe way. This is different from CSRF (cross-site request forgery), and will usually bypass CSRF protections. This is usually less severe than SSRF (server-side request forgery), as it does not expose internal services.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ClientSideRequestForgeryBad.js`):
+```
+async function loadMessage() {
+    const query = new URLSearchParams(location.search);
+    const url = '/api/messages/' + query.get('message_id');
+    const data = await (await fetch(url)).json();
+    document.getElementById('message').innerHTML = data.html;
+}
+```
+- Reference example (`ClientSideRequestForgeryGood.js`):
+```
+async function loadMessage() {
+    const query = new URLSearchParams(location.search);
+    const url = '/api/messages/' + Number(query.get('message_id'));
+    const data = await (await fetch(url)).json();
+    document.getElementById('message').innerHTML = data.html;
+}
+```

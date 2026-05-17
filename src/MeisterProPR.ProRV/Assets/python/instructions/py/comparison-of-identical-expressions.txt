@@ -1,0 +1,24 @@
+Review focus: Comparison of identical values
+
+What to look for:
+- Comparison of identical values, the intent of which is unclear.
+- When two identical expressions are compared it is typically an indication of a mistake, since the Boolean value of the comparison will always be the same, unless the value is the floating point value`float('nan')`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CompareIdenticalValues.py`):
+```
+#Using 'x == x' to check that 'x' is not a float('nan').
+def is_normal(f):
+    return not cmath.isinf(f) and f == f
+
+#Improved version; intention is explicit.
+def is_normal(f):
+    return not cmath.isinf(f) and not cmath.isnan(f)
+```

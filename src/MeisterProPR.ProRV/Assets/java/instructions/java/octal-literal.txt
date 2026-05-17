@@ -1,0 +1,14 @@
+Review focus: Use of octal values
+
+What to look for:
+- An integer literal that starts with '0' may cause a problem.
+- An integer literal consisting of a leading`0`digit followed by one or more digits in the range`0-7`is an octal literal. This can lead to two problems:
+- An octal literal can be misread by a programmer as a decimal literal.
+- A programmer might accidentally start a decimal literal with a zero, so that the compiler treats the decimal literal as an octal literal. For example,`010`is equal to`8`, not`10`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

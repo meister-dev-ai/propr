@@ -16,13 +16,17 @@ public sealed record ReviewEvaluationFixture(
     RepositorySnapshot RepositorySnapshot,
     PullRequestSnapshot PullRequestSnapshot,
     IReadOnlyList<FixtureThread>? Threads = null,
-    FixtureExpectations? Expectations = null)
+    FixtureExpectations? Expectations = null,
+    FixtureProRVPrefilterExpectations? ProRVPrefilterExpectations = null)
 {
     /// <summary>Optional prior discussion threads supplied with the fixture.</summary>
     public IReadOnlyList<FixtureThread> ThreadsOrEmpty => this.Threads ?? [];
 
     /// <summary>Optional expected review outcomes used by evaluation verification.</summary>
     public FixtureExpectations? ExpectationsOrNull => this.Expectations;
+
+    /// <summary>Optional expected ProRV prefilter outcomes used by deterministic ranked-item verification.</summary>
+    public FixtureProRVPrefilterExpectations? ProRVPrefilterExpectationsOrNull => this.ProRVPrefilterExpectations;
 }
 
 /// <summary>
@@ -53,6 +57,35 @@ public sealed record FixtureExpectations(
 ///     One fixture expectation entry with a stable identifier and natural-language description.
 /// </summary>
 public sealed record FixtureExpectation(string Key, string Description);
+
+/// <summary>
+///     Optional expected ProRV prefilter outcomes for one fixture.
+/// </summary>
+public sealed record FixtureProRVPrefilterExpectations(IReadOnlyList<FixtureProRVPrefilterPositiveExample>? PositiveExamples = null)
+{
+    /// <summary>Positive examples the ProRV prefilter should hit for the corresponding changed file.</summary>
+    public IReadOnlyList<FixtureProRVPrefilterPositiveExample> PositiveExamplesOrEmpty => this.PositiveExamples ?? [];
+
+    /// <summary>Returns true when at least one ProRV prefilter expectation exists.</summary>
+    public bool HasAny => this.PositiveExamplesOrEmpty.Count > 0;
+}
+
+/// <summary>
+///     One deterministic ProRV prefilter expectation for a specific changed file.
+/// </summary>
+public sealed record FixtureProRVPrefilterPositiveExample(
+    string Key,
+    string FilePath,
+    IReadOnlyList<string>? ExpectedItemIds,
+    string Description)
+{
+    /// <summary>
+    ///     Acceptable ProRV item identifiers for this expected issue. The expectation is fulfilled when at least one
+    ///     of these identifiers is present in the ranked output for the file. An empty list means the correct behavior
+    ///     is to return no ProRV items for the file.
+    /// </summary>
+    public IReadOnlyList<string> ExpectedItemIdsOrEmpty => this.ExpectedItemIds ?? [];
+}
 
 /// <summary>
 ///     Describes where the fixture content originated.

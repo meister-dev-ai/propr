@@ -1,0 +1,26 @@
+Review focus: Return statement outside function
+
+What to look for:
+- A 'return' statement appearing outside a function will cause an error when it is executed.
+- In JavaScript,`return`statements are not allowed outside functions in most cases, the main exception being event handler code in HTML attributes. On the other hand,`return`is not allowed in`javascript:`URLs, and will cause a runtime exception on many browsers.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnOutsideFunction.htm`):
+```
+<form name="f" action="javascript:return validateForm(this);" method="post">
+    <!--  form contents -->
+</form>
+```
+- Reference example (`ReturnOutsideFunctionGood.htm`):
+```
+<form name="f" onsubmit="return validateForm(this);" method="post">
+    <!--  form contents -->
+</form>
+```

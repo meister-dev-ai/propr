@@ -1,0 +1,20 @@
+Review focus: `__init__` method is a generator
+
+What to look for:
+- `__init__` method is a generator.
+- The`__init__`method of a class is used to initialize new objects, not create them. As such, it should not return any value. By including a`yield`expression in the method turns it into a generator method. On calling it will return a generator resulting in a runtime error.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InitIsGenerator.py`):
+```
+class InitIsGenerator(object):
+    def __init__(self, i):
+        yield i
+```

@@ -1,0 +1,97 @@
+Review focus: Double-checked lock is not thread-safe
+
+What to look for:
+- A repeated check on a non-volatile field is not thread-safe on some platforms, and could result in unexpected behavior.
+- Double-checked locking requires that the underlying field is`volatile`, otherwise the program can behave incorrectly when running in multiple threads, for example by computing the field twice.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnsafeLazyInitialization1.cs`):
+```
+string name;
+
+public string Name
+{
+    get
+    {
+        // BAD: Not thread-safe
+        if (name == null)
+            name = LoadNameFromDatabase();
+        return name;
+    }
+}
+```
+- Reference example (`UnsafeLazyInitialization2.cs`):
+```
+string name;    // BAD: Not thread-safe
+
+public string Name
+{
+    get
+    {
+        if (name == null)
+        {
+            lock (mutex)
+            {
+                if (name == null)
+                    name = LoadNameFromDatabase();
+            }
+        }
+        return name;
+    }
+}
+```
+- Reference example (`UnsafeLazyInitializationFix1.cs`):
+```
+string name;
+
+public string Name
+{
+    get
+    {
+        lock (mutex)    // GOOD: Thread-safe
+        {
+            if (name == null)
+                name = LoadNameFromDatabase();
+            return name;
+        }
+    }
+}
+```
+- Reference example (`UnsafeLazyInitializationFix2.cs`):
+```
+volatile string name;    // GOOD: Thread-safe
+
+public string Name
+{
+    get
+    {
+        if (name == null)
+        {
+            lock (mutex)
+            {
+                if (name == null)
+                    name = LoadNameFromDatabase();
+            }
+        }
+        return name;
+    }
+}
+```
+- Reference example (`UnsafeLazyInitializationFix3.cs`):
+```
+Lazy<string> name;    // GOOD: Thread-safe
+
+public Person()
+{
+    name = new Lazy<string>(LoadNameFromDatabase);
+}
+
+public string Name => name.Value;
+```

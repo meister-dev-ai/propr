@@ -1,0 +1,12 @@
+Review focus: String concatenation in loop
+
+What to look for:
+- Performing string concatenation in a loop that iterates many times may affect performance.
+- When string concatenation is performed using the "+" operator, the compiler translates this operation to a suitable manipulation, possibly constructing several intermediate strings. In general, because strings are immutable, at least one new string has to be constructed to hold the result. Building up a string one piece at a time in a loop requires a new string on every iteration, repeatedly copying longer and longer prefixes to fresh string objects. As a result, performance can be severely degraded.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

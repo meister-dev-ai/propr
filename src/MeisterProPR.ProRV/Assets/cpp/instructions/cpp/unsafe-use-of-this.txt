@@ -1,0 +1,37 @@
+Review focus: Unsafe use of this in constructor
+
+What to look for:
+- A call to a pure virtual function using a 'this' pointer of an object that is under construction may lead to undefined behavior.
+- This rule finds calls to pure virtual member functions in constructors and destructors. When executing the body of a constructor of class`T`, the virtual table of`T`refers to the virtual table of one of`T`'s base classes. This can produce unexpected behavior, including program abort that can lead to denial of service attacks. The same problem exists during destruction of an object.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UnsafeUseOfThis.cpp`):
+```
+class Base {
+private:
+    // pure virtual member function used for initialization of derived classes.
+    virtual void construct() = 0;
+public:
+    Base() {
+        // wrong: the virtual table of `Derived` has not been initialized yet. So this
+        // call will resolve to `Base::construct`, which cannot be called as it is a pure
+        // virtual function.
+        construct();
+    }
+};
+
+class Derived : public Base {
+    int field;
+
+    void construct() override {
+        field = 1;
+    }
+};
+```

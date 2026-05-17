@@ -1,0 +1,34 @@
+Review focus: Dead reference types
+
+What to look for:
+- Finds non-public reference types (classes, interfaces) that are not accessed anywhere in the codebase.
+- This rule detects classes that are not public and not used. These classes are redundant as they cannot be accessed from outside the project.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadRefTypes.cs`):
+```
+class OuterClass
+{
+    private class Person // BAD: "Person" is never used
+    {
+        private string name;
+        private int age;
+        public Person(string name, int age)
+        {
+            this.name = name;
+            this.age = age;
+        }
+    }
+    public static void Main(string[] args)
+    {
+
+    }
+}
+```

@@ -1,0 +1,70 @@
+Review focus: Suspicious method name declaration
+
+What to look for:
+- A method declaration with a name that is a special keyword in another context is suspicious.
+- In TypeScript, certain keywords have special meanings for member declarations, and misusing them can create confusion:
+- In classes, use`constructor`rather than`new`to declare constructors. Using`new`within a class creates a method named "new" and not a constructor signature.
+- In interfaces, use`new`rather than`constructor`to declare constructor signatures. Using`constructor`within an interface creates a method named "constructor" and not a constructor signature.
+- Similarly, the keyword`function`is used to declare functions in some contexts. However, using the name`function`for a class or interface member declaration declares a method named "function". When these keywords are misused, TypeScript will interpret them as regular method names rather than their intended special syntax, leading to code that may not work as expected.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousMethodNameDeclaration.ts`):
+```
+// BAD: Using 'constructor' in an interface creates a method, not a constructor signature
+interface Point {
+   x: number;
+   y: number;
+   constructor(x: number, y: number); // This is just a method named "constructor"
+}
+```
+- Reference example (`SuspiciousMethodNameDeclarationFixed.ts`):
+```
+// GOOD: Using 'new' for constructor signatures in interfaces
+interface Point {
+   x: number;
+   y: number;
+   new(x: number, y: number): Point; // This is a proper constructor signature
+}
+```
+- Reference example (`SuspiciousMethodNameDeclarationClass.ts`):
+```
+// BAD: Using 'new' in a class creates a method, not a constructor
+class Point {
+   x: number;
+   y: number;
+   new(x: number, y: number) {}; // This is just a method named "new"
+}
+```
+- Reference example (`SuspiciousMethodNameDeclarationClassFixed.ts`):
+```
+// GOOD: Using 'constructor' for constructors in classes
+class Point {
+   x: number;
+   y: number;
+   constructor(x: number, y: number) { // This is a proper constructor
+      this.x = x;
+      this.y = y;
+   }
+}
+```
+- Reference example (`SuspiciousMethodNameDeclarationFunction.ts`):
+```
+// BAD: Using 'function' as a method name is confusing
+interface Calculator {
+   function(a: number, b: number): number; // This is just a method named "function"
+}
+```
+- Reference example (`SuspiciousMethodNameDeclarationFunctionFixed.ts`):
+```
+// GOOD: Using descriptive method names instead of 'function'
+interface Calculator {
+   calculate(a: number, b: number): number; // Clear, descriptive method name
+}
+```

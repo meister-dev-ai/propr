@@ -1,0 +1,67 @@
+Review focus: Random used only once
+
+What to look for:
+- Creating an instance of 'Random' for each pseudo-random number required does not guarantee an evenly distributed sequence of random numbers.
+- A program that uses`System.Random`to generate a sequence of pseudo-random numbers should not create a new instance of`Random`every time a new pseudo-random number is required (for example,`new Random().Next()`). According to MSDN: The default seed value is derived from the system clock and has finite resolution. As a result, different`Random`objects that are created in close succession by a call to the default constructor will have identical default seed values and, therefore, will produce identical sets of random numbers. The sequence of pseudo-random numbers returned by these calls depends only on the value of the seed. If you construct a new`Random`object each time a pseudo-random number is needed, this does not generate a good distribution of pseudo-random numbers, even though the parameterless`Random()`constructor tries to initialize itself with a unique seed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RandomUsedOnce.cs`):
+```
+using System;
+
+class BadRandom
+{
+    public static void Main(string[] args)
+    {
+        for (int i = 0; i < 10; ++i)
+            Console.Out.WriteLine(new Random().Next());
+
+        /* Typical output:
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+                1003050238
+        */
+    }
+}
+```
+- Reference example (`RandomUsedOnceFix.cs`):
+```
+using System;
+
+class FixedRandom
+{
+    public static void Main(string[] args)
+    {
+        Random rng = new Random();
+        for (int i = 0; i < 10; ++i)
+            Console.Out.WriteLine(rng.Next());
+
+        /* Typical output:
+                1727678897
+                1302766072
+                1862602754
+                306287288
+                1158341977
+                1381161104
+                1200326172
+                1743307709
+                611422858
+                1455448871
+        */
+    }
+}
+```

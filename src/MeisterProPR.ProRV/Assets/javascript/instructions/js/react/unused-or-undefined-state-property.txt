@@ -1,0 +1,52 @@
+Review focus: Unused or undefined state property
+
+What to look for:
+- Unused or undefined component state properties may be a symptom of a bug and should be examined carefully.
+- Unused or undefined React component state properties can cause errors or make code hard to read and understand. Any computation used to initialize an unused state property is wasted, which may lead to performance problems. Any access to an undefined component state property trivially evaluates to the value`undefined`, which may come as a surprise.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedOrUndefinedStateProperty.js`):
+```
+class Clock extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { };
+    }
+
+    render() {
+         // BAD: this.state.date is undefined
+        var now = this.state.date.toLocaleTimeString();
+        return (
+                <div>
+                <h2>The time is {now}.</h2>
+                </div>
+        );
+    }
+}
+```
+- Reference example (`UnusedOrUndefinedStateProperty_fixed.js`):
+```
+class Clock extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { date: new Date() };
+    }
+
+    render() {
+         // GOOD: this.state.date is defined above
+        var now = this.state.date.toLocaleTimeString()
+        return (
+                <div>
+                <h2>The time is {now}.</h2>
+                </div>
+        );
+    }
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Direct call to a run() method
+
+What to look for:
+- Directly calling a 'Thread' object's 'run' method does not start a separate thread but executes the method within the current thread.
+- A direct call of a`Thread`object's`run`method does not start a separate thread. The method is executed within the current thread. This is an unusual use because`Thread.run()`is normally intended to be called from within a separate thread.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

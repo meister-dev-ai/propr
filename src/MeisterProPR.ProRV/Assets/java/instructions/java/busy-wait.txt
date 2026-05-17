@@ -1,0 +1,12 @@
+Review focus: Busy wait
+
+What to look for:
+- Calling 'Thread.sleep' to control thread interaction is less effective than waiting for a notification and may also result in race conditions.
+- Trying to control thread interaction by periodically calling`Thread.sleep`within a loop while waiting for a condition to be satisfied is less effective than waiting for a notification. This is because the waiting thread may either sleep for an unnecessarily long time or wake up too frequently. This approach may also result in race conditions and, therefore, incorrect code. Trying to control thread interaction by repeatedly checking a synchronized data structure without calling`Thread.sleep`or waiting for a notification may waste a lot of system resources and cause noticeable performance problems.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

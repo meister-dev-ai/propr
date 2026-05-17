@@ -1,0 +1,12 @@
+Review focus: Cast of 'this' to a type parameter
+
+What to look for:
+- Casting 'this' to a type parameter of the current type masks an implicit type constraint that should be explicitly stated.
+- Casting`this`to a type parameter usually suggests that there is an implicit type constraint - the programmer probably wanted to express the notion that`this`could be converted to the type parameter (when using the enclosing method from derived types). However, casting to the desired type, relies on derived types to ensure that the cast will succeed without the compiler forcing them to do so.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

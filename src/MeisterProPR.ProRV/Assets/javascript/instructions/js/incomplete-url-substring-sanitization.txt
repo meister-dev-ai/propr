@@ -1,0 +1,51 @@
+Review focus: Incomplete URL substring sanitization
+
+What to look for:
+- Security checks on the substrings of an unparsed URL are often vulnerable to bypassing.
+- Sanitizing untrusted URLs is an important technique for preventing attacks such as request forgeries and malicious redirections. Usually, this is done by checking that the host of a URL is in a set of allowed hosts. However, treating the URL as a string and checking if one of the allowed hosts is a substring of the URL is very prone to errors. Malicious URLs can bypass such security checks by embedding one of the allowed hosts in an unexpected location. Even if the substring check is not used in a security-critical context, the incomplete check may still cause undesirable behaviors when the check succeeds accidentally.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`IncompleteUrlSubstringSanitization_BAD1.js`):
+```
+app.get('/some/path', function(req, res) {
+    let url = req.param("url");
+    // BAD: the host of `url` may be controlled by an attacker
+    if (url.includes("example.com")) {
+        res.redirect(url);
+    }
+});
+```
+- Bad example (`IncompleteUrlSubstringSanitization_BAD2.js`):
+```
+app.get('/some/path', function(req, res) {
+    let url = req.param("url"),
+        host = urlLib.parse(url).host;
+    // BAD: the host of `url` may be controlled by an attacker
+    if (host.includes("example.com")) {
+        res.redirect(url);
+    }
+});
+```
+- Good example (`IncompleteUrlSubstringSanitization_GOOD.js`):
+```
+app.get('/some/path', function(req, res) {
+    let url = req.param('url'),
+        host = urlLib.parse(url).host;
+    // GOOD: the host of `url` can not be controlled by an attacker
+    let allowedHosts = [
+        'example.com',
+        'beta.example.com',
+        'www.example.com'
+    ];
+    if (allowedHosts.includes(host)) {
+        res.redirect(url);
+    }
+});
+```

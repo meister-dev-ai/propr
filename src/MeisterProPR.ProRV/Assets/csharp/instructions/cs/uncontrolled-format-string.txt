@@ -1,0 +1,31 @@
+Review focus: Uncontrolled format string
+
+What to look for:
+- Passing untrusted format strings from remote data sources can throw exceptions and cause a denial of service.
+- Passing untrusted format strings to`String.Format`can throw exceptions and cause a denial of service. For example, if the format string references a missing argument, or an argument of the wrong type, then`System.FormatException`is thrown.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UncontrolledFormatStringBad.cs`):
+```
+using System.Web;
+
+public class HttpHandler : IHttpHandler
+{
+    string Surname, Forenames, FormattedName;
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string format = ctx.Request.QueryString["nameformat"];
+
+        // BAD: Uncontrolled format string.
+        FormattedName = string.Format(format, Surname, Forenames);
+    }
+}
+```

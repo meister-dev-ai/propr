@@ -1,0 +1,32 @@
+Review focus: Bad dynamic call
+
+What to look for:
+- The type of the target of a dynamic invocation expression must have a method or operator with the appropriate signature, or an exception will be thrown.
+- Method calls on variables declared with type 'dynamic' are resolved at runtime rather than compile-time - the actual type of the instance is determined, and an attempt is made to call a method on that type with the appropriate signature. If such a method does not exist, a`RuntimeBinderException`is thrown. This rule identifies calls to instances with the`dynamic`type where it can be statically determined that the call will throw a`RuntimeBinderException`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadDynamicCall.cs`):
+```
+class BadDynamicCall
+{
+    class WithFoo
+    {
+        public void Foo(int i) { }
+    }
+
+    class WithoutFoo { }
+
+    public static void Main(string[] args)
+    {
+        dynamic o = new WithoutFoo();
+        o.Foo(3);
+    }
+}
+```

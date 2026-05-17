@@ -1,0 +1,23 @@
+Review focus: Empty except
+
+What to look for:
+- Except doesn't do anything and has no comment
+- Ignoring exceptions that should be dealt with in some way is almost always a bad idea. The loss of information can lead to hard to debug errors and incomplete log files. It is even possible that ignoring an exception can cause a security vulnerability. An empty`except`block may be an indication that the programmer intended to handle the exception, but never wrote the code to do so.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EmptyExcept.py`):
+```
+# ...
+try:
+    security_manager.drop_privileges()
+except SecurityError:
+    pass
+# ...
+```

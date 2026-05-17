@@ -1,0 +1,22 @@
+Review focus: Shift out of range
+
+What to look for:
+- The integer shift operators '<<', '>>' and '>>>' only take the five least significant bits of their right operand into account.
+- Shift operations in JavaScript operate on 32-bit values only, so it is not possible to shift by more than 31 positions. If the right operand of a shift operator is greater than 31, the left operand is actually only shifted by that value modulo 32.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShiftOutOfRange.js`):
+```
+var x = 1<<40;
+```
+- Reference example (`ShiftOutOfRangeGood.js`):
+```
+var x = Math.pow(2, 40);
+```

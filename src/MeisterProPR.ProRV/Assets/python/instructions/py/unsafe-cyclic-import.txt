@@ -1,0 +1,12 @@
+Review focus: Module-level cyclic import
+
+What to look for:
+- Module uses member of cyclically imported module, which can lead to failure at import time.
+- A cyclic import is an`import`which imports another module and that module imports (possibly indirectly) the module which contains the`import`statement. If all imports in a cyclic import occur at module level, then a module will be imported when it is part way through its initialization. This may rest in surprising errors, as parts of the module being imported may not yet exist. In addition to the possible errors, cyclic imports indicate that two modules are circularly dependent. This means that the modules cannot be tested independently, and it makes it harder to understand the architecture of the system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

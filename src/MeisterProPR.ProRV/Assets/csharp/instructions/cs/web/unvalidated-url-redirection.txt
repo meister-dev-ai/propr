@@ -1,0 +1,73 @@
+Review focus: URL redirection from remote source
+
+What to look for:
+- URL redirection based on unvalidated user input may cause redirection to malicious web sites.
+- Directly incorporating user input into a URL redirect request without validating the input can facilitate phishing attacks. In these attacks, unsuspecting users can be redirected to a malicious site that looks very similar to the real site they intend to visit, but which is controlled by the attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UrlRedirect.cs`):
+```
+using System;
+using System.Web;
+
+public class UnvalidatedUrlHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        // BAD: a request parameter is incorporated without validation into a URL redirect
+        ctx.Response.Redirect(ctx.Request.QueryString["page"]);
+    }
+}
+```
+- Reference example (`UrlRedirectGood.cs`):
+```
+using System;
+using System.Web;
+using System.Collections.Generic;
+
+public class UnvalidatedUrlHandler : IHttpHandler
+{
+    private List<string> VALID_REDIRECTS = new List<string>{ "http://cwe.mitre.org/data/definitions/601.html", "http://cwe.mitre.org/data/definitions/79.html" };
+
+    public void ProcessRequest(HttpContext ctx)
+    {
+        if (VALID_REDIRECTS.Contains(ctx.Request.QueryString["page"]))
+        {
+            // GOOD: the request parameter is validated against a known list of strings
+            ctx.Response.Redirect(ctx.Request.QueryString["page"]);
+        }
+    }
+}
+```
+- Reference example (`UrlRedirectGoodDomain.cs`):
+```
+using System;
+using System.Web;
+
+public class UnvalidatedUrlHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        var urlString = ctx.Request.QueryString["page"];
+        var url = new Uri(urlString, UriKind.RelativeOrAbsolute);
+
+        var url = new Uri(redirectUrl, UriKind.RelativeOrAbsolute);
+        if (!url.IsAbsoluteUri) {
+            // GOOD: The redirect is to a relative URL
+            ctx.Response.Redirect(url.ToString());
+        }
+
+        if (url.Host == "example.org") {
+            // GOOD: The redirect is to a known host
+            ctx.Response.Redirect(url.ToString());
+        }
+    }
+}
+```

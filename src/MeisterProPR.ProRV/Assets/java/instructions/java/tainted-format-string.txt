@@ -1,0 +1,12 @@
+Review focus: Use of externally-controlled format string
+
+What to look for:
+- Using external input in format strings can lead to exceptions or information leaks.
+- The`String.format`method and related methods, like`PrintStream.printf`and`Formatter.format`, all accept a format string that is used to format the trailing arguments to the format call by providing inline format specifiers. If the format string contains unsanitized input from an untrusted source, then that string may contain extra format specifiers that cause an exception to be thrown or information to be leaked. The Java standard library implementation for the format methods throws an exception if either the format specifier does not match the type of the argument, or if there are too few or too many arguments. If unsanitized input is used in the format string, it may contain invalid extra format specifiers which cause an exception to be thrown. Positional format specifiers may be used to access an argument to the format call by position. Unsanitized input in the format string may use a positional format specifier to access information that was not intended to be visible. For example, when formatting a Calendar instance we may intend to print only the year, but a user-specified format string may include a specifier to access the month and day.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

@@ -1,0 +1,39 @@
+Review focus: Creating an ASP.NET debug binary may reveal sensitive information
+
+What to look for:
+- ASP.NET projects should not produce debug binaries when deploying to production as debug builds provide additional information useful to a malicious attacker.
+- ASP.NET applications that deploy a 'debug' build to production can reveal debugging information to end users. This debugging information can aid a malicious user in attacking the system. The use of the debugging flag may also impair performance, increasing execution time and memory usage.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`Web.config.bad`):
+```
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <system.web>
+    <compilation
+      defaultLanguage="c#"
+      debug="true"
+    />
+   ...
+  </system.web>
+</configuration>
+```
+- Reference example (`Web.config.good`):
+```
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <system.web>
+    <compilation
+      defaultLanguage="c#"
+    />
+   ...
+  </system.web>
+</configuration>
+```

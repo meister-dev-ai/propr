@@ -1,0 +1,38 @@
+Review focus: Predicate built from user-controlled sources
+
+What to look for:
+- Building an NSPredicate from user-controlled sources may lead to attackers changing the predicate's intended logic.
+- Predicates represent logical conditions that can be used to check whether an object matches them. If a predicate is built from user-provided data without sufficient sanitization, an attacker may be able to change the overall meaning of the predicate.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`PredicateInjectionBad.swift`):
+```
+let remoteString = try String(contentsOf: URL(string: "https://example.com/")!)
+
+let filenames: [String] = ["img1.png", "img2.png", "img3.png", "img.txt", "img.csv"]
+
+let predicate = NSPredicate(format: "SELF LIKE \(remoteString)")
+let filtered = filenames.filter(){ filename in
+    predicate.evaluate(with: filename)
+}
+print(filtered)
+```
+- Good example (`PredicateInjectionGood.swift`):
+```
+let remoteString = try String(contentsOf: URL(string: "https://example.com/")!)
+
+let filenames: [String] = ["img1.png", "img2.png", "img3.png", "img.txt", "img.csv"]
+
+let predicate = NSPredicate(format: "SELF LIKE %@", remoteString)
+let filtered = filenames.filter(){ filename in
+    predicate.evaluate(with: filename)
+}
+print(filtered)
+```

@@ -246,6 +246,17 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
     }
 
+    public Task RecordProRvEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
+    }
+
     private Task RecordEventAsync(
         Guid protocolId,
         ProtocolEventKind kind,

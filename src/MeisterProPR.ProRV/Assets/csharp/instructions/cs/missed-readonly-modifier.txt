@@ -1,0 +1,38 @@
+Review focus: Missed 'readonly' opportunity
+
+What to look for:
+- A private field where all assignments occur as part of the declaration or in a constructor in the same class can be 'readonly'.
+- A private field where all assignments occur as part of the declaration or in a constructor in the same class can be`readonly`. Making a field`readonly`prevents unintended assignments after object initialization.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedReadonlyOpportunityBad.cs`):
+```
+class Bad
+{
+    int Field;
+
+    public Bad(int i)
+    {
+        Field = i;
+    }
+}
+```
+- Reference example (`MissedReadonlyOpportunityGood.cs`):
+```
+class Good
+{
+    readonly int Field;
+
+    public Good(int i)
+    {
+        Field = i;
+    }
+}
+```

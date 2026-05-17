@@ -1,0 +1,12 @@
+Review focus: Container size compared to zero
+
+What to look for:
+- Comparing the size of a container to zero with this operator will always return the same value.
+- A map, collection, string or array will always have size of at least zero. Checking that an object of one of these types has size greater than or equal to zero will always be true, while checking that it has size less than zero will always be false.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

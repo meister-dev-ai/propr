@@ -1,0 +1,32 @@
+Review focus: Do not expose float representation
+
+What to look for:
+- The underlying bit representation of floating point numbers should not be used in any way by the programmer.
+- This query highlights portions of code that can expose the floating point implementation of the underlying machine. Manually manipulating the bits in the float is prone to mistakes and is unportable. Floating point implementations can vary across architectures, and bit-field packing can differ across compilers, making manual bit-manipulation of floats inadvisable. The bits of a floating point could be exposed by:
+- casting a float pointer to a pointer of another type
+- casting a float array to a non-float pointer type
+- using a float in a union with another type
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 147.cpp`):
+```
+// Wrong: floating point bit implementation exposed by union with bit field.
+// Endianness and different floating-point implementations across architectures
+// as well as different packing methods across compilers could make this behave
+// incorrectly.
+typedef union {
+    float float_num;
+    struct {
+        unsigned sign : 1;
+        unsigned exp : 8;
+        unsigned fraction : 23;
+    } bits;
+} floatbits;
+```

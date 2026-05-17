@@ -1,0 +1,12 @@
+Review focus: Use of RSA algorithm without OAEP
+
+What to look for:
+- Using RSA encryption without OAEP padding can result in a padding oracle attack, leading to a weaker encryption.
+- Cryptographic algorithms often use padding schemes to make the plaintext less predictable. The OAEP (Optimal Asymmetric Encryption Padding) scheme should be used with RSA encryption. Using an outdated padding scheme such as PKCS1, or no padding at all, can weaken the encryption by making it vulnerable to a padding oracle attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

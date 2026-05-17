@@ -1,0 +1,46 @@
+Review focus: Uncontrolled allocation size
+
+What to look for:
+- Allocating memory with a size controlled by an external user can result in arbitrary amounts of memory being allocated, leading to a crash or a denial-of-service (DoS) attack.
+- Allocating memory with a size based on user input may allow arbitrary amounts of memory to be allocated, leading to a crash or a denial-of-service (DoS) attack. If the user input is multiplied by a constant, such as the size of a type, the result may overflow. In a build with the`--release`flag, Rust performs two's complement wrapping, with the result that less memory than expected may be allocated. This can lead to buffer overflow incidents.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UncontrolledAllocationSizeBad.rs`):
+```
+fn allocate_buffer(user_input: String) -> Result<*mut u8, Error> {
+    let num_bytes = user_input.parse::<usize>()? * std::mem::size_of::<u64>();
+
+    let layout = std::alloc::Layout::from_size_align(num_bytes, 1).unwrap();
+    unsafe {
+        let buffer = std::alloc::alloc(layout); // BAD: uncontrolled allocation size
+
+        Ok(buffer)
+    }
+}
+```
+- Reference example (`UncontrolledAllocationSizeGood.rs`):
+```
+const BUFFER_LIMIT: usize = 10 * 1024;
+
+fn allocate_buffer(user_input: String) -> Result<*mut u8, Error> {
+    let size = user_input.parse::<usize>()?;
+    if size > BUFFER_LIMIT {
+        return Err("Size exceeds limit".into());
+    }
+    let num_bytes = size * std::mem::size_of::<u64>();
+
+    let layout = std::alloc::Layout::from_size_align(num_bytes, 1).unwrap();
+    unsafe {
+        let buffer = std::alloc::alloc(layout); // GOOD
+
+        Ok(buffer)
+    }
+}
+```

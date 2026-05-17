@@ -1,0 +1,22 @@
+Review focus: Mismatching new/free or malloc/delete
+
+What to look for:
+- An object that was allocated with 'malloc' or 'new' is being freed using a mismatching 'free' or 'delete'.
+- This rule finds`delete`expressions whose argument is a pointer that points to memory allocated using the`malloc`function, and calls to`free`whose argument is a pointer that points to memory allocated using the`new`operator. Behavior in such cases is undefined and should be avoided.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NewFreeMismatch.cpp`):
+```
+Record *ptr = new Record(...);
+
+...
+
+free(ptr); // BAD: ptr was created using 'new', but is being freed using 'free'
+```

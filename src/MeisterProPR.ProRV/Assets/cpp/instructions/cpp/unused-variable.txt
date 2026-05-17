@@ -1,0 +1,21 @@
+Review focus: Variable is assigned a value that is never read
+
+What to look for:
+- Assigning a value to a variable that is not used may indicate an error in the code.
+- This query finds variables that are assigned a value but are never read. This is usually an indication of a variable that has been orphaned due to changes in code, or a defect in the code due to the omission of the unused variable. The unused variables should be removed to avoid misuse.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`Unused.cpp`):
+```
+{
+	int foo = 1;
+	... //foo is unused
+}
+```

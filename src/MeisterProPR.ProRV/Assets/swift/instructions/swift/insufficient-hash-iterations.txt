@@ -1,0 +1,30 @@
+Review focus: Insufficient hash iterations
+
+What to look for:
+- Using hash functions with fewer than 120,000 iterations is insufficient to protect passwords because a cracking attack will require a low level of computational effort.
+- Storing cryptographic hashes of passwords is standard security practice, but it is equally important to select the right hashing scheme. If an attacker obtains the hashed passwords of an application, the password hashing scheme should still prevent the attacker from easily obtaining the original cleartext passwords. A good password hashing scheme requires a computation that cannot be done efficiently. Hashing schemes with low number of iterations are efficiently computable, and are therefore not suitable for password hashing.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`InsufficientHashIterations.swift`):
+```
+func hash() {
+	// ...
+
+	// BAD: Using insufficient (that is, < 120,000) iterations for password hashing
+	_ = try PKCS5.PBKDF1(password: getRandomArray(), salt: getRandomArray(), iterations: 90000, keyLength: 0)
+	_ = try PKCS5.PBKDF2(password: getRandomArray(), salt: getRandomArray(), iterations: 90000, keyLength: 0)
+
+	// GOOD: Using sufficient (that is, >= 120,000) iterations for password hashing
+	_ = try PKCS5.PBKDF1(password: getRandomArray(), salt: getRandomArray(), iterations: 120120, keyLength: 0)
+	_ = try PKCS5.PBKDF2(password: getRandomArray(), salt: getRandomArray(), iterations: 310000, keyLength: 0)
+
+	// ...
+}
+```

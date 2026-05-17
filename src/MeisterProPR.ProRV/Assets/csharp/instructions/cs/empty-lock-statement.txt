@@ -1,0 +1,84 @@
+Review focus: Empty lock statement
+
+What to look for:
+- Empty lock statements are often a result of commenting-out code in a previously non-empty lock, but may sometimes be being used as a poor alternative to event wait handles or...
+- Empty lock statements suspend execution until a lock can be acquired, and then release that lock immediately. This can sometimes achieve the desired effect, but there are generally much better ways to accomplish the same thing using event wait handles. There are also other reasons why you may have an empty lock statement in your code. For example the statement may have originally contained code that has since been removed or code may have been accidentally placed outside the statement when it should be inside it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EmptyLockStatement.cs`):
+```
+class EmptyLockStatement
+{
+    private static readonly object locker = new object();
+    private static Thread threadX;
+    private static Thread threadY;
+    private static int value;
+
+    static void Main(string[] args)
+    {
+        threadX = new Thread(X);
+        threadY = new Thread(Y);
+        threadX.Start();
+
+        threadX.Join();
+        while (threadY.ThreadState == ThreadState.Unstarted) ;
+        threadY.Join();
+    }
+
+    static void X()
+    {
+        lock (locker)
+        {
+            threadY.Start();
+            value = 1;
+        }
+    }
+
+    static void Y()
+    {
+        lock (locker) { }
+        Console.WriteLine(value);
+    }
+}
+```
+- Reference example (`EmptyLockStatementFix.cs`):
+```
+class EmptyLockStatementFix
+{
+    private static Thread threadX;
+    private static Thread threadY;
+    private static int value;
+    private static EventWaitHandle waitHandle = new AutoResetEvent(false);
+
+    static void Main(string[] args)
+    {
+        threadX = new Thread(X);
+        threadY = new Thread(Y);
+        threadX.Start();
+
+        threadX.Join();
+        while (threadY.ThreadState == ThreadState.Unstarted) ;
+        threadY.Join();
+    }
+
+    static void X()
+    {
+        threadY.Start();
+        value = 1;
+        waitHandle.Set();
+    }
+
+    static void Y()
+    {
+        waitHandle.WaitOne();
+        Console.WriteLine(value);
+    }
+}
+```

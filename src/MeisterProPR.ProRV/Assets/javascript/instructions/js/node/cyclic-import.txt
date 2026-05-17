@@ -1,0 +1,51 @@
+Review focus: Cyclic module import
+
+What to look for:
+- If a module indirectly imports itself, some modules involved in the import cycle may end up with partially loaded dependencies.
+- Module imports in node.js can be cyclic, that is, a module can (directly or indirectly) import itself. In order to prevent an infinite loop, such cyclic imports return incomplete copies of the loaded module, which do not yet have all exported members available. Such incomplete modules are difficult to work with, and cyclic dependencies in general make the code hard to maintain and understand. Consequently, cyclic imports should be avoided.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CyclicImport.js`):
+```
+// a.js
+var b = require('./b');
+
+var title = "Ms";
+
+function example() {
+	return title + " " + b.fullName;
+}
+
+exports.firstName = "Ada";
+
+// b.js
+var a = require('./a');
+
+var lastName = "Lovelace";
+
+exports.fullName = a.firstName + " " + lastName;
+```
+- Reference example (`CyclicImportGood.js`):
+```
+// a.js
+var b = require('./b');
+
+var title = "Ms";
+
+function example() {
+  return title + " " + b.fullName;
+}
+
+// b.js
+var firstName = "Ada",
+    lastName = "Lovelace";
+
+exports.fullName = firstName + " " + lastName;
+```

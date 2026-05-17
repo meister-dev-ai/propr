@@ -1,0 +1,24 @@
+Review focus: Call to a function with one or more incompatible arguments
+
+What to look for:
+- When the type of a function argument is not compatible with the type of the corresponding parameter, it may lead to unpredictable behavior.
+- A function is called with at least one argument whose type is incompatible with the type of the corresponding parameter of the function being called. This may cause the called function to behave unpredictably. This may indicate that an incorrect function is being called, or that the signature (parameter list and parameter types) of the called function is not known to the author.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MistypedFunctionArguments.c`):
+```
+void three_arguments(int x, int y, int z);
+
+void calls() {
+	int three = 3;
+	three_arguments(1, 2, three); // GOOD
+	three_arguments(1, 2, &three); // BAD
+}
+```

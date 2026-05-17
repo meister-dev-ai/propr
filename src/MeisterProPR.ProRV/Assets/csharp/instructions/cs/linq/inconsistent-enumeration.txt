@@ -1,0 +1,63 @@
+Review focus: Bad multiple iteration
+
+What to look for:
+- Not every enumerable sequence is repeatable, so it is dangerous to write code that can consume elements of a sequence in more than one place.
+- A C#`IEnumerable`can be thought of as a lazily-yielded sequence of elements. Although an`IEnumerable`will often be backed by a`List`, or some other collection that can be iterated over multiple times, it is not guaranteed that the referred-to sequence will always be repeatable - if we iterate over an`IEnumerable`multiple times, it is perfectly possible that we will get different results each time.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadMultipleIteration.cs`):
+```
+class BadMultipleIteration
+{
+    private static int count = 1;
+
+    private static IEnumerable<int> NonRepeatable()
+    {
+        for (; count <= 3; count++)
+        {
+            yield return count;
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        IEnumerable<int> nr = NonRepeatable();
+        foreach (int i in nr)
+            Console.WriteLine(i);
+
+        foreach (int i in nr)
+            Console.WriteLine(i);
+    }
+}
+```
+- Reference example (`BadMultipleIterationFix.cs`):
+```
+class BadMultipleIterationFix
+{
+    private static int count = 1;
+    private static IEnumerable<int> NonRepeatable()
+    {
+        for (; count <= 3; count++)
+        {
+            yield return count;
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        IList<int> nr = NonRepeatable().ToList<int>();
+        foreach (int i in nr)
+            Console.WriteLine(i);
+
+        foreach (int i in nr)
+            Console.WriteLine(i);
+    }
+}
+```

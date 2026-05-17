@@ -1,0 +1,25 @@
+Review focus: Hard-coded data interpreted as code
+
+What to look for:
+- Transforming hard-coded data (such as hexadecimal constants) into code to be executed is a technique often associated with backdoors and should be avoided.
+- Interpreting hard-coded data, such as string literals containing hexadecimal numbers, as code or as an import path is typical of malicious backdoor code that has been implanted into an otherwise trusted code base and is trying to hide its true purpose from casual readers or automated scanning tools.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HardcodedDataInterpretedAsCode.js`):
+```
+var r = require;
+
+function e(r) {
+  return Buffer.from(r, "hex").toString()
+}
+
+// BAD: hexadecimal constant decoded and interpreted as import path
+var n = r(e("2e2f746573742f64617461"));
+```

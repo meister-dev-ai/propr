@@ -1,0 +1,38 @@
+Review focus: C-style condition
+
+What to look for:
+- Putting parentheses around a condition in an 'if' or 'while' statement is unnecessary and harder to read.
+- Python is designed to be more readable, at least for Western readers, than languages in the C family. This is achieved, in part, by using English language keywords and more familiar punctuation. Top level expressions are thus bracketed by the keyword and either a colon or new line, which can be more easily picked put by eye than parentheses. Using superfluous parentheses can impair this readability by making the code harder to scan and parse by eye. Parentheses often serve as a visual clue for more complex expressions, and adding them unnecessarily can be distracting. One notable exception to this rule is when an expression has to span multiple lines. In which case, using of parentheses is preferred to using a back slash for line continuation.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`C_StyleParentheses.py`):
+```
+#Written in Java or C style
+def gcd(a, b):
+    while(a != 0 and b != 0):
+        if(a > b):
+            a = a % b
+        else:
+            b = b % a
+    if(a == 0):
+        return (b)
+    return (a)
+
+#Written in a more Pythonic style
+def gcd(a, b):
+    while a != 0 and b != 0:
+        if a > b:
+            a = a % b
+        else:
+            b = b % a
+    if a == 0:
+        return b
+    return a
+```

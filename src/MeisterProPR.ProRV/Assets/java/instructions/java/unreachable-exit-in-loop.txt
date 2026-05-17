@@ -1,0 +1,12 @@
+Review focus: Loop with unreachable exit condition
+
+What to look for:
+- An iteration or loop with an exit condition that cannot be reached is an indication of faulty logic and can likely lead to infinite looping.
+- Loops can contain multiple exit conditions, either directly in the loop condition or as guards around`break`or`return`statements. If an exit condition cannot be satisfied, then the code is misleading at best, and the loop might not terminate.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

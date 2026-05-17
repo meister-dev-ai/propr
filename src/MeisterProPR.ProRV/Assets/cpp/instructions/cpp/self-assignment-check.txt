@@ -1,0 +1,55 @@
+Review focus: Self assignment check
+
+What to look for:
+- Copy assignment operators should guard against self assignment; otherwise, self assignment is likely to cause memory corruption.
+- This rule finds copy assignment operators that deallocate memory but do not check for self assignment. This could lead to accessing an already freed memory location. This rule is particularly important if the copy assignment operator puts the current object in an invalid state before getting a new value from the object on the right hand side.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SelfAssignmentCheck.cpp`):
+```
+class MyClass
+{
+public:
+  MyClass() : data(new Data()) {}
+  ~MyClass() {delete data;}
+
+  MyClass &operator=(const MyClass &other)
+  {
+    delete data;
+    data = other.data->clone(); // wrong: if other == *this, other.data has already been deleted!
+    return *this;
+  }
+
+private:
+  Data *data;
+};
+
+// If someone assigns a `MyClass` object to itself, the delete expression deletes both `this->data`
+// and `other.data`, since `*this` and `other` are the same object. But the call to `clone` uses
+// `*other.data`, which is no longer a valid object.  Fix this by adding a check:
+
+class MyClass
+{
+public:
+  MyClass() : data(new Data()) {}
+  ~MyClass() {delete data;}
+
+  MyClass &operator=(const MyClass &other)
+  {
+    if (this == &other) { return *this; } // correct
+    delete data;
+    data = other.data->clone();
+    return *this;
+  }
+
+private:
+  Data *data;
+};
+```

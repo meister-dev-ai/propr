@@ -1,0 +1,62 @@
+Review focus: Poor error handling: catch of NullReferenceException
+
+What to look for:
+- Finds catch clauses that catch NullReferenceException
+- Catching`NullReferenceException`should not be used as an alternative to checks and assertions for preventing dereferencing a null pointer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CatchOfNullReferenceException.cs`):
+```
+class CatchOfNullReferenceException
+{
+    public static Person findPerson(string name)
+    {
+        // ...
+    }
+
+    public static void Main(string[] args)
+    {
+        Console.WriteLine("Enter name of person:");
+        Person p = findPerson(Console.ReadLine());
+        try
+        {
+            Console.WriteLine("Person is {0:D} years old", p.getAge());
+        }
+        catch (NullReferenceException e)
+        {
+            Console.WriteLine("Person not found.");
+        }
+    }
+}
+```
+- Reference example (`CatchOfNullReferenceExceptionFix.cs`):
+```
+class CatchOfNullReferenceExceptionFix
+{
+    public static Person findPerson(string name)
+    {
+        // ...
+    }
+
+    public static void Main(string[] args)
+    {
+        Console.WriteLine("Enter name of person:");
+        Person p = findPerson(Console.ReadLine());
+        if (p != null)
+        {
+            Console.WriteLine("Person is {0:D} years old", p.getAge());
+        }
+        else
+        {
+            Console.WriteLine("Person not found.");
+        }
+    }
+}
+```

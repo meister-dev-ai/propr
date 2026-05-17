@@ -1,0 +1,34 @@
+Review focus: Capturing a foreach variable
+
+What to look for:
+- Code that captures a 'foreach' variable and uses it outside the loop behaves differently in C# version 4 and C# version 5
+- Avoid capturing the loop variable of`foreach`statements in lambda or delegate functions because the value captured varies depending on the version of C# used. In C# 5.0 and above the value captured is the original value but in earlier versions of C# the value captured is the current value. If the function is used outside of the loop, then the function will behave differently in different versions of C#.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ForeachCapture.cs`):
+```
+var actions = new List<Fn>();
+foreach (int i in Enumerable.Range(1, 10))
+{
+  // BAD: i is captured
+  actions.Add(() => Console.Out.WriteLine(i));
+}
+actions.ForEach(fn => fn());
+```
+- Reference example (`ForeachCaptureFix.cs`):
+```
+var actions = new List<Fn>();
+foreach (int i in Enumerable.Range(1, 10))
+{
+  int i2 = i; // GOOD: i is not captured
+actions.Add(() => Console.Out.WriteLine(i2));
+}
+actions.ForEach(fn => fn());
+```

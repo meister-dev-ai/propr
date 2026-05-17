@@ -1,0 +1,30 @@
+Review focus: Use of string copy function in a condition
+
+What to look for:
+- The return value for strcpy, strncpy, or related string copy functions have no reserved return value to indicate an error.
+- This query identifies calls to string copy functions used in conditions, either directly or as part of an equality operator or logical operator. The most common string copy functions always return their`destination`parameter and do not have a return value reserved to indicate an error. Therefore, such a function call always evaluates to true in a Boolean context. The string copy functions that the rule takes into consideration are:
+- -`strcpy`
+- -`wcscpy`
+- -`_mbscpy`
+- -`strncpy`
+- -`_strncpy_l`
+- -`wcsncpy`
+- -`_wcsncpy_l`
+- -`_mbsncpy`
+- -`_mbsncpy_l`NOTE: It is highly recommended to consider using a more secure version of string manipulation functions such as as`strcpy_s`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UsingStrcpyAsBoolean.cpp`):
+```
+if(strcpy(szbuf1, "Manager") == 0) // most likely strcmp was intended instead of strcpy
+{
+	// ...
+}
+```

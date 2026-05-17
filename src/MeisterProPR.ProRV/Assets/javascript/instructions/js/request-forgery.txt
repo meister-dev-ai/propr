@@ -1,0 +1,49 @@
+Review focus: Server-side request forgery
+
+What to look for:
+- Making a network request with user-controlled data in the URL allows for request forgery attacks.
+- Directly incorporating user input in the URL of an outgoing HTTP request can enable a request forgery attack, in which the request is altered to target an unintended API endpoint or resource. If the server performing the request is connected to an internal network, this can give an attacker the means to bypass the network boundary and make requests against internal services. A forged request may perform an unintended action on behalf of the attacker, or cause information leak if redirected to an external server or if the request response is fed back to the user. It may also compromise the server making the request, if the request response is handled in an unsafe way.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`RequestForgeryBad.js`):
+```
+import http from 'http';
+
+const server = http.createServer(function(req, res) {
+    const target = new URL(req.url, "http://example.com").searchParams.get("target");
+
+    // BAD: `target` is controlled by the attacker
+    http.get('https://' + target + ".example.com/data/", res => {
+        // process request response ...
+    });
+
+});
+```
+- Reference example (`RequestForgeryGood.js`):
+```
+import http from 'http';
+
+const server = http.createServer(function(req, res) {
+    const target = new URL(req.url, "http://example.com").searchParams.get("target");
+
+    let subdomain;
+    if (target === 'EU') {
+        subdomain = "europe"
+    } else {
+        subdomain = "world"
+    }
+
+    // GOOD: `subdomain` is controlled by the server
+    http.get('https://' + subdomain + ".example.com/data/", res => {
+        // process request response ...
+    });
+
+});
+```

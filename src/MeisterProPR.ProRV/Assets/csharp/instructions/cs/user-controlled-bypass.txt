@@ -1,0 +1,38 @@
+Review focus: User-controlled bypass of sensitive method
+
+What to look for:
+- User-controlled bypassing of sensitive methods may allow attackers to avoid passing through authentication systems.
+- Many C# constructs enable code statements to be executed conditionally, for example,`if`statements and`for`statements. If the statements contain important authentication or login code, and user-controlled data determines whether or not the code is executed, an attacker may be able to bypass security systems.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ConditionalBypass.cs`):
+```
+public boolean doLogin(HttpCookie adminCookie, String user, String password)
+{
+
+    // BAD: login is executed only if the value of 'adminCookie' is 'false',
+    // but 'adminCookie' is controlled by the user
+    if (adminCookie.Value == "false")
+        return login(user, password);
+
+    return true;
+}
+
+public boolean doLogin(HttpCookie adminCookie, String user, String password)
+{
+    // GOOD: use server-side information based on the credentials to decide
+    // whether user has privileges
+    bool isAdmin = queryDbForAdminStatus(user, password);
+    if (!isAdmin)
+        return login(user, password);
+
+    return true;
+}
+```

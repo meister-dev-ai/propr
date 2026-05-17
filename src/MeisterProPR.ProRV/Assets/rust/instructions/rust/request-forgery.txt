@@ -1,0 +1,56 @@
+Review focus: Server-side request forgery
+
+What to look for:
+- Making a network request with user-controlled data in the URL allows for request forgery attacks.
+- Directly incorporating user input into an HTTP request without validating the input can facilitate server-side request forgery (SSRF) attacks. In these attacks, the server may be tricked into making a request to an unintended API endpoint or resource. If the server is connected to an internal network, attackers can bypass security boundaries to target internal services. Forged requests can execute unintended actions, leak data if redirected to an external server, or compromise the server if responses are handled insecurely.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`RequestForgery.rs`):
+```
+// BAD: Endpoint handler that makes requests based on user input
+async fn vulnerable_endpoint_handler(req: Request) -> Result<Response> {
+    // This request is vulnerable to SSRF attacks as the user controls the
+    // entire URL
+    let response = reqwest::get(&req.user_url).await;
+    
+    match response {
+        Ok(resp) => {
+            let body = resp.text().await.unwrap_or_default();
+            Ok(Response {
+                message: "Success".to_string(),
+                data: body,
+            })
+        }
+        Err(_) => Err("Request failed")
+    }
+}
+
+// GOOD: Validate user input against an allowlist
+async fn secure_endpoint_handler(req: Request) -> Result<Response> {
+    // Allow list of specific, known-safe URLs
+    let allowed_hosts = ["api.example.com", "trusted-service.com"];
+    
+    if !allowed_hosts.contains(&req.user_url) {
+        return Err("Untrusted domain");
+    }
+    // This request is safe as the user input has been validated
+    let response = reqwest::get(&req.user_url).await;
+    match response {
+        Ok(resp) => {
+            let body = resp.text().await.unwrap_or_default();
+            Ok(Response {
+                message: "Success".to_string(),
+                data: body,
+            })
+        }
+        Err(_) => Err("Request failed")
+    }
+}
+```

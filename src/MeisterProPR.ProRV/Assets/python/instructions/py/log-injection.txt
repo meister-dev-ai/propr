@@ -1,0 +1,89 @@
+Review focus: Log Injection
+
+What to look for:
+- Building log entries from user-controlled data is vulnerable to insertion of forged log entries by a malicious user.
+- If unsanitized user input is written to a log entry, a malicious user may be able to forge new log entries. Forgery can occur if a user provides some input with characters that are interpreted when the log output is displayed. If the log is displayed as a plain text file, then new line characters can be used by a malicious user to create the appearance of multiple log entries. If the log is displayed as HTML, then arbitrary HTML may be included to spoof log entries.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`LogInjectionBad.py`):
+```
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+"""
+@Desc   ：Log Injection
+"""
+from flask import Flask
+from flask import request
+from django.utils.log import request_logger
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+app = Flask(__name__)
+
+@app.route('/bad1')
+def bad1():
+    name = request.args.get('name')
+    app.logger.info('User name: ' + name) # Bad
+    return 'bad1'
+
+@app.route('/bad2')
+def bad2():
+    name = request.args.get('name')
+    logging.info('User name: ' + name) # Bad
+    return 'bad2'
+
+@app.route('/bad3')
+def bad3():
+    name = request.args.get('name')
+    request_logger.warn('User name: ' + name) # Bad
+    return 'bad3'
+
+@app.route('/bad4')
+def bad4():
+    name = request.args.get('name')
+    logtest = logging.getLogger('test')
+    logtest.debug('User name: ' + name) # Bad
+    return 'bad4'
+
+if __name__ == '__main__':
+    app.debug = True
+    handler = logging.FileHandler('log')
+    app.logger.addHandler(handler)
+    app.run()
+```
+- Reference example (`LogInjectionGood.py`):
+```
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+"""
+@Desc   ：Log Injection
+"""
+from flask import Flask
+from flask import request
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+app = Flask(__name__)
+
+@app.route('/good1')
+def good1():
+    name = request.args.get('name')
+    name = name.replace('\r\n','').replace('\n','')
+    logging.info('User name: ' + name) # Good
+    return 'good1'
+
+if __name__ == '__main__':
+    app.debug = True
+    handler = logging.FileHandler('log')
+    app.logger.addHandler(handler)
+    app.run()
+```

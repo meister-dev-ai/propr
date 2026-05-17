@@ -1,0 +1,31 @@
+Review focus: Insecure temporary file
+
+What to look for:
+- Creating a temporary file that is accessible by other users can lead to information disclosure and sometimes remote code execution.
+- Temporary files created in the operating system's temporary directory are by default accessible to other users. In some cases, this can lead to information exposure, or in the worst case, to remote code execution.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`insecure-temporary-file.js`):
+```
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const file = path.join(os.tmpdir(), "test-" + (new Date()).getTime() + ".txt");
+fs.writeFileSync(file, "content");
+```
+- Reference example (`secure-temporary-file.js`):
+```
+const fs = require('fs');
+const tmp = require('tmp');
+
+const file = tmp.fileSync().name;
+fs.writeFileSync(file, "content");
+```

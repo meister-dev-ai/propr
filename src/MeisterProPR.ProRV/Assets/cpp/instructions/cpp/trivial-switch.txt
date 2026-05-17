@@ -1,0 +1,39 @@
+Review focus: No trivial switch statements
+
+What to look for:
+- Using a switch statement when there are fewer than two non-default cases leads to unclear code.
+- The following forms of`switch`statement are considered trivial:
+- No cases at all.
+- Just a default case.
+- Just one non-default case.
+- A default case and one non-default case.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 196.cpp`):
+```
+int f() {
+	int val = 0;
+	switch(val) { //wrong, use an if instead
+	case 0:
+		//...
+	default:
+		//...
+	}
+
+	switch(val) { //correct, has 2 cases and a default
+	case 0:
+		//...
+	case 1:
+		//...
+	default:
+		//...
+	}
+}
+```

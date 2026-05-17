@@ -1,0 +1,40 @@
+Review focus: Irregular enum initialization
+
+What to look for:
+- In an enumerator list, the = construct should not be used to explicitly initialize members other than the first, unless all items are explicitly initialized.
+- This rule finds enumerations that initialize their members inconsistently. Only the first enumeration member should be initialized using '=', or all of them should be initialized. Inconsistent initialization of members in enumerations can easily cause defects, especially when adding or removing members, or if the code relies on the actual integer values of the enumeration members.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 145.cpp`):
+```
+//wrong: inconsistent initialization, only the first should be initialized, 
+//or all should be initialized
+enum {
+	VALUE_SHOULD_BE_10 = 10,
+	VALUE_SHOULD_BE_11,
+	VALUE_SHOULD_BE_12,
+	VALUE_SHOULD_BE_20, //newly added member, but initialization was forgotten 
+	                    //(would have a value of 13 instead of 20).
+	VALUE_SHOULD_BE_30 = 30,
+	VALUE_SHOULD_BE_40 = 40
+} bad_values;
+
+//correct: all enum values initialized
+enum {
+	VALUE_SHOULD_BE_10 = 10,
+	VALUE_SHOULD_BE_11 = 11,
+	VALUE_SHOULD_BE_12 = 12,
+	VALUE_SHOULD_BE_20 = 20, //newly added member, it is less likely to forget
+	                         //putting in initialization since everything else 
+	                         //is initialized
+	VALUE_SHOULD_BE_30 = 30,
+	VALUE_SHOULD_BE_40 = 40
+} good_values;
+```

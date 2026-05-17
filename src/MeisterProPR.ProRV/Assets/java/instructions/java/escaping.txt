@@ -1,0 +1,12 @@
+Review focus: Escaping
+
+What to look for:
+- In a thread-safe class, care should be taken to avoid exposing mutable state.
+- In a thread-safe class, non-final fields should generally be private (or possibly volatile) to ensure that they cannot be accessed by other threads in an unsafe manner.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

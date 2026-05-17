@@ -1,0 +1,60 @@
+Review focus: Iteration using non-local variable
+
+What to look for:
+- For-in/for-of loops whose iteration variable is not a purely local variable may prevent optimization of the surrounding function.
+- A for-in loop whose iteration variable is a property, a global variable, a local variable from a surrounding scope, or a local variable that is captured in a closure may prevent optimization of the function it appears in, which could make the program run slower. The same applies to for-of loops. In particular, the V8 engine (which is used by the Google Chrome browser and the Node.js platform) does not currently optimize functions containing such loops.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonLocalForIn.js`):
+```
+function extend(dest, src) {
+    for (p in src)
+        dest[p] = src[p];
+    return dest;
+}
+```
+- Reference example (`NonLocalForInGood.js`):
+```
+function extend(dest, src) {
+    for (var p in src)
+        dest[p] = src[p];
+    return dest;
+}
+```
+- Reference example (`NonLocalForIn2.js`):
+```
+function combine(dest) {
+    var p;
+
+    function extend(src) {
+        for (p in src)
+            dest[p] = src[p];
+    }
+
+    for (var i=1; i<arguments.length; ++i)
+        extend(arguments[i]);
+
+    return dest;
+}
+```
+- Reference example (`NonLocalForIn2Good.js`):
+```
+function combine(dest) {
+    function extend(src) {
+        for (var p in src)
+            dest[p] = src[p];
+    }
+
+    for (var i=1; i<arguments.length; ++i)
+        extend(arguments[i]);
+
+    return dest;
+}
+```

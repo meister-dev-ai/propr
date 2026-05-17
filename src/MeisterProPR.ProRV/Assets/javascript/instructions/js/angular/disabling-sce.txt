@@ -1,0 +1,33 @@
+Review focus: Disabling SCE
+
+What to look for:
+- Disabling strict contextual escaping (SCE) can cause security vulnerabilities.
+- AngularJS is secure by default through automated sanitization and filtering of untrusted values that could cause vulnerabilities such as XSS. Strict Contextual Escaping (SCE) is an execution mode in AngularJS that provides this security mechanism. Disabling SCE in an AngularJS application is strongly discouraged. It is even more discouraged to disable SCE in a library, since it is an application-wide setting.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DisablingSce.js`):
+```
+angular.module('app', [])
+    .config(function($sceProvider) {
+        $sceProvider.enabled(false); // BAD
+    }).controller('controller', function($scope) {
+        // ...
+        $scope.html = '<ul><li>' + item.toString() + '</li></ul>';
+    });
+```
+- Reference example (`DisablingSce_better.js`):
+```
+angular.module('app', [])
+    .controller('controller', function($scope, $sce) {
+        // ...
+        // GOOD (but should use the templating system instead)
+        $scope.html = $sce.trustAsHtml('<ul><li>' + item.toString() + '</li></ul>'); 
+    });
+```

@@ -1,0 +1,22 @@
+Review focus: Unused static variable
+
+What to look for:
+- A static variable that is never accessed may be an indication that the code is incomplete or has a typo.
+- This rule finds static variables that are never accessed. These static variables should be removed, to increase code comprehensibility, reduce memory usage and avoid misuse. Unused static`const`variables could also be an indication of a defect caused by an unhandled case.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedStaticVariables.cpp`):
+```
+void f() {
+	static int i = 0; //i is unused
+	...
+	return;
+}
+```

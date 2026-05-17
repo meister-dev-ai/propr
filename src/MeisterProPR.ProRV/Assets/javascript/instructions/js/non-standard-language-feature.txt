@@ -1,0 +1,59 @@
+Review focus: Use of platform-specific language features
+
+What to look for:
+- Non-standard language features such as expression closures or let expressions make it harder to reuse code.
+- Non-standard language extensions such as expression closures or`let`expressions should be avoided, since they make code harder to read or reuse.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ExpressionClosures.js`):
+```
+[1, 2, 3].map(function(x) x * x);
+```
+- Reference example (`ExpressionClosuresGood.js`):
+```
+[1, 2, 3].map((x) => x * x);
+```
+- Reference example (`ExpressionClosuresGood2.js`):
+```
+[1, 2, 3].map(function (x) { return x * x; });
+```
+- Reference example (`LetStatement.js`):
+```
+function sumOfSquares(a) {
+	var sum = 0;
+	for (var i=0; i<a.length; ++i) {
+		let (square = a[i]*a[i]) {
+			sum += square;
+		}
+	}
+	return sum;
+}
+```
+- Reference example (`LetStatementGood.js`):
+```
+function sumOfSquares(a) {
+	var sum = 0;
+	for (var i=0; i<a.length; ++i) {
+		let square = a[i]*a[i];
+		sum += square;
+	}
+	return sum;
+}
+```
+- Reference example (`PostfixComprehension.js`):
+```
+var numbers = [1, 2, 3, 4, 5];
+var squares = [i*i for (i of numbers)];
+```
+- Reference example (`PostfixComprehensionGood.js`):
+```
+var numbers = [1, 2, 3, 4, 5];
+var squares = [for (i of numbers) i*i];
+```

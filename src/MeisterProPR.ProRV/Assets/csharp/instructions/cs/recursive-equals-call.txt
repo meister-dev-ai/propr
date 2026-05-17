@@ -1,0 +1,54 @@
+Review focus: Recursive call to Equals(object)
+
+What to look for:
+- A call to 'Equals(object)' is recursive: often this is due to a mistake in invoking a definition of 'Equals(...)' with a different signature.
+- Recursive calls to`Equals(object)`are often made by accident whilst trying to forward to another`Equals`method with a more specific parameter type. This tends to result in a stack overflow exception.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RecursiveEquals.cs`):
+```
+class RecursiveEquals
+{
+    class C
+    {
+        private int i = 0;
+        public override bool Equals(object rhs)
+        {
+            if (rhs.GetType() != this.GetType()) return false;
+            return Equals(rhs);
+        }
+
+        public bool Equals(C rhs)
+        {
+            return (rhs != null && this.i == rhs.i);
+        }
+    }
+}
+```
+- Reference example (`RecursiveEqualsFix.cs`):
+```
+class RecursiveEqualsFix
+{
+    class C
+    {
+        private int i = 0;
+        public override bool Equals(object rhs)
+        {
+            if (rhs.GetType() != this.GetType()) return false;
+            return Equals((C)rhs);
+        }
+
+        public bool Equals(C rhs)
+        {
+            return (rhs != null && this.i == rhs.i);
+        }
+    }
+}
+```

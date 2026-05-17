@@ -1,0 +1,12 @@
+Review focus: Android WebSettings file access
+
+What to look for:
+- Enabling access to the file system in a WebView allows attackers to view sensitive information.
+- Allowing file access in an Android WebView can expose a device's file system to the JavaScript running in that WebView. If the JavaScript contains vulnerabilities or the WebView loads untrusted content, file access allows an attacker to steal the user's data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

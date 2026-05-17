@@ -1,0 +1,36 @@
+Review focus: Split control structure
+
+What to look for:
+- Splitting control structures across multiple code blocks makes .aspx pages more difficult to maintain.
+- ASP.NET is very flexible about the code that can be embedded into a page. It is not necessary that the individual code render blocks are valid syntax on their own. Rather, it is only necessary that all the code render blocks can compile as a group, once they are all emitted into a class that the ASP.NET infrastructure generates to implement the page. This flexibility is sometimes used to implement conditional portions of an HTML page. One code render block will have the beginning of an`If...Then`statement, and another will have the`End If`, with arbitrary ASP content in between. This conditional code can make the source code of the page hard to read and maintain, especially if the embedded ASP content has further conditional code within it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SplitControlStructureBad.aspx`):
+```
+<%@ Page Language="VB" %>
+
+<html>
+<body>
+<% If ShouldWarn() Then %>
+<p>WARNING: <%=warning()%></p>
+<% End If %>
+</body>
+</html>
+```
+- Reference example (`SplitControlStructureGood.aspx`):
+```
+<%@ Page Language="VB" %>
+
+<html>
+<body>
+<%=maybeEmitWarning()%>
+</body>
+</html>
+```

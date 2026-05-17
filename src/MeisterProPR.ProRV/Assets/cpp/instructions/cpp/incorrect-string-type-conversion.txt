@@ -1,0 +1,20 @@
+Review focus: Cast from char* to wchar_t*
+
+What to look for:
+- Casting a byte string to a wide-character string is likely to yield a string that is incorrectly terminated or aligned.
+- This rule indicates a potentially incorrect cast from an byte string (`char *`) to a wide-character string (`wchar_t *`). This cast might yield strings that are not correctly terminated; including potential buffer overruns when using such strings with some dangerous APIs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WcharCharConversion.cpp`):
+```
+wchar_t* pSrc;
+
+pSrc = (wchar_t*)"a"; // casting a byte-string literal "a" to a wide-character string
+```

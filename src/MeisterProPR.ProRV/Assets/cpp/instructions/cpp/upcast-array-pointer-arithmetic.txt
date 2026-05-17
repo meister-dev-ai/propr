@@ -1,0 +1,41 @@
+Review focus: Upcast array used in pointer arithmetic
+
+What to look for:
+- An array with elements of a derived struct type is cast to a pointer to the base type of the struct.
+- A pointer to a derived class may be implicitly converted to a pointer to its base type when passed as an argument to a function expecting a pointer to the base type. If pointer arithmetic or an array dereference is then used, it will be performed using the size of the base type. This can lead to reading data from unexpected fields in the derived type.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CastArrayPointerArithmetic.cpp`):
+```
+class Base {
+public:
+	int x;
+}
+
+class Derived: public Base {
+public:
+	int y;
+};
+
+void dereference_base(Base *b) {
+	b[2].x;
+}
+
+void dereference_derived(Derived *d) {
+	d[2].x;
+}
+
+void test () {
+	Derived[4] d;
+	dereference_base(d); // BAD: implicit conversion to Base*
+
+	dereference_derived(d); // GOOD: implicit conversion to Derived*, which will be the right size
+}
+```

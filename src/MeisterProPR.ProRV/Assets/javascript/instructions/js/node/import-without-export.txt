@@ -1,0 +1,54 @@
+Review focus: Dubious import
+
+What to look for:
+- Importing a symbol from a module that does not export it most likely indicates a bug.
+- Since JavaScript is a dynamically typed language, module imports in node.js are not statically checked for correctness: calls to`require`simply return an object containing all the exports of the imported module, and accessing a member that was not, in fact, exported, yields`undefined`. This is most likely unintentional and usually indicates a bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DubiousImport.js`):
+```
+// point.js
+function Point(x, y) {
+	this.x = x;
+	this.y = y;
+}
+
+Point.prototype.distance = function() {
+	return Math.sqrt(this.x*this.x+this.y*this.y);
+};
+
+module.exports = Point;
+
+// client.js
+var Point = require('./point').Point;
+
+var pyth = new Point(3, 4);
+console.log(pyth.distance());
+```
+- Reference example (`DubiousImportGood.js`):
+```
+// point.js
+function Point(x, y) {
+	this.x = x;
+	this.y = y;
+}
+
+Point.prototype.distance = function() {
+	return Math.sqrt(this.x*this.x+this.y*this.y);
+};
+
+module.exports = Point;
+
+// client.js
+var Point = require('./point');
+
+var pyth = new Point(3, 4);
+console.log(pyth.distance());
+```

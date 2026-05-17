@@ -1,0 +1,37 @@
+Review focus: Call to alloca in a loop
+
+What to look for:
+- Using alloca in a loop can lead to a stack overflow
+- The`alloca`macro allocates memory by expanding the current stack frame. Invoking`alloca`within a loop may lead to a stack overflow because the memory is not released until the function returns.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AllocaInLoopBad.cpp`):
+```
+char *dir_path;
+char **dir_entries;
+int count;
+
+for (int i = 0; i < count; i++) {
+  char *path = (char*)alloca(strlen(dir_path) + strlen(dir_entry[i]) + 2);
+  // use path
+}
+```
+- Reference example (`AllocaInLoopGood.cpp`):
+```
+char *dir_path;
+char **dir_entries;
+int count;
+
+for (int i = 0; i < count; i++) {
+  char *path = (char*)malloc(strlen(dir_path) + strlen(dir_entry[i]) + 2);
+  // use path
+  free(path);
+}
+```

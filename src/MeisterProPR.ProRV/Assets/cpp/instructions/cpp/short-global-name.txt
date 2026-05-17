@@ -1,0 +1,12 @@
+Review focus: Short global name
+
+What to look for:
+- Global variables should have descriptive names, to help document their use, avoid namespace pollution and reduce the risk of shadowing with local variables.
+- This rule finds global variables which have a name of length three characters or less. It is particularly important to use descriptive names for global variables. Use of a clear naming convention for global variables helps document their use, avoids pollution of the namespace and reduces the risk of shadowing with local variables.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

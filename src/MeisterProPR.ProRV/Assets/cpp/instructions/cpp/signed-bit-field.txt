@@ -1,0 +1,21 @@
+Review focus: Possible signed bit-field member
+
+What to look for:
+- Failing to explicitly assign bit fields to unsigned integer or enumeration types may result in unexpected sign extension or overflow.
+- This query finds bit fields with members that are not explicitly declared to be unsigned. The sign of plain char, short, int, or long bit field is implementation-specific, and declaring them all to be unsigned removes the ambiguity and ensures portability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 154.cpp`):
+```
+struct {
+	short s : 4; //wrong: behavior of signed bit-field members varies across compilers
+	unsigned int : 24; //correct: unsigned
+} bits;
+```

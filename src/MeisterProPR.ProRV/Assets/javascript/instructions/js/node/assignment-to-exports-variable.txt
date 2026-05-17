@@ -1,0 +1,54 @@
+Review focus: Assignment to exports variable
+
+What to look for:
+- Assigning to the special 'exports' variable only overwrites its value and does not export anything.
+- Node.js modules that only export a single value commonly do so by assigning it directly to the`module.exports`property. A common mistake is to assign it to the`exports`variable instead, but this simply overwrites the value of`exports`without affecting the value of`module.exports`, and does not lead to anything being exported.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InvalidExport.js`):
+```
+// point.js
+function Point(x, y) {
+	this.x = x;
+	this.y = y;
+}
+
+Point.prototype.distance = function() {
+	return Math.sqrt(this.x*this.x+this.y*this.y);
+};
+
+exports = Point;
+
+// client.js
+var Point = require('./point');
+
+var pyth = new Point(3, 4);
+console.log(pyth.distance());
+```
+- Reference example (`InvalidExportGood.js`):
+```
+// point.js
+function Point(x, y) {
+	this.x = x;
+	this.y = y;
+}
+
+Point.prototype.distance = function() {
+	return Math.sqrt(this.x*this.x+this.y*this.y);
+};
+
+module.exports = Point;
+
+// client.js
+var Point = require('./point');
+
+var pyth = new Point(3, 4);
+console.log(pyth.distance());
+```

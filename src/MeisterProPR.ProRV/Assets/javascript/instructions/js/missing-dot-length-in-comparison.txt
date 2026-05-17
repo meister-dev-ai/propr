@@ -1,0 +1,26 @@
+Review focus: Missing '.length' in comparison
+
+What to look for:
+- Two variables are being compared using a relational operator, but one is also used to index into the other, suggesting a ".length" is missing from the comparison.
+- It is very common to check whether a number is within the bounds of an array or string using a comparison of form i < array.length, and later perform an indexing access array[i]. If this comparison is mistyped as i < array, a type coercion will be performed, which almost never has the intended effect.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingDotLengthInComparison.js`):
+```
+for (var i = 0; i < array; ++i) {
+    count += array[i]
+}
+```
+- Reference example (`MissingDotLengthInComparisonGood.js`):
+```
+for (var i = 0; i < array.length; ++i) {
+    count += array[i]
+}
+```

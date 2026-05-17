@@ -1,0 +1,12 @@
+Review focus: Failure to use HTTPS or SFTP URL in Maven artifact upload/download
+
+What to look for:
+- Non-HTTPS connections can be intercepted by third parties.
+- Using an insecure protocol like HTTP or FTP to download your dependencies leaves your Maven build vulnerable to a Man in the Middle (MITM). This can allow attackers to inject malicious code into the artifacts that you are resolving and infect build artifacts that are being produced. This can be used by attackers to perform a Supply chain attack against your project's users. This vulnerability has a CVSS v3.1 base score of 8.1/10 .
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

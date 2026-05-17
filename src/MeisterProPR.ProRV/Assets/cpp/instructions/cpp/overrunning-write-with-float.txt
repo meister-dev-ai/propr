@@ -1,0 +1,26 @@
+Review focus: Potentially overrunning write with float to string conversion
+
+What to look for:
+- Buffer write operations that do not control the length of data written may overflow when floating point inputs take extreme values.
+- The program performs a buffer copy or write operation that includes one or more float to string conversions (i.e. the %f format specifier), which may overflow the destination buffer if extreme inputs are given. In addition to causing program instability, techniques exist which may allow an attacker to use this vulnerability to execute arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OverrunWriteFloat.c`):
+```
+void displayValue(double value)
+{
+	char buffer[256];
+
+	// BAD: extreme values may overflow the buffer
+	sprintf(buffer, "%f", value);
+
+	MessageBox(hWnd, buffer, "A Number", MB_OK);
+}
+```

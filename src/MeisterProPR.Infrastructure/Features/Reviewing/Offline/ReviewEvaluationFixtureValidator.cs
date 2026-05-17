@@ -29,6 +29,9 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
         var snapshotPaths = fixture.RepositorySnapshot.Files
             .Select(file => file.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var changedFilePaths = fixture.PullRequestSnapshot.ChangedFiles
+            .Select(file => file.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var changedFile in fixture.PullRequestSnapshot.ChangedFiles)
         {
@@ -40,6 +43,41 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
             if (!snapshotPaths.Contains(changedFile.Path))
             {
                 throw new InvalidOperationException($"Fixture changed file '{changedFile.Path}' was not found in the repository snapshot.");
+            }
+        }
+
+        var proRvExpectations = fixture.ProRVPrefilterExpectationsOrNull;
+        if (proRvExpectations is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        foreach (var example in proRvExpectations.PositiveExamplesOrEmpty)
+        {
+            if (string.IsNullOrWhiteSpace(example.Key))
+            {
+                throw new InvalidOperationException("Fixture ProRV prefilter expectations must define a non-empty key.");
+            }
+
+            if (string.IsNullOrWhiteSpace(example.FilePath))
+            {
+                throw new InvalidOperationException($"Fixture ProRV prefilter expectation '{example.Key}' must define a filePath.");
+            }
+
+            if (!changedFilePaths.Contains(example.FilePath))
+            {
+                throw new InvalidOperationException(
+                    $"Fixture ProRV prefilter expectation '{example.Key}' references changed file '{example.FilePath}' that does not exist in pullRequestSnapshot.changedFiles.");
+            }
+
+            if (string.IsNullOrWhiteSpace(example.Description))
+            {
+                throw new InvalidOperationException($"Fixture ProRV prefilter expectation '{example.Key}' must define a description.");
+            }
+
+            if (example.ExpectedItemIdsOrEmpty.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new InvalidOperationException($"Fixture ProRV prefilter expectation '{example.Key}' must not contain empty expectedItemIds values.");
             }
         }
 

@@ -1,0 +1,52 @@
+Review focus: Parameter reassigned in function that uses arguments
+
+What to look for:
+- A function that reassigns one of its parameters and also uses the arguments object may not be optimized properly.
+- A function that reassigns one of its parameters and also uses the special arguments object may not be optimized properly, which could make the program run slower. In particular, the V8 engine (which is used by the Google Chrome browser and the Node.js platform) does not currently perform any advanced optimizations on such functions.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReassignParameterAndUseArguments.js`):
+```
+function sum(xs, start) {
+    if (arguments.length < 2)
+        start = 0;
+
+    var sum = start;
+    for (var i=0; i<xs.length; ++i)
+        sum += xs[i];
+
+    return sum;
+}
+```
+- Reference example (`ReassignParameterAndUseArgumentsGood1.js`):
+```
+function sum(xs, start) {
+    if (typeof start === 'undefined')
+        start = 0;
+
+    var sum = start;
+    for (var i=0; i<xs.length; ++i)
+        sum += xs[i];
+
+    return sum;
+}
+```
+- Reference example (`ReassignParameterAndUseArgumentsGood2.js`):
+```
+function sum(xs, _start) {
+    var start = arguments.length < 2 ? 0 : _start;
+
+    var sum = start;
+    for (var i=0; i<xs.length; ++i)
+        sum += xs[i];
+
+    return sum;
+}
+```

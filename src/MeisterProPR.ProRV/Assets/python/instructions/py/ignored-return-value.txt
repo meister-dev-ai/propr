@@ -1,0 +1,37 @@
+Review focus: Ignored return value
+
+What to look for:
+- Ignoring return values may result in discarding errors or loss of information.
+- When a function returns a non-trivial value, that value should not be ignored. Doing so may result in errors being ignored or information being thrown away. A return value is considered to be trivial if it is`None`or it is a parameter (parameters, usually`self`are often returned to assist with method chaining, but can be ignored). A return value is also assumed to be trivial if it is ignored for more than 25% of calls.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnValueIgnored.py`):
+```
+from third_party import get_resource
+
+def ignore_error(name):
+    rsc = get_resource(name)
+    rsc.initialize()
+    try:
+        use_resource(rsc)
+    finally:
+        rsc.close()
+
+#Fixed
+def do_not_ignore_error(name):
+    rsc = get_resource(name)
+    success = rsc.initialize()
+    if not success:
+        raise Error("Could not initialize resource")
+    try:
+        use_resource(rsc)
+    finally:
+        rsc.close()
+```

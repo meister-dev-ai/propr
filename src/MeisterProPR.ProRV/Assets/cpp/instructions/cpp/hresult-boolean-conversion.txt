@@ -1,0 +1,24 @@
+Review focus: Cast between HRESULT and a Boolean type
+
+What to look for:
+- Casting an HRESULT to/from a Boolean type and then using it in a test expression will yield an incorrect result because success (S_OK) in HRESULT is indicated by a value of 0.
+- This query indicates that an`HRESULT`is being cast to a Boolean type or vice versa. The typical success value (`S_OK`) of an`HRESULT`equals 0. However, 0 indicates failure for a Boolean type. Casting an`HRESULT`to a Boolean type and then using it in a test expression will yield an incorrect result.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`HResultBooleanConversion.cpp`):
+```
+LPMALLOC pMalloc;
+HRESULT hr = CoGetMalloc(1, &pMalloc);
+
+if (!hr)
+{
+    // code ...
+}
+```

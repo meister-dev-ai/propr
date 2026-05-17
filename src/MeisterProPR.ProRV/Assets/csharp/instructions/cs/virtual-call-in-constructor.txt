@@ -1,0 +1,51 @@
+Review focus: Virtual call in constructor or destructor
+
+What to look for:
+- Finds virtual calls or accesses in a constructor or destructor
+- Virtual calls or accesses in a constructor or destructor might not behave as expected. The constructor for the base class is always executed first, but in the context of the runtime type of the object. If a method is overridden in a sub type then that overridden method can be called from the constructor of the base type. This can lead to the methods of a class being called before the constructor of the class, which can have unexpected consequences.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`VirtualCallInConstructorOrDestructor.cs`):
+```
+class VirtualCallInConstructorOrDestructor
+{
+    class BaseClass
+    {
+        protected String classReady = "No";
+        public BaseClass()
+        {
+            Console.WriteLine("Base constructor called.");
+            Method();
+        }
+
+        public virtual void Method()
+        {
+            Console.WriteLine("Base method called.");
+        }
+    }
+    class DClass : BaseClass
+    {
+        public DClass()
+        {
+            Console.WriteLine("D constructor called.");
+            classReady = "Yes";
+        }
+
+        public override void Method()
+        {
+            Console.WriteLine("D method called. Ready for method to be called? " + classReady);
+        }
+    }
+    public static void Main(string[] args)
+    {
+        BaseClass x = new DClass();
+    }
+}
+```

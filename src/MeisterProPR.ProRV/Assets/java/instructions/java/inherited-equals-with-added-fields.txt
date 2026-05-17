@@ -1,0 +1,12 @@
+Review focus: Inherited equals() in subclass with added fields
+
+What to look for:
+- If a class overrides 'Object.equals', and a subclass defines additional fields to those it inherits but does not re-define 'equals', the results of 'equals' may be wrong.
+- If a class overrides the default implementation of equality defined by the`Object.equals`method, and a subclass of that class declares additional fields to the ones that it inherits, the results of`equals`may be wrong, unless that subclass also redefines`equals`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

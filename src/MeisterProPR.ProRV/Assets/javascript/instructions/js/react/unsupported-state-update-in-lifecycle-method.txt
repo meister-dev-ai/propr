@@ -1,0 +1,47 @@
+Review focus: Unsupported state update in lifecycle method
+
+What to look for:
+- Attempting to update the state of a React component at the wrong time can cause undesired behavior.
+- The three builtin React component methods`setState`,`replaceState`, and`forceUpdate`can update the state of a component asynchronously. It is, however, not recommended to invoke these methods at certain points in the lifecycle of the component. For instance, invoking one of the state update methods during a call to`render`will cause React to throw an exception because the`render`method must be pure. Invoking one of the state update methods from the constructor of a component is also forbidden because the component is not mounted at that point in time. The three component methods`componentDidUpdate`,`componentWillUpdate`, and`shouldComponentUpdate`do allow calls to the state update methods, but only if the calls are conditional.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`unsupported-state-update-in-lifecycle-method.js`):
+```
+class MyComponent extends React.Component {
+
+    constructor(props) {
+        super(props)
+        this.setState({
+            counter: 0
+        })
+
+    }
+
+    render() {
+        return <div>{this.state.counter}</div>
+    }
+
+}
+```
+- Reference example (`unsupported-state-update-in-lifecycle-method_fixed.js`):
+```
+class MyComponent extends React.Component {
+
+    constructor(props) {
+        super(props)
+        this.state.counter = 0;
+    }
+
+    render() {
+        return <div>{this.state.counter}</div>
+    }
+
+}
+```

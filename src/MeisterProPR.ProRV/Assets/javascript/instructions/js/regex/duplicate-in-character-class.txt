@@ -1,0 +1,22 @@
+Review focus: Duplicate character in character class
+
+What to look for:
+- If a character class in a regular expression contains the same character twice, this may indicate a bug.
+- Character classes in regular expressions (denoted by square brackets`[]`) represent sets of characters where the pattern matches any single character from that set. Since character classes are sets, specifying the same character multiple times is redundant and often indicates a programming error. Common mistakes include:
+- Using square brackets`[]`instead of parentheses`()`for grouping alternatives
+- Misunderstanding that special regex characters like`|`,`*`,`+`,`()`, and`-`work differently when appearing inside a character class
+- Accidentally duplicating characters or escape sequences that represent the same character
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateCharacterInCharacterClass.js`):
+```
+if (/[password|pwd] =/.test(input))
+	console.log("Found password!");
+```

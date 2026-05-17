@@ -1,0 +1,122 @@
+Review focus: Command built from user-controlled sources
+
+What to look for:
+- Building a system command from user-controlled sources is vulnerable to insertion of malicious code by the user.
+- If a system command invocation is built from user-provided data without sufficient sanitization, a malicious user may be able to run commands to exfiltrate data or compromise the system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CommandInjection.go`):
+```
+package main
+
+import (
+	"net/http"
+	"os/exec"
+)
+
+func handler(req *http.Request) {
+	imageName := req.URL.Query()["imageName"][0]
+	outputPath := "/tmp/output.svg"
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("imagetool %s > %s", imageName, outputPath))
+	cmd.Run()
+	// ...
+}
+```
+- Reference example (`CommandInjectionGood.go`):
+```
+package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+)
+
+func handler(req *http.Request) {
+	imageName := req.URL.Query()["imageName"][0]
+	outputPath := "/tmp/output.svg"
+
+	// Create the output file
+	outfile, err := os.Create(outputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outfile.Close()
+
+	// Prepare the command
+	cmd := exec.Command("imagetool", imageName)
+
+	// Set the output to our file
+	cmd.Stdout = outfile
+
+	cmd.Run()
+}
+```
+- Reference example (`CommandInjectionGood2.go`):
+```
+package main
+
+import (
+	"log"
+	"net/http"
+	"os/exec"
+	"regexp"
+)
+
+func handler(req *http.Request) {
+	imageName := req.URL.Query()["imageName"][0]
+	outputPath := "/tmp/output.svg"
+
+	// Validate the imageName with a regular expression
+	validImageName := regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
+	if !validImageName.MatchString(imageName) {
+		log.Fatal("Invalid image name")
+		return
+	}
+
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("imagetool %s > %s", imageName, outputPath))
+	cmd.Run()
+}
+```
+- Reference example (`CommandInjectionGood3.go`):
+```
+package main
+
+import (
+	"log"
+	"net/http"
+	"os/exec"
+	"strings"
+)
+
+func handler(req *http.Request) {
+	repoURL := req.URL.Query()["repoURL"][0]
+	outputPath := "/tmp/repo"
+
+	// Sanitize the repoURL to ensure it does not start with "--"
+	if strings.HasPrefix(repoURL, "--") {
+		log.Fatal("Invalid repository URL")
+	} else {
+		cmd := exec.Command("git", "clone", repoURL, outputPath)
+		err := cmd.Run()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Or: add "--" to ensure that the repoURL is not interpreted as a flag
+	cmd := exec.Command("git", "clone", "--", repoURL, outputPath)
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+```

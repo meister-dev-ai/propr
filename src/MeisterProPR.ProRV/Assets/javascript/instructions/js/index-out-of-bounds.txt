@@ -1,0 +1,32 @@
+Review focus: Off-by-one comparison against length
+
+What to look for:
+- An array index is compared to be less than or equal to the 'length' property, and then used in an indexing operation that could be out of bounds.
+- Reading an array element from an index that is greater than the array length always returns`undefined`. If the index is compared to the array length using the less-than-or-equal operator`<=`instead of the less-than operator`<`, the index could be out of bounds, which may not be intentional and may adversely affect performance.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LengthComparisonOffByOne.js`):
+```
+function contains(a, elt) {
+  for (let i = 0; i <= a.length; ++i)
+    if (a[i] === elt)
+      return true;
+  return false;
+}
+```
+- Reference example (`LengthComparisonOffByOneGood.js`):
+```
+function contains(a, elt) {
+  for (let i = 0; i < a.length; ++i)
+    if (a[i] === elt)
+      return true;
+  return false;
+}
+```

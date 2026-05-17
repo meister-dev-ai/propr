@@ -1,0 +1,21 @@
+Review focus: Assignment where comparison was intended
+
+What to look for:
+- The '=' operator may have been used accidentally, where '==' was intended.
+- This rule finds uses of the assignment operator`=`in places where the equality operator`==`would make more sense. This is a very common mistake in C and C++, because of the similarity of the`=`and the`==`operator, and the fact that the`if`statement accepts a condition with an integral type, instead of limiting it to just the`bool`type. The rule flags every occurrence of an assignment in a position where its result is interpreted as a truth value. An assignment is only flagged if its right hand side is a compile-time constant.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AssignWhereCompareMeant.cpp`):
+```
+if(p = NULL) { //most likely == was intended. Otherwise it evaluates to the value
+               //of the rhs of the assignment (which is NULL)
+ ...
+}
+```

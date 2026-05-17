@@ -1,0 +1,46 @@
+Review focus: Email content injection
+
+What to look for:
+- Incorporating untrusted input directly into an email message can enable content spoofing, which in turn may lead to information leaks and other security issues.
+- Using untrusted input to construct an email can cause multiple security vulnerabilities. For instance, inclusion of an untrusted input in an email body may allow an attacker to conduct cross-site scripting (XSS) attacks, while inclusion of an HTTP header may allow a full account compromise as shown in the example below.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`EmailBad.go`):
+```
+package main
+
+import (
+	"net/http"
+	"net/smtp"
+)
+
+func mail(w http.ResponseWriter, r *http.Request) {
+	host := r.Header.Get("Host")
+	token := backend.getUserSecretResetToken(email)
+	body := "Click to reset password: " + host + "/" + token
+	smtp.SendMail("test.test", nil, "from@from.com", nil, []byte(body))
+}
+```
+- Reference example (`EmailGood.go`):
+```
+package main
+
+import (
+	"net/http"
+	"net/smtp"
+)
+
+func mailGood(w http.ResponseWriter, r *http.Request) {
+	host := config.Get("Host")
+	token := backend.getUserSecretResetToken(email)
+	body := "Click to reset password: " + host + "/" + token
+	smtp.SendMail("test.test", nil, "from@from.com", nil, []byte(body))
+}
+```

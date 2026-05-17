@@ -1,0 +1,25 @@
+Review focus: Implicit function declaration
+
+What to look for:
+- An implicitly declared function is assumed to take no arguments and return an integer.
+- A function is called without a prior function declaration or definition. When this happens, the compiler generates an implicit declaration of the function, specifying an integer return type and no parameters. If the implicit declaration does not match the true signature of the function, the function may behave unpredictably. This may indicate a misspelled function name, or that the required header containing the function declaration has not been included. Note: This query is not compatible with`build-mode: none`databases, and produces no results on those databases.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImplicitFunctionDeclaration.c`):
+```
+/* '#include <stdlib.h>' was forgotten */
+
+int main(void) {
+	/* 'int malloc()' assumed */
+	unsigned char *p = malloc(100);
+	*p = 'a';
+	return 0;
+}
+```

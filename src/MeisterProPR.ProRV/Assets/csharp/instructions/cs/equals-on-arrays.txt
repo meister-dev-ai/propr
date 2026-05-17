@@ -1,0 +1,63 @@
+Review focus: Equals on collections
+
+What to look for:
+- Comparing collections using the Equals method only checks reference equality.
+- There are some circumstances where you want to compare two arrays or collections using reference equality, but often you will want a deep comparison instead (that is, one that compares two collections on an element-by-element basis).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`EqualsArray.cs`):
+```
+class EqualsArray
+{
+    public static void Main(string[] args)
+    {
+        string[] strings = { "hello", "world" };
+        string[] moreStrings = { "hello", "world" };
+        Console.WriteLine(strings.Equals(moreStrings));
+    }
+}
+```
+- Reference example (`EqualsArrayFix.cs`):
+```
+class EqualsArrayFix
+{
+    static bool DeepEquals<T>(T[] arr1, T[] arr2)
+    {
+        // If arr1 and arr2 refer to the same array, they are trivially equal.
+        if (ReferenceEquals(arr1, arr2)) return true;
+
+        // If either arr1 or arr2 is null and they are not both null (see the previous
+        // check), they are not equal.
+        if (arr1 == null || arr2 == null) return false;
+
+        // If both arrays are non-null but have different lengths, they are not equal.
+        if (arr1.Length != arr2.Length) return false;
+
+        // Failing which, do an element-by-element compare.
+        for (int i = 0; i < arr1.Length; ++i)
+        {
+            // Early out if we find corresponding array elements that are not equal.
+            if (!arr1[i].Equals(arr2[i])) return false;
+        }
+
+        // If we get here, all of the corresponding array elements were equal, so the
+        // arrays are equal.
+        return true;
+    }
+
+    public static void Main(string[] args)
+    {
+        string[] strings = { "hello", "world" };
+        string[] moreStrings = { "hello", "world" };
+        Console.WriteLine(strings.SequenceEqual(moreStrings));
+        Console.WriteLine(DeepEquals(strings, moreStrings));
+    }
+}
+```

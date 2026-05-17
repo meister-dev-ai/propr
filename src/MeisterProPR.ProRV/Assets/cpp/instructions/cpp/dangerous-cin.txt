@@ -1,0 +1,35 @@
+Review focus: Dangerous use of 'cin'
+
+What to look for:
+- Using `cin` without specifying the length of the input may be dangerous.
+- This rule finds calls to`std::istream::operator>>`on`std::cin`without a preceding call to`cin.width`. Consuming input from`cin`without specifying the length of the input is dangerous due to the possibility of buffer overflows.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DangerousUseOfCin.cpp`):
+```
+#define BUFFER_SIZE 20
+
+void bad()
+{
+	char buffer[BUFFER_SIZE];
+	// BAD: Use of 'cin' without specifying the length of the input.
+	cin >> buffer;
+	buffer[BUFFER_SIZE-1] = '\0';
+}
+
+void good()
+{
+	char buffer[BUFFER_SIZE];
+	// GOOD: Specifying the length of the input before using 'cin'.
+	cin.width(BUFFER_SIZE);
+	cin >> buffer;
+	buffer[BUFFER_SIZE-1] = '\0';
+}
+```

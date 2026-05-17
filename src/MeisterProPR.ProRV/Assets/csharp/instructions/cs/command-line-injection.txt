@@ -1,0 +1,29 @@
+Review focus: Uncontrolled command line
+
+What to look for:
+- Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.
+- Code that passes user input directly to`System.Diagnostic.Process.Start`, or some other library routine that executes a command, allows the user to execute malicious code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CommandInjection.cs`):
+```
+using System;
+using System.Web;
+using System.Diagnostics;
+
+public class CommandInjectionHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string param = ctx.Request.QueryString["param"];
+        Process.Start("process.exe", "/c " + param);
+    }
+}
+```

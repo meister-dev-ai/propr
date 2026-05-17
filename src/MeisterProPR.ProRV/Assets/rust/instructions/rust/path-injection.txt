@@ -1,0 +1,58 @@
+Review focus: Uncontrolled data used in path expression
+
+What to look for:
+- Accessing paths influenced by users can allow an attacker to access unexpected resources.
+- Accessing paths controlled by users can allow an attacker to access unexpected resources. This can result in sensitive information being revealed or deleted, or an attacker being able to influence behavior by modifying unexpected files. Paths that are naively constructed from data controlled by a user may be absolute paths, or may contain unexpected special characters such as "..". Such a path could point anywhere on the file system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedPath.rs`):
+```
+use poem::{error::InternalServerError, handler, web::Query, Result};
+use std::{fs, path::PathBuf};
+
+#[handler]
+fn tainted_path_handler(Query(file_name): Query<String>) -> Result<String> {
+    let file_path = PathBuf::from(file_name);
+    // BAD: This could read any file on the filesystem.
+    fs::read_to_string(file_path).map_err(InternalServerError)
+}
+```
+- Reference example (`TaintedPathGoodNormalize.rs`):
+```
+use poem::{error::InternalServerError, handler, http::StatusCode, web::Query, Error, Result};
+use std::{fs, path::PathBuf};
+
+#[handler]
+fn tainted_path_handler(Query(file_name): Query<String>) -> Result<String> {
+    // GOOD: ensure that the filename has no path separators or parent directory references
+    if file_name.contains("..") || file_name.contains("/") || file_name.contains("\\") {
+        return Err(Error::from_status(StatusCode::BAD_REQUEST));
+    }
+    let file_path = PathBuf::from(file_name);
+    fs::read_to_string(file_path).map_err(InternalServerError)
+}
+```
+- Reference example (`TaintedPathGoodFolder.rs`):
+```
+use poem::{error::InternalServerError, handler, http::StatusCode, web::Query, Error, Result};
+use std::{env::home_dir, fs, path::PathBuf};
+
+#[handler]
+fn tainted_path_handler(Query(file_path): Query<String>) -> Result<String, Error> {
+    let public_path = home_dir().unwrap().join("public");
+    let file_path = public_path.join(PathBuf::from(file_path));
+    let file_path = file_path.canonicalize().unwrap();
+    // GOOD: ensure that the path stays within the public folder
+    if !file_path.starts_with(public_path) {
+        return Err(Error::from_status(StatusCode::BAD_REQUEST));
+    }
+    fs::read_to_string(file_path).map_err(InternalServerError)
+}
+```

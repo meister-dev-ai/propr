@@ -1,0 +1,12 @@
+Review focus: Confusing non-overriding of package-private method
+
+What to look for:
+- A method that appears to override another method but does not, because the declaring classes are in different packages, is potentially confusing.
+- If a method is declared with default access (that is, not private, protected, nor public), it can only be overridden by methods in the same package. If a method of the same signature is defined in a subclass in a different package, it is a completely separate method and no overriding occurs. Code like this can be confusing for other programmers, who have to understand that there is no overriding relation, check that the original programmer did not intend one method to override the other, and avoid mixing up the two methods by accident.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

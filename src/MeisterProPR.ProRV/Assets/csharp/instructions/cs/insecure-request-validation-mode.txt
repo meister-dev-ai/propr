@@ -1,0 +1,30 @@
+Review focus: Insecure configuration for ASP.NET requestValidationMode
+
+What to look for:
+- Setting 'requestValidationMode' to less than 4.5 disables built-in validations included by default in ASP.NET.
+- The`requestValidationMode`attribute in ASP.NET is used to configure built-in validation to protect applications against code injections. Downgrading or disabling this configuration is not recommended. The default value of 4.5 is the only recommended value, as previous versions only test a subset of requests.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ASPNetRequestValidationModeBad.config`):
+```
+<configuration>
+  <system.web>
+    <httpRuntime requestValidationMode="4.0"/>
+  </system.web>
+</configuration>
+```
+- Reference example (`ASPNetRequestValidationModeGood.config`):
+```
+<configuration>
+  <system.web>
+    <httpRuntime requestValidationMode="4.5"/>
+  </system.web>
+</configuration>
+```

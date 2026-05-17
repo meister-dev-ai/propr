@@ -1,0 +1,12 @@
+Review focus: Suspicious date format
+
+What to look for:
+- Using a data format that includes both 'M' and 'Y' is likely to give unexpected results.
+- The Java`SimpleDateFormat` class provides many placeholders so that you can define precisely the date format required. However, this also makes it easy to define a pattern that doesn't behave exactly as you intended. The most common mistake is to use the`Y`placeholder (which represents the ISO 8601 week year), rather than`y`(which represents the actual year). In this case, the date reported will appear correct until the end of the year, when the "week year" may differ from the actual year.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

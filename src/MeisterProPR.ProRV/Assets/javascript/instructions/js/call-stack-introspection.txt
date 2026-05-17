@@ -1,0 +1,30 @@
+Review focus: Use of arguments.caller or arguments.callee
+
+What to look for:
+- The properties 'arguments.caller' and 'argument.callee' have subtle semantics and make code non-modular and hard to maintain.
+- The`arguments.callee`property can be used to access the currently executing function, while the non-standard`arguments.caller`property provides access to its caller. Using these properties makes code hard to read, however, so they should be avoided.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ArgumentsCallerCallee.js`):
+```
+(function (i) {
+	if (i <= 1)
+		return 1;
+	return i*arguments.callee(i-1);
+}(3));
+```
+- Reference example (`ArgumentsCallerCalleeGood.js`):
+```
+(function factorial(i) {
+	if (i <= 1)
+		return 1;
+	return i*factorial(i-1);
+}(3));
+```

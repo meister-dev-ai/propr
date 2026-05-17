@@ -1,0 +1,58 @@
+Review focus: Time-of-check time-of-use filesystem race condition
+
+What to look for:
+- Separately checking the state of a file before operating on it may allow an attacker to modify the file between the two operations.
+- Often it is necessary to check the state of a file before using it. These checks usually take a file name to be checked, and if the check returns positively, then the file is opened or otherwise operated upon. However, in the time between the check and the operation, the underlying file referenced by the file name could be changed by an attacker, causing unexpected behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TOCTOUFilesystemRaceBad.c`):
+```
+char *file_name;
+FILE *f_ptr;
+
+/* Initialize file_name */
+
+f_ptr = fopen(file_name, "w");
+if (f_ptr == NULL)  {
+  /* Handle error */
+}
+
+/* ... */
+
+if (chmod(file_name, S_IRUSR) == -1) {
+  /* Handle error */
+}
+
+fclose(f_ptr);
+```
+- Reference example (`TOCTOUFilesystemRaceGood.c`):
+```
+char *file_name;
+int fd;
+
+/* Initialize file_name */
+
+fd = open(
+  file_name,
+  O_WRONLY | O_CREAT | O_EXCL,
+  S_IRWXU
+);
+if (fd == -1) {
+  /* Handle error */
+}
+
+/* ... */
+
+if (fchmod(fd, S_IRUSR) == -1) {
+  /* Handle error */
+}
+
+close(fd);
+```

@@ -1,0 +1,31 @@
+Review focus: 'import *' may pollute namespace
+
+What to look for:
+- Importing a module using 'import *' may unintentionally pollute the global namespace if the module does not define `__all__`
+- When you import a module using`from xxx import *`all public names defined in the module are imported and bound in the local namespace of the`import`statement. The public names are determined by checking the`__all__`variable for the module. If`__all__`is not defined then all names within the module that do not start with an underscore character are imported. This pollutes the current namespace with names that are not part of the public API for the module.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnintentionalImport.py`):
+```
+# Example module - finance.py
+
+__all__ = ['tax1', 'tax2']  #defines the names to import when '*' is used
+
+tax1 = 5
+tax2 = 10
+def cost(): return 'cost'
+
+# Imported into code using
+
+from finance import *
+
+print tax1
+print tax2
+```

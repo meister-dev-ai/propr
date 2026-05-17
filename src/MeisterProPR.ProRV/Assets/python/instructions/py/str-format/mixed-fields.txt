@@ -1,0 +1,19 @@
+Review focus: Formatting string mixes implicitly and explicitly numbered fields
+
+What to look for:
+- Using implicit and explicit numbering in string formatting operations, such as '"{}: {1}".format(a,b)', will raise a ValueError.
+- A formatting expression, that is an expression of the form`the_format.format(args)`or`format(the_format, args)`, can use explicitly numbered fields, like`{1}`, or implicitly numbered fields, such as`{}`, but it cannot use both. Doing so will raise a`ValueError`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MixedExplicitImplicitIn3101Format.py`):
+```
+def illegal_format():
+    "{} {1}".format("spam", "eggs")
+```

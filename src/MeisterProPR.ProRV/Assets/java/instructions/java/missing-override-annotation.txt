@@ -1,0 +1,12 @@
+Review focus: Missing Override annotation
+
+What to look for:
+- A method that overrides a method in a superclass but does not have an 'Override' annotation cannot take advantage of compiler checks, and makes code less readable.
+- Java enables you to annotate methods that are intended to override a method in a superclass. Compilers are required to generate an error if such an annotated method does not override a method in a superclass, which provides increased protection from potential defects. An annotated method also improves code readability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

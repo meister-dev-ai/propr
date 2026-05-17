@@ -1,0 +1,12 @@
+Review focus: Insertion of sensitive information into log files
+
+What to look for:
+- Writing sensitive information to log files can allow that information to be leaked to an attacker more easily.
+- Information written to log files can be of a sensitive nature and give valuable guidance to an attacker or expose sensitive user information. Third-party logging utilities like Log4J and SLF4J are widely used in Java projects. When sensitive information is written to logs without properly set logging levels, it is accessible to potential attackers who can use it to gain access to file storage.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

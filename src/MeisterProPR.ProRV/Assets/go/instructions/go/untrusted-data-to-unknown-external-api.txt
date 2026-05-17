@@ -1,0 +1,53 @@
+Review focus: Untrusted data passed to unknown external API
+
+What to look for:
+- Data provided remotely is used in this unknown external API without sanitization, which could be a security risk.
+- Using unsanitized untrusted data in an external API can cause a variety of security issues. This query reports external APIs that use untrusted data. The results have been filtered to only report unknown external APIs. The query provides data for security reviews of the application. It can also be used to identify external APIs that should be modeled as either taint steps, or sinks for specific problems. An external API is defined as a call to a function that is not defined in the source code and is not modeled as a taint step in the default taint library. Calls made in test files are excluded. External APIs may be from the Go standard library, third-party dependencies, or from internal dependencies. The query reports uses of untrusted data in either the receiver or as one of the arguments of external APIs. An external API is considered unknown if it is not in a package which has already been modeled, it is not a sink for an existing query, and it is not in a list of external APIs which have been examined and determined to not be a possible source of security vulnerabilities.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExternalAPISinkExample.go`):
+```
+package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func serve() {
+	http.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		username := r.Form.Get("username")
+		if !isValidUsername(username) {
+			// BAD: a request parameter is incorporated without validation into the response
+			fmt.Fprintf(w, "%q is an unknown user", username)
+		} else {
+			// TODO: Handle successful login
+		}
+	})
+	http.ListenAndServe(":80", nil)
+}
+```
+- Reference example (`ExternalAPITaintStepExample.go`):
+```
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http"
+)
+
+func handler(db *sql.DB, req *http.Request) {
+	q := fmt.Sprintf("SELECT ITEM,PRICE FROM PRODUCT WHERE ITEM_CATEGORY='%s' ORDER BY PRICE",
+		req.URL.Query()["category"])
+	db.Query(q)
+}
+```

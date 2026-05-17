@@ -1,0 +1,12 @@
+Review focus: Use of HTMLInputHidden
+
+What to look for:
+- Finds uses of hidden fields on forms
+- Data entered in hidden fields is cached in the same way as the rest of the page, and can be accessed or replaced by attackers that have access to the browser's cache. You should not trust the contents of hidden fields more than the contents of normal input fields.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

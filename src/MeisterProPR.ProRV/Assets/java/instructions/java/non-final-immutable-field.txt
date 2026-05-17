@@ -1,0 +1,12 @@
+Review focus: Non-final immutable field
+
+What to look for:
+- A field of immutable type that is assigned to only in a constructor or static initializer of its declaring type, but is not declared 'final', may lead to defects and makes code...
+- A field of immutable type that is not declared`final`, but is assigned to only in a constructor or static initializer of its declaring type, may lead to defects and makes code less readable. This is because other parts of the code may be based on the assumption that the field has a constant value, and a later modification, which includes an assignment to the field, may invalidate this assumption.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

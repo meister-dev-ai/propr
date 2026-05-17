@@ -1,0 +1,43 @@
+Review focus: Dubious type test of 'this'
+
+What to look for:
+- Testing whether 'this' is an instance of a derived type introduces a dependency cycle between the type of 'this' and the target type.
+- If a type`Derived`inherits (either directly or indirectly) from a type`Base`, then it has a dependency on`Base`by virtue of this inheritance relationship - that is, it cannot be used without`Base`also being present. If, in addition to making`Derived`inherit from`Base`, you also write code that depends on`Derived`within`Base`, you cause`Base`to depend on`Derived`as well, resulting in a dependency cycle between the two types. Dependency cycles are a well-known design smell, in that they make code both difficult to read and difficult to test. In the situation just described, the dependency cycle has been introduced by writing code that checks whether or not`this`is an instance of a derived type. This is a very unwise thing to do - a type should never know about its specific descendants, even though it may of course choose to impose some constraints on them as a group (such as the need for every derived type to implement a method with a specific signature).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DubiousTypeTestOfThis.cs`):
+```
+class DubiousTypeTestOfThis
+{
+    class BaseClass
+    {
+        public int add(int x)
+        {
+            if (this is FiveAdder)
+                return x + 5;
+
+            if (this is TenAdder)
+                return x + 10;
+
+            return 0;
+        }
+    }
+
+    class FiveAdder : BaseClass
+    {
+        // ...
+    }
+
+    class TenAdder : BaseClass
+    {
+        // ...
+    }
+}
+```

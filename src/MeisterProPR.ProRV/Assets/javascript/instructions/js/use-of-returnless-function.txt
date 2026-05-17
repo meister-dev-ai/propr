@@ -1,0 +1,26 @@
+Review focus: Use of returnless function
+
+What to look for:
+- Using the return value of a function that does not return an expression is indicative of a mistake.
+- JavaScript functions that do not return an expression will implicitly return`undefined`. Using the implicit return value from such a function is not an error in itself, but it is a pattern indicating that some misunderstanding has occurred.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseOfReturnlessFunction.js`):
+```
+var stage = require("./stage")
+
+function renderText(text, id) {
+    document.getElementById(id).innerText = text;
+}
+
+var text = renderText("Two households, both alike in dignity", "scene");
+
+stage.show(text);
+```

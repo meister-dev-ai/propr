@@ -1,0 +1,36 @@
+Review focus: Redundant check for negative value
+
+What to look for:
+- Checking whether the result of 'len' or 'cap' is negative is pointless, since these functions always returns a non-negative number.
+- The built-in`len`function returns the length of an array, slice or similar, which is never less than zero. Hence, checking whether the result of a call to`len`is negative is either redundant or indicates a logic mistake. The same applies to the built-in function`cap`, and to unsigned integer values.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NegativeLengthCheck.go`):
+```
+package main
+
+func getFirst(xs []int) int {
+	if len(xs) < 0 {
+		panic("No elements provided")
+	}
+	return xs[0]
+}
+```
+- Reference example (`NegativeLengthCheckGood.go`):
+```
+package main
+
+func getFirstGood(xs []int) int {
+	if len(xs) == 0 {
+		panic("No elements provided")
+	}
+	return xs[0]
+}
+```

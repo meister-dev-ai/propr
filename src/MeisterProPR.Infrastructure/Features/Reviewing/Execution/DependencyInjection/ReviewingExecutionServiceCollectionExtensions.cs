@@ -12,6 +12,7 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
+using MeisterProPR.ProRV.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
@@ -32,7 +33,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
             new ReviewJobExecutionStoreAdapter(sp.GetRequiredService<IJobRepository>()));
         services.AddScoped<IReviewStrategyDispatcher, ReviewStrategyDispatcher>();
         services.AddSingleton<IReviewPipelineProfileProvider, ReviewPipelineProfileProvider>();
-        services.AddSingleton<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
+        services.AddScoped<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
+        services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileProRvPrefilterStage>();
+        services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, AgenticProRvPrefilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileConfidenceFloorStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSpeculativeCommentFilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();
@@ -48,6 +51,7 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();
         services.AddSingleton<IReviewClaimExtractor, DeterministicReviewClaimExtractor>();
         services.AddSingleton<IReviewFindingVerifier, DeterministicLocalReviewVerifier>();
+        services.AddProRV();
         services.AddSingleton<LocalReviewVerificationExecutor>();
         services.AddSingleton<IReviewEvidenceCollector, ReviewContextEvidenceCollector>();
         services.AddSingleton<PrLevelReviewVerificationExecutor>();

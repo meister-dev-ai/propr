@@ -1,0 +1,38 @@
+Review focus: Sensitive cookie missing `HttpOnly` attribute
+
+What to look for:
+- Cookies without the `HttpOnly` attribute set can be accessed by JS scripts, making them more vulnerable to XSS attacks.
+- Cookies without the`HttpOnly`flag set are accessible to JavaScript running in the same origin. In case of a Cross-Site Scripting (XSS) vulnerability, the cookie can be stolen by a malicious script. If a sensitive cookie does not need to be accessed directly by client-side JS, the`HttpOnly`flag should be set.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InsecureCookie.py`):
+```
+from flask import Flask, request, make_response, Response
+
+
+@app.route("/good1")
+def good1():
+    resp = make_response()
+    resp.set_cookie("sessionid", value="value", secure=True, httponly=True, samesite='Strict') # GOOD: Attributes are securely set
+    return resp
+
+
+@app.route("/good2")
+def good2():
+    resp = make_response()
+    resp.headers['Set-Cookie'] = "sessionid=value; Secure; HttpOnly; SameSite=Strict" # GOOD: Attributes are securely set 
+    return resp
+
+@app.route("/bad1")
+def bad1():
+    resp = make_response()
+    resp.set_cookie("sessionid", value="value", samesite='None') # BAD: the SameSite attribute is set to 'None' and the 'Secure' and 'HttpOnly' attributes are set to False by default.
+    return resp
+```

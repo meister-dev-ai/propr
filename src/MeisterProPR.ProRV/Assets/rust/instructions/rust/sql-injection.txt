@@ -1,0 +1,32 @@
+Review focus: Database query built from user-controlled sources
+
+What to look for:
+- Building a database query from user-controlled sources is vulnerable to insertion of malicious code by attackers.
+- If a database query (such as an SQL query) is built from user-provided data without sufficient sanitization, a user may be able to run malicious database queries. An attacker can craft the part of the query they control to change the overall meaning of the query.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`SqlInjectionBad.rs`):
+```
+// with SQLx
+
+let unsafe_query = format!("SELECT * FROM people WHERE firstname='{remote_controlled_string}'");
+
+let _ = conn.execute(unsafe_query.as_str()).await?; // BAD (arbitrary SQL injection is possible)
+
+let _ = sqlx::query(unsafe_query.as_str()).fetch_all(&mut conn).await?; // BAD (arbitrary SQL injection is possible)
+```
+- Reference example (`SqlInjectionGood.rs`):
+```
+// with SQLx
+
+let prepared_query = "SELECT * FROM people WHERE firstname=?";
+
+let _ = sqlx::query(prepared_query_1).bind(&remote_controlled_string).fetch_all(&mut conn).await?; // GOOD (prepared statement with bound parameter)
+```

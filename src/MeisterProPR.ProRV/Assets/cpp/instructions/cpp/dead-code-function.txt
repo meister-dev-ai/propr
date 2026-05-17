@@ -1,0 +1,29 @@
+Review focus: Function is never called
+
+What to look for:
+- Unused functions may increase object size, decrease readability, and create the possibility of misuse.
+- This query highlights functions that are non-public, non-virtual, and are never called. Dead functions are often deprecated pieces of code, and should be removed. If left in the code base they increase object code size, decrease code comprehensibility, and create the possibility of misuse.`public`and`protected`functions are ignored by this query. This type of function may be part of the program's API and could be used by external programs.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadCodeFunction.cpp`):
+```
+class C {
+public:
+	void g() {
+		...
+		//f() was previously used but is now commented-out, orphaning f()
+		//f();
+		...
+	}
+private:
+	void f() { //is now unused, and can be removed
+	}
+};
+```

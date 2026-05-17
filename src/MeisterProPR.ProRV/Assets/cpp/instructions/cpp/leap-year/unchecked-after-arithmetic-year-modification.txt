@@ -1,0 +1,44 @@
+Review focus: Year field changed using an arithmetic operation without checking for leap year
+
+What to look for:
+- A field that represents a year is being modified by an arithmetic operation, but no proper check for leap years can be detected afterwards.
+- When performing arithmetic operations on a variable that represents a year, it is important to consider that the resulting value may not be a valid date. The typical example is doing simple year arithmetic (i.e.`date.year++`) without considering if the resulting value will be a valid date or not.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UncheckedLeapYearAfterYearModificationBad.c`):
+```
+SYSTEMTIME st;
+FILETIME ft;
+GetSystemTime(&st);
+
+// Flawed logic may result in invalid date
+st.wYear++;
+
+// The following code may fail
+SystemTimeToFileTime(&st, &ft);
+```
+- Reference example (`UncheckedLeapYearAfterYearModificationGood.c`):
+```
+SYSTEMTIME st;
+FILETIME ft;
+GetSystemTime(&st);
+
+// Flawed logic may result in invalid date
+st.wYear++;
+
+// Check for leap year, and adjust the date accordingly
+bool isLeapYear = st.wYear % 4 == 0 && (st.wYear % 100 != 0 || st.wYear % 400 == 0);
+st.wDay = st.wMonth == 2 && st.wDay == 29 && !isLeapYear ? 28 : st.wDay;
+
+if (!SystemTimeToFileTime(&st, &ft))
+{
+	// handle error
+}
+```

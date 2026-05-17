@@ -1,0 +1,12 @@
+Review focus: Insecure JavaMail SSL Configuration
+
+What to look for:
+- Configuring a Java application to use authenticated mail session over SSL without certificate validation makes the session susceptible to a man-in-the-middle attack.
+- JavaMail is commonly used in Java applications to send emails. There are popular third-party libraries like Apache Commons Email which are built on JavaMail and facilitate integration. Authenticated mail sessions require user credentials and mail sessions can require SSL/TLS authentication. It is a common security vulnerability that host-specific certificate data is not validated or is incorrectly validated. Failing to validate the certificate makes the SSL session susceptible to a man-in-the-middle attack. This query checks whether the SSL certificate is validated when credentials are used and SSL is enabled in email communications. The query has code for both plain JavaMail invocation and mailing through Apache SimpleMail to make it more comprehensive.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

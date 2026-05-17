@@ -1,0 +1,82 @@
+Review focus: Non-constant format string
+
+What to look for:
+- Passing a value that is not a string literal 'format' string to a printf-like function can lead to a mismatch between the number of arguments defined by the 'format' and the...
+- The`printf`function, related functions like`sprintf`and`fprintf`, and other functions built atop`vprintf`all accept a format string as one of their arguments. When such format strings are literal constants, it is easy for the programmer (and static analysis tools) to verify that the format specifiers (such as`%s`and`%02x`) in the format string are compatible with the trailing arguments of the function call. When such format strings are not literal constants, it is more difficult to maintain the program: programmers (and static analysis tools) must perform non-local data-flow analysis to deduce what values the format string argument might take.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`NonConstantFormat-1-bad.c`):
+```
+#include <stdio.h>
+int main(int argc, char** argv) {
+  for(int i = 1; i < argc; ++i) {
+    printf(argv[i]);
+  }
+}
+```
+- Good example (`NonConstantFormat-1-good.c`):
+```
+#include <stdio.h>
+int main(int argc, char** argv) {
+  for(int i = 1; i < argc; ++i) {
+    printf("%s", argv[i]);
+  }
+}
+```
+- Bad example (`NonConstantFormat-2-bad.c`):
+```
+void log_with_timestamp(const char* message) {
+  struct tm now;
+  time(&now);
+  printf("[%s] ", asctime(now));
+  printf(message);
+}
+
+int main(int argc, char** argv) {
+  log_with_timestamp("Application is starting...\n");
+  /* ... */
+  log_with_timestamp("Application is closing...\n");
+  return 0;
+}
+```
+- Reference example (`NonConstantFormat-2-ok.c`):
+```
+void log_with_timestamp(const char* message) {
+  struct tm now;
+  time(&now);
+  printf("[%s] %s", asctime(now), message);
+}
+
+int main(int argc, char** argv) {
+  log_with_timestamp("Application is starting...\n");
+  /* ... */
+  log_with_timestamp("Application is closing...\n");
+  return 0;
+}
+```
+- Good example (`NonConstantFormat-2-good.c`):
+```
+void log_with_timestamp(const char* message, ...) {
+  va_list args;
+  va_start(args, message);
+  struct tm now;
+  time(&now);
+  printf("[%s] ", asctime(now));
+  vprintf(message, args);
+  va_end(args);
+}
+
+int main(int argc, char** argv) {
+  log_with_timestamp("%s is starting...\n", argv[0]);
+  /* ... */
+  log_with_timestamp("%s is closing...\n", argv[0]);
+  return 0;
+}
+```

@@ -1,0 +1,12 @@
+Review focus: Full server-side request forgery
+
+What to look for:
+- Making a network request to a URL that is fully user-controlled allows for request forgery attacks.
+- This query covers full SSRF, to find partial SSRF use the`py/partial-ssrf`query.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

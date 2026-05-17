@@ -1,0 +1,12 @@
+Review focus: Uncontrolled data used in content resolution
+
+What to look for:
+- Resolving externally-provided content URIs without validation can allow an attacker to access unexpected resources.
+- When an Android application wants to access data in a content provider, it uses the`ContentResolver`object.`ContentResolver`s communicate with an instance of a class that implements the`ContentProvider`interface via URIs with the`content://`scheme. The authority part (the first path segment) of the URI, passed as parameter to the`ContentResolver`, determines which content provider is contacted for the operation. Specific operations that act on files also support the`file://`scheme, in which case the local filesystem is queried instead. If an external component, like a malicious or compromised application, controls the URI for a`ContentResolver`operation, it can trick the vulnerable application into accessing its own private files or non-exported content providers. The attacking application might be able to get access to the file by forcing it to be copied to a public directory, like external storage, or tamper with the contents by making the application overwrite the file with unexpected data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

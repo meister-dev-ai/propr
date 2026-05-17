@@ -1,0 +1,37 @@
+Review focus: CGI script vulnerable to cross-site scripting
+
+What to look for:
+- Writing user input directly to a web page allows for a cross-site scripting vulnerability.
+- Directly writing an HTTP request parameter back to a web page allows for a cross-site scripting vulnerability. The data is displayed in a user's web browser as belonging to one site, but it is provided by some other site that the user browses to. In effect, such an attack allows one web site to insert content in the other one. For web servers implemented with the Common Gateway Interface (CGI), HTTP parameters are supplied via the`QUERY_STRING`environment variable.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CgiXss.c`):
+```
+void bad_server() {
+  char* query = getenv("QUERY_STRING");
+  puts("<p>Query results for ");
+  // BAD: Printing out an HTTP parameter with no escaping
+  puts(query);
+  puts("\n<p>\n");
+  puts(do_search(query));
+}
+
+void good_server() {
+  char* query = getenv("QUERY_STRING");
+  puts("<p>Query results for ");
+  // GOOD: Escape HTML characters before adding to a page
+  char* query_escaped = escape_html(query);
+  puts(query_escaped);
+  free(query_escaped);
+
+  puts("\n<p>\n");
+  puts(do_search(query));
+}
+```

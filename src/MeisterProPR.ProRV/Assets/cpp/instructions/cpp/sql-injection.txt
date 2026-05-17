@@ -1,0 +1,32 @@
+Review focus: Uncontrolled data in SQL query
+
+What to look for:
+- Including user-supplied data in a SQL query without neutralizing special elements can make code vulnerable to SQL Injection.
+- The code passes user input as part of a SQL query without escaping special elements. It generates a SQL query using`sprintf`, with the user-supplied data directly passed as an argument to`sprintf`. This leaves the code vulnerable to attack by SQL Injection.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`SqlTainted.c`):
+```
+int main(int argc, char** argv) {
+  char *userName = argv[2];
+  
+  // BAD
+  char query1[1000] = {0};
+  sprintf(query1, "SELECT UID FROM USERS where name = \"%s\"", userName);
+  runSql(query1);
+  
+  // GOOD
+  char userNameSql[1000] = {0};
+  encodeSqlString(userNameSql, 1000, userName); 
+  char query2[1000] = {0};
+  sprintf(query2, "SELECT UID FROM USERS where name = \"%s\"", userNameSql);
+  runSql(query2);
+}
+```

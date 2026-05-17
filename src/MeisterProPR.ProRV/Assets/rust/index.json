@@ -1,0 +1,423 @@
+{
+   "checks" : [
+      {
+         "id" : "rust/regex-injection",
+         "instructionPath" : "instructions/rust/regex-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RegexInjectionBad.rs",
+            "RegexInjectionGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to inject an expression that could modify the meaning of...",
+         "sourceRelativePath" : "queries/security/CWE-020/RegexInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-074"
+         ],
+         "title" : "Regular expression injection"
+      },
+      {
+         "id" : "rust/path-injection",
+         "instructionPath" : "instructions/rust/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TaintedPath.rs",
+            "TaintedPathGoodNormalize.rs",
+            "TaintedPathGoodFolder.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "queries/security/CWE-022/TaintedPath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "rust/xss",
+         "instructionPath" : "instructions/rust/xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XSSBad.rs",
+            "XSSGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to a webpage allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "queries/security/CWE-079/XSS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Cross-site scripting"
+      },
+      {
+         "id" : "rust/sql-injection",
+         "instructionPath" : "instructions/rust/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SqlInjectionBad.rs",
+            "SqlInjectionGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a database query from user-controlled sources is vulnerable to insertion of malicious code by attackers.",
+         "sourceRelativePath" : "queries/security/CWE-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089"
+         ],
+         "title" : "Database query built from user-controlled sources"
+      },
+      {
+         "id" : "rust/log-injection",
+         "instructionPath" : "instructions/rust/log-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "LogInjectionBad.rs",
+            "LogInjectionGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled sources is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "queries/security/CWE-117/LogInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log injection"
+      },
+      {
+         "id" : "rust/disabled-certificate-check",
+         "instructionPath" : "instructions/rust/disabled-certificate-check.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DisabledCertificateCheckBad.rs",
+            "DisabledCertificateCheckGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An application that disables TLS certificate checking is more vulnerable to man-in-the-middle attacks.",
+         "sourceRelativePath" : "queries/security/CWE-295/DisabledCertificateCheck.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295"
+         ],
+         "title" : "Disabled TLS certificate check"
+      },
+      {
+         "id" : "rust/cleartext-transmission",
+         "instructionPath" : "instructions/rust/cleartext-transmission.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextTransmission.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Transmitting sensitive information across a network in cleartext can expose it to an attacker.",
+         "sourceRelativePath" : "queries/security/CWE-311/CleartextTransmission.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-319"
+         ],
+         "title" : "Cleartext transmission of sensitive information"
+      },
+      {
+         "id" : "rust/cleartext-logging",
+         "instructionPath" : "instructions/rust/cleartext-logging.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextLoggingBad.rs",
+            "CleartextLoggingGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Logging sensitive information in plaintext can expose it to an attacker.",
+         "sourceRelativePath" : "queries/security/CWE-312/CleartextLogging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-359",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Cleartext logging of sensitive information"
+      },
+      {
+         "id" : "rust/cleartext-storage-database",
+         "instructionPath" : "instructions/rust/cleartext-storage-database.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextStorageDatabaseBad.rs",
+            "CleartextStorageDatabaseGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Storing sensitive information in a non-encrypted database can expose it to an attacker.",
+         "sourceRelativePath" : "queries/security/CWE-312/CleartextStorageDatabase.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312"
+         ],
+         "title" : "Cleartext storage of sensitive information in a database"
+      },
+      {
+         "id" : "rust/non-https-url",
+         "instructionPath" : "instructions/rust/non-https-url.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UseOfHttpBad.rs",
+            "UseOfHttpGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Non-HTTPS connections can be intercepted by third parties.",
+         "sourceRelativePath" : "queries/security/CWE-319/UseOfHttp.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-345"
+         ],
+         "title" : "Failure to use HTTPS URLs"
+      },
+      {
+         "id" : "rust/weak-cryptographic-algorithm",
+         "instructionPath" : "instructions/rust/weak-cryptographic-algorithm.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BrokenCryptoAlgorithmBad.rs",
+            "BrokenCryptoAlgorithmGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic algorithms can compromise security.",
+         "sourceRelativePath" : "queries/security/CWE-327/BrokenCryptoAlgorithm.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Use of a broken or weak cryptographic algorithm"
+      },
+      {
+         "id" : "rust/weak-sensitive-data-hashing",
+         "instructionPath" : "instructions/rust/weak-sensitive-data-hashing.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WeakSensitiveDataHashingBad.rs",
+            "WeakSensitiveDataHashingGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic hashing algorithms can compromise security.",
+         "sourceRelativePath" : "queries/security/CWE-327/WeakSensitiveDataHashing.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328",
+            "external/cwe/cwe-916"
+         ],
+         "title" : "Use of a broken or weak cryptographic hashing algorithm on sensitive data"
+      },
+      {
+         "id" : "rust/insecure-cookie",
+         "instructionPath" : "instructions/rust/insecure-cookie.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureCookieBad.rs",
+            "InsecureCookieGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Omitting the 'Secure' attribute allows data to be transmitted insecurely using HTTP.",
+         "sourceRelativePath" : "queries/security/CWE-614/InsecureCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-319",
+            "external/cwe/cwe-614"
+         ],
+         "title" : "'Secure' attribute is not set to true"
+      },
+      {
+         "id" : "rust/ctor-initialization",
+         "instructionPath" : "instructions/rust/ctor-initialization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadCtorInitializationBad.rs",
+            "BadCtorInitializationGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Calling functions in the Rust std library from a ctor or dtor function is not safe.",
+         "sourceRelativePath" : "queries/security/CWE-696/BadCtorInitialization.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-696",
+            "external/cwe/cwe-665"
+         ],
+         "title" : "Bad 'ctor' initialization"
+      },
+      {
+         "id" : "rust/uncontrolled-allocation-size",
+         "instructionPath" : "instructions/rust/uncontrolled-allocation-size.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UncontrolledAllocationSizeBad.rs",
+            "UncontrolledAllocationSizeGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Allocating memory with a size controlled by an external user can result in arbitrary amounts of memory being allocated, leading to a crash or a denial-of-service (DoS) attack.",
+         "sourceRelativePath" : "queries/security/CWE-770/UncontrolledAllocationSize.ql",
+         "tags" : [
+            "reliability",
+            "security",
+            "external/cwe/cwe-770",
+            "external/cwe/cwe-789"
+         ],
+         "title" : "Uncontrolled allocation size"
+      },
+      {
+         "id" : "rust/hard-coded-cryptographic-value",
+         "instructionPath" : "instructions/rust/hard-coded-cryptographic-value.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "HardcodedCryptographicValueBad.rs",
+            "HardcodedCryptographicValueGood.rs"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using hard-coded keys, passwords, salts or initialization vectors is not secure.",
+         "sourceRelativePath" : "queries/security/CWE-798/HardcodedCryptographicValue.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798",
+            "external/cwe/cwe-1204"
+         ],
+         "title" : "Hard-coded cryptographic value"
+      },
+      {
+         "id" : "rust/access-after-lifetime-ended",
+         "instructionPath" : "instructions/rust/access-after-lifetime-ended.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "AccessAfterLifetimeBad.rs",
+            "AccessAfterLifetimeGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Dereferencing a pointer after the lifetime of its target has ended causes undefined behavior and may result in memory corruption.",
+         "sourceRelativePath" : "queries/security/CWE-825/AccessAfterLifetime.ql",
+         "tags" : [
+            "reliability",
+            "security",
+            "external/cwe/cwe-825"
+         ],
+         "title" : "Access of a pointer after its lifetime has ended"
+      },
+      {
+         "id" : "rust/access-invalid-pointer",
+         "instructionPath" : "instructions/rust/access-invalid-pointer.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "AccessInvalidPointerBad.rs",
+            "AccessInvalidPointerGood.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Dereferencing an invalid or dangling pointer causes undefined behavior and may result in memory corruption.",
+         "sourceRelativePath" : "queries/security/CWE-825/AccessInvalidPointer.ql",
+         "tags" : [
+            "reliability",
+            "security",
+            "external/cwe/cwe-476",
+            "external/cwe/cwe-825"
+         ],
+         "title" : "Access of invalid pointer"
+      },
+      {
+         "id" : "rust/request-forgery",
+         "instructionPath" : "instructions/rust/request-forgery.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RequestForgery.rs"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Making a network request with user-controlled data in the URL allows for request forgery attacks.",
+         "sourceRelativePath" : "queries/security/CWE-918/RequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Server-side request forgery"
+      },
+      {
+         "id" : "rust/dead-code",
+         "instructionPath" : "instructions/rust/dead-code.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnreachableCodeBad.rs",
+            "UnreachableCodeGood.rs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Code that cannot be reached should be deleted.",
+         "sourceRelativePath" : "queries/unusedentities/UnreachableCode.ql",
+         "tags" : [
+            "maintainability",
+            "quality"
+         ],
+         "title" : "Unreachable code"
+      },
+      {
+         "id" : "rust/unused-value",
+         "instructionPath" : "instructions/rust/unused-value.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnusedValueBad.rs",
+            "UnusedValueGood.rs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused values may be an indication that the code is incomplete or has a typo.",
+         "sourceRelativePath" : "queries/unusedentities/UnusedValue.ql",
+         "tags" : [
+            "maintainability",
+            "quality"
+         ],
+         "title" : "Unused value"
+      },
+      {
+         "id" : "rust/unused-variable",
+         "instructionPath" : "instructions/rust/unused-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedVariableBad.rs",
+            "UnusedVariableGood.rs"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Unused variables may be an indication that the code is incomplete or has a typo.",
+         "sourceRelativePath" : "queries/unusedentities/UnusedVariable.ql",
+         "tags" : [
+            "maintainability",
+            "quality"
+         ],
+         "title" : "Unused variable"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:33:57Z",
+   "language" : "rust"
+}

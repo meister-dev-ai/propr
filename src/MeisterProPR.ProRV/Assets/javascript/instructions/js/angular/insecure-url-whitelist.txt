@@ -1,0 +1,26 @@
+Review focus: Insecure URL whitelist
+
+What to look for:
+- URL whitelists that are too permissive can cause security vulnerabilities.
+- AngularJS uses filters to ensure that the URLs used for sourcing AngularJS templates and other script-running URLs are safe. One such filter is a whitelist of URL patterns to allow. A URL pattern that is too permissive can cause security vulnerabilities.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InsecureUrlWhitelist.js`):
+```
+angular.module('myApp', [])
+    .config(function($sceDelegateProvider) {
+        $sceDelegateProvider.resourceUrlWhitelist([
+            "*://example.org/*", // BAD
+            "https://**.example.com/*", // BAD
+            "https://example.**", // BAD
+            "https://example.*" // BAD
+        ]);
+    });
+```

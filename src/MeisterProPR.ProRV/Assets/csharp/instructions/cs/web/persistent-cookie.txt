@@ -1,0 +1,12 @@
+Review focus: Cookie security: persistent cookie
+
+What to look for:
+- Persistent cookies are vulnerable to attacks.
+- This rule finds cookies that are made to expire in more than 5 minutes from now. Cookies are usually non-persistent, in which case they reside in the browser's memory only. However, by setting an expiration date in the future, cookies can be made persistent and are then written to disk to survive the browser restarts. If a persistent cookie is set to expire in a fairly distant future, it is easier for an attacker to steal its data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

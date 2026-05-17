@@ -1,0 +1,12 @@
+Review focus: 'break' or 'return' statement in finally
+
+What to look for:
+- Using a Break or Return statement in a finally block causes the Try-finally block to exit, discarding the exception.
+- When a`break`or`return`statement is used in a`finally`block this causes the`try-finally`block to exit immediately discarding the exception. This is unlikely to be the intention of the developer and makes the code more difficult to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

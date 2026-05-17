@@ -1,0 +1,12 @@
+Review focus: Inconsistent equals and hashCode
+
+What to look for:
+- If a class overrides only one of 'equals' and 'hashCode', it may mean that 'equals' and 'hashCode' are inconsistent.
+- A class that overrides only one of`equals`and`hashCode`is likely to violate the contract of the`hashCode`method. The contract requires that`hashCode`gives the same integer result for any two equal objects. Not enforcing this property may cause unexpected results when storing and retrieving objects of such a class in a hashing data structure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

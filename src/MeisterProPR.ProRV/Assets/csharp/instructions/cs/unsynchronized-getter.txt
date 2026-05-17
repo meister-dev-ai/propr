@@ -1,0 +1,55 @@
+Review focus: Inconsistently synchronized property
+
+What to look for:
+- If a property has a lock in its setter, but not in its getter, then the value returned by the getter can be inconsistent.
+- Data which is accessed concurrently from multiple threads is vulnerable to race conditions and other errors.`lock`statements are often needed to make concurrent code correct and ensure that the data is consistent. However`lock`statements must be used consistently on all methods which are potentially called concurrently. When there is a`lock`statement on a property setter, it implies that the property could be assigned to concurrently, so the property could also be read concurrently. Therefore a`lock`statement is necessary on the property getter. Even simple getters require a`lock`statement to ensure that there is a memory barrier when reading a field.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SynchSetUnsynchGet.cs`):
+```
+public int ErrorCount
+{
+    get
+    {
+        return count;
+    }
+
+    set
+    {
+        lock (mutex)
+        {
+            count = value;
+            if (count > 0) GenerateDiagnostics();
+        }
+    }
+}
+```
+- Reference example (`SynchSetUnsynchGetFix.cs`):
+```
+public int ErrorCount
+{
+    get
+    {
+        lock (mutex)
+        {
+            return count;
+        }
+    }
+
+    set
+    {
+        lock (mutex)
+        {
+            count = value;
+            if (count > 0) GenerateDiagnostics();
+        }
+    }
+}
+```

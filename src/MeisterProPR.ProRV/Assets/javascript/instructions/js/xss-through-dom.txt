@@ -1,0 +1,28 @@
+Review focus: DOM text reinterpreted as HTML
+
+What to look for:
+- Reinterpreting text from the DOM as HTML can lead to a cross-site scripting vulnerability.
+- Extracting text from a DOM node and interpreting it as HTML can lead to a cross-site scripting vulnerability. A webpage with this vulnerability reads text from the DOM, and afterwards adds the text as HTML to the DOM. Using text from the DOM as HTML effectively unescapes the text, and thereby invalidates any escaping done on the text. If an attacker is able to control the safe sanitized text, then this vulnerability can be exploited to perform a cross-site scripting attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`XssThroughDom.js`):
+```
+$("button").click(function () {
+    var target = $(this).attr("data-target");
+    $(target).hide();
+});
+```
+- Reference example (`XssThroughDomFixed.js`):
+```
+$("button").click(function () {
+    var target = $(this).attr("data-target");
+	$.find(target).hide();
+});
+```

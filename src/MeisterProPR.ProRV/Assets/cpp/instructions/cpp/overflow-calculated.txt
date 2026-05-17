@@ -1,0 +1,29 @@
+Review focus: Buffer not sufficient for string
+
+What to look for:
+- A buffer allocated using 'malloc' may not have enough space for a string that is being copied into it.
+- This query finds calls to:
+- -`malloc`that use a`strlen`for the buffer size and do not take the zero terminator into consideration.
+- -`strcat`or`strncat`that use buffers that are too small to contain the new string. The highlighted expression will cause a buffer overflow because the buffer is too small to contain the data being copied. Buffer overflows can result to anything from a segmentation fault to a security vulnerability (particularly if the array is on stack-allocated memory).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OverflowCalculated.cpp`):
+```
+void f(char* string) {
+	// wrong: allocates space for characters, but not zero terminator
+	char* buf = malloc(strlen(string));
+	strcpy(buf, string);
+
+	char* buf_right = malloc(strlen(string) + 1); //correct: includes the zero terminator
+	strcpy(buf_right, string);
+	// buf_right is now full
+	strcat(buf_right, string); //wrong: appending would overflow the buffer
+}
+```

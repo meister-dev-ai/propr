@@ -1,0 +1,29 @@
+Review focus: Unused method
+
+What to look for:
+- Finds private methods that seem to never be used, or solely used from other dead methods
+- Dead methods are often deprecated pieces of code, and should be removed as they may increase object code size, decrease code maintainability, and create the possibility of misuse. A method is considered dead if it is private and not directly called, or accessed, or only ever called from other dead methods.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedMethod.cs`):
+```
+class UnusedMethod
+{
+    private void A()
+    {
+        B();
+    }
+
+    private void B()
+    {
+
+    }
+}
+```

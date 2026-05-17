@@ -1,0 +1,18 @@
+Review focus: Back reference into negative lookahead assertion
+
+What to look for:
+- If a back reference refers to a capture group inside a preceding negative lookahead assertion, then the back reference always matches the empty string, which probably indicates a...
+- Back references can be used to refer to the result of a previously matched capture group. It is syntactically legal to refer from outside a negative lookahead assertion to a capture group nested inside that assertion, but since the regular expression can only match when the body of the negative lookahead assertion did not match, such a back reference always matches the empty string. This probably indicates a mistake.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BackrefIntoNegativeLookahead.js`):
+```
+/(.*?)a(?:d*)a(?!(a+)b)\2(.*)/;
+```

@@ -1,0 +1,25 @@
+Review focus: Unchecked return value used as offset
+
+What to look for:
+- Using a return value as a pointer offset without checking that the value is positive may lead to buffer overruns.
+- This query finds pointer arithmetic expressions that use a value returned from a function without checking that the value is positive. Most pointer arithmetic and almost all array element accesses use a positive value for offsets. A negative value is likely to be a defect in the returning function. Checking pointer offsets (particularly if they derive from user input) is necessary to avoid buffer overruns. The query looks only at the return values of functions that may return a negative value (not all functions).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingNegativityTest.cpp`):
+```
+Record records[SIZE] = ...;
+
+int f() {
+    int recordIdx = 0;
+    recordIdx = readUserInput(); //recordIdx is returned from a function
+        // there is no check so it could be negative
+    doFoo(&(records[recordIdx])); //but is not checked before use as an array offset
+}
+```

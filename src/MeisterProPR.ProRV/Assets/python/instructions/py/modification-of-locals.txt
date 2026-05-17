@@ -1,0 +1,25 @@
+Review focus: Modification of dictionary returned by locals()
+
+What to look for:
+- Modifications of the dictionary returned by locals() are not propagated to the local variables of a function.
+- The dictionary returned by`locals()`is not a view of the function's locals, but a copy. Therefore, modification of the dictionary returned from`locals()`will not modify the local variables of the function.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ModificationOfLocals.py`):
+```
+def modifies_locals_sum(x, y):
+    locals()['z'] = x + y
+    #z will not be defined as modifications to locals() do not alter the local variables.
+    return z
+
+def fixed_sum(x, y):
+    z = x + y
+    return z
+```

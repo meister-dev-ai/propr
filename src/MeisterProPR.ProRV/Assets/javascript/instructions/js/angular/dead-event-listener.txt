@@ -1,0 +1,50 @@
+Review focus: Dead AngularJS event listener
+
+What to look for:
+- An AngularJS event listener that listens for a non-existent event has no effect.
+- AngularJS applications use the method`$scope.$on`to register event listeners for the events sent out by`$scope.$emit`and`$scope.$broadcast`. The first argument to`$scope.$on`is the name of the event to listen for. Listening for an event that never gets sent means that the event listener never gets invoked. This is likely an error caused by either: a misspelled event name, or a missing call to`$scope.emit`or`$scope.broadcast`somewhere else.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadAngularJSEventListener.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', function($scope) {
+        function cleanup() {
+            // close database connection
+            // ...
+        }
+        $scope.$on('destroy', cleanup); // BAD
+    });
+```
+- Reference example (`DeadAngularJSEventListener_fixed.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', function($scope) {
+        function cleanup() {
+            // close database connection
+            // ...
+        }
+        $scope.$on('$destroy', cleanup); // GOOD
+    });
+```
+- Reference example (`DeadAngularJSEventListener_emit.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', function($scope) {
+        function cleanup() {
+            // close database connection
+            // ...
+        }
+        $scope.$on('destroy', cleanup); // GOOD
+    })
+    .controller('MyOtherController', function($scope) {
+        $scope.$emit('destroy');
+    });
+```

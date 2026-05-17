@@ -1,0 +1,42 @@
+Review focus: Double escaping or unescaping
+
+What to look for:
+- When escaping special characters using a meta-character like backslash or ampersand, the meta-character has to be escaped first to avoid double-escaping, and conversely it has to...
+- Escaping meta-characters in untrusted input is an important technique for preventing injection attacks such as cross-site scripting. One particular example of this is HTML entity encoding, where HTML special characters are replaced by HTML character entities to prevent them from being interpreted as HTML markup. For example, the less-than character is encoded as`<`and the double-quote character as`"`. Other examples include backslash-escaping for including untrusted data in string literals and percent-encoding for URI components. The reverse process of replacing escape sequences with the characters they represent is known as unescaping. Note that the escape characters themselves (such as ampersand in the case of HTML encoding) play a special role during escaping and unescaping: they are themselves escaped, but also form part of the escaped representations of other characters. Hence care must be taken to avoid double escaping and unescaping: when escaping, the escape character must be escaped first, when unescaping it has to be unescaped last. If used in the context of sanitization, double unescaping may render the sanitization ineffective. Even if it is not used in a security-critical context, it may still result in confusing or garbled output.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DoubleEscaping.js`):
+```
+module.exports.encode = function(s) {
+  return s.replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+};
+
+module.exports.decode = function(s) {
+  return s.replace(/&amp;/g, "&")
+          .replace(/&quot;/g, "\"")
+          .replace(/&apos;/g, "'");
+};
+```
+- Reference example (`DoubleEscapingGood.js`):
+```
+module.exports.encode = function(s) {
+  return s.replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+};
+
+module.exports.decode = function(s) {
+  return s.replace(/&quot;/g, "\"")
+          .replace(/&apos;/g, "'")
+          .replace(/&amp;/g, "&");
+};
+```

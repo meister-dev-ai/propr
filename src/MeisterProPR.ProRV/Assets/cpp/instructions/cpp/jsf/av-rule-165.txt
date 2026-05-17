@@ -1,0 +1,25 @@
+Review focus: Negation of unsigned value
+
+What to look for:
+- The unary minus operator should not be applied to unsigned expressions - cast the expression to a signed type to avoid unexpected behavior.
+- This query finds unsigned values that are being negated. Behavior is undefined in such cases. Negating integer values produces the two's complement of that number, which cannot represent negative values of large unsigned values (values where the sign bit is used) and are most likely to be interpreted as a smaller positive integer instead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 165.cpp`):
+```
+//for this example, sizeof(short) == 2 bytes
+short f(unsigned short c) {
+	return -c; //unsigned value being negated
+}
+
+cout << f(100); //as expected, returns -100
+cout << f(40000U); //returns 25536
+// (negation finds the two's complement of the bit representation of 40000)
+```

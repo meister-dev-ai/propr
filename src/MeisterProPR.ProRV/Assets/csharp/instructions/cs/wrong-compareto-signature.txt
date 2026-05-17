@@ -1,0 +1,32 @@
+Review focus: Potentially incorrect CompareTo(...) signature
+
+What to look for:
+- The declaring type of a method with signature `CompareTo(T)` does not implement `IComparable<T>`.
+- If you wish to make a class comparable with type`T`then you should both make a`CompareTo(T)`method and inherit from the`IComparable`interface. If a`CompareTo(T)`method has been added without the interface also being implemented, it is sometimes an indication that the programmer has forgotten to inherit the interface despite providing the implementation for it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectCompareToSignatureBad.cs`):
+```
+using System;
+
+class Bad
+{
+    public int CompareTo(Bad b) => 0;
+}
+```
+- Reference example (`IncorrectCompareToSignatureGood.cs`):
+```
+using System;
+
+class Good : IComparable<Good>
+{
+    public int CompareTo(Good g) => 0;
+}
+```

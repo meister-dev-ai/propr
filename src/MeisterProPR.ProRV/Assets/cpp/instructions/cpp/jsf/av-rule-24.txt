@@ -1,0 +1,36 @@
+Review focus: Dangerous system functions
+
+What to look for:
+- The library functions abort, exit, getenv and system from library <stdlib.h> should not be used.
+- This query highlights calls to the standard library functions`abort, exit, getenv`and`system`. The functions`abort`and`exit`should not be called as they immediately terminate the program and will bypass all the normal error and exception handling routines in the software. This is especially important in software which is run on systems without an interactive OS, as restarting the software may require a complete reboot of the system.`getenv`and`system`will usually not work at all on systems that do not have a command processor.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 24.cpp`):
+```
+class LibraryClass {
+public:
+	void f() {
+		...
+		if (error) {
+			abort(); //immediately terminates program, especially
+			//bad since the class is in a library and not in the main
+			//logic of the application.
+		}
+	}
+
+	char* diff(string file1, string file2) {
+		string command;
+		command = "diff " + file1 + " " + file2;
+		system(command); //call to system, may not be supported in all platforms
+		...
+		return cmd_out;
+	}
+};
+```

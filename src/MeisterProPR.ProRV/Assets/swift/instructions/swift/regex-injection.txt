@@ -1,0 +1,45 @@
+Review focus: Regular expression injection
+
+What to look for:
+- User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to provide a regex that could require exponential time on...
+- Constructing a regular expression with unsanitized user input is dangerous, since a malicious user may be able to modify the meaning of the expression. They may be able to cause unexpected program behaviour, or perform a denial-of-service attack. For example, they may provide a regular expression fragment that takes exponential time to evaluate in the worst case.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`RegexInjectionBad.swift`):
+```
+func processRemoteInput(remoteInput: String) {
+  ...
+
+  // BAD: Unsanitized user input is used to construct a regular expression
+  let regex1 = try Regex(remoteInput)
+
+  // BAD: Unsanitized user input is used to construct a regular expression
+  let regexStr = "abc|\(remoteInput)"
+  let regex2 = try NSRegularExpression(pattern: regexStr)
+
+  ...
+}
+```
+- Good example (`RegexInjectionGood.swift`):
+```
+func processRemoteInput(remoteInput: String) {
+  ...
+
+  // GOOD: Regular expression is not derived from user input
+  let regex1 = try Regex(myRegex)
+
+  // GOOD: User input is sanitized before being used to construct a regular expression
+  let escapedInput = NSRegularExpression.escapedPattern(for: remoteInput)
+  let regexStr = "abc|\(escapedInput)"
+  let regex2 = try NSRegularExpression(pattern: regexStr)
+
+  ...
+}
+```

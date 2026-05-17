@@ -1,0 +1,26 @@
+Review focus: Membership test with a non-container
+
+What to look for:
+- A membership test, such as 'item in sequence', with a non-container on the right hand side will raise a 'TypeError'.
+- A membership test, that is a binary expression with`in`or`not in`as the operator, expects that the expression to the right of the operator will be a container. As well as standard containers such as`list`,`tuple`,`dict`or`set`, a container can be an instance of any class that has the`__contains__`,`__iter__`or`__getitem__`method.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ContainsNonContainer.py`):
+```
+class NotAContainer(object):
+
+    def __init__(self, *items):
+        self.items = items
+
+def main():
+    cont = NotAContainer(1, 2, 3)
+    if 2 in cont:
+        print("2 in container")
+```

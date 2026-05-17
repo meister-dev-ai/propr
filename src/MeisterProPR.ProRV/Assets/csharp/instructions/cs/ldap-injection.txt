@@ -1,0 +1,65 @@
+Review focus: LDAP query built from user-controlled sources
+
+What to look for:
+- Building an LDAP query from user-controlled sources is vulnerable to insertion of malicious LDAP code by the user.
+- If an LDAP query is built using string concatenation, and the components of the concatenation include user input, a user is likely to be able to run malicious LDAP queries.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`LDAPInjection.cs`):
+```
+using Microsoft.Security.Application.Encoder
+using System;
+using System.DirectoryServices;
+using System.Web;
+
+public class LDAPInjectionHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string userName = ctx.Request.QueryString["username"];
+        string organizationName = ctx.Request.QueryString["organization_name"];
+        // BAD: User input used in DN (Distinguished Name) without encoding
+        string ldapQuery = "LDAP://myserver/OU=People,O=" + organizationName;
+        using (DirectoryEntry root = new DirectoryEntry(ldapQuery))
+        {
+            // BAD: User input used in search filter without encoding
+            DirectorySearcher ds = new DirectorySearcher(root, "username=" + userName);
+
+            SearchResult result = ds.FindOne();
+            if (result != null)
+            {
+                using (DirectoryEntry user = result.getDirectoryEntry())
+                {
+                    ctx.Response.Write(user.Properties["type"].Value)
+                }
+            }
+        }
+
+        // GOOD: Organization name is encoded before being used in DN
+        string safeOrganizationName = Encoder.LdapDistinguishedNameEncode(organizationName);
+        string safeLDAPQuery = "LDAP://myserver/OU=People,O=" + safeOrganizationName;
+        using (DirectoryEntry root = new DirectoryEntry(safeLDAPQuery))
+        {
+            // GOOD: User input is encoded before being used in search filter
+            string safeUserName = Encoder.LdapFilterEncode(userName);
+            DirectorySearcher ds = new DirectorySearcher(root, "username=" + safeUserName);
+
+            SearchResult result = ds.FindOne();
+            if (result != null)
+            {
+                using (DirectoryEntry user = result.getDirectoryEntry())
+                {
+                    ctx.Response.Write(user.Properties["type"].Value)
+                }
+            }
+        }
+    }
+}
+```

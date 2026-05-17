@@ -1,0 +1,12 @@
+Review focus: Inappropriate Intimacy
+
+What to look for:
+- Two files share too much information about each other (accessing many operations or variables in both directions).
+- This rule looks for two files that share too much information about each other (accessing many operations or variables in both directions). It would be better to invert some of the dependencies to reduce the coupling between the two files. Having two files have too many dependencies on each other makes it difficult to modify one file without requiring modifications to the other. This could lead to defects when the programmer forgets to put in the necessary changes to one file when he makes a change to the other.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

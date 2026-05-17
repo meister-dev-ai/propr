@@ -1,0 +1,42 @@
+Review focus: Incomplete URL scheme check
+
+What to look for:
+- Checking for the "javascript:" URL scheme without also checking for "vbscript:" and "data:" suggests a logic error or even a security vulnerability.
+- URLs with the special scheme`javascript`can be used to encode JavaScript code to be executed when the URL is visited. While this is a powerful mechanism for creating feature-rich and responsive web applications, it is also a potential security risk: if the URL comes from an untrusted source, it might contain harmful JavaScript code. For this reason, many frameworks and libraries first check the URL scheme of any untrusted URL, and reject URLs with the`javascript`scheme. However, the`data`and`vbscript`schemes can be used to represent executable code in a very similar way, so any validation logic that checks against`javascript`, but not against`data`and`vbscript`, is likely to be insufficient.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncompleteUrlSchemeCheck.go`):
+```
+package main
+
+import "net/url"
+
+func sanitizeUrl(urlstr string) string {
+	u, err := url.Parse(urlstr)
+	if err != nil || u.Scheme == "javascript" {
+		return "about:blank"
+	}
+	return urlstr
+}
+```
+- Reference example (`IncompleteUrlSchemeCheckGood.go`):
+```
+package main
+
+import "net/url"
+
+func sanitizeUrlGod(urlstr string) string {
+	u, err := url.Parse(urlstr)
+	if err != nil || u.Scheme == "javascript" || u.Scheme == "data" || u.Scheme == "vbscript" {
+		return "about:blank"
+	}
+	return urlstr
+}
+```

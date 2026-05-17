@@ -1,0 +1,25 @@
+Review focus: Builtin shadowed by local variable
+
+What to look for:
+- Defining a local variable with the same name as a built-in object makes the built-in object unusable within the current scope and makes the code more difficult to read.
+- When a local variable is defined with the same name as a built-in type or function, the local variable "shadows" or "hides" the built-in object. This can lead to confusion as a reader of the code may expect the variable to refer to a built-in object.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShadowBuiltin.py`):
+```
+def test():
+    int = 1           # Variable should be renamed to avoid
+    def print_int():  # shadowing the int() built-in function
+        print int
+    print_int()
+    print int 
+
+test()
+```

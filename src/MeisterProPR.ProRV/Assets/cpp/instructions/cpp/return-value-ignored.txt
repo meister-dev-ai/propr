@@ -1,0 +1,40 @@
+Review focus: Return value of a function is ignored
+
+What to look for:
+- A call to a function ignores its return value, but at least 90% of the total number of calls to the function check the return value.
+- This rule finds calls to a function that ignore the return value. A function call is only marked as a violation if at least 90% of the total calls to that function check the return value. Not checking a return value is a common source of defects from standard library functions like`malloc`or`fread`. These functions return the status information and the return values should always be checked to see if the operation succeeded before operating on any data modified or resources allocated by these functions. This rule uses a white/blacklist of functions the value of which can always be ignored (e.g.`select`) and those that should always be checked (e.g.`fgets`). These list can be modified to suit a particular codebase.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnValueIgnored.cpp`):
+```
+int doFoo() {
+	...
+	return status;
+}
+
+void f() {
+	if (doFoo() == OK) {
+		...
+	}
+}
+
+void g() {
+	int status = doFoo();
+	if (status == OK) {
+		...
+	}
+}
+
+void err() {
+	doFoo(); //doFoo is called but its return value is not checked, and 
+	         //the value is checked in other locations
+	...
+}
+```

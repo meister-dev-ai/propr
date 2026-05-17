@@ -1,0 +1,16 @@
+Review focus: Thread safety
+
+What to look for:
+- Calling Swing methods from a thread other than the event-dispatching thread may result in multi-threading errors.
+- Because Swing components are not thread-safe (that is, they do not support concurrent access from multiple threads), Swing has a rule that states that method calls on Swing components that have been realized (see below) must be made from a special thread known as the event-dispatching thread. Failure to observe this rule may result in multiple threads accessing a Swing component concurrently, with the potential for deadlocks, race conditions and other errors related to multi-threading. A component is considered realized if its`paint`method has been, or could be, called at this point. Realization is triggered according to the following rules:
+- A top-level window is realized if`setVisible(true)`,`show`or`pack`is called on it.
+- Realizing a container realizes the components it contains. There are a few exceptions to the rule. These are documented more fully in [The Swing Connection] but the key exceptions are:
+- It is safe to call the`repaint`,`revalidate`and`invalidate`methods on a Swing component from any thread.
+- It is safe to add and remove listeners from any thread. Therefore, any method of the form`add*Listener`or`remove*Listener`is thread-safe.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

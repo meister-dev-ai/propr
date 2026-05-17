@@ -1,0 +1,20 @@
+Review focus: Unsafe hostname verification
+
+What to look for:
+- Marking a certificate as valid for a host without checking the certificate hostname allows an attacker to perform a machine-in-the-middle attack.
+- If a`HostnameVerifier`always returns`true`it will not verify the hostname at all. This stops Transport Layer Security (TLS) providing any security and allows an attacker to perform a man-in-the-middle attack against the application. An attack might look like this:
+- The program connects to`https://example.com`.
+- The attacker intercepts this connection and presents an apparently-valid certificate of their choosing.
+- The`TrustManager`of the program verifies that the certificate has been issued by a trusted certificate authority.
+- The Java HTTPS library checks whether the certificate has been issued for the host`example.com`. This check fails because the certificate has been issued for a domain controlled by the attacker, for example:`malicious.domain`.
+- The HTTPS library wants to reject the certificate because the hostname does not match. Before doing this it checks whether a`HostnameVerifier`exists.
+- Your`HostnameVerifier`is called which returns`true`for any certificate so also for this one.
+- The program proceeds with the connection since your`HostnameVerifier`accepted it.
+- The attacker can now read the data your program sends to`https://example.com`and/or alter its replies while the program thinks the connection is secure.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

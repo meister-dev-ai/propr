@@ -1,0 +1,81 @@
+Review focus: Uncontrolled data used in path expression
+
+What to look for:
+- Accessing paths influenced by users can allow an attacker to access unexpected resources.
+- Accessing paths controlled by users can allow an attacker to access unexpected resources. This can result in sensitive information being revealed or deleted, or an attacker being able to influence behavior by modifying unexpected files. Paths that are naively constructed from data controlled by a user may be absolute paths, or may contain unexpected special characters such as "..". Such a path could point anywhere on the file system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedPath.cs`):
+```
+using System;
+using System.IO;
+using System.Web;
+
+public class TaintedPathHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string filename = ctx.Request.QueryString["path"];
+        // BAD: This could read any file on the filesystem.
+        ctx.Response.Write(File.ReadAllText(filename));
+    }
+}
+```
+- Reference example (`TaintedPathGoodNormalize.cs`):
+```
+using System;
+using System.IO;
+using System.Web;
+
+public class TaintedPathHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string filename = ctx.Request.QueryString["path"];
+        // GOOD: ensure that the filename has no path separators or parent directory references
+        if (filename.Contains("..") || filename.Contains("/") || filename.Contains("\\"))
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.StatusDescription = "Bad Request";
+            ctx.Response.Write("Invalid path");
+            return;
+        }
+        ctx.Response.Write(File.ReadAllText(filename));
+    }
+}
+```
+- Reference example (`TaintedPathGoodFolder.cs`):
+```
+using System;
+using System.IO;
+using System.Web;
+
+public class TaintedPathHandler : IHttpHandler
+{
+    public void ProcessRequest(HttpContext ctx)
+    {
+        string filename = ctx.Request.QueryString["path"];
+        
+        string user = ctx.User.Identity.Name;
+        string publicFolder = Path.GetFullPath("/home/" + user + "/public");
+        string filePath = Path.GetFullPath(Path.Combine(publicFolder, filename));
+
+        // GOOD: ensure that the path stays within the public folder
+        if (!filePath.StartsWith(publicFolder + Path.DirectorySeparatorChar))
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.StatusDescription = "Bad Request";
+            ctx.Response.Write("Invalid path");
+            return;
+        }
+        ctx.Response.Write(File.ReadAllText(filename));
+    }
+}
+```

@@ -1,0 +1,49 @@
+Review focus: Missed 'using' opportunity
+
+What to look for:
+- C# provides a 'using' statement as a better alternative to manual resource disposal in a finally block - it makes sense to use it.
+- It is good practice (and often essential for correctness) to dispose of resources (for example file handles, graphics handles or database connections) when a program no longer needs them. For resources that are used only within a single method, a common idiom is to enclose the code that uses the resource in a`try`block and dispose of the resource in the`try`'s`finally`block. This idiom is in fact so common that C# provides a shorter, tidier syntax for it in the form of the`using`statement.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedUsingOpportunity.cs`):
+```
+class MissedUsingOpportunity
+{
+    static void Main(string[] args)
+    {
+        StreamReader reader = null;
+        try
+        {
+            reader = File.OpenText("input.txt");
+            // ...
+        }
+        finally
+        {
+            if (reader != null)
+            {
+                ((IDisposable)reader).Dispose();
+            }
+        }
+    }
+}
+```
+- Reference example (`MissedUsingOpportunityFix.cs`):
+```
+class MissedUsingOpportunityFix
+{
+    static void Main(string[] args)
+    {
+        using (StreamReader reader = File.OpenText("input.txt"))
+        {
+            // ...
+        }
+    }
+}
+```

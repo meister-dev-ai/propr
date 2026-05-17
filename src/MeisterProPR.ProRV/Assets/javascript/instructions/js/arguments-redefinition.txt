@@ -1,0 +1,22 @@
+Review focus: Arguments redefined
+
+What to look for:
+- The special 'arguments' variable can be redefined, but this should be avoided since it makes code hard to read and maintain and may prevent compiler optimizations.
+- JavaScript functions can access their arguments by position (rather than by parameter name) through the special`arguments`object. However, if a function declares a parameter or local variable named`arguments`, or assigns a new value to`arguments`, then the`arguments`object is no longer available. This is confusing and makes code hard to understand, so it should be avoided. Also note that many popular JavaScript engines (such as V8, which is used by Google Chrome and Node.js) do not support optimization of functions that assign to`arguments`, so such functions will run more slowly.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ArgumentsRedefined.js`):
+```
+function f(x, arguments) {
+	if (x === arguments[0])
+		return 23;
+	return 42;
+}
+```

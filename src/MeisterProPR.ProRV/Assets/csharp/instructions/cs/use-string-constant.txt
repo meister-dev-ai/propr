@@ -1,0 +1,38 @@
+Review focus: Magic strings: use defined constant
+
+What to look for:
+- A string literal that matches the initializer of a final variable was found.
+- This rule finds strings that are used where a named constant already exists instead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MagicStringsUseConstant.cs`):
+```
+class MagicStringsUseConstant
+{
+    private const string Target = "127.0.0.1";
+    public static void send(string ip, string message)
+    {
+        // ...
+    }
+
+    public static void testmessage()
+    {
+        send("127.0.0.1", "test message");
+        // BAD: the named constant "Target" should have been used.
+    }
+
+    public static void Main(string[] args)
+    {
+        testmessage();
+        send("127.0.0.1", "hello world");
+        // BAD: the named constant "Target" should have been used.
+    }
+}
+```

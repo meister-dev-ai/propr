@@ -1,0 +1,29 @@
+Review focus: Not all control paths return a value
+
+What to look for:
+- Functions where some execution paths return an explicit value while others "fall off" the end of the function and return 'undefined' are hard to maintain and use.
+- Unlike Java and other statically typed languages, JavaScript does not require that all execution paths in a function return a value: if an invocation of the function "falls off" the end of the function without explicitly returning a value, the special value`undefined`is implicitly returned. Relying on this behavior is dangerous, however, since it can lead to situations where`undefined`is returned by accident, simply because the programmer overlooked a possible execution path. Functions with implicit return behavior may also be hard to use in client code, which has to be prepared for either an explicit return value or`undefined`being returned.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImplicitReturn.js`):
+```
+function call(o, m) {
+	if (o && typeof o[m] === 'function')
+		return o[m]();
+}
+```
+- Reference example (`ImplicitReturnGood.js`):
+```
+function call(o, m) {
+	if (o && typeof o[m] === 'function')
+		return o[m]();
+	throw new Error("no such method");
+}
+```

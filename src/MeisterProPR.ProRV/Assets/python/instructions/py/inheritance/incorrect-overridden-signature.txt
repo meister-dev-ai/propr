@@ -1,0 +1,30 @@
+Review focus: Mismatch between signature and use of an overridden method
+
+What to look for:
+- Method has a signature that differs from both the signature of its overriding methods and the arguments with which it is called, and if it were called, would be likely to cause...
+- There is a call to the overriding method, and potentially the overridden method, with arguments that are not legal for the overridden method. This will cause an error if the overridden method is called and is a violation of the Liskov substitution principle.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SignatureOverridingMethod.py`):
+```
+class BaseClass(object):
+
+    def run(self, source, filename, symbol="single"):
+        ... # Definition
+
+    def load_and_run(self, filename):
+        source = self.load(filename)
+        self.run(source) # Matches signature in derived class, but not in this class.
+
+class DerivedClass(BaseClass):
+
+    def run(self, source):
+        ... # Definition
+```

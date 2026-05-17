@@ -1,0 +1,27 @@
+Review focus: Not enough memory allocated for pointer type
+
+What to look for:
+- Calling 'malloc', 'calloc' or 'realloc' without allocating enough memory to contain an instance of the type of the pointer may result in a buffer overflow
+- When you allocate an array from memory using`malloc`,`calloc`or`realloc`, you should ensure that you allocate enough memory to contain an instance of the required pointer type. Calls that are assigned to a non-void pointer variable, but do not allocate enough memory will cause a buffer overflow when a field accessed on the pointer points to memory that is beyond the allocated array. Buffer overflows can lead to anything from a segmentation fault to a security vulnerability.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SizeCheck.cpp`):
+```
+#define RECORD_SIZE 30  //incorrect or outdated size for record
+typedef struct {
+	char name[30];
+	int status;
+} Record;
+
+void f() {
+	Record* p = malloc(RECORD_SIZE); //not of sufficient size to hold a Record
+	...
+}
+```

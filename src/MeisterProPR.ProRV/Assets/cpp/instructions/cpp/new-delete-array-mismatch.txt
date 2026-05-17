@@ -1,0 +1,22 @@
+Review focus: 'new' object freed with 'delete[]'
+
+What to look for:
+- An object that was allocated with 'new' is being freed using 'delete[]'.
+- This rule finds`delete[]`expressions that are using a pointer that points to memory allocated using the`new`operator. Behavior in such cases is undefined and should be avoided. The`new`operator allocates memory for just one object, then calls that object's constructor, and`delete`does the opposite. The array`delete[]`operator, however, expects the pointer to be pointing to the first element of an array (which could have header data specifying the length of the array) and would attempt to call the destructor on each element of the 'array', which would likely lead to a segfault due to the invalid header data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NewDeleteArrayMismatch.cpp`):
+```
+Record *ptr = new Record(...);
+
+...
+
+delete [] ptr; // ptr was created using 'new', but was freed using 'delete[]'
+```

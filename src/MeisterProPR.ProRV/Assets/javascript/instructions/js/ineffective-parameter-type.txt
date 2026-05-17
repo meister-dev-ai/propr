@@ -1,0 +1,26 @@
+Review focus: Ineffective parameter type
+
+What to look for:
+- Omitting the name of a parameter causes its type annotation to be parsed as the name.
+- In TypeScript, the parameters of a function signature must have a name and may optionally have a type. A common mistake is to try to omit the name. This means the type is instead seen as the name. As a result, the parameter type will default to any since no type was given. Parameter names in function signatures are only relevant for documentation purposes but cannot be omitted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IneffectiveParameterType.ts`):
+```
+function join<T>(items: T[], callback: (T) => string) {
+  return items.map(callback).join(", ")
+}
+```
+- Reference example (`IneffectiveParameterTypeGood.ts`):
+```
+function join<T>(items: T[], callback: (item: T) => string) {
+  return items.map(callback).join(", ")
+}
+```

@@ -1,0 +1,58 @@
+Review focus: Host header poisoning in email generation
+
+What to look for:
+- Using the HTTP Host header to construct a link in an email can facilitate phishing attacks and leak password reset tokens.
+- Using the HTTP Host header to construct a link in an email can facilitate phishing attacks and leak password reset tokens. A malicious user can send an HTTP request to the targeted web site, but with a Host header that refers to his own web site. This means the emails will be sent out to potential victims, originating from a server they trust, but with links leading to a malicious web site. If the email contains a password reset link, and should the victim click the link, the secret reset token will be leaked to the attacker. Using the leaked token, the attacker can then construct the real reset link and use it to change the victim's password.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`HostHeaderPoisoningInEmailGeneration.js`):
+```
+let nodemailer = require('nodemailer');
+let express = require('express');
+let backend = require('./backend');
+
+let app = express();
+
+let config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+
+app.post('/resetpass', (req, res) => {
+  let email = req.query.email;
+  let transport = nodemailer.createTransport(config.smtp);
+  let token = backend.getUserSecretResetToken(email);
+  transport.sendMail({
+    from: 'webmaster@example.com',
+    to: email,
+    subject: 'Forgot password',
+    text: `Click to reset password: https://${req.host}/resettoken/${token}`,
+  });
+});
+```
+- Reference example (`HostHeaderPoisoningInEmailGenerationGood.js`):
+```
+let nodemailer = require('nodemailer');
+let express = require('express');
+let backend = require('./backend');
+
+let app = express();
+
+let config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+
+app.post('/resetpass', (req, res) => {
+  let email = req.query.email;
+  let transport = nodemailer.createTransport(config.smtp);
+  let token = backend.getUserSecretResetToken(email);
+  transport.sendMail({
+    from: 'webmaster@example.com',
+    to: email,
+    subject: 'Forgot password',
+    text: `Click to reset password: https://${config.hostname}/resettoken/${token}`,
+  });
+});
+```

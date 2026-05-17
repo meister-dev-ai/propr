@@ -1,0 +1,12 @@
+Review focus: Dereferenced variable is always null
+
+What to look for:
+- Dereferencing a variable whose value is 'null' causes a 'NullPointerException'.
+- If a variable is dereferenced, and the variable has a`null`value on all possible execution paths leading to the dereferencing, the dereferencing is guaranteed to result in a`NullPointerException`. A variable may also be implicitly dereferenced if its type is a boxed primitive type, and the variable occurs in a context in which implicit unboxing occurs. Note that the conditional operator unboxes its second and third operands when one of them is a primitive type and the other is the corresponding boxed type.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

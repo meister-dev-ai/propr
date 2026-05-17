@@ -1,0 +1,12 @@
+Review focus: Insecure Bean Validation
+
+What to look for:
+- User-controlled data may be evaluated as a Java EL expression, leading to arbitrary code execution.
+- Custom error messages for constraint validators support different types of interpolation, including Java EL expressions. Controlling part of the message template being passed to`ConstraintValidatorContext.buildConstraintViolationWithTemplate()`argument can lead to arbitrary Java code execution. Unfortunately, it is common that validated (and therefore, normally untrusted) bean properties flow into the custom error message.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

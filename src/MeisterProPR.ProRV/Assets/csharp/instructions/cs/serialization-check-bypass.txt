@@ -1,0 +1,65 @@
+Review focus: Serialization check bypass
+
+What to look for:
+- A write that looks like it may be bypassing runtime checks.
+- Fields that are deserialized should be validated, otherwise the deserialized object could contain invalid data. This query finds cases where a field is validated in a constructor, but not in a deserialization method. This is an indication that the deserialization method is missing a validation step.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RuntimeChecksBypassBad.cs`):
+```
+using System;
+using System.Runtime.Serialization;
+
+[Serializable]
+public class PersonBad : ISerializable
+{
+    public int Age;
+
+    public PersonBad(int age)
+    {
+        if (age < 0)
+            throw new ArgumentException(nameof(age));
+        Age = age;
+    }
+
+    [OnDeserializing]
+    void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
+    {
+        Age = info.GetInt32("age");  // BAD - write is unsafe
+    }
+}
+```
+- Reference example (`RuntimeChecksBypassGood.cs`):
+```
+using System;
+using System.Runtime.Serialization;
+
+[Serializable]
+public class PersonGood : ISerializable
+{
+    public int Age;
+
+    public PersonGood(int age)
+    {
+        if (age < 0)
+            throw new ArgumentException(nameof(age));
+        Age = age;
+    }
+
+    [OnDeserializing]
+    void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
+    {
+        int age = info.GetInt32("age");
+        if (age < 0)
+            throw new SerializationException(nameof(Age));
+        Age = age;  // GOOD - write is safe
+    }
+}
+```

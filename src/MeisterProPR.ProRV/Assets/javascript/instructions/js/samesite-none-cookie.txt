@@ -1,0 +1,34 @@
+Review focus: Sensitive cookie without SameSite restrictions
+
+What to look for:
+- Sensitive cookies where the SameSite attribute is set to "None" can in some cases allow for Cross-Site Request Forgery (CSRF) attacks.
+- Authentication cookies where the SameSite attribute is set to "None" can potentially be used to perform Cross-Site Request Forgery (CSRF) attacks if no other CSRF protections are in place. With SameSite set to "None", a third party website may create an authorized cross-site request that includes the cookie. Such a cross-site request can allow that website to perform actions on behalf of a user.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SameSiteCookieBad.js`):
+```
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.setHeader("Set-Cookie", `authKey=${makeAuthkey()}; secure; httpOnly; SameSite=None`);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h2>Hello world</h2>');
+});
+```
+- Reference example (`SameSiteCookieGood.js`):
+```
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.setHeader("Set-Cookie", `authKey=${makeAuthkey()}; secure; httpOnly; SameSite=Strict`);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h2>Hello world</h2>');
+});
+```

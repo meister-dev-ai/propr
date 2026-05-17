@@ -1,0 +1,43 @@
+Review focus: Comparison using is when operands support `__eq__`
+
+What to look for:
+- Comparison using `is` when equivalence is not the same as identity
+- When you compare two values using the`is`or`is not`operator, it is the object identities of the two values that is tested rather than their equality. If the class of either of the values in the comparison redefines equality then the`is`operator may return`False`even though the objects compare as equal. Equality is defined by the`__eq__`or, in Python2,`__cmp__`method. To compare two objects for equality, use the`==`or`!=`operator instead.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectComparisonUsingIs.py`):
+```
+DEFAULT = "default"
+
+def get_color(name, fallback):
+    if name in COLORS:
+        return COLORS[name]
+    elif fallback is DEFAULT:
+        return DEFAULT_COLOR
+    else:
+        return fallback
+
+#This works
+print (get_color("spam", "def" + "ault"))
+
+#But this does not
+print (get_color("spam", "default-spam"[:7]))
+
+#To fix the above code change to object
+DEFAULT = object()
+
+#Or if you want better repr() output:
+class Default(object):
+
+    def __repr__(self):
+        return "DEFAULT"
+
+DEFAULT = Default()
+```

@@ -1,0 +1,46 @@
+Review focus: Comparison of identical values
+
+What to look for:
+- If the same expression occurs on both sides of a comparison operator, the operator is redundant, and probably indicates a mistake.
+- Comparing two identical expressions typically indicates a mistake such as a missing`this`qualifier or a misspelled variable name. The only case where such a comparison makes semantic sense is when determining whether a value is`NaN`, since`NaN`does not compare as equal to itself. But even in this case clearer alternatives are available.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CompareIdenticalValues.js`):
+```
+function Rectangle(x, y, width, height) {
+  this.x = x;
+  this.y = y;
+  this.width = width;
+  this.height = height;
+}
+
+Rectangle.prototype.contains = function(x, y) {
+  return (this.x <= x &&
+          x < this.x+this.width) &&
+         (y <= y &&
+          y < this.y+this.height);
+};
+```
+- Reference example (`CompareIdenticalValuesGood.js`):
+```
+function Rectangle(x, y, width, height) {
+	this.x = x;
+	this.y = y;
+	this.width = width;
+	this.height = height;
+}
+
+Rectangle.prototype.contains = function(x, y) {
+	return (this.x <= x &&
+	        x < this.x+this.width) &&
+	       (this.y <= y &&
+	        y < this.y+this.height);
+};
+```

@@ -1,0 +1,3573 @@
+{
+   "checks" : [
+      {
+         "id" : "py/missing-call-to-delete",
+         "instructionPath" : "instructions/py/missing-call-to-delete.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingCallToDel.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An omitted call to a superclass `__del__` method may lead to class instances not being cleaned up properly.",
+         "sourceRelativePath" : "Classes/CallsToInitDel/MissingCallToDel.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "performance"
+         ],
+         "title" : "Missing call to superclass `__del__` during object destruction"
+      },
+      {
+         "id" : "py/missing-call-to-init",
+         "instructionPath" : "instructions/py/missing-call-to-init.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingCallToInit.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An omitted call to a superclass `__init__` method may lead to objects of this class not being fully initialized.",
+         "sourceRelativePath" : "Classes/CallsToInitDel/MissingCallToInit.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing call to superclass `__init__` during object initialization"
+      },
+      {
+         "id" : "py/multiple-calls-to-delete",
+         "instructionPath" : "instructions/py/multiple-calls-to-delete.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SuperclassDelCalledMultipleTimes.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A duplicated call to a superclass `__del__` method may lead to class instances not be cleaned up properly.",
+         "sourceRelativePath" : "Classes/CallsToInitDel/SuperclassDelCalledMultipleTimes.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Multiple calls to `__del__` during object destruction"
+      },
+      {
+         "id" : "py/multiple-calls-to-init",
+         "instructionPath" : "instructions/py/multiple-calls-to-init.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SuperclassInitCalledMultipleTimesBad1.py",
+            "SuperclassInitCalledMultipleTimesGood2.py",
+            "SuperclassInitCalledMultipleTimesBad3.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "A duplicated call to a superclass `__init__` method may lead to objects of this class not being properly initialized.",
+         "sourceRelativePath" : "Classes/CallsToInitDel/SuperclassInitCalledMultipleTimes.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Multiple calls to `__init__` during object initialization"
+      },
+      {
+         "id" : "py/equals-hash-mismatch",
+         "instructionPath" : "instructions/py/equals-hash-mismatch.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "EqualsOrHash.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Defining a hash operation without defining equality may be a mistake.",
+         "sourceRelativePath" : "Classes/Comparisons/EqualsOrHash.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-581"
+         ],
+         "title" : "Inconsistent equality and hashing"
+      },
+      {
+         "id" : "py/inconsistent-equality",
+         "instructionPath" : "instructions/py/inconsistent-equality.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "EqualsOrNotEquals1.py",
+            "EqualsOrNotEquals2.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Class definitions of equality and inequality operators may be inconsistent.",
+         "sourceRelativePath" : "Classes/Comparisons/EqualsOrNotEquals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Inconsistent equality and inequality"
+      },
+      {
+         "id" : "py/incomplete-ordering",
+         "instructionPath" : "instructions/py/incomplete-ordering.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "IncompleteOrdering.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Class defines ordering comparison methods, but does not define both strict and nonstrict ordering methods, to ensure all four comparison operators behave as expected.",
+         "sourceRelativePath" : "Classes/Comparisons/IncompleteOrdering.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Incomplete ordering"
+      },
+      {
+         "id" : "py/conflicting-attributes",
+         "instructionPath" : "instructions/py/conflicting-attributes.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConflictingAttributesInBaseClasses.py",
+            "ConflictingAttributesInBaseClasses_Fixed.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When a class subclasses multiple base classes and more than one base class defines the same attribute, attribute overriding may result in unexpected behavior by instances of this...",
+         "sourceRelativePath" : "Classes/ConflictingAttributesInBaseClasses.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Conflicting attributes in base classes"
+      },
+      {
+         "id" : "py/missing-equals",
+         "instructionPath" : "instructions/py/missing-equals.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DefineEqualsWhenAddingAttributes.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When adding new attributes to instances of a class, equality for that class needs to be defined.",
+         "sourceRelativePath" : "Classes/DefineEqualsWhenAddingAttributes.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "`__eq__` not overridden when adding attributes"
+      },
+      {
+         "id" : "py/inconsistent-mro",
+         "instructionPath" : "instructions/py/inconsistent-mro.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InconsistentMRO.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Class definition will raise a type error at runtime due to inconsistent method resolution order(MRO)",
+         "sourceRelativePath" : "Classes/InconsistentMRO.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Inconsistent method resolution order"
+      },
+      {
+         "id" : "py/init-calls-subclass",
+         "instructionPath" : "instructions/py/init-calls-subclass.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InitCallsSubclassMethodBad.py",
+            "InitCallsSubclassMethodGood.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling a method from `__init__` that is overridden by a subclass may result in a partially initialized instance being observed.",
+         "sourceRelativePath" : "Classes/InitCallsSubclass/InitCallsSubclassMethod.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "quality"
+         ],
+         "title" : "`__init__` method calls overridden method"
+      },
+      {
+         "id" : "py/maybe-undefined-attribute",
+         "instructionPath" : "instructions/py/maybe-undefined-attribute.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "MaybeUndefinedClassAttribute.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing an attribute of `self` that is not initialized in the `__init__` method may cause an AttributeError at runtime",
+         "sourceRelativePath" : "Classes/MaybeUndefinedClassAttribute.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Maybe undefined class attribute"
+      },
+      {
+         "id" : "py/mutable-descriptor",
+         "instructionPath" : "instructions/py/mutable-descriptor.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MutatingDescriptor.py",
+            "MutatingDescriptorFixed.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Descriptor objects can be shared across many instances.",
+         "sourceRelativePath" : "Classes/MutatingDescriptor.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Mutation of descriptor in `__get__` or `__set__` method"
+      },
+      {
+         "id" : "py/overwritten-inherited-attribute",
+         "instructionPath" : "instructions/py/overwritten-inherited-attribute.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "OverwritingAttributeInSuperClass.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Assignment to self attribute overwrites attribute previously defined in subclass or superclass `__init__` method.",
+         "sourceRelativePath" : "Classes/OverwritingAttributeInSuperClass.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Overwriting attribute in super-class or sub-class"
+      },
+      {
+         "id" : "py/property-in-old-style-class",
+         "instructionPath" : "instructions/py/property-in-old-style-class.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "PropertyInOldStyleClass.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using property descriptors in old-style classes does not work from Python 2.1 onward.",
+         "sourceRelativePath" : "Classes/PropertyInOldStyleClass.ql",
+         "tags" : [
+            "portability",
+            "correctness"
+         ],
+         "title" : "Property in old-style class"
+      },
+      {
+         "id" : "py/should-be-context-manager",
+         "instructionPath" : "instructions/py/should-be-context-manager.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ShouldBeContextManager.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Making a class a context manager allows instances to be used in a 'with' statement.",
+         "sourceRelativePath" : "Classes/ShouldBeContextManager.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "performance"
+         ],
+         "title" : "Class should be a context manager"
+      },
+      {
+         "id" : "py/slots-in-old-style-class",
+         "instructionPath" : "instructions/py/slots-in-old-style-class.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SlotsInOldStyleClass.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Overriding the class dictionary by declaring `__slots__` is not supported by old-style classes.",
+         "sourceRelativePath" : "Classes/SlotsInOldStyleClass.ql",
+         "tags" : [
+            "portability",
+            "correctness"
+         ],
+         "title" : "`__slots__` in old-style class"
+      },
+      {
+         "id" : "py/attribute-shadows-method",
+         "instructionPath" : "instructions/py/attribute-shadows-method.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SubclassShadowingBad.py",
+            "SubclassShadowingGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Defining an attribute in a superclass method with a name that matches a subclass method, hides the method in the subclass.",
+         "sourceRelativePath" : "Classes/SubclassShadowing/SubclassShadowing.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Superclass attribute shadows subclass method"
+      },
+      {
+         "id" : "py/super-in-old-style",
+         "instructionPath" : "instructions/py/super-in-old-style.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SuperInOldStyleClass.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using super() to access inherited methods is not supported by old-style classes.",
+         "sourceRelativePath" : "Classes/SuperInOldStyleClass.ql",
+         "tags" : [
+            "portability",
+            "correctness"
+         ],
+         "title" : "'super' in old style class"
+      },
+      {
+         "id" : "py/undefined-attribute",
+         "instructionPath" : "instructions/py/undefined-attribute.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UndefinedClassAttribute.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing an attribute of `self` that is not initialized anywhere in the class in the `__init__` method may cause an AttributeError at runtime",
+         "sourceRelativePath" : "Classes/UndefinedClassAttribute.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Undefined class attribute"
+      },
+      {
+         "id" : "py/useless-class",
+         "instructionPath" : "instructions/py/useless-class.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UselessClass.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Class only defines one public method (apart from `__init__` or `__new__`) and should be replaced by a function",
+         "sourceRelativePath" : "Classes/UselessClass.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "complexity"
+         ],
+         "title" : "Useless class"
+      },
+      {
+         "id" : "py/call/wrong-named-class-argument",
+         "instructionPath" : "instructions/py/call/wrong-named-class-argument.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WrongNameForArgumentInClassInstantiation.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a named argument whose name does not correspond to a parameter of the __init__ method of the class being instantiated, will result in a TypeError at runtime.",
+         "sourceRelativePath" : "Classes/WrongNameForArgumentInClassInstantiation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-628"
+         ],
+         "title" : "Wrong name for an argument in a class instantiation"
+      },
+      {
+         "id" : "py/call/wrong-number-class-arguments",
+         "instructionPath" : "instructions/py/call/wrong-number-class-arguments.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WrongNumberArgumentsInClassInstantiation.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using too many or too few arguments in a call to the `__init__` method of a class will result in a TypeError at runtime.",
+         "sourceRelativePath" : "Classes/WrongNumberArgumentsInClassInstantiation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-685"
+         ],
+         "title" : "Wrong number of arguments in a class instantiation"
+      },
+      {
+         "id" : "py/catch-base-exception",
+         "instructionPath" : "instructions/py/catch-base-exception.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CatchingBaseException.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Handling 'BaseException' means that system exits and keyboard interrupts may be mis-handled.",
+         "sourceRelativePath" : "Exceptions/CatchingBaseException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-396"
+         ],
+         "title" : "Except block handles 'BaseException'"
+      },
+      {
+         "id" : "py/empty-except",
+         "instructionPath" : "instructions/py/empty-except.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EmptyExcept.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Except doesn't do anything and has no comment",
+         "sourceRelativePath" : "Exceptions/EmptyExcept.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-390"
+         ],
+         "title" : "Empty except"
+      },
+      {
+         "id" : "py/useless-except",
+         "instructionPath" : "instructions/py/useless-except.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "IllegalExceptionHandlerType.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An exception handler specifying a non-exception type will never handle any exception.",
+         "sourceRelativePath" : "Exceptions/IllegalExceptionHandlerType.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Non-exception in 'except' clause"
+      },
+      {
+         "id" : "py/illegal-raise",
+         "instructionPath" : "instructions/py/illegal-raise.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "IllegalRaise.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Raising a non-exception object or type will result in a TypeError being raised instead.",
+         "sourceRelativePath" : "Exceptions/IllegalRaise.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Illegal raise"
+      },
+      {
+         "id" : "py/unreachable-except",
+         "instructionPath" : "instructions/py/unreachable-except.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "IncorrectExceptOrder.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Handling general exceptions before specific exceptions means that the specific handlers are never executed.",
+         "sourceRelativePath" : "Exceptions/IncorrectExceptOrder.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unreachable `except` block"
+      },
+      {
+         "id" : "py/raise-not-implemented",
+         "instructionPath" : "instructions/py/raise-not-implemented.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NotImplemented.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using `NotImplemented` as an exception will result in a type error.",
+         "sourceRelativePath" : "Exceptions/NotImplementedIsNotAnException.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Raising `NotImplemented`"
+      },
+      {
+         "id" : "py/raises-tuple",
+         "instructionPath" : "instructions/py/raises-tuple.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RaisingTuple.py",
+            "RaisingTuple2.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Raising a tuple will result in all but the first element being discarded",
+         "sourceRelativePath" : "Exceptions/RaisingTuple.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Raising a tuple"
+      },
+      {
+         "id" : "py/unguarded-next-in-generator",
+         "instructionPath" : "instructions/py/unguarded-next-in-generator.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnguardedNextInGeneratorBad.py",
+            "UnguardedNextInGeneratorGood.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling next() in a generator may cause unintended early termination of an iteration.",
+         "sourceRelativePath" : "Exceptions/UnguardedNextInGenerator.ql",
+         "tags" : [
+            "maintainability",
+            "portability"
+         ],
+         "title" : "Unguarded next in generator"
+      },
+      {
+         "id" : "py/super-not-enclosing-class",
+         "instructionPath" : "instructions/py/super-not-enclosing-class.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CallToSuperWrongClass.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Calling super with something other than the enclosing class may cause incorrect object initialization.",
+         "sourceRelativePath" : "Expressions/CallToSuperWrongClass.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-687"
+         ],
+         "title" : "First argument to super() is not enclosing class"
+      },
+      {
+         "id" : "py/comparison-of-constants",
+         "instructionPath" : "instructions/py/comparison-of-constants.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CompareConstants.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparison of constants is always constant, but is harder to read than a simple constant.",
+         "sourceRelativePath" : "Expressions/CompareConstants.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison of constants"
+      },
+      {
+         "id" : "py/comparison-of-identical-expressions",
+         "instructionPath" : "instructions/py/comparison-of-identical-expressions.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CompareIdenticalValues.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparison of identical values, the intent of which is unclear.",
+         "sourceRelativePath" : "Expressions/CompareIdenticalValues.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison of identical values"
+      },
+      {
+         "id" : "py/comparison-missing-self",
+         "instructionPath" : "instructions/py/comparison-missing-self.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CompareIdenticalValuesMissingSelf.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparison of identical values, the intent of which is unclear.",
+         "sourceRelativePath" : "Expressions/CompareIdenticalValuesMissingSelf.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Maybe missing 'self' in comparison"
+      },
+      {
+         "id" : "py/redundant-comparison",
+         "instructionPath" : "instructions/py/redundant-comparison.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UselessComparisonTest.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The result of a comparison is implied by a previous comparison.",
+         "sourceRelativePath" : "Expressions/Comparisons/UselessComparisonTest.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Redundant comparison"
+      },
+      {
+         "id" : "py/member-test-non-container",
+         "instructionPath" : "instructions/py/member-test-non-container.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ContainsNonContainer.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A membership test, such as 'item in sequence', with a non-container on the right hand side will raise a 'TypeError'.",
+         "sourceRelativePath" : "Expressions/ContainsNonContainer.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Membership test with a non-container"
+      },
+      {
+         "id" : "py/duplicate-key-dict-literal",
+         "instructionPath" : "instructions/py/duplicate-key-dict-literal.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateKeyInDictionaryLiteral.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Duplicate key in dict literal.",
+         "sourceRelativePath" : "Expressions/DuplicateKeyInDictionaryLiteral.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate key in dict literal"
+      },
+      {
+         "id" : "py/test-equals-none",
+         "instructionPath" : "instructions/py/test-equals-none.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "EqualsNone.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Testing whether an object is 'None' using the == operator is inefficient and potentially incorrect.",
+         "sourceRelativePath" : "Expressions/EqualsNone.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "performance"
+         ],
+         "title" : "Testing equality to None"
+      },
+      {
+         "id" : "py/percent-format/not-mapping",
+         "instructionPath" : "instructions/py/percent-format/not-mapping.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ExpectedMappingForFormatString.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The formatted object must be a mapping when the format includes a named specifier; otherwise a TypeError will be raised.\"",
+         "sourceRelativePath" : "Expressions/ExpectedMappingForFormatString.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Formatted object is not a mapping"
+      },
+      {
+         "id" : "py/explicit-call-to-delete",
+         "instructionPath" : "instructions/py/explicit-call-to-delete.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExplicitCallToDel.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The `__del__` special method is called by the virtual machine when an object is being finalized.",
+         "sourceRelativePath" : "Expressions/ExplicitCallToDel.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "`__del__` is called explicitly"
+      },
+      {
+         "id" : "py/str-format/mixed-fields",
+         "instructionPath" : "instructions/py/str-format/mixed-fields.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MixedExplicitImplicitIn3101Format.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using implicit and explicit numbering in string formatting operations, such as '\"{}: {1}\".format(a,b)', will raise a ValueError.",
+         "sourceRelativePath" : "Expressions/Formatting/MixedExplicitImplicitIn3101Format.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Formatting string mixes implicitly and explicitly numbered fields"
+      },
+      {
+         "id" : "py/str-format/surplus-argument",
+         "instructionPath" : "instructions/py/str-format/surplus-argument.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedArgumentIn3101Format.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Including surplus arguments in a formatting call makes code more difficult to read and may indicate an error.",
+         "sourceRelativePath" : "Expressions/Formatting/UnusedArgumentIn3101Format.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unused argument in a formatting call"
+      },
+      {
+         "id" : "py/str-format/surplus-named-argument",
+         "instructionPath" : "instructions/py/str-format/surplus-named-argument.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnusedNamedArgumentIn3101Format.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Including surplus keyword arguments in a formatting call makes code more difficult to read and may indicate an error.",
+         "sourceRelativePath" : "Expressions/Formatting/UnusedNamedArgumentIn3101Format.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unused named argument in formatting call"
+      },
+      {
+         "id" : "py/str-format/missing-named-argument",
+         "instructionPath" : "instructions/py/str-format/missing-named-argument.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WrongNameInArgumentsFor3101Format.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A string formatting operation, such as '\"{name}\".format(key=b)', where the names of format items in the format string differs from the names of the values to be formatted will...",
+         "sourceRelativePath" : "Expressions/Formatting/WrongNameInArgumentsFor3101Format.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing named arguments in formatting call"
+      },
+      {
+         "id" : "py/str-format/missing-argument",
+         "instructionPath" : "instructions/py/str-format/missing-argument.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WrongNumberArgumentsFor3101Format.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A string formatting operation, such as '\"{0}: {1}, {2}\".format(a,b)', where the number of values to be formatted is too few for the format string will raise an IndexError.",
+         "sourceRelativePath" : "Expressions/Formatting/WrongNumberArgumentsFor3101Format.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Too few arguments in formatting call"
+      },
+      {
+         "id" : "py/hash-unhashable-value",
+         "instructionPath" : "instructions/py/hash-unhashable-value.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "HashedButNoHash.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Hashing an object which is not hashable will result in a TypeError at runtime.",
+         "sourceRelativePath" : "Expressions/HashedButNoHash.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unhashable object hashed"
+      },
+      {
+         "id" : "py/comparison-using-is",
+         "instructionPath" : "instructions/py/comparison-using-is.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncorrectComparisonUsingIs.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparison using `is` when equivalence is not the same as identity",
+         "sourceRelativePath" : "Expressions/IncorrectComparisonUsingIs.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Comparison using is when operands support `__eq__`"
+      },
+      {
+         "id" : "py/call-to-non-callable",
+         "instructionPath" : "instructions/py/call-to-non-callable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NonCallableCalled.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A call to an object which is not a callable will raise a TypeError at runtime.",
+         "sourceRelativePath" : "Expressions/NonCallableCalled.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Non-callable called"
+      },
+      {
+         "id" : "py/comparison-using-is-non-portable",
+         "instructionPath" : "instructions/py/comparison-using-is-non-portable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "NonPortableComparisonUsingIs.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Comparison using 'is' when equivalence is not the same as identity and may not be portable.",
+         "sourceRelativePath" : "Expressions/NonPortableComparisonUsingIs.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Non-portable comparison using is when operands support `__eq__`"
+      },
+      {
+         "id" : "py/regex/backspace-escape",
+         "instructionPath" : "instructions/py/regex/backspace-escape.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "BackspaceEscape.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using '\\b' to escape the backspace character in a regular expression is confusing since it could be mistaken for a word boundary assertion.",
+         "sourceRelativePath" : "Expressions/Regex/BackspaceEscape.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Backspace escape in regular expression"
+      },
+      {
+         "id" : "py/regex/duplicate-in-character-class",
+         "instructionPath" : "instructions/py/regex/duplicate-in-character-class.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateCharacterInSet.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Duplicate characters in a class have no effect and may indicate an error in the regular expression.",
+         "sourceRelativePath" : "Expressions/Regex/DuplicateCharacterInSet.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Duplication in regular expression character class"
+      },
+      {
+         "id" : "py/regex/incomplete-special-group",
+         "instructionPath" : "instructions/py/regex/incomplete-special-group.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingPartSpecialGroup.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Incomplete special groups are parsed as normal groups and are unlikely to match the intended strings.",
+         "sourceRelativePath" : "Expressions/Regex/MissingPartSpecialGroup.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Missing part of special group in regular expression"
+      },
+      {
+         "id" : "py/regex/unmatchable-caret",
+         "instructionPath" : "instructions/py/regex/unmatchable-caret.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnmatchableCaret.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Regular expressions containing a caret '^' in the middle cannot be matched, whatever the input.",
+         "sourceRelativePath" : "Expressions/Regex/UnmatchableCaret.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unmatchable caret in regular expression"
+      },
+      {
+         "id" : "py/regex/unmatchable-dollar",
+         "instructionPath" : "instructions/py/regex/unmatchable-dollar.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnmatchableDollar.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Regular expressions containing a dollar '$' in the middle cannot be matched, whatever the input.",
+         "sourceRelativePath" : "Expressions/Regex/UnmatchableDollar.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unmatchable dollar in regular expression"
+      },
+      {
+         "id" : "py/truncated-division",
+         "instructionPath" : "instructions/py/truncated-division.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "TruncatedDivision.py",
+            "TruncatedDivisionCorrect.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The arguments to a division statement may be integers, which may cause the result to be truncated in Python 2.",
+         "sourceRelativePath" : "Expressions/TruncatedDivision.ql",
+         "tags" : [
+            "maintainability",
+            "correctness"
+         ],
+         "title" : "Result of integer division may be truncated"
+      },
+      {
+         "id" : "py/implicit-string-concatenation-in-list",
+         "instructionPath" : "instructions/py/implicit-string-concatenation-in-list.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnintentionalImplicitStringConcatenation.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Omitting a comma between strings causes implicit concatenation which is confusing in a list.",
+         "sourceRelativePath" : "Expressions/UnintentionalImplicitStringConcatenation.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "external/cwe/cwe-665"
+         ],
+         "title" : "Implicit string concatenation in a list"
+      },
+      {
+         "id" : "py/unnecessary-lambda",
+         "instructionPath" : "instructions/py/unnecessary-lambda.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnnecessaryLambda.py",
+            "UnnecessaryLambdaFix.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A lambda is used that calls through to a function without modifying any parameters",
+         "sourceRelativePath" : "Expressions/UnnecessaryLambda.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unnecessary lambda"
+      },
+      {
+         "id" : "py/percent-format/unsupported-character",
+         "instructionPath" : "instructions/py/percent-format/unsupported-character.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsupportedFormatCharacter.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An unsupported format character in a format string",
+         "sourceRelativePath" : "Expressions/UnsupportedFormatCharacter.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Unsupported format character"
+      },
+      {
+         "id" : "py/use-of-apply",
+         "instructionPath" : "instructions/py/use-of-apply.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "The builtin function 'apply' is obsolete and should not be used.",
+         "sourceRelativePath" : "Expressions/UseofApply.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "'apply' function used"
+      },
+      {
+         "id" : "py/use-of-input",
+         "instructionPath" : "instructions/py/use-of-input.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The built-in function 'input' is used which, in Python 2, can allow arbitrary code to be run.",
+         "sourceRelativePath" : "Expressions/UseofInput.ql",
+         "tags" : [
+            "security",
+            "correctness",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095"
+         ],
+         "title" : "'input' function used in Python 2"
+      },
+      {
+         "id" : "py/call/wrong-named-argument",
+         "instructionPath" : "instructions/py/call/wrong-named-argument.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using a named argument whose name does not correspond to a parameter of the called function or method, will result in a TypeError at runtime.",
+         "sourceRelativePath" : "Expressions/WrongNameForArgumentInCall.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-628"
+         ],
+         "title" : "Wrong name for an argument in a call"
+      },
+      {
+         "id" : "py/percent-format/wrong-arguments",
+         "instructionPath" : "instructions/py/percent-format/wrong-arguments.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WrongNumberArgumentsForFormat.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A string formatting operation, such as '\"%s: %s, %s\" % (a,b)', where the number of conversion specifiers in the format string differs from the number of values to be formatted...",
+         "sourceRelativePath" : "Expressions/WrongNumberArgumentsForFormat.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-685"
+         ],
+         "title" : "Wrong number of arguments for format"
+      },
+      {
+         "id" : "py/call/wrong-arguments",
+         "instructionPath" : "instructions/py/call/wrong-arguments.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using too many or too few arguments in a call to a function will result in a TypeError at runtime.",
+         "sourceRelativePath" : "Expressions/WrongNumberArgumentsInCall.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-685"
+         ],
+         "title" : "Wrong number of arguments in a call"
+      },
+      {
+         "id" : "py/mixed-returns",
+         "instructionPath" : "instructions/py/mixed-returns.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConsistentReturns.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Mixing implicit and explicit returns indicates a likely error as implicit returns always return `None`.",
+         "sourceRelativePath" : "Functions/ConsistentReturns.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Explicit returns mixed with implicit (fall through) returns"
+      },
+      {
+         "id" : "py/deprecated-slice-method",
+         "instructionPath" : "instructions/py/deprecated-slice-method.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Defining special methods for slicing has been deprecated since Python 2.0.",
+         "sourceRelativePath" : "Functions/DeprecatedSliceMethod.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Deprecated slice method"
+      },
+      {
+         "id" : "py/explicit-return-in-init",
+         "instructionPath" : "instructions/py/explicit-return-in-init.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExplicitReturnInInit.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Explicitly returning a value from an `__init__` method will raise a TypeError.",
+         "sourceRelativePath" : "Functions/ExplicitReturnInInit.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "`__init__` method returns a value"
+      },
+      {
+         "id" : "py/unexpected-raise-in-special-method",
+         "instructionPath" : "instructions/py/unexpected-raise-in-special-method.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncorrectRaiseInSpecialMethod.py",
+            "IncorrectRaiseInSpecialMethod2.py",
+            "IncorrectRaiseInSpecialMethod3.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Raising a non-standard exception in a special method alters the expected interface of that method.",
+         "sourceRelativePath" : "Functions/IncorrectRaiseInSpecialMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Non-standard exception raised in special method"
+      },
+      {
+         "id" : "py/inheritance/incorrect-overriding-signature",
+         "instructionPath" : "instructions/py/inheritance/incorrect-overriding-signature.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SignatureIncorrectlyOverriddenMethod.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Method has a different signature from the overridden method and, if it were called, would be likely to cause an error.",
+         "sourceRelativePath" : "Functions/IncorrectlyOverriddenMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Mismatch between signature and use of an overriding method"
+      },
+      {
+         "id" : "py/inheritance/incorrect-overridden-signature",
+         "instructionPath" : "instructions/py/inheritance/incorrect-overridden-signature.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SignatureOverridingMethod.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Method has a signature that differs from both the signature of its overriding methods and the arguments with which it is called, and if it were called, would be likely to cause...",
+         "sourceRelativePath" : "Functions/IncorrectlySpecifiedOverriddenMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Mismatch between signature and use of an overridden method"
+      },
+      {
+         "id" : "py/init-method-is-generator",
+         "instructionPath" : "instructions/py/init-method-is-generator.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InitIsGenerator.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "`__init__` method is a generator.",
+         "sourceRelativePath" : "Functions/InitIsGenerator.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "`__init__` method is a generator"
+      },
+      {
+         "id" : "py/iter-returns-non-iterator",
+         "instructionPath" : "instructions/py/iter-returns-non-iterator.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IterReturnsNonIterator.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The `__iter__` method returns a non-iterator which, if used in a 'for' loop, would raise a 'TypeError'.",
+         "sourceRelativePath" : "Functions/IterReturnsNonIterator.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "`__iter__` method returns a non-iterator"
+      },
+      {
+         "id" : "py/iter-returns-non-self",
+         "instructionPath" : "instructions/py/iter-returns-non-self.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IterReturnsNonSelf.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Iterator does not return self from `__iter__` method, violating the iterator protocol.",
+         "sourceRelativePath" : "Functions/IterReturnsNonSelf.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "quality"
+         ],
+         "title" : "Iterator does not return self from `__iter__` method"
+      },
+      {
+         "id" : "py/modification-of-default-value",
+         "instructionPath" : "instructions/py/modification-of-default-value.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ModificationOfParameterWithDefault.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Modifying the default value of a parameter can lead to unexpected results.",
+         "sourceRelativePath" : "Functions/ModificationOfParameterWithDefault.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Modification of parameter with default"
+      },
+      {
+         "id" : "py/not-named-cls",
+         "instructionPath" : "instructions/py/not-named-cls.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NonCls.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "By the PEP8 style guide, the first parameter of a class method should be named `cls`.",
+         "sourceRelativePath" : "Functions/NonCls.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "convention",
+            "quality"
+         ],
+         "title" : "First parameter of a class method is not named 'cls'"
+      },
+      {
+         "id" : "py/not-named-self",
+         "instructionPath" : "instructions/py/not-named-self.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NonSelf.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "By the PEP8 style guide, the first parameter of a normal method should be named `self`.",
+         "sourceRelativePath" : "Functions/NonSelf.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "convention",
+            "quality"
+         ],
+         "title" : "First parameter of a method is not named 'self'"
+      },
+      {
+         "id" : "py/overly-complex-delete",
+         "instructionPath" : "instructions/py/overly-complex-delete.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "OverlyComplexDelMethod.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "`__del__` methods may be called at arbitrary times, perhaps never called at all, and should be simple.",
+         "sourceRelativePath" : "Functions/OverlyComplexDelMethod.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "complexity"
+         ],
+         "title" : "Overly complex `__del__` method"
+      },
+      {
+         "id" : "py/mixed-tuple-returns",
+         "instructionPath" : "instructions/py/mixed-tuple-returns.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReturnConsistentTupleSizes.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A function that potentially returns tuples of different lengths may indicate a problem.",
+         "sourceRelativePath" : "Functions/ReturnConsistentTupleSizes.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Returning tuples with varying lengths"
+      },
+      {
+         "id" : "py/ignored-return-value",
+         "instructionPath" : "instructions/py/ignored-return-value.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ReturnValueIgnored.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Ignoring return values may result in discarding errors or loss of information.",
+         "sourceRelativePath" : "Functions/ReturnValueIgnored.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability",
+            "external/cwe/cwe-252"
+         ],
+         "title" : "Ignored return value"
+      },
+      {
+         "id" : "py/inheritance/signature-mismatch",
+         "instructionPath" : "instructions/py/inheritance/signature-mismatch.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "SignatureOverriddenMethod.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Overriding a method without ensuring that both methods accept the same number and type of parameters has the potential to cause an error when there is a mismatch.",
+         "sourceRelativePath" : "Functions/SignatureOverriddenMethod.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Signature mismatch in overriding method"
+      },
+      {
+         "id" : "py/special-method-wrong-signature",
+         "instructionPath" : "instructions/py/special-method-wrong-signature.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SignatureSpecialMethods.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Special method has incorrect signature",
+         "sourceRelativePath" : "Functions/SignatureSpecialMethods.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "quality"
+         ],
+         "title" : "Special method has incorrect signature"
+      },
+      {
+         "id" : "py/procedure-return-value-used",
+         "instructionPath" : "instructions/py/procedure-return-value-used.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UseImplicitNoneReturnValue.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The return value of a procedure (a function that does not return a value) is used.",
+         "sourceRelativePath" : "Functions/UseImplicitNoneReturnValue.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Use of the return value of a procedure"
+      },
+      {
+         "id" : "py/cyclic-import",
+         "instructionPath" : "instructions/py/cyclic-import.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Module forms part of an import cycle, thereby indirectly importing itself.",
+         "sourceRelativePath" : "Imports/CyclicImport.ql",
+         "tags" : [
+            "reliability",
+            "maintainability",
+            "modularity"
+         ],
+         "title" : "Cyclic import"
+      },
+      {
+         "id" : "py/import-deprecated-module",
+         "instructionPath" : "instructions/py/import-deprecated-module.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Import of a deprecated module",
+         "sourceRelativePath" : "Imports/DeprecatedModule.ql",
+         "tags" : [
+            "maintainability",
+            "external/cwe/cwe-477"
+         ],
+         "title" : "Import of deprecated module"
+      },
+      {
+         "id" : "py/encoding-error",
+         "instructionPath" : "instructions/py/encoding-error.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Encoding errors cause failures at runtime and prevent analysis of the code.",
+         "sourceRelativePath" : "Imports/EncodingError.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Encoding error"
+      },
+      {
+         "id" : "py/import-of-mutable-attribute",
+         "instructionPath" : "instructions/py/import-of-mutable-attribute.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "from_import.py",
+            "redirect.py",
+            "from_import_fixed.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Importing the value of a mutable attribute directly means that changes in global state will not be observed locally.",
+         "sourceRelativePath" : "Imports/FromImportOfMutableAttribute.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Importing value of mutable attribute"
+      },
+      {
+         "id" : "py/import-shadowed-loop-variable",
+         "instructionPath" : "instructions/py/import-shadowed-loop-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "A loop variable shadows an import.",
+         "sourceRelativePath" : "Imports/ImportShadowedByLoopVar.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Import shadowed by loop variable"
+      },
+      {
+         "id" : "py/import-star-used",
+         "instructionPath" : "instructions/py/import-star-used.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Using import * prevents some analysis",
+         "sourceRelativePath" : "Imports/ImportStarUsed.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "'import *' used"
+      },
+      {
+         "id" : "py/import-and-import-from",
+         "instructionPath" : "instructions/py/import-and-import-from.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ImportandImportFrom.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A module is imported with the \"import\" and \"import from\" statements",
+         "sourceRelativePath" : "Imports/ImportandImportFrom.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Module is imported with 'import' and 'import from'"
+      },
+      {
+         "id" : "py/multiple-imports-on-line",
+         "instructionPath" : "instructions/py/multiple-imports-on-line.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ImportTwiceOnALine.py",
+            "ImportOnTwoLines.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Defining multiple imports on one line makes code more difficult to read; PEP8 states that imports should usually be on separate lines.",
+         "sourceRelativePath" : "Imports/Imports.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "Multiple imports on one line"
+      },
+      {
+         "id" : "py/import-own-module",
+         "instructionPath" : "instructions/py/import-own-module.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ModuleImportsItself.py",
+            "ModuleImportsItselfFix.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A module imports itself",
+         "sourceRelativePath" : "Imports/ModuleImportsItself.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Module imports itself"
+      },
+      {
+         "id" : "py/unsafe-cyclic-import",
+         "instructionPath" : "instructions/py/unsafe-cyclic-import.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Module uses member of cyclically imported module, which can lead to failure at import time.",
+         "sourceRelativePath" : "Imports/ModuleLevelCyclicImport.ql",
+         "tags" : [
+            "reliability",
+            "correctness",
+            "types"
+         ],
+         "title" : "Module-level cyclic import"
+      },
+      {
+         "id" : "py/repeated-import",
+         "instructionPath" : "instructions/py/repeated-import.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MultipleImports.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Importing a module a second time has no effect and impairs readability",
+         "sourceRelativePath" : "Imports/MultipleImports.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Module is imported more than once"
+      },
+      {
+         "id" : "py/syntax-error",
+         "instructionPath" : "instructions/py/syntax-error.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Syntax errors cause failures at runtime and prevent analysis of the code.",
+         "sourceRelativePath" : "Imports/SyntaxError.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Syntax error"
+      },
+      {
+         "id" : "py/polluting-import",
+         "instructionPath" : "instructions/py/polluting-import.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnintentionalImport.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Importing a module using 'import *' may unintentionally pollute the global namespace if the module does not define `__all__`",
+         "sourceRelativePath" : "Imports/UnintentionalImport.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "'import *' may pollute namespace"
+      },
+      {
+         "id" : "py/unused-import",
+         "instructionPath" : "instructions/py/unused-import.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Import is not required as it is not used",
+         "sourceRelativePath" : "Imports/UnusedImport.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unused import"
+      },
+      {
+         "id" : "py/commented-out-code",
+         "instructionPath" : "instructions/py/commented-out-code.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Commented-out code makes the remaining code more difficult to read.",
+         "sourceRelativePath" : "Lexical/CommentedOutCode.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Commented-out code"
+      },
+      {
+         "id" : "py/old-style-octal-literal",
+         "instructionPath" : "instructions/py/old-style-octal-literal.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "OldOctalLiteral.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Octal literal with a leading 0 is easily misread as a decimal value",
+         "sourceRelativePath" : "Lexical/OldOctalLiteral.ql",
+         "tags" : [
+            "readability"
+         ],
+         "title" : "Confusing octal literal"
+      },
+      {
+         "id" : "py/todo-comment",
+         "instructionPath" : "instructions/py/todo-comment.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ToDoComment.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Writing comments that include 'TODO' tends to lead to a build up of partially implemented features.",
+         "sourceRelativePath" : "Lexical/ToDoComment.ql",
+         "tags" : [
+            "maintainability",
+            "readability",
+            "documentation",
+            "external/cwe/cwe-546"
+         ],
+         "title" : "'To Do' comment"
+      },
+      {
+         "id" : "py/pythagorean",
+         "instructionPath" : "instructions/py/pythagorean.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "Pythagorean.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calculating the length of the hypotenuse using the standard formula may lead to overflow.",
+         "sourceRelativePath" : "Numerics/Pythagorean.ql",
+         "tags" : [
+            "accuracy"
+         ],
+         "title" : "Pythagorean calculation with sub-optimal numerics"
+      },
+      {
+         "id" : "py/file-not-closed",
+         "instructionPath" : "instructions/py/file-not-closed.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "FileNotAlwaysClosed.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Opening a file without ensuring that it is always closed may lead to data loss or resource leaks.",
+         "sourceRelativePath" : "Resources/FileNotAlwaysClosed.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "performance",
+            "external/cwe/cwe-772"
+         ],
+         "title" : "File is not always closed"
+      },
+      {
+         "id" : "py/bind-socket-all-network-interfaces",
+         "instructionPath" : "instructions/py/bind-socket-all-network-interfaces.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BindToAllInterfaces.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Binding a socket to all interfaces opens it up to traffic from any IPv4 address and is therefore associated with security risks.",
+         "sourceRelativePath" : "Security/CVE-2018-1281/BindToAllInterfaces.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-200"
+         ],
+         "title" : "Binding a socket to all network interfaces"
+      },
+      {
+         "id" : "py/untrusted-data-to-external-api",
+         "instructionPath" : "instructions/py/untrusted-data-to-external-api.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ExternalAPISinkExample.py",
+            "ExternalAPITaintStepExample.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Data provided remotely is used in this external API without sanitization, which could be a security risk.",
+         "sourceRelativePath" : "Security/CWE-020-ExternalAPIs/UntrustedDataToExternalAPI.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Untrusted data passed to external API"
+      },
+      {
+         "id" : "py/cookie-injection",
+         "instructionPath" : "instructions/py/cookie-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CookieInjection.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Constructing cookies from user input may allow an attacker to perform a Cookie Poisoning attack.",
+         "sourceRelativePath" : "Security/CWE-020/CookieInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Construction of a cookie using user-supplied input"
+      },
+      {
+         "id" : "py/incomplete-hostname-regexp",
+         "instructionPath" : "instructions/py/incomplete-hostname-regexp.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteHostnameRegExp.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching a URL or hostname against a regular expression that contains an unescaped dot as part of the hostname might match more hostnames than expected.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteHostnameRegExp.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete regular expression for hostnames"
+      },
+      {
+         "id" : "py/incomplete-url-substring-sanitization",
+         "instructionPath" : "instructions/py/incomplete-url-substring-sanitization.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteUrlSubstringSanitization.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Security checks on the substrings of an unparsed URL are often vulnerable to bypassing.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteUrlSubstringSanitization.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete URL substring sanitization"
+      },
+      {
+         "id" : "py/overly-large-range",
+         "instructionPath" : "instructions/py/overly-large-range.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Overly permissive regular expression ranges match a wider range of characters than intended.",
+         "sourceRelativePath" : "Security/CWE-020/OverlyLargeRange.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Overly permissive regular expression range"
+      },
+      {
+         "id" : "py/path-injection",
+         "instructionPath" : "instructions/py/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "tainted_path.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "Security/CWE-022/PathInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "py/tarslip",
+         "instructionPath" : "instructions/py/tarslip.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "tarslip_bad.py",
+            "tarslip_good.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Extracting files from a malicious tar archive without validating that the destination file path is within the destination directory can cause files outside the destination...",
+         "sourceRelativePath" : "Security/CWE-022/TarSlip.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022"
+         ],
+         "title" : "Arbitrary file write during tarfile extraction"
+      },
+      {
+         "id" : "py/template-injection",
+         "instructionPath" : "instructions/py/template-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "JinjaBad.py",
+            "template_exploit.txt",
+            "JinjaGoodParam.py",
+            "JinjaGoodSandbox.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using user-controlled data to create a template can lead to remote code execution or cross site scripting.",
+         "sourceRelativePath" : "Security/CWE-074/TemplateInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-074"
+         ],
+         "title" : "Server Side Template Injection"
+      },
+      {
+         "id" : "py/command-line-injection",
+         "instructionPath" : "instructions/py/command-line-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "command_injection.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "Security/CWE-078/CommandInjection.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088"
+         ],
+         "title" : "Uncontrolled command line"
+      },
+      {
+         "id" : "py/shell-command-constructed-from-input",
+         "instructionPath" : "instructions/py/shell-command-constructed-from-input.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "unsafe-shell-command-construction.py",
+            "unsafe-shell-command-construction_fixed.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using externally controlled strings in a command line may allow a malicious user to change the meaning of the command.",
+         "sourceRelativePath" : "Security/CWE-078/UnsafeShellCommandConstruction.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-088",
+            "external/cwe/cwe-073"
+         ],
+         "title" : "Unsafe shell command constructed from library input"
+      },
+      {
+         "id" : "py/jinja2/autoescape-false",
+         "instructionPath" : "instructions/py/jinja2/autoescape-false.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "jinja2.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using jinja2 templates with 'autoescape=False' can cause a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/Jinja2WithoutEscaping.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079"
+         ],
+         "title" : "Jinja2 templating with autoescape=False"
+      },
+      {
+         "id" : "py/reflective-xss",
+         "instructionPath" : "instructions/py/reflective-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "xss.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to a web page allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/ReflectedXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Reflected server-side cross-site scripting"
+      },
+      {
+         "id" : "py/sql-injection",
+         "instructionPath" : "instructions/py/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "sql_injection.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a SQL query from user-controlled sources is vulnerable to insertion of malicious SQL code by the user.",
+         "sourceRelativePath" : "Security/CWE-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089"
+         ],
+         "title" : "SQL query built from user-controlled sources"
+      },
+      {
+         "id" : "py/ldap-injection",
+         "instructionPath" : "instructions/py/ldap-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "example_bad1.py",
+            "example_bad2.py",
+            "example_good1.py",
+            "example_good2.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building an LDAP query from user-controlled sources is vulnerable to insertion of malicious LDAP code by the user.",
+         "sourceRelativePath" : "Security/CWE-090/LdapInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-090"
+         ],
+         "title" : "LDAP query built from user-controlled sources"
+      },
+      {
+         "id" : "py/code-injection",
+         "instructionPath" : "instructions/py/code-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "code_injection.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.",
+         "sourceRelativePath" : "Security/CWE-094/CodeInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Code injection"
+      },
+      {
+         "id" : "py/client-exposed-cookie",
+         "instructionPath" : "instructions/py/client-exposed-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureCookie.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Cookies without the `HttpOnly` attribute set can be accessed by JS scripts, making them more vulnerable to XSS attacks.",
+         "sourceRelativePath" : "Security/CWE-1004/NonHttpOnlyCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1004"
+         ],
+         "title" : "Sensitive cookie missing `HttpOnly` attribute"
+      },
+      {
+         "id" : "py/http-response-splitting",
+         "instructionPath" : "instructions/py/http-response-splitting.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "header_injection.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to an HTTP header makes code vulnerable to attack by header splitting.",
+         "sourceRelativePath" : "Security/CWE-113/HeaderInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-113",
+            "external/cwe/cwe-079"
+         ],
+         "title" : "HTTP Response Splitting"
+      },
+      {
+         "id" : "py/bad-tag-filter",
+         "instructionPath" : "instructions/py/bad-tag-filter.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadTagFilter.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching HTML tags using regular expressions is hard to do right, and can easily lead to security issues.",
+         "sourceRelativePath" : "Security/CWE-116/BadTagFilter.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-116",
+            "external/cwe/cwe-020",
+            "external/cwe/cwe-185",
+            "external/cwe/cwe-186"
+         ],
+         "title" : "Bad HTML filtering regexp"
+      },
+      {
+         "id" : "py/log-injection",
+         "instructionPath" : "instructions/py/log-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "LogInjectionBad.py",
+            "LogInjectionGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled data is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "Security/CWE-117/LogInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log Injection"
+      },
+      {
+         "id" : "py/samesite-none-cookie",
+         "instructionPath" : "instructions/py/samesite-none-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureCookie.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Cookies with `SameSite` set to `None` can allow for Cross-Site Request Forgery (CSRF) attacks.",
+         "sourceRelativePath" : "Security/CWE-1275/SameSiteNoneCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1275"
+         ],
+         "title" : "Sensitive cookie with `SameSite` attribute set to `None`"
+      },
+      {
+         "id" : "py/stack-trace-exposure",
+         "instructionPath" : "instructions/py/stack-trace-exposure.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StackTraceExposure.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Leaking information about an exception, such as messages and stack traces, to an external user can expose implementation details that are useful to an attacker for developing a...",
+         "sourceRelativePath" : "Security/CWE-209/StackTraceExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-209",
+            "external/cwe/cwe-497"
+         ],
+         "title" : "Information exposure through an exception"
+      },
+      {
+         "id" : "py/flask-debug",
+         "instructionPath" : "instructions/py/flask-debug.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "FlaskDebug.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Running a Flask app in debug mode may allow an attacker to run arbitrary code through the Werkzeug debugger.",
+         "sourceRelativePath" : "Security/CWE-215/FlaskDebug.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-215",
+            "external/cwe/cwe-489"
+         ],
+         "title" : "Flask app is run in debug mode"
+      },
+      {
+         "id" : "py/pam-auth-bypass",
+         "instructionPath" : "instructions/py/pam-auth-bypass.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "PamAuthorizationBad.py",
+            "PamAuthorizationGood.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Not using `pam_acct_mgmt` after `pam_authenticate` to check the validity of a login can lead to authorization bypass.",
+         "sourceRelativePath" : "Security/CWE-285/PamAuthorization.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-285"
+         ],
+         "title" : "PAM authorization bypass due to incorrect usage"
+      },
+      {
+         "id" : "py/paramiko-missing-host-key-validation",
+         "instructionPath" : "instructions/py/paramiko-missing-host-key-validation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "paramiko_host_key.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accepting unknown host keys can allow man-in-the-middle attacks.",
+         "sourceRelativePath" : "Security/CWE-295/MissingHostKeyValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295"
+         ],
+         "title" : "Accepting unknown SSH host keys when using Paramiko"
+      },
+      {
+         "id" : "py/request-without-cert-validation",
+         "instructionPath" : "instructions/py/request-without-cert-validation.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "make_request.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Making a request without certificate validation can allow man-in-the-middle attacks.",
+         "sourceRelativePath" : "Security/CWE-295/RequestWithoutValidation.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295"
+         ],
+         "title" : "Request without certificate validation"
+      },
+      {
+         "id" : "py/clear-text-logging-sensitive-data",
+         "instructionPath" : "instructions/py/clear-text-logging-sensitive-data.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextLogging.py",
+            "CleartextLoggingGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Logging sensitive information without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/CleartextLogging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-359",
+            "external/cwe/cwe-532"
+         ],
+         "title" : "Clear-text logging of sensitive information"
+      },
+      {
+         "id" : "py/clear-text-storage-sensitive-data",
+         "instructionPath" : "instructions/py/clear-text-storage-sensitive-data.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "password_in_cookie.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Sensitive information stored without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/CleartextStorage.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-315",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Clear-text storage of sensitive information"
+      },
+      {
+         "id" : "py/weak-crypto-key",
+         "instructionPath" : "instructions/py/weak-crypto-key.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Use of a cryptographic key that is too small may allow the encryption to be broken.",
+         "sourceRelativePath" : "Security/CWE-326/WeakCryptoKey.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-326"
+         ],
+         "title" : "Use of weak cryptographic key"
+      },
+      {
+         "id" : "py/weak-cryptographic-algorithm",
+         "instructionPath" : "instructions/py/weak-cryptographic-algorithm.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "broken_crypto.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic algorithms can compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/BrokenCryptoAlgorithm.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Use of a broken or weak cryptographic algorithm"
+      },
+      {
+         "id" : "py/insecure-default-protocol",
+         "instructionPath" : "instructions/py/insecure-default-protocol.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "insecure_default_protocol.py",
+            "secure_default_protocol.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Leaving the SSL/TLS version unspecified may result in an insecure default protocol being used.",
+         "sourceRelativePath" : "Security/CWE-327/InsecureDefaultProtocol.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Default version of SSL/TLS may be insecure"
+      },
+      {
+         "id" : "py/insecure-protocol",
+         "instructionPath" : "instructions/py/insecure-protocol.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "insecure_protocol.py",
+            "secure_default_protocol.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using an insecure SSL/TLS version may leave the connection vulnerable to attacks.",
+         "sourceRelativePath" : "Security/CWE-327/InsecureProtocol.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Use of insecure SSL/TLS version"
+      },
+      {
+         "id" : "py/weak-sensitive-data-hashing",
+         "instructionPath" : "instructions/py/weak-sensitive-data-hashing.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "weak_certificate_hashing.py",
+            "weak_password_hashing_bad.py",
+            "weak_password_hashing_good.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic hashing algorithms can compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/WeakSensitiveDataHashing.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328",
+            "external/cwe/cwe-916"
+         ],
+         "title" : "Use of a broken or weak cryptographic hashing algorithm on sensitive data"
+      },
+      {
+         "id" : "py/csrf-protection-disabled",
+         "instructionPath" : "instructions/py/csrf-protection-disabled.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "settings.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Disabling or weakening CSRF protection may make the application vulnerable to a Cross-Site Request Forgery (CSRF) attack.",
+         "sourceRelativePath" : "Security/CWE-352/CSRFProtectionDisabled.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "CSRF protection weakened or disabled"
+      },
+      {
+         "id" : "py/insecure-temporary-file",
+         "instructionPath" : "instructions/py/insecure-temporary-file.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureTemporaryFile.py",
+            "SecureTemporaryFile.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Creating a temporary file using this method may be insecure.",
+         "sourceRelativePath" : "Security/CWE-377/InsecureTemporaryFile.ql",
+         "tags" : [
+            "external/cwe/cwe-377",
+            "security"
+         ],
+         "title" : "Insecure temporary file"
+      },
+      {
+         "id" : "py/unsafe-deserialization",
+         "instructionPath" : "instructions/py/unsafe-deserialization.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnpicklingBad.py",
+            "JsonGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Deserializing user-controlled data may allow attackers to execute arbitrary code.",
+         "sourceRelativePath" : "Security/CWE-502/UnsafeDeserialization.ql",
+         "tags" : [
+            "external/cwe/cwe-502",
+            "security",
+            "serialization"
+         ],
+         "title" : "Deserialization of user-controlled data"
+      },
+      {
+         "id" : "py/url-redirection",
+         "instructionPath" : "instructions/py/url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "redirect_bad.py",
+            "redirect_good.py",
+            "redirect_good2.py",
+            "redirect_good3.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "Security/CWE-601/UrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "URL redirection from remote source"
+      },
+      {
+         "id" : "py/xxe",
+         "instructionPath" : "instructions/py/xxe.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XxeBad.py",
+            "XxeGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Parsing user input as an XML document with external entity expansion is vulnerable to XXE attacks.",
+         "sourceRelativePath" : "Security/CWE-611/Xxe.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-611",
+            "external/cwe/cwe-827"
+         ],
+         "title" : "XML external entity expansion"
+      },
+      {
+         "id" : "py/insecure-cookie",
+         "instructionPath" : "instructions/py/insecure-cookie.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureCookie.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Insecure cookies may be sent in cleartext, which makes them vulnerable to interception.",
+         "sourceRelativePath" : "Security/CWE-614/InsecureCookie.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-614"
+         ],
+         "title" : "Failure to use secure cookies"
+      },
+      {
+         "id" : "py/xpath-injection",
+         "instructionPath" : "instructions/py/xpath-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "xpathBad.py",
+            "xpathGood.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a XPath query from user-controlled sources is vulnerable to insertion of malicious Xpath code by the user.",
+         "sourceRelativePath" : "Security/CWE-643/XpathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-643"
+         ],
+         "title" : "XPath query built from user-controlled sources"
+      },
+      {
+         "id" : "py/polynomial-redos",
+         "instructionPath" : "instructions/py/polynomial-redos.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "A regular expression that can require polynomial time to match may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-730/PolynomialReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Polynomial regular expression used on uncontrolled data"
+      },
+      {
+         "id" : "py/redos",
+         "instructionPath" : "instructions/py/redos.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "A regular expression that requires exponential time to match certain inputs can be a performance bottleneck, and may be vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-730/ReDoS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1333",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Inefficient regular expression"
+      },
+      {
+         "id" : "py/regex-injection",
+         "instructionPath" : "instructions/py/regex-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "re_bad.py",
+            "re_good.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "User input should not be used in regular expressions without first being escaped, otherwise a malicious user may be able to inject an expression that could require exponential...",
+         "sourceRelativePath" : "Security/CWE-730/RegexInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-730",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "Regular expression injection"
+      },
+      {
+         "id" : "py/overly-permissive-file",
+         "instructionPath" : "instructions/py/overly-permissive-file.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Allowing files to be readable or writable by users other than the owner may allow sensitive information to be accessed.",
+         "sourceRelativePath" : "Security/CWE-732/WeakFilePermissions.ql",
+         "tags" : [
+            "external/cwe/cwe-732",
+            "security"
+         ],
+         "title" : "Overly permissive file permissions"
+      },
+      {
+         "id" : "py/xml-bomb",
+         "instructionPath" : "instructions/py/xml-bomb.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XmlBombBad.py",
+            "XmlBombGood.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Parsing user input as an XML document with arbitrary internal entity expansion is vulnerable to denial-of-service attacks.",
+         "sourceRelativePath" : "Security/CWE-776/XmlBomb.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-776",
+            "external/cwe/cwe-400"
+         ],
+         "title" : "XML internal entity expansion"
+      },
+      {
+         "id" : "py/hardcoded-credentials",
+         "instructionPath" : "instructions/py/hardcoded-credentials.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HardcodedCredentials.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Credentials are hard coded in the source code of the application.",
+         "sourceRelativePath" : "Security/CWE-798/HardcodedCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded credentials"
+      },
+      {
+         "id" : "py/full-ssrf",
+         "instructionPath" : "instructions/py/full-ssrf.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Making a network request to a URL that is fully user-controlled allows for request forgery attacks.",
+         "sourceRelativePath" : "Security/CWE-918/FullServerSideRequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Full server-side request forgery"
+      },
+      {
+         "id" : "py/partial-ssrf",
+         "instructionPath" : "instructions/py/partial-ssrf.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Making a network request to a URL that is partially user-controlled allows for request forgery attacks.",
+         "sourceRelativePath" : "Security/CWE-918/PartialServerSideRequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Partial server-side request forgery"
+      },
+      {
+         "id" : "py/nosql-injection",
+         "instructionPath" : "instructions/py/nosql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NoSQLInjection-bad.py",
+            "NoSQLInjection-good.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a NoSQL query from user-controlled sources is vulnerable to insertion of malicious NoSQL code by the user.",
+         "sourceRelativePath" : "Security/CWE-943/NoSqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-943"
+         ],
+         "title" : "NoSQL Injection"
+      },
+      {
+         "id" : "py/assert-literal-constant",
+         "instructionPath" : "instructions/py/assert-literal-constant.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "AssertLiteralConstant.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "An assert statement testing a literal constant value may exhibit different behavior when optimizations are enabled.",
+         "sourceRelativePath" : "Statements/AssertLiteralConstant.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Assert statement tests the truth value of a literal constant"
+      },
+      {
+         "id" : "py/asserts-tuple",
+         "instructionPath" : "instructions/py/asserts-tuple.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "AssertOnTuple.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using an assert statement to test a tuple provides no validity checking.",
+         "sourceRelativePath" : "Statements/AssertOnTuple.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-670"
+         ],
+         "title" : "Asserting a tuple"
+      },
+      {
+         "id" : "py/exit-from-finally",
+         "instructionPath" : "instructions/py/exit-from-finally.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Using a Break or Return statement in a finally block causes the Try-finally block to exit, discarding the exception.",
+         "sourceRelativePath" : "Statements/BreakOrReturnInFinally.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "correctness",
+            "external/cwe/cwe-584"
+         ],
+         "title" : "'break' or 'return' statement in finally"
+      },
+      {
+         "id" : "py/c-style-parentheses",
+         "instructionPath" : "instructions/py/c-style-parentheses.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "C_StyleParentheses.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Putting parentheses around a condition in an 'if' or 'while' statement is unnecessary and harder to read.",
+         "sourceRelativePath" : "Statements/C_StyleParentheses.ql",
+         "tags" : [
+            "maintainability"
+         ],
+         "title" : "C-style condition"
+      },
+      {
+         "id" : "py/constant-conditional-expression",
+         "instructionPath" : "instructions/py/constant-conditional-expression.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ConstantInConditional.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "The conditional is always true or always false",
+         "sourceRelativePath" : "Statements/ConstantInConditional.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Constant in conditional expression or statement"
+      },
+      {
+         "id" : "py/missing-docstring",
+         "instructionPath" : "instructions/py/missing-docstring.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "DocStrings.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Omitting documentation strings from public classes, functions or methods makes it more difficult for other developers to maintain the code.",
+         "sourceRelativePath" : "Statements/DocStrings.ql",
+         "tags" : [
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Missing docstring"
+      },
+      {
+         "id" : "py/use-of-exec",
+         "instructionPath" : "instructions/py/use-of-exec.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ExecUsed.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "The 'exec' statement or function is used which could cause arbitrary code to be executed.",
+         "sourceRelativePath" : "Statements/ExecUsed.ql",
+         "tags" : [
+            "security",
+            "correctness"
+         ],
+         "title" : "'exec' used"
+      },
+      {
+         "id" : "py/iteration-string-and-sequence",
+         "instructionPath" : "instructions/py/iteration-string-and-sequence.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IterableStringOrSequence.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Iteration over either a string or a sequence in the same loop can cause errors that are hard to find.",
+         "sourceRelativePath" : "Statements/IterableStringOrSequence.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Iterable can be either a string or a sequence"
+      },
+      {
+         "id" : "py/mismatched-multiple-assignment",
+         "instructionPath" : "instructions/py/mismatched-multiple-assignment.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MismatchInMultipleAssignment.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Assigning multiple variables without ensuring that you define a value for each variable causes an exception at runtime.",
+         "sourceRelativePath" : "Statements/MismatchInMultipleAssignment.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Mismatch in multiple assignment"
+      },
+      {
+         "id" : "py/modification-of-locals",
+         "instructionPath" : "instructions/py/modification-of-locals.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ModificationOfLocals.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Modifications of the dictionary returned by locals() are not propagated to the local variables of a function.",
+         "sourceRelativePath" : "Statements/ModificationOfLocals.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Modification of dictionary returned by locals()"
+      },
+      {
+         "id" : "py/nested-loops-with-same-variable",
+         "instructionPath" : "instructions/py/nested-loops-with-same-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NestedLoopsSameVariable.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Nested loops in which the target variable is the same for each loop make the behavior of the loops difficult to understand.",
+         "sourceRelativePath" : "Statements/NestedLoopsSameVariable.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Nested loops with same variable"
+      },
+      {
+         "id" : "py/nested-loops-with-same-variable-reused",
+         "instructionPath" : "instructions/py/nested-loops-with-same-variable-reused.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NestedLoopsSameVariableWithReuse.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Redefining a variable in an inner loop and then using the variable in an outer loop causes unexpected behavior.",
+         "sourceRelativePath" : "Statements/NestedLoopsSameVariableWithReuse.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Nested loops with same variable reused after inner loop body"
+      },
+      {
+         "id" : "py/non-iterable-in-for-loop",
+         "instructionPath" : "instructions/py/non-iterable-in-for-loop.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "NonIteratorInForLoop.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a non-iterable as the object in a 'for' loop causes a TypeError.",
+         "sourceRelativePath" : "Statements/NonIteratorInForLoop.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Non-iterable used in for loop"
+      },
+      {
+         "id" : "py/redundant-assignment",
+         "instructionPath" : "instructions/py/redundant-assignment.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RedundantAssignment.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Assigning a variable to itself is useless and very likely indicates an error in the code.",
+         "sourceRelativePath" : "Statements/RedundantAssignment.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Redundant assignment"
+      },
+      {
+         "id" : "py/return-or-yield-outside-function",
+         "instructionPath" : "instructions/py/return-or-yield-outside-function.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ReturnOrYieldOutsideFunction.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using 'return' or 'yield' outside a function causes a 'SyntaxError' at runtime.",
+         "sourceRelativePath" : "Statements/ReturnOrYieldOutsideFunction.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of 'return' or 'yield' outside a function"
+      },
+      {
+         "id" : "py/should-use-with",
+         "instructionPath" : "instructions/py/should-use-with.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ShouldUseWithStatement.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using a 'try-finally' block to ensure only that a resource is closed makes code more difficult to read.",
+         "sourceRelativePath" : "Statements/ShouldUseWithStatement.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Should use a 'with' statement"
+      },
+      {
+         "id" : "py/side-effect-in-assert",
+         "instructionPath" : "instructions/py/side-effect-in-assert.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SideEffectInAssert.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Side-effects in assert statements result in differences between normal and optimized behavior.",
+         "sourceRelativePath" : "Statements/SideEffectInAssert.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "An assert statement has a side-effect"
+      },
+      {
+         "id" : "py/ineffectual-statement",
+         "instructionPath" : "instructions/py/ineffectual-statement.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StatementNoEffect.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "A statement has no effect",
+         "sourceRelativePath" : "Statements/StatementNoEffect.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Statement has no effect"
+      },
+      {
+         "id" : "py/string-concatenation-in-loop",
+         "instructionPath" : "instructions/py/string-concatenation-in-loop.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Concatenating strings in loops has quadratic performance.",
+         "sourceRelativePath" : "Statements/StringConcatenationInLoop.ql",
+         "tags" : [
+            "efficiency",
+            "maintainability"
+         ],
+         "title" : "String concatenation in loop"
+      },
+      {
+         "id" : "py/print-during-import",
+         "instructionPath" : "instructions/py/print-during-import.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TopLevelPrint.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using a print statement at module scope (except when guarded by `if __name__ == '__main__'`) will cause surprising output when the module is imported.",
+         "sourceRelativePath" : "Statements/TopLevelPrint.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of a print statement at module level"
+      },
+      {
+         "id" : "py/unnecessary-delete",
+         "instructionPath" : "instructions/py/unnecessary-delete.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnnecessaryDelete.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using a 'delete' statement to delete a local variable is unnecessary, because the variable is deleted automatically when the function exits.",
+         "sourceRelativePath" : "Statements/UnnecessaryDelete.ql",
+         "tags" : [
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unnecessary delete statement in function"
+      },
+      {
+         "id" : "py/redundant-else",
+         "instructionPath" : "instructions/py/redundant-else.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnnecessaryElseClause.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An 'else' clause in a 'for' or 'while' statement that does not contain a 'break' is redundant.",
+         "sourceRelativePath" : "Statements/UnnecessaryElseClause.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unnecessary 'else' clause in loop"
+      },
+      {
+         "id" : "py/unnecessary-pass",
+         "instructionPath" : "instructions/py/unnecessary-pass.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Unnecessary 'pass' statement",
+         "sourceRelativePath" : "Statements/UnnecessaryPass.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Unnecessary pass"
+      },
+      {
+         "id" : "py/unreachable-statement",
+         "instructionPath" : "instructions/py/unreachable-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnreachableCode.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Code is unreachable",
+         "sourceRelativePath" : "Statements/UnreachableCode.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unreachable code"
+      },
+      {
+         "id" : "py/unused-exception-object",
+         "instructionPath" : "instructions/py/unused-exception-object.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnusedExceptionObject.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An exception object is created, but is not used.",
+         "sourceRelativePath" : "Statements/UnusedExceptionObject.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Unused exception object"
+      },
+      {
+         "id" : "py/use-of-exit-or-quit",
+         "instructionPath" : "instructions/py/use-of-exit-or-quit.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExitUsed.py",
+            "SysExitUsed.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "exit() or quit() may fail if the interpreter is run with the -S option.",
+         "sourceRelativePath" : "Statements/UseOfExit.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of exit() or quit()"
+      },
+      {
+         "id" : "py/imprecise-assert",
+         "instructionPath" : "instructions/py/imprecise-assert.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ImpreciseAssert.py",
+            "ImpreciseAssert2.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Using 'assertTrue' or 'assertFalse' rather than a more specific assertion can give uninformative failure messages.",
+         "sourceRelativePath" : "Testing/ImpreciseAssert.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability"
+         ],
+         "title" : "Imprecise assert"
+      },
+      {
+         "id" : "py/use-of-global",
+         "instructionPath" : "instructions/py/use-of-global.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Use of the 'global' statement may indicate poor modularity.",
+         "sourceRelativePath" : "Variables/Global.ql",
+         "tags" : [],
+         "title" : "Use of the 'global' statement"
+      },
+      {
+         "id" : "py/redundant-global-declaration",
+         "instructionPath" : "instructions/py/redundant-global-declaration.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Use of the 'global' statement at module level",
+         "sourceRelativePath" : "Variables/GlobalAtModuleLevel.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code"
+         ],
+         "title" : "Use of 'global' at module level"
+      },
+      {
+         "id" : "py/leaking-list-comprehension",
+         "instructionPath" : "instructions/py/leaking-list-comprehension.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "LeakingListComprehension.py",
+            "LeakingListComprehensionFixed.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using the iteration variable of a list comprehension in the enclosing scope will result in different behavior between Python 2 and 3 and is confusing.",
+         "sourceRelativePath" : "Variables/LeakingListComprehension.ql",
+         "tags" : [
+            "portability",
+            "correctness"
+         ],
+         "title" : "List comprehension variable used in enclosing scope"
+      },
+      {
+         "id" : "py/loop-variable-capture",
+         "instructionPath" : "instructions/py/loop-variable-capture.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "bad.py",
+            "good.py",
+            "good2.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Capturing a loop variable is not the same as capturing its value, and can lead to unexpected behavior or bugs.",
+         "sourceRelativePath" : "Variables/LoopVariableCapture/LoopVariableCapture.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Loop variable capture"
+      },
+      {
+         "id" : "py/multiple-definition",
+         "instructionPath" : "instructions/py/multiple-definition.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "MultiplyDefined.py"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Assignment to a variable occurs multiple times without any intermediate use of that variable",
+         "sourceRelativePath" : "Variables/MultiplyDefined.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Variable defined multiple times"
+      },
+      {
+         "id" : "py/local-shadows-builtin",
+         "instructionPath" : "instructions/py/local-shadows-builtin.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ShadowBuiltin.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Defining a local variable with the same name as a built-in object makes the built-in object unusable within the current scope and makes the code more difficult to read.",
+         "sourceRelativePath" : "Variables/ShadowBuiltin.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "correctness"
+         ],
+         "title" : "Builtin shadowed by local variable"
+      },
+      {
+         "id" : "py/local-shadows-global",
+         "instructionPath" : "instructions/py/local-shadows-global.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "ShadowGlobal.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Defining a local variable with the same name as a global variable makes the global variable unusable within the current scope and makes the code more difficult to read.",
+         "sourceRelativePath" : "Variables/ShadowGlobal.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "readability",
+            "correctness"
+         ],
+         "title" : "Global shadowed by local variable"
+      },
+      {
+         "id" : "py/unused-loop-variable",
+         "instructionPath" : "instructions/py/unused-loop-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousUnusedLoopIterationVariable.py",
+            "SuspiciousUnusedLoopIterationVariableFixed.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A loop iteration variable is unused, which suggests an error.",
+         "sourceRelativePath" : "Variables/SuspiciousUnusedLoopIterationVariable.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Suspicious unused loop iteration variable"
+      },
+      {
+         "id" : "py/undefined-export",
+         "instructionPath" : "instructions/py/undefined-export.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UndefinedExport.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Including an undefined attribute in `__all__` causes an exception when the module is imported using '*'",
+         "sourceRelativePath" : "Variables/UndefinedExport.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Explicit export is not defined"
+      },
+      {
+         "id" : "py/undefined-global-variable",
+         "instructionPath" : "instructions/py/undefined-global-variable.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "UndefinedGlobal.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a global variable before it is initialized causes an exception.",
+         "sourceRelativePath" : "Variables/UndefinedGlobal.ql",
+         "tags" : [
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of an undefined global variable"
+      },
+      {
+         "id" : "py/undefined-placeholder-variable",
+         "instructionPath" : "instructions/py/undefined-placeholder-variable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Using a variable before it is initialized causes an exception.",
+         "sourceRelativePath" : "Variables/UndefinedPlaceHolder.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Use of an undefined placeholder variable"
+      },
+      {
+         "id" : "py/uninitialized-local-variable",
+         "instructionPath" : "instructions/py/uninitialized-local-variable.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UninitializedLocal.py"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a local variable before it is initialized causes an UnboundLocalError.",
+         "sourceRelativePath" : "Variables/UninitializedLocal.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness"
+         ],
+         "title" : "Potentially uninitialized local variable"
+      },
+      {
+         "id" : "py/unused-local-variable",
+         "instructionPath" : "instructions/py/unused-local-variable.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnusedLocalVariable.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Local variable is defined but not used",
+         "sourceRelativePath" : "Variables/UnusedLocalVariable.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Unused local variable"
+      },
+      {
+         "id" : "py/unused-global-variable",
+         "instructionPath" : "instructions/py/unused-global-variable.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnusedModuleVariable.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Global variable is defined but not used",
+         "sourceRelativePath" : "Variables/UnusedModuleVariable.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Unused global variable"
+      },
+      {
+         "id" : "py/unused-parameter",
+         "instructionPath" : "instructions/py/unused-parameter.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "UnusedParameter.py"
+         ],
+         "severity" : "recommendation",
+         "shortDescription" : "Parameter is defined but not used",
+         "sourceRelativePath" : "Variables/UnusedParameter.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "readability"
+         ],
+         "title" : "Unused parameter"
+      },
+      {
+         "id" : "py/duplicate-block",
+         "instructionPath" : "instructions/py/duplicate-block.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "This block of code is duplicated elsewhere.",
+         "sourceRelativePath" : "external/DuplicateBlock.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Duplicate code block"
+      },
+      {
+         "id" : "py/duplicate-function",
+         "instructionPath" : "instructions/py/duplicate-function.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another identical implementation of this function.",
+         "sourceRelativePath" : "external/DuplicateFunction.ql",
+         "tags" : [
+            "testability",
+            "useless-code",
+            "maintainability",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Duplicate function"
+      },
+      {
+         "id" : "py/mostly-duplicate-class",
+         "instructionPath" : "instructions/py/mostly-duplicate-class.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "More than 80% of the methods in this class are duplicated in another class.",
+         "sourceRelativePath" : "external/MostlyDuplicateClass.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Mostly duplicate class"
+      },
+      {
+         "id" : "py/mostly-duplicate-file",
+         "instructionPath" : "instructions/py/mostly-duplicate-file.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another file that shares a lot of the code with this file.",
+         "sourceRelativePath" : "external/MostlyDuplicateFile.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Mostly duplicate module"
+      },
+      {
+         "id" : "py/mostly-similar-file",
+         "instructionPath" : "instructions/py/mostly-similar-file.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another module that shares a lot of the code with this module.",
+         "sourceRelativePath" : "external/MostlySimilarFile.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Mostly similar module"
+      },
+      {
+         "id" : "py/similar-function",
+         "instructionPath" : "instructions/py/similar-function.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "There is another function that is very similar this one.",
+         "sourceRelativePath" : "external/SimilarFunction.ql",
+         "tags" : [
+            "testability",
+            "maintainability",
+            "useless-code",
+            "duplicate-code",
+            "statistical",
+            "non-attributable"
+         ],
+         "title" : "Similar function"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:33:57Z",
+   "language" : "python"
+}

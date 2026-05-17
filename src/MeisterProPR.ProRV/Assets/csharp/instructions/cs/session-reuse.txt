@@ -1,0 +1,36 @@
+Review focus: Failure to abandon session
+
+What to look for:
+- Reusing an existing session as a different user could allow an attacker to access someone else's account by using their session.
+- Reusing a session could allow an attacker to gain unauthorized access to another account. Always ensure that, when a user logs in or out, the current session is abandoned so that a new session may be started.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AbandonSession.cs`):
+```
+public void Login(HttpContext ctx, string username, string password)
+{
+    if (FormsAuthentication.Authenticate(username, password)
+    {
+        // BAD: Reusing the previous session
+        ctx.Session["Mode"] = GetModeForUser(username);
+    }
+}
+```
+- Reference example (`AbandonSessionFix.cs`):
+```
+public void Login(HttpContext ctx, string username, string password)
+{
+    if (FormsAuthentication.Authenticate(username, password)
+    {
+        // GOOD: Abandon the session first.
+        ctx.Session.Abandon();
+    }
+}
+```

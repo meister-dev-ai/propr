@@ -1,0 +1,44 @@
+Review focus: Use of a broken or weak cryptographic hashing algorithm on sensitive data
+
+What to look for:
+- Using broken or weak cryptographic hashing algorithms can compromise security.
+- A broken or weak cryptographic hash function can leave data vulnerable, and should not be used in security-related code. A strong cryptographic hash function should be resistant to:
+- Pre-image attacks. If you know a hash value`h(x)`, you should not be able to easily find the input`x`.
+- Collision attacks. If you know a hash value`h(x)`, you should not be able to easily find a different input`y`with the same hash value`h(x) = h(y)`.
+- Brute force. For passwords and other data with limited input space, if you know a hash value`h(x)`, you should not be able to find the input`x`even using a brute force attack (without significant computational effort). As an example, both MD5 and SHA-1 are known to be vulnerable to collision attacks. All of MD5, SHA-1, SHA-2 and SHA-3 are weak against offline brute forcing, so they are not suitable for hashing passwords. This includes SHA-224, SHA-256, SHA-384, and SHA-512, which are in the SHA-2 family. Since it's OK to use a weak cryptographic hash function in a non-security context, this query only alerts when these are used to hash sensitive data (such as passwords, certificates, usernames).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`WeakSensitiveDataHashingBad.rs`):
+```
+// MD5 is not appropriate for hashing sensitive data.
+let mut md5_hasher = md5::Md5::new();
+...
+md5_hasher.update(emergency_contact); // BAD
+md5_hasher.update(credit_card_no); // BAD
+...
+my_hash = md5_hasher.finalize();
+
+// SHA3-256 is not appropriate for hashing passwords.
+my_hash = sha3::Sha3_256::digest(password); // BAD
+```
+- Reference example (`WeakSensitiveDataHashingGood.rs`):
+```
+// SHA3-256 *is* appropriate for hashing sensitive data.
+let mut sha3_256_hasher = sha3::Sha3_256::new();
+...
+sha3_256_hasher.update(emergency_contact); // GOOD
+sha3_256_hasher.update(credit_card_no); // GOOD
+...
+my_hash = sha3_256_hasher.finalize();
+
+// Argon2 is appropriate for hashing passwords.
+let argon2_salt = argon2::password_hash::Salt::from_b64(salt)?;
+my_hash = argon2::Argon2::default().hash_password(password.as_bytes(), argon2_salt)?.to_string(); // GOOD
+```

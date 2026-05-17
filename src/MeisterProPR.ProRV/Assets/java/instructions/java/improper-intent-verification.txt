@@ -1,0 +1,12 @@
+Review focus: Improper verification of intent by broadcast receiver
+
+What to look for:
+- A broadcast receiver that does not verify intents it receives may be susceptible to unintended behavior by third party applications sending it explicit intents.
+- When an Android application uses a`BroadcastReceiver`to receive intents, it is also able to receive explicit intents that are sent directly to it, regardless of its filter. Certain intent actions are only able to be sent by the operating system, not third-party applications. However, a`BroadcastReceiver`that is registered to receive system intents is still able to receive intents from a third-party application, so it should check that the intent received has the expected action. Otherwise, a third-party application could impersonate the system this way to cause unintended behavior, such as a denial of service.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

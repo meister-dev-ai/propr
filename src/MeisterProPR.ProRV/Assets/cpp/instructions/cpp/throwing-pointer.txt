@@ -1,0 +1,12 @@
+Review focus: Throwing pointers
+
+What to look for:
+- Exceptions should be objects rather than pointers to objects.
+- As C++ is not a garbage collected language, exceptions should not be dynamically allocated. Dynamically allocating an exception puts an onus on every`catch`site to ensure that the memory is freed. As a special case, it is permissible to throw anything derived from Microsoft MFC's`CException` class as a pointer. This is for historical reasons; modern code and modern frameworks should not throw pointer values.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

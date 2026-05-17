@@ -1,0 +1,22 @@
+Review focus: Potentially unsafe external link
+
+What to look for:
+- External links that open in a new tab or window but do not specify link type 'noopener' or 'noreferrer' are a potential security risk.
+- HTML links that open in a new tab or window allow the target page to access the DOM of the origin page using`window.opener`unless link type`noopener`or`noreferrer`is specified. This is a potential security risk. Note that only older browsers, where`target="_blank"`does not imply`rel="noopener"`, are affected by this vulnerability. Modern browsers implicitly add`rel="noopener"`to`target="_blank"`links. Refer to the browser compatibility section on the anchor element for details on which browsers implicitly add`rel="noopener"`to`target="_blank"`links.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TargetBlank.js`):
+```
+var link = <a href="http://example.com" target="_blank">Example</a>;
+```
+- Reference example (`TargetBlankGood.js`):
+```
+var link = <a href="http://example.com" target="_blank" rel="noopener noreferrer">Example</a>;
+```

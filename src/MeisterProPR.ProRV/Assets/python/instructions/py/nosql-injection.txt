@@ -1,0 +1,48 @@
+Review focus: NoSQL Injection
+
+What to look for:
+- Building a NoSQL query from user-controlled sources is vulnerable to insertion of malicious NoSQL code by the user.
+- Passing user-controlled sources into NoSQL queries can result in a NoSQL injection flaw. This tainted NoSQL query containing a user-controlled source can then execute a malicious query in a NoSQL database such as MongoDB. In order for the user-controlled source to taint the NoSQL query, the user-controller source must be converted into a Python object using something like`json.loads`or`xmltodict.parse`. Because a user-controlled source is passed into the query, the malicious user can have complete control over the query itself. When the tainted query is executed, the malicious user can commit malicious actions such as bypassing role restrictions or accessing and modifying restricted data in the NoSQL database.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`NoSQLInjection-bad.py`):
+```
+from flask import Flask, request
+from flask_pymongo import PyMongo
+import json
+
+mongo = PyMongo(app)
+
+
+@app.route("/")
+def home_page():
+    unsanitized_search = request.args['search']
+    json_search = json.loads(unsanitized_search)
+
+    result = mongo.db.user.find({'name': json_search})
+```
+- Good example (`NoSQLInjection-good.py`):
+```
+from flask import Flask, request
+from flask_pymongo import PyMongo
+from mongosanitizer.sanitizer import sanitize
+import json
+
+mongo = PyMongo(app)
+
+
+@app.route("/")
+def home_page():
+    unsafe_search = request.args['search']
+    json_search = json.loads(unsafe_search)
+    safe_search = sanitize(unsanitized_search)
+
+    result = client.db.collection.find_one({'data': safe_search})
+```

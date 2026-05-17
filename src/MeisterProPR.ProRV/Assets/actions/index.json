@@ -1,0 +1,431 @@
+{
+   "checks" : [
+      {
+         "id" : "actions/envpath-injection/critical",
+         "instructionPath" : "instructions/actions/envpath-injection/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building the PATH environment variable from user-controlled sources may alter the execution of following system commands",
+         "sourceRelativePath" : "Security/CWE-077/EnvPathInjectionCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-077",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "PATH environment variable built from user-controlled sources"
+      },
+      {
+         "id" : "actions/envpath-injection/medium",
+         "instructionPath" : "instructions/actions/envpath-injection/medium.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building the PATH environment variable from user-controlled sources may alter the execution of following system commands",
+         "sourceRelativePath" : "Security/CWE-077/EnvPathInjectionMedium.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-077",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "PATH environment variable built from user-controlled sources"
+      },
+      {
+         "id" : "actions/envvar-injection/critical",
+         "instructionPath" : "instructions/actions/envvar-injection/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building an environment variable from user-controlled sources may alter the execution of following system commands",
+         "sourceRelativePath" : "Security/CWE-077/EnvVarInjectionCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-077",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Environment variable built from user-controlled sources"
+      },
+      {
+         "id" : "actions/envvar-injection/medium",
+         "instructionPath" : "instructions/actions/envvar-injection/medium.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Building an environment variable from user-controlled sources may alter the execution of following system commands",
+         "sourceRelativePath" : "Security/CWE-077/EnvVarInjectionMedium.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-077",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Environment variable built from user-controlled sources"
+      },
+      {
+         "id" : "actions/code-injection/critical",
+         "instructionPath" : "instructions/actions/code-injection/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.",
+         "sourceRelativePath" : "Security/CWE-094/CodeInjectionCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Code injection"
+      },
+      {
+         "id" : "actions/code-injection/medium",
+         "instructionPath" : "instructions/actions/code-injection/medium.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Interpreting unsanitized user input as code allows a malicious user to perform arbitrary code execution.",
+         "sourceRelativePath" : "Security/CWE-094/CodeInjectionMedium.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-094",
+            "external/cwe/cwe-095",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Code injection"
+      },
+      {
+         "id" : "actions/vulnerable-action",
+         "instructionPath" : "instructions/actions/vulnerable-action.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The workflow is using an action with known vulnerabilities.",
+         "sourceRelativePath" : "Security/CWE-1395/UseOfKnownVulnerableAction.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-1395"
+         ],
+         "title" : "Use of a known vulnerable action"
+      },
+      {
+         "id" : "actions/missing-workflow-permissions",
+         "instructionPath" : "instructions/actions/missing-workflow-permissions.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Workflows should contain explicit permissions to restrict the scope of the default GITHUB_TOKEN.",
+         "sourceRelativePath" : "Security/CWE-275/MissingActionsPermissions.ql",
+         "tags" : [
+            "actions",
+            "maintainability",
+            "security",
+            "external/cwe/cwe-275"
+         ],
+         "title" : "Workflow does not contain permissions"
+      },
+      {
+         "id" : "actions/improper-access-control",
+         "instructionPath" : "instructions/actions/improper-access-control.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The access control mechanism is not properly implemented, allowing untrusted code to be executed in a privileged context.",
+         "sourceRelativePath" : "Security/CWE-285/ImproperAccessControl.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-285"
+         ],
+         "title" : "Improper Access Control"
+      },
+      {
+         "id" : "actions/excessive-secrets-exposure",
+         "instructionPath" : "instructions/actions/excessive-secrets-exposure.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "All organization and repository secrets are passed to the workflow runner.",
+         "sourceRelativePath" : "Security/CWE-312/ExcessiveSecretsExposure.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-312"
+         ],
+         "title" : "Excessive Secrets Exposure"
+      },
+      {
+         "id" : "actions/secrets-in-artifacts",
+         "instructionPath" : "instructions/actions/secrets-in-artifacts.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Including sensitive information in a GitHub Actions artifact can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/SecretsInArtifacts.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-312"
+         ],
+         "title" : "Storage of sensitive information in GitHub Actions artifact"
+      },
+      {
+         "id" : "actions/unmasked-secret-exposure",
+         "instructionPath" : "instructions/actions/unmasked-secret-exposure.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Secrets derived from other secrets are not masked by the workflow runner.",
+         "sourceRelativePath" : "Security/CWE-312/UnmaskedSecretExposure.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-312"
+         ],
+         "title" : "Unmasked Secret Exposure"
+      },
+      {
+         "id" : "actions/cache-poisoning/code-injection",
+         "instructionPath" : "instructions/actions/cache-poisoning/code-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The cache can be poisoned by untrusted code, leading to a cache poisoning attack.",
+         "sourceRelativePath" : "Security/CWE-349/CachePoisoningViaCodeInjection.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-349",
+            "external/cwe/cwe-094"
+         ],
+         "title" : "Cache Poisoning via low-privileged code injection"
+      },
+      {
+         "id" : "actions/cache-poisoning/direct-cache",
+         "instructionPath" : "instructions/actions/cache-poisoning/direct-cache.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The cache can be poisoned by untrusted code, leading to a cache poisoning attack.",
+         "sourceRelativePath" : "Security/CWE-349/CachePoisoningViaDirectCache.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-349"
+         ],
+         "title" : "Cache Poisoning via caching of untrusted files"
+      },
+      {
+         "id" : "actions/cache-poisoning/poisonable-step",
+         "instructionPath" : "instructions/actions/cache-poisoning/poisonable-step.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "The cache can be poisoned by untrusted code, leading to a cache poisoning attack.",
+         "sourceRelativePath" : "Security/CWE-349/CachePoisoningViaPoisonableStep.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-349"
+         ],
+         "title" : "Cache Poisoning via execution of untrusted code"
+      },
+      {
+         "id" : "actions/untrusted-checkout-toctou/critical",
+         "instructionPath" : "instructions/actions/untrusted-checkout-toctou/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Untrusted Checkout is protected by a security check but the checked-out branch can be changed after the check.",
+         "sourceRelativePath" : "Security/CWE-367/UntrustedCheckoutTOCTOUCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-367"
+         ],
+         "title" : "Untrusted Checkout TOCTOU"
+      },
+      {
+         "id" : "actions/untrusted-checkout-toctou/high",
+         "instructionPath" : "instructions/actions/untrusted-checkout-toctou/high.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Untrusted Checkout is protected by a security check but the checked-out branch can be changed after the check.",
+         "sourceRelativePath" : "Security/CWE-367/UntrustedCheckoutTOCTOUHigh.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-367"
+         ],
+         "title" : "Untrusted Checkout TOCTOU"
+      },
+      {
+         "id" : "actions/if-expression-always-true/critical",
+         "instructionPath" : "instructions/actions/if-expression-always-true/critical.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Expressions used in If conditions with extra spaces are always true.",
+         "sourceRelativePath" : "Security/CWE-571/ExpressionIsAlwaysTrueCritical.ql",
+         "tags" : [
+            "actions",
+            "maintainability",
+            "external/cwe/cwe-275"
+         ],
+         "title" : "If expression always true"
+      },
+      {
+         "id" : "actions/if-expression-always-true/high",
+         "instructionPath" : "instructions/actions/if-expression-always-true/high.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Expressions used in If conditions with extra spaces are always true.",
+         "sourceRelativePath" : "Security/CWE-571/ExpressionIsAlwaysTrueHigh.ql",
+         "tags" : [
+            "actions",
+            "maintainability",
+            "external/cwe/cwe-275"
+         ],
+         "title" : "If expression always true"
+      },
+      {
+         "id" : "actions/artifact-poisoning/critical",
+         "instructionPath" : "instructions/actions/artifact-poisoning/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "An attacker may be able to poison the workflow's artifacts and influence on consequent steps.",
+         "sourceRelativePath" : "Security/CWE-829/ArtifactPoisoningCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Artifact poisoning"
+      },
+      {
+         "id" : "actions/artifact-poisoning/medium",
+         "instructionPath" : "instructions/actions/artifact-poisoning/medium.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "An attacker may be able to poison the workflow's artifacts and influence on consequent steps.",
+         "sourceRelativePath" : "Security/CWE-829/ArtifactPoisoningMedium.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Artifact poisoning"
+      },
+      {
+         "id" : "actions/unpinned-tag",
+         "instructionPath" : "instructions/actions/unpinned-tag.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Using a tag for a non-immutable Action that is not pinned to a commit can lead to executing an untrusted Action through a supply chain attack.",
+         "sourceRelativePath" : "Security/CWE-829/UnpinnedActionsTag.ql",
+         "tags" : [
+            "security",
+            "actions",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Unpinned tag for a non-immutable Action in workflow"
+      },
+      {
+         "id" : "actions/untrusted-checkout/critical",
+         "instructionPath" : "instructions/actions/untrusted-checkout/critical.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Privileged workflows have read/write access to the base repository and access to secrets.",
+         "sourceRelativePath" : "Security/CWE-829/UntrustedCheckoutCritical.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Checkout of untrusted code in a privileged context"
+      },
+      {
+         "id" : "actions/untrusted-checkout/high",
+         "instructionPath" : "instructions/actions/untrusted-checkout/high.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "error",
+         "shortDescription" : "Privileged workflows have read/write access to the base repository and access to secrets.",
+         "sourceRelativePath" : "Security/CWE-829/UntrustedCheckoutHigh.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Checkout of untrusted code in privileged context without privileged context use"
+      },
+      {
+         "id" : "actions/untrusted-checkout/medium",
+         "instructionPath" : "instructions/actions/untrusted-checkout/medium.txt",
+         "kind" : "problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [],
+         "severity" : "warning",
+         "shortDescription" : "Privileged workflows have read/write access to the base repository and access to secrets.",
+         "sourceRelativePath" : "Security/CWE-829/UntrustedCheckoutMedium.ql",
+         "tags" : [
+            "actions",
+            "security",
+            "external/cwe/cwe-829"
+         ],
+         "title" : "Checkout of untrusted code in trusted context"
+      },
+      {
+         "id" : "actions/unnecessary-use-of-advanced-config",
+         "instructionPath" : "instructions/actions/unnecessary-use-of-advanced-config.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [],
+         "severity" : "recommendation",
+         "shortDescription" : "Workflows should use CodeQL Action with default setup instead of advanced configuration if there are no customizations",
+         "sourceRelativePath" : "Violations Of Best Practice/CodeQL/UnnecessaryUseOfAdvancedConfig.ql",
+         "tags" : [
+            "actions",
+            "maintainability"
+         ],
+         "title" : "Workflow Should Use Default Setup"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:34:59Z",
+   "language" : "actions"
+}

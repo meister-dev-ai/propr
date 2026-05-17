@@ -1,0 +1,36 @@
+Review focus: Missing exports qualifier
+
+What to look for:
+- Referencing an undeclared global variable in a module that exports a definition of the same name is confusing and may indicate a bug.
+- Referencing an otherwise undeclared global variable in a module that exports a definition of the same name is confusing and may indicate a bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingExports.js`):
+```
+exports.checkOne = function(x) {
+  if (!x) throw new Error();
+};
+
+var checkList = exports.checkList = function(xs) {
+  for (var i=0; i<xs.length; ++i)
+    checkOne(xs[i]);
+};
+```
+- Reference example (`MissingExportsGood.js`):
+```
+exports.checkOne = function(x) {
+  if (!x) throw new Error();
+};
+
+var checkList = exports.checkList = function(xs) {
+  for (var i=0; i<xs.length; ++i)
+    exports.checkOne(xs[i]);
+};
+```

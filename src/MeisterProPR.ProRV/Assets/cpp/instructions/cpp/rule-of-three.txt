@@ -1,0 +1,12 @@
+Review focus: Rule of three
+
+What to look for:
+- Classes that have an explicit destructor, copy constructor, or copy assignment operator may behave inconsistently if they do not have all three.
+- This query finds classes that define a destructor, a copy constructor, or a copy assignment operator, but not all three of them. The compiler generates default implementations for these functions, and since they deal with similar concerns it is likely that if the default implementation of one of them is not satisfactory, then neither are those of the others. The query flags any such class with a warning, and also display the list of generated warnings in the result view.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,14 @@
+Review focus: Magic numbers
+
+What to look for:
+- A magic number makes code less readable and maintainable.
+- A magic number is a numeric literal (for example,`8080`,`2048`) that is used in the middle of a block of code without explanation. It is considered bad practice to use magic numbers because:
+- A number in isolation can be difficult for other programmers to understand.
+- It can be difficult to update the code if the requirements change. For example, if the magic number represents the number of guests allowed, adding one more guest means that you must change every occurrence of the magic number.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

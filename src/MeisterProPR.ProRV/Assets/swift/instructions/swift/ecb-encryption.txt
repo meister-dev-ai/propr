@@ -1,0 +1,35 @@
+Review focus: Encryption using ECB
+
+What to look for:
+- Using the ECB encryption mode makes code vulnerable to replay attacks.
+- ECB should not be used as a mode for encryption as it has dangerous weaknesses. Data is encrypted the same way every time, which means that the same plaintext input will always produce the same ciphertext. This behavior makes messages encrypted with ECB more vulnerable to replay attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ECBEncryption.swift`):
+```
+func encrypt(key : Key, padding : Padding) {
+	// ...
+
+	// BAD: ECB is used for block mode
+	let blockMode = ECB()
+	_ = try AES(key: key, blockMode: blockMode, padding: padding)
+	_ = try AES(key: key, blockMode: blockMode)
+	_ = try Blowfish(key: key, blockMode: blockMode, padding: padding)
+
+	// GOOD: ECB is not used for block mode
+	let aesBlockMode = CBC(iv: AES.randomIV(AES.blockSize))
+	let blowfishBlockMode = CBC(iv: Blowfish.randomIV(Blowfish.blockSize))
+	_ = try AES(key: key, blockMode: aesBlockMode, padding: padding)
+	_ = try AES(key: key, blockMode: aesBlockMode)
+	_ = try Blowfish(key: key, blockMode: blowfishBlockMode, padding: padding)
+
+	// ...
+}
+```

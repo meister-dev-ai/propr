@@ -1,0 +1,33 @@
+Review focus: Classes with too many source dependencies
+
+What to look for:
+- Finds classes that depend on many other types; they could probably be refactored into smaller classes with fewer dependencies.
+- This rule finds classes that depend on many other types. Depending on too many other classes makes a class vulnerable to changes and defects in its dependencies, and is also a sign that the class lacks cohesion (i.e. a single purpose). These classes could be refactored into smaller, more cohesive classes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ClassesWithManyDependencies.cpp`):
+```
+// an include declaration just adds one source dependency, it does not automatically
+// add a dependency from this file to all the declarations in stdio.h
+#include <stdio.h>
+#include <myfile.h> // contains non-static global myfile_err
+
+extern int myfile_err; // this external declaration adds a dependency on myfile.h
+
+class C {
+public:
+	C() {
+		// one dependency for printf:
+		printf("Hello world!");
+		// one dependency for FILE type, and one for NULL macro:
+		FILE fp = NULL;
+	}
+};
+```

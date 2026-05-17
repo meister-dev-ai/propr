@@ -1,0 +1,75 @@
+Review focus: URL redirection from remote source
+
+What to look for:
+- URL redirection based on unvalidated user input may cause redirection to malicious web sites.
+- Directly incorporating user input into a URL redirect request without validating the input can facilitate phishing attacks. In these attacks, unsuspecting users can be redirected to a malicious site that looks very similar to the real site they intend to visit, but which is controlled by the attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`redirect_bad.py`):
+```
+from flask import Flask, request, redirect
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    target = request.args.get('target', '')
+    return redirect(target, code=302)
+```
+- Good example (`redirect_good.py`):
+```
+from flask import Flask, request, redirect
+
+VALID_REDIRECT = "http://cwe.mitre.org/data/definitions/601.html"
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    target = request.args.get('target', '')
+    if target == VALID_REDIRECT:
+        return redirect(target, code=302)
+    else:
+        # ignore the target and redirect to the home page
+        return redirect('/', code=302)
+```
+- Good example (`redirect_good2.py`):
+```
+from flask import Flask, request, redirect
+from urllib.parse import urlparse
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    target = request.args.get('target', '')
+    target = target.replace('\\', '')
+    if not urlparse(target).netloc and not urlparse(target).scheme:
+        # relative path, safe to redirect
+        return redirect(target, code=302)
+    # ignore the target and redirect to the home page
+    return redirect('/', code=302)
+```
+- Good example (`redirect_good3.py`):
+```
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views import View
+
+class RedirectView(View):
+    def get(self, request, *args, **kwargs):
+        target = request.GET.get('target', '')
+        if url_has_allowed_host_and_scheme(target, allowed_hosts=None):
+            return HttpResponseRedirect(target)
+        else:
+            # ignore the target and redirect to the home page
+            return redirect('/')
+```

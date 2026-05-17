@@ -1,0 +1,12 @@
+Review focus: Empty body of finalizer
+
+What to look for:
+- An empty 'finalize' method is useless and prevents its superclass's 'finalize' method (if any) from being called.
+- An empty`finalize`method is useless and may prevent finalization from working properly. This is because, unlike a constructor, a finalizer does not implicitly call the finalizer of the superclass. Thus, an empty finalizer prevents any finalization logic that is defined in any of its superclasses from being executed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

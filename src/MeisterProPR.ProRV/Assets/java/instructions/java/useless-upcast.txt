@@ -1,0 +1,14 @@
+Review focus: Useless upcast
+
+What to look for:
+- Upcasting a derived type to its base type is usually unnecessary.
+- In most situations, casting an instance of a derived type to a base type serves no purpose, since the conversion can be done implicitly. In such cases, the redundant cast can simply be removed. However, an upcast is not redundant in the following situations:
+- It is being used to force a call to an overloaded callable that takes a parameter of the base type rather than one of the derived type.
+- It is being used to specify the type to use for the operands of a ternary expression. Both of these special cases are illustrated in the example below. This rule ignores these special cases and highlights upcasts which appear to be redundant.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,47 @@
+Review focus: Missed opportunity to use All
+
+What to look for:
+- The intent of a foreach loop that checks whether every element of its target sequence satisfies some predicate can be expressed more directly using LINQ's 'All' method.
+- Often a programmer wants to check that all the elements of a given sequence satisfy some predicate. A common pattern for this is to create a flag and then iterate over the sequence, changing the flag and breaking out of the loop if the element being examined does not satisfy the predicate.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedAllOpportunity.cs`):
+```
+class MissedAllOpportunity
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = new List<int> { 2, 4, 18, 12, 80 };
+
+        bool allEven = true;
+        foreach (int i in lst)
+        {
+            if (i % 2 != 0)
+            {
+                allEven = false;
+                break;
+            }
+        }
+        Console.WriteLine("All Even = " + allEven);
+    }
+}
+```
+- Reference example (`MissedAllOpportunityFix.cs`):
+```
+class MissedAllOpportunityFix
+{
+    public static void Main(string[] args)
+    {
+        List<int> lst = new List<int> { 2, 4, 18, 12, 80 };
+
+        Console.WriteLine("All Even = " + lst.All(i => i % 2 == 0));
+    }
+}
+```

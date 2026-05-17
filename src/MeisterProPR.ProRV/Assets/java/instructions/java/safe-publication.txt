@@ -1,0 +1,16 @@
+Review focus: Safe publication
+
+What to look for:
+- A field of a thread-safe class is not safely published.
+- In a thread-safe class, values must be published safely to avoid inconsistent or unexpected behavior caused by visibility issues between threads. If a value is not safely published, one thread may see a stale or partially constructed value written by another thread, leading to subtle concurrency bugs. In particular, values of primitive types should not be initialised to anything but their default values (which for`Object`is`null`) unless this happens in a static context. Techniques for safe publication include:
+- Using synchronized blocks or methods to ensure that a value is fully constructed before it is published.
+- Using volatile fields to ensure visibility of changes across threads.
+- Using thread-safe collections or classes that provide built-in synchronization, such as are found in`java.util.concurrent`.
+- Using the`final`keyword to ensure that a reference to an object is safely published when the object is constructed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

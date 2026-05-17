@@ -1,0 +1,12 @@
+Review focus: EJB accesses security configuration
+
+What to look for:
+- An EJB should not attempt to access or modify any Java security configuration, including the Policy, Security, Provider, Signer and Identity objects.
+- The Enterprise JavaBeans 3.0 core specification, Section 21.1.2, states: The enterprise bean must not attempt to access or modify the security configuration objects (Policy, Security, Provider, Signer, and Identity). These functions are reserved for the EJB container. Allowing the enterprise bean to use these functions could compromise security.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

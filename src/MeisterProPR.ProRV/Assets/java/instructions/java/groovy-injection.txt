@@ -1,0 +1,12 @@
+Review focus: Groovy Language injection
+
+What to look for:
+- Evaluation of a user-controlled Groovy script may lead to arbitrary code execution.
+- Apache Groovy is a powerful, optionally typed and dynamic language, with static-typing and static compilation capabilities. It integrates smoothly with any Java program, and immediately delivers to your application powerful features, including scripting capabilities, Domain-Specific Language authoring, runtime and compile-time meta-programming and functional programming. If a Groovy script is built using attacker-controlled data, and then evaluated, then it may allow the attacker to achieve RCE.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

@@ -1,0 +1,34 @@
+Review focus: Misleading indentation
+
+What to look for:
+- If a control structure does not use braces, misleading indentation makes it difficult to see which statements are within its scope.
+- A control structure (`if`statements and loops) has a body that is either a block of statements or a single statement. The second option may be indicated by omitting the braces:`{`and`}`. However, omitting the braces can lead to confusion, especially if the indentation of the code suggests that multiple statements are within the body of a control structure when in fact they are not.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseBraces.cs`):
+```
+void AddItem(Object i)
+{
+    if (i != null)
+        items.Add(i);
+    Console.Out.WriteLine("Item added: " + i.ToString());
+}
+```
+- Reference example (`UseBracesFix.cs`):
+```
+void AddItem(Object i)
+{
+    if (i != null)
+    {
+        items.Add(i);
+        Console.Out.WriteLine("Item added: " + i.ToString());
+    }
+}
+```

@@ -1,0 +1,16 @@
+Review focus: Inexact type match for varargs argument
+
+What to look for:
+- Calling a varargs method where it is unclear whether the arguments should be interpreted as a list of arguments or as a single argument, may lead to compiler-dependent behavior.
+- A variable arity method, commonly known as a varargs method, may be called with different numbers of arguments. For example, the method`sum(int...&nbsp;values)`may be called in all of the following ways:
+- -`sum()`
+- -`sum(1)`
+- -`sum(1,2,3)`
+- -`sum(new int[] { 1, 2, 3 })`When a method`foo(T...&nbsp;x)`is called with an argument that is neither`T`nor`T[]`, but the argument can be cast as either, the choice of which type the argument is cast as is compiler-dependent.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,47 @@
+Review focus: Improper code sanitization
+
+What to look for:
+- Escaping code as HTML does not provide protection against code injection.
+- Using string concatenation to construct JavaScript code can be error-prone, or in the worst case, enable code injection if an input is constructed by an attacker.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ImproperCodeSanitization.js`):
+```
+function createObjectWrite() {
+    const assignment = `obj[${JSON.stringify(key)}]=42`;
+    return `(function(){${assignment}})` // NOT OK
+}
+```
+- Reference example (`ImproperCodeSanitizationFixed.js`):
+```
+const charMap = {
+    '<': '\\u003C',
+    '>' : '\\u003E',
+    '/': '\\u002F',
+    '\\': '\\\\',
+    '\b': '\\b',
+    '\f': '\\f',
+    '\n': '\\n',
+    '\r': '\\r',
+    '\t': '\\t',
+    '\0': '\\0',
+    '\u2028': '\\u2028',
+    '\u2029': '\\u2029'
+};
+
+function escapeUnsafeChars(str) {
+    return str.replace(/[<>\b\f\n\r\t\0\u2028\u2029]/g, x => charMap[x])
+}
+
+function createObjectWrite() {
+    const assignment = `obj[${escapeUnsafeChars(JSON.stringify(key))}]=42`;
+    return `(function(){${assignment}})` // OK
+}
+```

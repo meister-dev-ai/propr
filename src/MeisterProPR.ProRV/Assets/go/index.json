@@ -1,0 +1,1174 @@
+{
+   "checks" : [
+      {
+         "id" : "go/constant-length-comparison",
+         "instructionPath" : "instructions/go/constant-length-comparison.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConstantLengthComparison.go",
+            "ConstantLengthComparisonGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparing the length of an array to a constant before indexing it using a loop variable may indicate a logic error.",
+         "sourceRelativePath" : "InconsistentCode/ConstantLengthComparison.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-129"
+         ],
+         "title" : "Constant length comparison"
+      },
+      {
+         "id" : "go/inconsistent-loop-direction",
+         "instructionPath" : "instructions/go/inconsistent-loop-direction.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InconsistentLoopOrientation.go",
+            "InconsistentLoopOrientationGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A 'for' loop that increments its loop variable but checks it against a lower bound, or decrements its loop variable but checks it against an upper bound, will either stop...",
+         "sourceRelativePath" : "InconsistentCode/InconsistentLoopOrientation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-835"
+         ],
+         "title" : "Inconsistent direction of for loop"
+      },
+      {
+         "id" : "go/index-out-of-bounds",
+         "instructionPath" : "instructions/go/index-out-of-bounds.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "LengthComparisonOffByOne.go",
+            "LengthComparisonOffByOneGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "An array index is compared with the length of the array, and then used in an indexing operation that could be out of bounds.",
+         "sourceRelativePath" : "InconsistentCode/LengthComparisonOffByOne.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-193"
+         ],
+         "title" : "Off-by-one comparison against length"
+      },
+      {
+         "id" : "go/missing-error-check",
+         "instructionPath" : "instructions/go/missing-error-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingErrorCheck.go",
+            "MissingErrorCheckGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When a function returns a pointer alongside an error value, one should normally assume that the pointer may be nil until either the pointer or error has been checked.",
+         "sourceRelativePath" : "InconsistentCode/MissingErrorCheck.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-252"
+         ],
+         "title" : "Missing error check"
+      },
+      {
+         "id" : "go/mistyped-exponentiation",
+         "instructionPath" : "instructions/go/mistyped-exponentiation.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MistypedExponentiation.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using ^ as exponentiation is a mistake, as it is the bitwise exclusive-or operator.",
+         "sourceRelativePath" : "InconsistentCode/MistypedExponentiation.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480"
+         ],
+         "title" : "Bitwise exclusive-or used like exponentiation"
+      },
+      {
+         "id" : "go/unhandled-writable-file-close",
+         "instructionPath" : "instructions/go/unhandled-writable-file-close.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnhandledCloseWritableHandleNotDeferred.go",
+            "UnhandledCloseWritableHandle.go",
+            "UnhandledCloseWritableHandleGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Errors which occur when closing a writable file handle may result in data loss if the data could not be successfully flushed.",
+         "sourceRelativePath" : "InconsistentCode/UnhandledCloseWritableHandle.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling",
+            "external/cwe/cwe-252"
+         ],
+         "title" : "Writable file handle closed without error handling"
+      },
+      {
+         "id" : "go/whitespace-contradicts-precedence",
+         "instructionPath" : "instructions/go/whitespace-contradicts-precedence.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "WhitespaceContradictsPrecedence.go",
+            "WhitespaceContradictsPrecedenceGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Nested expressions where the formatting contradicts the grouping enforced by operator precedence are difficult to read and may indicate a bug.",
+         "sourceRelativePath" : "InconsistentCode/WhitespaceContradictsPrecedence.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-783"
+         ],
+         "title" : "Whitespace contradicts operator precedence"
+      },
+      {
+         "id" : "go/unexpected-nil-value",
+         "instructionPath" : "instructions/go/unexpected-nil-value.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WrappedErrorAlwaysNil.go",
+            "WrappedErrorAlwaysNilGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Finds calls to `Wrap` from `pkg/errors` where the error argument is always nil.",
+         "sourceRelativePath" : "InconsistentCode/WrappedErrorAlwaysNil.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "error-handling"
+         ],
+         "title" : "Wrapped error is always nil"
+      },
+      {
+         "id" : "go/comparison-of-identical-expressions",
+         "instructionPath" : "instructions/go/comparison-of-identical-expressions.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "CompareIdenticalValues.go",
+            "CompareIdenticalValuesGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the same expression occurs on both sides of a comparison operator, the operator is redundant, and probably indicates a mistake.",
+         "sourceRelativePath" : "RedundantCode/CompareIdenticalValues.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Comparison of identical values"
+      },
+      {
+         "id" : "go/useless-assignment-to-field",
+         "instructionPath" : "instructions/go/useless-assignment-to-field.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DeadStoreOfField.go",
+            "DeadStoreOfFieldGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a field that is not used later on has no effect.",
+         "sourceRelativePath" : "RedundantCode/DeadStoreOfField.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to field"
+      },
+      {
+         "id" : "go/useless-assignment-to-local",
+         "instructionPath" : "instructions/go/useless-assignment-to-local.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DeadStoreOfLocalBad.go",
+            "DeadStoreOfLocalGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An assignment to a local variable that is not used later on, or whose value is always overwritten, has no effect.",
+         "sourceRelativePath" : "RedundantCode/DeadStoreOfLocal.ql",
+         "tags" : [
+            "quality",
+            "maintainability",
+            "useless-code",
+            "external/cwe/cwe-563"
+         ],
+         "title" : "Useless assignment to local variable"
+      },
+      {
+         "id" : "go/duplicate-branches",
+         "instructionPath" : "instructions/go/duplicate-branches.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateBranches.go",
+            "DuplicateBranchesGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If the 'then' and 'else' branches of an 'if' statement are identical, the conditional may be superfluous, or it may indicate a mistake.",
+         "sourceRelativePath" : "RedundantCode/DuplicateBranches.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate 'if' branches"
+      },
+      {
+         "id" : "go/duplicate-condition",
+         "instructionPath" : "instructions/go/duplicate-condition.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateCondition.go",
+            "DuplicateConditionGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If two conditions in an 'if'-'else if' chain are identical, the second condition will never hold.",
+         "sourceRelativePath" : "RedundantCode/DuplicateCondition.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate 'if' condition"
+      },
+      {
+         "id" : "go/duplicate-switch-case",
+         "instructionPath" : "instructions/go/duplicate-switch-case.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "DuplicateSwitchCase.go",
+            "DuplicateSwitchCaseGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "If two cases in a switch statement have the same label, the second case will never be executed.",
+         "sourceRelativePath" : "RedundantCode/DuplicateSwitchCase.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Duplicate switch case"
+      },
+      {
+         "id" : "go/useless-expression",
+         "instructionPath" : "instructions/go/useless-expression.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ExprHasNoEffect.go",
+            "ExprHasNoEffectGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "An expression that has no effect and is used in a void context is most likely redundant and may indicate a bug.",
+         "sourceRelativePath" : "RedundantCode/ExprHasNoEffect.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Expression has no effect"
+      },
+      {
+         "id" : "go/impossible-interface-nil-check",
+         "instructionPath" : "instructions/go/impossible-interface-nil-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ImpossibleInterfaceNilCheck.go",
+            "ImpossibleInterfaceNilCheckGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Comparing a non-nil interface value to nil may indicate a logic error.",
+         "sourceRelativePath" : "RedundantCode/ImpossibleInterfaceNilCheck.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-570"
+         ],
+         "title" : "Impossible interface nil check"
+      },
+      {
+         "id" : "go/negative-length-check",
+         "instructionPath" : "instructions/go/negative-length-check.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "NegativeLengthCheck.go",
+            "NegativeLengthCheckGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Checking whether the result of 'len' or 'cap' is negative is pointless, since these functions always returns a non-negative number.",
+         "sourceRelativePath" : "RedundantCode/NegativeLengthCheck.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-571"
+         ],
+         "title" : "Redundant check for negative value"
+      },
+      {
+         "id" : "go/redundant-operation",
+         "instructionPath" : "instructions/go/redundant-operation.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "RedundantExpr.go",
+            "RedundantExprGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Passing identical, or seemingly identical, operands to an operator such as subtraction or conjunction may indicate a typo; even if it is intentional, it makes the code hard to...",
+         "sourceRelativePath" : "RedundantCode/RedundantExpr.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Identical operands"
+      },
+      {
+         "id" : "go/redundant-recover",
+         "instructionPath" : "instructions/go/redundant-recover.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RedundantRecover1.go",
+            "RedundantRecover1Good.go",
+            "RedundantRecover2.go",
+            "RedundantRecover2Good.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Calling 'recover' in a function which isn't called using a defer statement has no effect.",
+         "sourceRelativePath" : "RedundantCode/RedundantRecover.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-248"
+         ],
+         "title" : "Redundant call to recover"
+      },
+      {
+         "id" : "go/redundant-assignment",
+         "instructionPath" : "instructions/go/redundant-assignment.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SelfAssignment.go",
+            "SelfAssignmentGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Assigning a variable to itself has no effect.",
+         "sourceRelativePath" : "RedundantCode/SelfAssignment.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-480",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Self assignment"
+      },
+      {
+         "id" : "go/shift-out-of-range",
+         "instructionPath" : "instructions/go/shift-out-of-range.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "ShiftOutOfRange.go",
+            "ShiftOutOfRangeGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Shifting by more than the number of bits in the type of the left-hand side always yields 0 or -1.",
+         "sourceRelativePath" : "RedundantCode/ShiftOutOfRange.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-197"
+         ],
+         "title" : "Shift out of range"
+      },
+      {
+         "id" : "go/unreachable-statement",
+         "instructionPath" : "instructions/go/unreachable-statement.txt",
+         "kind" : "problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "UnreachableStatement.go",
+            "UnreachableStatementGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Unreachable statements are often indicative of missing code or latent bugs and should be avoided.",
+         "sourceRelativePath" : "RedundantCode/UnreachableStatement.ql",
+         "tags" : [
+            "quality",
+            "reliability",
+            "correctness",
+            "external/cwe/cwe-561"
+         ],
+         "title" : "Unreachable statement"
+      },
+      {
+         "id" : "go/incomplete-hostname-regexp",
+         "instructionPath" : "instructions/go/incomplete-hostname-regexp.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteHostnameRegexp.go",
+            "IncompleteHostnameRegexpGood.go",
+            "IncompleteHostnameRegexpGood2.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Matching a URL or hostname against a regular expression that contains an unescaped dot as part of the hostname might match more hostnames than expected.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteHostnameRegexp.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete regular expression for hostnames"
+      },
+      {
+         "id" : "go/incomplete-url-scheme-check",
+         "instructionPath" : "instructions/go/incomplete-url-scheme-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncompleteUrlSchemeCheck.go",
+            "IncompleteUrlSchemeCheckGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Checking for the \"javascript:\" URL scheme without also checking for \"vbscript:\" and \"data:\" suggests a logic error or even a security vulnerability.",
+         "sourceRelativePath" : "Security/CWE-020/IncompleteUrlSchemeCheck.ql",
+         "tags" : [
+            "security",
+            "correctness",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Incomplete URL scheme check"
+      },
+      {
+         "id" : "go/regex/missing-regexp-anchor",
+         "instructionPath" : "instructions/go/regex/missing-regexp-anchor.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingRegexpAnchor.go",
+            "MissingRegexpAnchorGood.go",
+            "MissingRegexpAnchorGoodDomain.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Regular expressions without anchors can be vulnerable to bypassing.",
+         "sourceRelativePath" : "Security/CWE-020/MissingRegexpAnchor.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Missing regular expression anchor"
+      },
+      {
+         "id" : "go/suspicious-character-in-regex",
+         "instructionPath" : "instructions/go/suspicious-character-in-regex.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SuspiciousCharacterInRegexp.go",
+            "SuspiciousCharacterInRegexpGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a literal bell character or backspace appears in a regular expression, the start of text or word boundary may have been intended.",
+         "sourceRelativePath" : "Security/CWE-020/SuspiciousCharacterInRegexp.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Suspicious characters in a regular expression"
+      },
+      {
+         "id" : "go/untrusted-data-to-external-api",
+         "instructionPath" : "instructions/go/untrusted-data-to-external-api.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ExternalAPISinkExample.go",
+            "ExternalAPITaintStepExample.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Data provided remotely is used in this external API without sanitization, which could be a security risk.",
+         "sourceRelativePath" : "Security/CWE-020/UntrustedDataToExternalAPI.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Untrusted data passed to external API"
+      },
+      {
+         "id" : "go/untrusted-data-to-unknown-external-api",
+         "instructionPath" : "instructions/go/untrusted-data-to-unknown-external-api.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "ExternalAPISinkExample.go",
+            "ExternalAPITaintStepExample.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Data provided remotely is used in this unknown external API without sanitization, which could be a security risk.",
+         "sourceRelativePath" : "Security/CWE-020/UntrustedDataToUnknownExternalAPI.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-020"
+         ],
+         "title" : "Untrusted data passed to unknown external API"
+      },
+      {
+         "id" : "go/path-injection",
+         "instructionPath" : "instructions/go/path-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "TaintedPath.go",
+            "TaintedPathGood.go",
+            "TaintedPathGood2.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Accessing paths influenced by users can allow an attacker to access unexpected resources.",
+         "sourceRelativePath" : "Security/CWE-022/TaintedPath.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022",
+            "external/cwe/cwe-023",
+            "external/cwe/cwe-036",
+            "external/cwe/cwe-073",
+            "external/cwe/cwe-099"
+         ],
+         "title" : "Uncontrolled data used in path expression"
+      },
+      {
+         "id" : "go/unsafe-unzip-symlink",
+         "instructionPath" : "instructions/go/unsafe-unzip-symlink.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UnsafeUnzipSymlink.go",
+            "UnsafeUnzipSymlinkGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Extracting files from a malicious zip archive without validating that the destination file path is within the destination directory can cause files outside the destination...",
+         "sourceRelativePath" : "Security/CWE-022/UnsafeUnzipSymlink.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022"
+         ],
+         "title" : "Arbitrary file write extracting an archive containing symbolic links"
+      },
+      {
+         "id" : "go/zipslip",
+         "instructionPath" : "instructions/go/zipslip.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ZipSlip.go",
+            "ZipSlipGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Extracting files from a malicious ZIP file, or similar type of archive, without validating that the destination file path is within the destination directory can allow an...",
+         "sourceRelativePath" : "Security/CWE-022/ZipSlip.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-022"
+         ],
+         "title" : "Arbitrary file access during archive extraction (\"Zip Slip\")"
+      },
+      {
+         "id" : "go/command-injection",
+         "instructionPath" : "instructions/go/command-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CommandInjection.go",
+            "CommandInjectionGood.go",
+            "CommandInjectionGood2.go",
+            "CommandInjectionGood3.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a system command from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-078/CommandInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-078"
+         ],
+         "title" : "Command built from user-controlled sources"
+      },
+      {
+         "id" : "go/stored-command",
+         "instructionPath" : "instructions/go/stored-command.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "StoredCommand.go",
+            "StoredCommandGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a system command from stored data that is user-controlled can lead to execution of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-078/StoredCommand.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-078"
+         ],
+         "title" : "Command built from stored data"
+      },
+      {
+         "id" : "go/html-template-escaping-bypass-xss",
+         "instructionPath" : "instructions/go/html-template-escaping-bypass-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "HtmlTemplateEscapingBypassXssBad.go",
+            "HtmlTemplateEscapingBypassXssGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Converting user input to a special type that avoids escaping when fed into an HTML template allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/HtmlTemplateEscapingBypassXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Cross-site scripting via HTML template escaping bypass"
+      },
+      {
+         "id" : "go/reflected-xss",
+         "instructionPath" : "instructions/go/reflected-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ReflectedXss.go",
+            "ReflectedXssGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Writing user input directly to an HTTP response allows for a cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/ReflectedXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Reflected cross-site scripting"
+      },
+      {
+         "id" : "go/stored-xss",
+         "instructionPath" : "instructions/go/stored-xss.txt",
+         "kind" : "path-problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "StoredXss.go",
+            "StoredXssGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using uncontrolled stored values in HTML allows for a stored cross-site scripting vulnerability.",
+         "sourceRelativePath" : "Security/CWE-079/StoredXss.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-079",
+            "external/cwe/cwe-116"
+         ],
+         "title" : "Stored cross-site scripting"
+      },
+      {
+         "id" : "go/sql-injection",
+         "instructionPath" : "instructions/go/sql-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "SqlInjection.go",
+            "SqlInjectionGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building a database query from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-089/SqlInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-089"
+         ],
+         "title" : "Database query built from user-controlled sources"
+      },
+      {
+         "id" : "go/unsafe-quoting",
+         "instructionPath" : "instructions/go/unsafe-quoting.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StringBreak.go",
+            "StringBreakGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If a quoted string literal is constructed from data that may itself contain quotes, the embedded data could (accidentally or intentionally) change the structure of the overall...",
+         "sourceRelativePath" : "Security/CWE-089/StringBreak.ql",
+         "tags" : [
+            "correctness",
+            "security",
+            "external/cwe/cwe-078",
+            "external/cwe/cwe-089",
+            "external/cwe/cwe-094"
+         ],
+         "title" : "Potentially unsafe quoting"
+      },
+      {
+         "id" : "go/cookie-httponly-not-set",
+         "instructionPath" : "instructions/go/cookie-httponly-not-set.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CookieWithoutHttpOnly.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Sensitive cookies without the `HttpOnly` property set are accessible by client-side scripts such as JavaScript.",
+         "sourceRelativePath" : "Security/CWE-1004/CookieWithoutHttpOnly.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-1004"
+         ],
+         "title" : "Cookie 'HttpOnly' attribute is not set to true"
+      },
+      {
+         "id" : "go/log-injection",
+         "instructionPath" : "instructions/go/log-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "medium",
+         "referenceExampleFileNames" : [
+            "LogInjection.go",
+            "LogInjectionGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building log entries from user-controlled sources is vulnerable to insertion of forged log entries by a malicious user.",
+         "sourceRelativePath" : "Security/CWE-117/LogInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-117"
+         ],
+         "title" : "Log entries created from user input"
+      },
+      {
+         "id" : "go/allocation-size-overflow",
+         "instructionPath" : "instructions/go/allocation-size-overflow.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "AllocationSizeOverflow.go",
+            "AllocationSizeOverflowGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "When computing the size of an allocation based on the size of a large object, the result may overflow and cause a runtime panic.",
+         "sourceRelativePath" : "Security/CWE-190/AllocationSizeOverflow.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-190"
+         ],
+         "title" : "Size computation for allocation may overflow"
+      },
+      {
+         "id" : "go/stack-trace-exposure",
+         "instructionPath" : "instructions/go/stack-trace-exposure.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "StackTraceExposure.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Information from a stack trace propagates to an external user.",
+         "sourceRelativePath" : "Security/CWE-209/StackTraceExposure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-209",
+            "external/cwe/cwe-497"
+         ],
+         "title" : "Information exposure through a stack trace"
+      },
+      {
+         "id" : "go/disabled-certificate-check",
+         "instructionPath" : "instructions/go/disabled-certificate-check.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "DisabledCertificateCheck.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If an application disables TLS certificate checking, it may be vulnerable to man-in-the-middle attacks.",
+         "sourceRelativePath" : "Security/CWE-295/DisabledCertificateCheck.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-295"
+         ],
+         "title" : "Disabled TLS certificate check"
+      },
+      {
+         "id" : "go/clear-text-logging",
+         "instructionPath" : "instructions/go/clear-text-logging.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CleartextLogging.go",
+            "CleartextLoggingGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Logging sensitive information without encryption or hashing can expose it to an attacker.",
+         "sourceRelativePath" : "Security/CWE-312/CleartextLogging.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-312",
+            "external/cwe/cwe-315",
+            "external/cwe/cwe-359"
+         ],
+         "title" : "Clear-text logging of sensitive information"
+      },
+      {
+         "id" : "go/insecure-hostkeycallback",
+         "instructionPath" : "instructions/go/insecure-hostkeycallback.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureHostKeyCallbackExample.go",
+            "SecureHostKeyCallbackExample.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Detects insecure SSL client configurations with an implementation of the `HostKeyCallback` that accepts all host keys.",
+         "sourceRelativePath" : "Security/CWE-322/InsecureHostKeyCallback.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-322"
+         ],
+         "title" : "Use of insecure HostKeyCallback implementation"
+      },
+      {
+         "id" : "go/weak-crypto-key",
+         "instructionPath" : "instructions/go/weak-crypto-key.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsufficientKeySizeBad.go",
+            "InsufficientKeySizeGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a weak cryptographic key can allow an attacker to compromise security.",
+         "sourceRelativePath" : "Security/CWE-326/InsufficientKeySize.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-326"
+         ],
+         "title" : "Use of a weak cryptographic key"
+      },
+      {
+         "id" : "go/weak-cryptographic-algorithm",
+         "instructionPath" : "instructions/go/weak-cryptographic-algorithm.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "Crypto.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic algorithms can compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/BrokenCryptoAlgorithm.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328"
+         ],
+         "title" : "Use of a broken or weak cryptographic algorithm"
+      },
+      {
+         "id" : "go/insecure-tls",
+         "instructionPath" : "instructions/go/insecure-tls.txt",
+         "kind" : "path-problem",
+         "precision" : "very-high",
+         "referenceExampleFileNames" : [
+            "InsecureTLS.go",
+            "SaferTLS.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "If an application supports insecure TLS versions or ciphers, it may be vulnerable to machine-in-the-middle and other attacks.",
+         "sourceRelativePath" : "Security/CWE-327/InsecureTLS.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327"
+         ],
+         "title" : "Insecure TLS configuration"
+      },
+      {
+         "id" : "go/weak-sensitive-data-hashing",
+         "instructionPath" : "instructions/go/weak-sensitive-data-hashing.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "WeakSecretHashing.go",
+            "WeakPasswordHashing.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Using broken or weak cryptographic hashing algorithms can compromise security.",
+         "sourceRelativePath" : "Security/CWE-327/WeakSensitiveDataHashing.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-327",
+            "external/cwe/cwe-328",
+            "external/cwe/cwe-916"
+         ],
+         "title" : "Use of a broken or weak cryptographic hashing algorithm on sensitive data"
+      },
+      {
+         "id" : "go/insecure-randomness",
+         "instructionPath" : "instructions/go/insecure-randomness.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "InsecureRandomness.go",
+            "InsecureRandomnessGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using insufficient randomness as the key of a cryptographic algorithm can allow an attacker to compromise security.",
+         "sourceRelativePath" : "Security/CWE-338/InsecureRandomness.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-338"
+         ],
+         "title" : "Use of insufficient randomness as the key of a cryptographic algorithm"
+      },
+      {
+         "id" : "go/missing-jwt-signature-check",
+         "instructionPath" : "instructions/go/missing-jwt-signature-check.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "MissingJwtSignatureCheckBad.go",
+            "MissingJwtSignatureCheckGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Failing to check the JSON Web Token (JWT) signature may allow an attacker to forge their own tokens.",
+         "sourceRelativePath" : "Security/CWE-347/MissingJwtSignatureCheck.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-347"
+         ],
+         "title" : "Missing JWT signature check"
+      },
+      {
+         "id" : "go/constant-oauth2-state",
+         "instructionPath" : "instructions/go/constant-oauth2-state.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "ConstantOauth2StateBad.go",
+            "ConstantOauth2StateBetter.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Using a constant value for the `state` in the OAuth 2.0 URL makes the application susceptible to CSRF attacks.",
+         "sourceRelativePath" : "Security/CWE-352/ConstantOauth2State.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-352"
+         ],
+         "title" : "Use of constant `state` value in OAuth 2.0 URL"
+      },
+      {
+         "id" : "go/bad-redirect-check",
+         "instructionPath" : "instructions/go/bad-redirect-check.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "BadRedirectCheck.go",
+            "BadRedirectCheckGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "A redirect check that checks for a leading slash but not two leading slashes or a leading slash followed by a backslash is incomplete.",
+         "sourceRelativePath" : "Security/CWE-601/BadRedirectCheck.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "Bad redirect check"
+      },
+      {
+         "id" : "go/unvalidated-url-redirection",
+         "instructionPath" : "instructions/go/unvalidated-url-redirection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "OpenUrlRedirect.go",
+            "OpenUrlRedirectGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Open URL redirection based on unvalidated user input may cause redirection to malicious web sites.",
+         "sourceRelativePath" : "Security/CWE-601/OpenUrlRedirect.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-601"
+         ],
+         "title" : "Open URL redirect"
+      },
+      {
+         "id" : "go/cookie-secure-not-set",
+         "instructionPath" : "instructions/go/cookie-secure-not-set.txt",
+         "kind" : "problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "CookieWithoutSecure.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Cookies without the `Secure` flag may be sent in cleartext.",
+         "sourceRelativePath" : "Security/CWE-614/CookieWithoutSecure.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-614"
+         ],
+         "title" : "Cookie 'Secure' attribute is not set to true"
+      },
+      {
+         "id" : "go/email-injection",
+         "instructionPath" : "instructions/go/email-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "EmailBad.go",
+            "EmailGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Incorporating untrusted input directly into an email message can enable content spoofing, which in turn may lead to information leaks and other security issues.",
+         "sourceRelativePath" : "Security/CWE-640/EmailInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-640"
+         ],
+         "title" : "Email content injection"
+      },
+      {
+         "id" : "go/xml/xpath-injection",
+         "instructionPath" : "instructions/go/xml/xpath-injection.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "XPathInjection.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Building an XPath expression from user-controlled sources is vulnerable to insertion of malicious code by the user.",
+         "sourceRelativePath" : "Security/CWE-643/XPathInjection.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-643"
+         ],
+         "title" : "XPath injection"
+      },
+      {
+         "id" : "go/incorrect-integer-conversion",
+         "instructionPath" : "instructions/go/incorrect-integer-conversion.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "IncorrectIntegerConversion.go",
+            "IncorrectIntegerConversionGood.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Converting the result of `strconv.Atoi`, `strconv.ParseInt`, and `strconv.ParseUint` to integer types of smaller bit size can produce unexpected values.",
+         "sourceRelativePath" : "Security/CWE-681/IncorrectIntegerConversionQuery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-190",
+            "external/cwe/cwe-681"
+         ],
+         "title" : "Incorrect conversion between integer types"
+      },
+      {
+         "id" : "go/uncontrolled-allocation-size",
+         "instructionPath" : "instructions/go/uncontrolled-allocation-size.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "UncontrolledAllocationSizeBad.go",
+            "UncontrolledAllocationSizeGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Allocating memory for slices with the built-in make function from user-controlled sources can lead to a denial of service.",
+         "sourceRelativePath" : "Security/CWE-770/UncontrolledAllocationSize.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-770"
+         ],
+         "title" : "Slice memory allocation with excessive size value"
+      },
+      {
+         "id" : "go/hardcoded-credentials",
+         "instructionPath" : "instructions/go/hardcoded-credentials.txt",
+         "kind" : "problem",
+         "precision" : "low",
+         "referenceExampleFileNames" : [
+            "HardcodedCredentials.go"
+         ],
+         "severity" : "warning",
+         "shortDescription" : "Hard-coding credentials in source code may enable an attacker to gain unauthorized access.",
+         "sourceRelativePath" : "Security/CWE-798/HardcodedCredentials.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-259",
+            "external/cwe/cwe-321",
+            "external/cwe/cwe-798"
+         ],
+         "title" : "Hard-coded credentials"
+      },
+      {
+         "id" : "go/request-forgery",
+         "instructionPath" : "instructions/go/request-forgery.txt",
+         "kind" : "path-problem",
+         "precision" : "high",
+         "referenceExampleFileNames" : [
+            "RequestForgery.go",
+            "RequestForgeryGood.go"
+         ],
+         "severity" : "error",
+         "shortDescription" : "Sending network requests with user-controlled data allows for request forgery attacks.",
+         "sourceRelativePath" : "Security/CWE-918/RequestForgery.ql",
+         "tags" : [
+            "security",
+            "external/cwe/cwe-918"
+         ],
+         "title" : "Uncontrolled data used in network request"
+      }
+   ],
+   "generatedAtUtc" : "2026-05-17T19:33:57Z",
+   "language" : "go"
+}

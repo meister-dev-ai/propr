@@ -1,0 +1,49 @@
+Review focus: Misleading indentation of dangling 'else'
+
+What to look for:
+- The 'else' clause of an 'if' statement should be aligned with the 'if' it belongs to.
+- In JavaScript, an`else`clause is always associated with the closest preceding`if`statement that does not already have an`else`clause. It is good practice to use indentation to clarify this structure by indenting matching`if`...`else`pairs by the same amount of whitespace. Indenting the`else`clause of a nested`if`statement to suggest that it matches an outer`if`statement (instead of the one it actually belongs to) is confusing to readers and may even indicate a bug in the program logic.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DanglingElse.js`):
+```
+function f() {
+	if (cond1())
+		if (cond2())
+			return 23;
+	else
+		return 42;
+	return 56;
+}
+```
+- Reference example (`DanglingElseGood.js`):
+```
+function f() {
+	if (cond1())
+		if (cond2())
+			return 23;
+		else
+			return 42;
+	return 56;
+}
+```
+- Reference example (`DanglingElseGood2.js`):
+```
+function f() {
+	if (cond1()) {
+		if (cond2()) {
+			return 23;
+		} else {
+			return 42;
+		}
+	}
+	return 56;
+}
+```

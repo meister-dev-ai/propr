@@ -1,0 +1,27 @@
+Review focus: Call to function with extraneous arguments
+
+What to look for:
+- A function call to a function passed more arguments than there are declared parameters of the function.
+- A function is called with more arguments than there are parameters of the function. This may indicate that an incorrect function is being called, or that the signature (parameter list) of the called function is not known to the author. In C, function calls generally need to provide the same number of arguments as there are arguments to the function. (Variadic functions can accept additional arguments.) Providing more arguments than there are parameters incurs an unneeded computational overhead, both in terms of time and of additional stack space.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TooManyArguments.c`):
+```
+void one_argument();
+
+void calls() {
+	
+	one_argument(1); // GOOD: `one_argument` will accept and use the argument
+	
+	one_argument(1, 2); // BAD: `one_argument` will use the first argument but ignore the second
+}
+
+void one_argument(int x);
+```

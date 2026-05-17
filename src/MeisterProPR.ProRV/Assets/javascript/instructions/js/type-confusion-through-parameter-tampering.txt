@@ -1,0 +1,52 @@
+Review focus: Type confusion through parameter tampering
+
+What to look for:
+- Sanitizing an HTTP request parameter may be ineffective if the user controls its type.
+- Sanitizing untrusted HTTP request parameters is a common technique for preventing injection attacks such as SQL injection or path traversal. This is sometimes done by checking if the request parameters contain blacklisted substrings. However, sanitizing request parameters assuming they have type`String`and using the builtin string methods such as`String.prototype.indexOf`is susceptible to type confusion attacks. In a type confusion attack, an attacker tampers with an HTTP request parameter such that it has a value of type`Array`instead of the expected type`String`. Furthermore, the content of the array has been crafted to bypass sanitizers by exploiting that some identically named methods of strings and arrays behave differently.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TypeConfusionThroughParameterTampering.js`):
+```
+var app = require("express")(),
+  path = require("path");
+
+app.get("/user-files", function(req, res) {
+  var file = req.param("file");
+  if (file.indexOf("..") !== -1) {
+    // BAD
+    // we forbid relative paths that contain ..
+    // as these could leave the public directory
+    res.status(400).send("Bad request");
+  } else {
+    var absolute = path.resolve("/public/" + file);
+    console.log("Sending file: %s", absolute);
+    res.sendFile(absolute);
+  }
+});
+```
+- Reference example (`TypeConfusionThroughParameterTampering_fixed.js`):
+```
+var app = require("express")(),
+  path = require("path");
+
+app.get("/user-files", function(req, res) {
+  var file = req.param("file");
+  if (typeof file !== 'string' || file.indexOf("..") !== -1) {
+    // GOOD
+    // we forbid relative paths that contain ..
+    // as these could leave the public directory
+    res.status(400).send("Bad request");
+  } else {
+    var absolute = path.resolve("/public/" + file);
+    console.log("Sending file: %s", absolute);
+    res.sendFile(absolute);
+  }
+});
+```

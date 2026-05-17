@@ -1,0 +1,36 @@
+Review focus: Comparison of identical values
+
+What to look for:
+- When the same variable occurs on both sides of a comparison operator, the behavior is always constant, and probably not what it was intended to be.
+- If two identical expressions are compared (that is, checked for equality or inequality), this is typically an indication of a mistake, because the Boolean value of the comparison is always the same. Often, it indicates that the wrong qualifier has been used on a field access. An exception applies to inequality (`!=`) and equality (`==`) tests of a floating point variable with itself: the special floating point value`NaN`("not-a-number") is the only value that is not considered to be equal to itself. Thus, the test`x != x`where`x`is a`float`or`double`variable is equivalent to checking whether`x`is`NaN`, and similarly for`x == x`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CompareIdenticalValues.cs`):
+```
+class Person
+{
+    private string name;
+    private int age;
+    public Person(string name, int age)
+    {
+        this.name = name;
+        this.age = age;
+    }
+    public override bool Equals(object obj)
+    {
+        Person personObj = obj as Person;
+        if (personObj == null)
+        {
+            return false;
+        }
+        return name == personObj.name && age == age; // BAD
+    }
+}
+```

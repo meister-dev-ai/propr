@@ -1,0 +1,40 @@
+Review focus: Return statement assigns local variable
+
+What to look for:
+- An assignment to a local variable in a return statement is useless, since the variable will immediately go out of scope and its value is lost.
+- Assigning a local variable in a return statement is useless, since the local variable will go out of scope immediately and its new value is lost.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ReturnAssignsLocal.js`):
+```
+function Person(first, last, age) {
+	this.first = first;
+	this.last = last;
+	this.age = age;
+}
+
+Person.prototype.getName = function() {
+	var name = first + " " + last;
+	return name = name.trim();
+};
+```
+- Reference example (`ReturnAssignsLocalGood.js`):
+```
+function Person(first, last, age) {
+	this.first = first;
+	this.last = last;
+	this.age = age;
+}
+
+Person.prototype.getName = function() {
+	var name = first + " " + last;
+	return name.trim();
+};
+```

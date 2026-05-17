@@ -1,0 +1,12 @@
+Review focus: Improper validation of user-provided array index
+
+What to look for:
+- Using external input as an index to an array, without proper validation, can lead to index out of bound exceptions.
+- Using unvalidated input as part of an index into the array can cause the array access to throw an`ArrayIndexOutOfBoundsException`. This is because there is no guarantee that the index provided is within the bounds of the array. This problem occurs when user input is used as an array index, either directly or following one or more calculations. If the user input is unsanitized, it may be any value, which could result in either a negative index, or an index which is larger than the size of the array, either of which would result in an`ArrayIndexOutOfBoundsException`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

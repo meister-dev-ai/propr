@@ -1,0 +1,47 @@
+Review focus: Incorrect return-value check for a 'scanf'-like function
+
+What to look for:
+- Failing to account for EOF in a call to a scanf-like function can lead to undefined behavior.
+- This query finds calls of scanf-like functions with improper return-value checking. Specifically, it flags uses of`scanf`where the return value is only checked against zero. Functions in the scanf family return either EOF (a negative value) in case of IO failure, or the number of items successfully read from the input. Consequently, a simple check that the return value is nonzero is not enough.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectCheckScanf.cpp`):
+```
+{
+  int i, j;
+
+  // BAD: The result is only checked against zero
+  if (scanf("%d %d", &i, &j)) { 
+      use(i);
+      use(j);
+  }
+
+  // BAD: The result is only checked against zero
+  if (scanf("%d %d", &i, &j) == 0) { 
+    i = 0;
+    j = 0;
+  }
+  use(i);
+  use(j);
+
+  if (scanf("%d %d", &i, &j) == 2) { 
+      // GOOD: the result is checked against 2
+  }
+
+  // GOOD: the result is compared directly
+  int r = scanf("%d %d", &i, &j);
+  if (r < 2) {
+    return;
+  }
+  if (r == 1) { 
+    j = 0;
+  }
+}
+```

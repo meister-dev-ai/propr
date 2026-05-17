@@ -1,0 +1,12 @@
+Review focus: Use id instead of name
+
+What to look for:
+- Using 'id' instead of 'name' to name a Spring bean enables the XML parser to perform additional checks.
+- To name a Spring bean, it is best to use the`id`attribute instead of the`name`attribute. Using the`id`attribute enables the XML parser to perform additional checks (for example, checking if the`id`in a`ref`attribute is an actual`id`of an XML element).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

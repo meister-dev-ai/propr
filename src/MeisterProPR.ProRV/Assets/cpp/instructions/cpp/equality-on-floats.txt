@@ -1,0 +1,25 @@
+Review focus: Equality test on floating-point values
+
+What to look for:
+- Comparing results of floating-point computations with '==' or '!=' is likely to yield surprising results since floating-point computation does not follow the standard rules of...
+- This rule finds comparisons using the equals (`==`) operator on floating point values. Such comparisons can yield unexpected results due to conversion or rounding errors. Pay particular attention if you are dealing with very large or very small floating point values as rounding errors will be more prominent when using such values.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FloatComparison.cpp`):
+```
+//wrong: could evaluate to 0 (false) due to rounding errors
+23.42f == 23.42
+
+//wrong: could evaluate to 1 (true) due to rounding errors
+1000000000.0f == 1000000001.0f
+
+//correct: use a margin of error to check equality
+fabs(f1 - f2) < EPSILON
+```

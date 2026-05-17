@@ -1,0 +1,55 @@
+Review focus: File created without restricting permissions
+
+What to look for:
+- Creating a file that is world-writable can allow an attacker to write to the file.
+- When you create a file, take care to give it the most restrictive permissions possible. A typical mistake is to create the file with world-writable permissions. This can allow an attacker to write to the file, which can give them unexpected control over the program.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DoNotCreateWorldWritable.c`):
+```
+void write_default_config_bad() {
+	// BAD - this is world-writable so any user can overwrite the config
+	int out = creat(OUTFILE, 0666);
+	if (out < 0) {
+		// handle error
+	}
+
+	dprintf(out, "%s", DEFAULT_CONFIG);
+	close(out);
+}
+
+void write_default_config_good() {
+	// GOOD - this allows only the current user to modify the file
+	int out = creat(OUTFILE, S_IWUSR | S_IRUSR);
+	if (out < 0) {
+		// handle error
+	}
+
+	dprintf(out, "%s", DEFAULT_CONFIG);
+	close(out);
+}
+
+void write_default_config_good_2() {
+	// GOOD - this allows only the current user to modify the file
+	int out = open(OUTFILE, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR);
+	if (out < 0) {
+		// handle error
+	}
+
+	FILE *fd = fdopen(out, "w");
+	if (fd == NULL) {
+		close(out);
+		// handle error
+	}
+
+	fprintf(fd, "%s", DEFAULT_CONFIG);
+	fclose(fd);
+}
+```

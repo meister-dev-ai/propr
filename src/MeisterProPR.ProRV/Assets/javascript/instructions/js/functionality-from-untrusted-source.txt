@@ -1,0 +1,38 @@
+Review focus: Inclusion of functionality from an untrusted source
+
+What to look for:
+- Including functionality from an untrusted source may allow an attacker to control the functionality and execute arbitrary code.
+- Including a resource from an untrusted source or using an untrusted channel may allow an attacker to include arbitrary code in the response. When including an external resource (for example, a`script`element or an`iframe`element) on a page, it is important to ensure that the received data is not malicious. When including external resources, it is possible to verify that the responding server is the intended one by using an`https`URL. This prevents a MITM (man-in-the-middle) attack where an attacker might have been able to spoof a server response. Even when`https`is used, an attacker might still compromise the server. When you use a`script`element, you can check for subresource integrity - that is, you can check the contents of the data received by supplying a cryptographic digest of the expected sources to the`script`element. The script will only load sources that match the digest and an attacker will be unable to modify the script even when the server is compromised. Subresource integrity (SRI) checking is commonly recommended when importing a fixed version of a library - for example, from a CDN (content-delivery network). Then, the fixed digest of that version of the library can easily be added to the`script`element's`integrity`attribute. A dynamic service cannot be easily used with SRI. Nevertheless, it is possible to list multiple acceptable SHA hashes in the`integrity`attribute, such as those for the content generated for major browers used by your users. See the [`CUSTOMIZING.md`](https://github.com/github/codeql/blob/main/javascript/ql/src/Security/CWE-830/CUSTOMIZING.md) file in the source code for this query for information on how to extend the list of hostnames required to use SRI by this query.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`jquery-http-nocheck.html`):
+```
+<html>
+    <head>
+        <title>jQuery demo</title>
+        <script src="http://code.jquery.com/jquery-3.6.0.slim.min.js" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        ...
+    </body>
+</html>
+```
+- Reference example (`jquery-https-check.html`):
+```
+<html>
+    <head>
+        <title>jQuery demo</title>
+        <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js" integrity="sha256-u7e5khyithlIdTpu22PHhENmPcRdFiHRjhAuHcs05RI=" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        ...
+    </body>
+</html>
+```

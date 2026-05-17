@@ -1,0 +1,12 @@
+Review focus: Intent URI permission manipulation
+
+What to look for:
+- Returning an externally provided Intent via 'setResult' may allow a malicious application to access arbitrary content providers of the vulnerable application.
+- When an Android component expects a result from an Activity,`startActivityForResult`can be used. The started Activity can then use`setResult`to return the appropriate data to the calling component. If an Activity obtains the incoming, user-provided Intent and directly returns it via`setResult`without any checks, the application may be unintentionally giving arbitrary access to its content providers, even if they are not exported, as long as they are configured with the attribute`android:grantUriPermissions="true"`. This happens because the attacker adds the appropriate URI permission flags to the provided Intent, which take effect once the Intent is reflected back.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

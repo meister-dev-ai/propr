@@ -1,0 +1,37 @@
+Review focus: Redefined default parameter
+
+What to look for:
+- An inherited default parameter shall never be redefined.
+- Inherited default parameters should not be redefined because this obscures the behavior of the code. Default values are statically bound and when they are redefined in dynamically bound function calls this reduces readability of the code, increasing the risk of introducing defects. For example, while C++ dynamically binds virtual methods, the default parameters of those methods are statically bound. Hence, the draw() method of the derived type (Circle), if referenced through a base type pointer (Shape *), will be invoked with the default parameters of the base type (Shape).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 95.cpp`):
+```
+enum Shape_color { red, green, blue };
+class Shape 
+{
+  public:
+    virtual void draw (Shape_color color = green) const;
+    ...
+}
+class Circle : public Shape 
+{
+  public:
+    virtual void draw (Shape_color  color = red) const;
+    ...
+}
+void fun()
+{
+  Shape* sp;
+
+  sp = new Circle;
+  sp->draw ();      // Invokes Circle::draw(green) even though the default
+}				   	// parameter for Circle is red.
+```

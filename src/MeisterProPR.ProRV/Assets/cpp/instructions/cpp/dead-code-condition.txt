@@ -1,0 +1,36 @@
+Review focus: Branching condition always evaluates to same value
+
+What to look for:
+- The condition of the branching statement always evaluates to the same value.
+- This query finds branching statements with conditions that always evaluate to the same value. It is likely that these conditions indicate an error in the branching condition. Alternatively, the conditions may have been left behind after debugging.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadCodeCondition.cpp`):
+```
+while(result) {
+	if ( ... )
+		...
+	else if (result //wrong: this test is redundant
+				&& result->flags != 0)
+		...
+	result = next(queue);
+}
+
+
+fp = fopen(log, "r");
+if (fp) {
+	/*
+	 * large block of code
+	 */
+	if (!fp) { //wrong: always false
+		...  /* dead code */
+	}
+}
+```

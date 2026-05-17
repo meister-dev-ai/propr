@@ -1,0 +1,12 @@
+Review focus: Time-of-check time-of-use race condition
+
+What to look for:
+- Using a resource after an unsynchronized state check can lead to a race condition, if the state may be changed between the check and use.
+- Often it is necessary to check the state of a resource before using it. If the resource is accessed concurrently, then the check and the use need to be performed atomically, otherwise the state of the resource may change between the check and the use. This can lead to a "time-of-check/time-of-use" (TOCTOU) race condition. In Java, classes may present state inspection methods and operation methods which are synchronized. This prevents multiple threads from executing those methods simultaneously, but it does not prevent a state change in between separate method invocations.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

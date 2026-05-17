@@ -1,0 +1,40 @@
+Review focus: Unreachable code
+
+What to look for:
+- Code that cannot be reached should be deleted.
+- This rule finds code that is never reached. Unused code should be removed to increase readability and avoid confusion.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnreachableCodeBad.rs`):
+```
+fn fib(input: u32) -> u32 {
+	if (input == 0) {
+		return 0;
+	} else if (input == 1) {
+		return 1;
+	} else {
+		return fib(input - 1) + fib(input - 2);
+	}
+
+	return input; // BAD: this code is never reached
+}
+```
+- Reference example (`UnreachableCodeGood.rs`):
+```
+fn fib(input: u32) -> u32 {
+	if (input == 0) {
+		return 0;
+	} else if (input == 1) {
+		return 1;
+	} else {
+		return fib(input - 1) + fib(input - 2);
+	}
+}
+```

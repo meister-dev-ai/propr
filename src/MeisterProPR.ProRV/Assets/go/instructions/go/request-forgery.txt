@@ -1,0 +1,63 @@
+Review focus: Uncontrolled data used in network request
+
+What to look for:
+- Sending network requests with user-controlled data allows for request forgery attacks.
+- Directly incorporating user input into an HTTP request without validating the input can facilitate different kinds of request forgery attacks, where the attacker essentially controls the request. If the vulnerable request is in server-side code, then security mechanisms, such as external firewalls, can be bypassed. If the vulnerable request is in client-side code, then unsuspecting users can send malicious requests to other servers, potentially resulting in a DDOS attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`RequestForgery.go`):
+```
+package main
+
+import (
+	"net/http"
+)
+
+func handler(w http.ResponseWriter, req *http.Request) {
+	target := req.FormValue("target")
+
+	// BAD: `target` is controlled by the attacker
+	resp, err := http.Get("https://" + target + ".example.com/data/")
+	if err != nil {
+		// error handling
+	}
+
+	// process request response
+	use(resp)
+}
+```
+- Reference example (`RequestForgeryGood.go`):
+```
+package main
+
+import (
+	"net/http"
+)
+
+func handler1(w http.ResponseWriter, req *http.Request) {
+	target := req.FormValue("target")
+
+	var subdomain string
+	if target == "EU" {
+		subdomain = "europe"
+	} else {
+		subdomain = "world"
+	}
+
+	// GOOD: `subdomain` is controlled by the server
+	resp, err := http.Get("https://" + subdomain + ".example.com/data/")
+	if err != nil {
+		// error handling
+	}
+
+	// process request response
+	use(resp)
+}
+```

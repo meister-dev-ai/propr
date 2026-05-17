@@ -1,0 +1,20 @@
+Review focus: Non-iterable used in for loop
+
+What to look for:
+- Using a non-iterable as the object in a 'for' loop causes a TypeError.
+- The`for`statement is designed to allow you to iterate over the elements of a sequence or other iterable object. If a non-iterable object is used in a`for`statement (`for var in object:`) then a TypeError will be raised.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonIteratorInForLoop.py`):
+```
+def illegal_for_loop(seq = None):
+    for x in seq:
+        print (x)
+```

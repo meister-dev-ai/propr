@@ -1,0 +1,49 @@
+Review focus: Off-by-one comparison against container length
+
+What to look for:
+- The index is compared to be less than or equal to the container length, then used in an array indexing operation that could be out of bounds.
+- An indexing operation against a collection, string or array should use an index at most one less than the length. If the index to be accessed is compared to be less than or equal to the length (`<=`), instead of less than the length (`<`), the index could be out of bounds.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ContainerLengthCmpOffByOne.cs`):
+```
+using System.IO;
+using System;
+
+class ContainerLengthOffByOne
+{
+    public static boolean BadContains(string searchName, string names)
+    {
+        string[] values = names.Split(',');
+        // BAD: index could be equal to length
+        for (int i = 0; i <= values.Length; i++)
+        {
+            // When i = length, this access will be out of bounds
+            if (values[i] == searchName)
+            {
+                return true;
+            }
+        }
+    }
+
+    public static boolean GoodContains(string searchName, string names)
+    {
+        string[] values = names.Split(',');
+        // GOOD: Avoid using indexes, and use foreach instead
+        foreach (string name in values)
+        {
+            if (name == searchName)
+            {
+                return true;
+            }
+        }
+    }
+}
+```

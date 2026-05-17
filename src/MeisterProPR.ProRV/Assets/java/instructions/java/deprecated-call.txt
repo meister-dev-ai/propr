@@ -1,0 +1,15 @@
+Review focus: Deprecated method or constructor invocation
+
+What to look for:
+- Using a method or constructor that has been marked as deprecated may be dangerous or fail to take advantage of a better method or constructor.
+- A method (or constructor) can be marked as deprecated using either the`@Deprecated`annotation or the`@deprecated`Javadoc tag. Using a method that has been marked as deprecated is bad practice, typically for one or more of the following reasons:
+- The method is dangerous.
+- There is a better alternative method.
+- Methods that are marked as deprecated are often removed from future versions of an API. So using a deprecated method may cause extra maintenance effort when the API is upgraded.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

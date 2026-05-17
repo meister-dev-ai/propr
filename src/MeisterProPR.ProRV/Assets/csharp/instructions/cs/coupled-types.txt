@@ -1,0 +1,12 @@
+Review focus: Inappropriate intimacy
+
+What to look for:
+- Two otherwise unrelated classes that share too much information about each other are difficult to maintain, change and understand.
+- Inappropriate intimacy is an anti-pattern that describes a pair of otherwise unrelated classes that are too tightly coupled: each class uses a significant number of methods and fields of the other. This makes both classes difficult to maintain, change and understand. Inappropriate intimacy is the same as the "feature envy" anti-pattern but in both directions: each class is "envious" of some functionality or data defined in the other class.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

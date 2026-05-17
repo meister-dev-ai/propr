@@ -1,0 +1,31 @@
+Review focus: Unused npm dependency
+
+What to look for:
+- If unnecessary package dependencies are included in package.json, the package will become harder to install.
+- Specifying an unused dependency in`package.json`may make packages harder to install. The unused dependency will still be downloaded by npm, and if it conflicts with another package installation will become difficult or impossible. Dependencies on packages that are only used during development (such as testing frameworks or linters) should be listed under`devDependencies`rather than`dependencies`, since they are not required for deployment.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedDependency.js`):
+```
+// package.json
+{
+  "name": "example-package",
+  "version": "0.1.0",
+  "dependencies": {
+    "acorn": "*",
+    "esprima": "~2.0.0"
+  }
+}
+
+// index.js
+var acorn = require('acorn'),
+    fs = require('fs');
+acorn.parse(fs.readFileSync('tst.js'), 'utf-8');
+```

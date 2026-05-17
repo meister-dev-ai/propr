@@ -1,0 +1,41 @@
+Review focus: Second order command injection
+
+What to look for:
+- Using user-controlled data as arguments to some commands, such as git clone, can allow arbitrary commands to be executed.
+- Some shell commands, like`git ls-remote`, can execute arbitrary commands if a user provides a malicious URL that starts with`--upload-pack`. This can be used to execute arbitrary code on the server.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`second-order-command-injection.js`):
+```
+const express = require("express");
+const app = express();
+
+const cp = require("child_process");
+
+app.get("/ls-remote", (req, res) => {
+  const remote = req.query.remote;
+  cp.execFile("git", ["ls-remote", remote]); // NOT OK
+});
+```
+- Reference example (`second-order-command-injection-fixed.js`):
+```
+const express = require("express");
+const app = express();
+
+const cp = require("child_process");
+
+app.get("/ls-remote", (req, res) => {
+  const remote = req.query.remote;
+  if (!(remote.startsWith("git@") || remote.startsWith("https://"))) {
+    throw new Error("Invalid remote: " + remote);
+  }
+  cp.execFile("git", ["ls-remote", remote]); // OK
+});
+```

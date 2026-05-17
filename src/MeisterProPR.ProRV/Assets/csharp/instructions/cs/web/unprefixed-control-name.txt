@@ -1,0 +1,12 @@
+Review focus: ASP.NET control name prefixes
+
+What to look for:
+- Including standard prefixes in the field names of ASP.NET Web / HTML controls makes code easier to understand.
+- It is good practice to prefix the names of ASP.NET web controls with a shortened version of their type. This makes the controls easier to find in Intellisense and also makes the purpose of the control more clear.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

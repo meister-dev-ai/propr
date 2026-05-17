@@ -1,0 +1,30 @@
+Review focus: Suspicious unused loop iteration variable
+
+What to look for:
+- A loop iteration variable is unused, which suggests an error.
+- A for loop iteration variable is not used in the body of the loop, and the loop does not count the number of items in the sequence. This is suspicious as there is rarely any reason to iterate over a sequence and not use the contents. Not using the loop variable can often indicate a logical error or typo.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousUnusedLoopIterationVariable.py`):
+```
+#
+def test():
+    for t in [TypeA, TypeB]:
+        x = TypeA()
+        run_test(x)
+```
+- Reference example (`SuspiciousUnusedLoopIterationVariableFixed.py`):
+```
+#
+def test():
+    for t in [TypeA, TypeB]:
+        x = t
+        run_test(x)
+```

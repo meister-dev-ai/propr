@@ -1,0 +1,28 @@
+Review focus: Missing 'this' qualifier
+
+What to look for:
+- Referencing an undeclared global variable in a class that has a member of the same name is confusing and may indicate a bug.
+- JavaScript methods can call other methods of the same class instance through the use of the`this`keyword. In other object-oriented languages such as Java, the use of the`this`keyword for such method calls is optional. It is however not optional in JavaScript. If the`this`keyword is left out, the call is a regular function call.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingThisQualifier1.js`):
+```
+class Audio3D {
+  setAudioStream(){
+    // ...
+    setAudioProperties();
+    // ...
+  }
+
+  setAudioProperties(){
+    // ...  
+  }
+}
+```

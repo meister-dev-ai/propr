@@ -1,0 +1,35 @@
+Review focus: Missing explicit dependency injection
+
+What to look for:
+- Functions without explicit dependency injections will not work when their parameter names are minified.
+- When AngularJS injects dependencies into a function that does not have an explicit dependency specification, it matches up dependencies with function parameters by name. This is dangerous, since some source code transformations such as minification may change the names of parameters. Such a renaming will break the AngularJS application.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ImplicitDependency.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', function($scope) { // BAD: implicit dependency name
+        // ...
+});
+```
+- Reference example (`ImplicitDependency-minified.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', function(a) { // BAD: dependency 'a' does not exist
+        // ...
+});
+```
+- Reference example (`ImplicitDependency-explicit.js`):
+```
+angular.module('myModule', [])
+    .controller('MyController', ['$scope', function($scope) { // GOOD: explicit dependency name
+        // ...
+}]);
+```

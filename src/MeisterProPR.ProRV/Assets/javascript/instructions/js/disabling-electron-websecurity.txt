@@ -1,0 +1,22 @@
+Review focus: Disabling Electron webSecurity
+
+What to look for:
+- Disabling webSecurity can cause critical security vulnerabilities.
+- Electron is secure by default through a same-origin policy requiring all JavaScript and CSS code to originate from the machine running the Electron application. Setting the`webSecurity`property of a`webPreferences`object to`false`will disable the same-origin policy. Disabling the same-origin policy is strongly discouraged.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DisablingWebSecurity.js`):
+```
+const mainWindow = new BrowserWindow({
+  webPreferences: {
+    webSecurity: false
+  }
+})
+```

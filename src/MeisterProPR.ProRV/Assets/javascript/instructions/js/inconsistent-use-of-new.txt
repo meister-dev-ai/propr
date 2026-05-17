@@ -1,0 +1,46 @@
+Review focus: Inconsistent use of 'new'
+
+What to look for:
+- If a function is intended to be a constructor, it should always be invoked with 'new'.
+- JavaScript does not enforce a distinction between constructor functions and normal functions, so the same function can be invoked both as a constructor with`new`and as a normal function without`new`. This is unusual, however, and can often indicate a bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InconsistentNew.js`):
+```
+function Point(x, y) {
+  this.x = x;
+  this.y = y;
+}
+
+var p = new Point(23, 42),
+    q = Point(56, 72);
+```
+- Reference example (`InconsistentNewGood.js`):
+```
+function Point(x, y) {
+  this.x = x;
+  this.y = y;
+}
+
+var p = new Point(23, 42),
+    q = new Point(56, 72);
+```
+- Reference example (`InconsistentNewGood2.js`):
+```
+function Point(x, y) {
+  if (!(this instanceof Point))
+    return new Point(x, y);
+  this.x = x;
+  this.y = y;
+}
+
+var p = new Point(23, 42),
+    q = Point(56, 72);
+```

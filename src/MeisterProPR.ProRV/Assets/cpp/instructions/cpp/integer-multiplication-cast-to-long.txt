@@ -1,0 +1,25 @@
+Review focus: Multiplication result converted to larger type
+
+What to look for:
+- A multiplication result that is converted to a larger type can be a sign that the result can overflow the type converted from.
+- This rule finds code that converts the result of an integer multiplication to a larger type. Since the conversion applies after the multiplication, arithmetic overflow may still occur. The rule flags every multiplication of two non-constant integer expressions that is (explicitly or implicitly) converted to a larger integer type. The conversion is an indication that the expression would produce a result that would be too large to fit in the smaller integer type.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IntMultToLong.cpp`):
+```
+int i = 2000000000;
+long j = i * i; //Wrong: due to overflow on the multiplication between ints, 
+                //will result to j being -1651507200, not 4000000000000000000
+
+long k = (long) i * i; //Correct: the multiplication is done on longs instead of ints, 
+                       //and will not overflow
+
+long l = static_cast<long>(i) * i; //Correct: modern C++
+```

@@ -1,0 +1,19 @@
+Review focus: Non-callable called
+
+What to look for:
+- A call to an object which is not a callable will raise a TypeError at runtime.
+- If an object is called,`obj()`, then that object must be a callable or a`TypeError`will be raised. A callable object is any object whose class defines the`__call__`special method. Callable objects include functions, methods, classes. The`callable(object)`builtin function determines if an object is callable or not. When the Python interpreter attempts to evaluate a call such as`func(arg)`it will invoke the`__call__`special method on`func`. Thus,`func(arg)`is roughly equivalent to`type(func).__call__(func, arg)`which means that the class must define the attribute`__call__`, merely adding it to the instance is not sufficient.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonCallableCalled.py`):
+```
+a_list = []
+a_list()
+```

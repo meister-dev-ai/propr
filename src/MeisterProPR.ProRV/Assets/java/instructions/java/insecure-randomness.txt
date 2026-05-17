@@ -1,0 +1,12 @@
+Review focus: Insecure randomness
+
+What to look for:
+- Using a cryptographically Insecure pseudo-random number generator to generate a security-sensitive value may allow an attacker to predict what value will be generated.
+- If you use a cryptographically weak pseudo-random number generator to generate security-sensitive values, such as passwords, attackers can more easily predict those values. Pseudo-random number generators generate a sequence of numbers that only approximates the properties of random numbers. The sequence is not truly random because it is completely determined by a relatively small set of initial values (the seed). If the random number generator is cryptographically weak, then this sequence may be easily predictable through outside observations.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.

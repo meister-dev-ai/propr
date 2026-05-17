@@ -1,0 +1,45 @@
+Review focus: Use of integer where enum is preferred
+
+What to look for:
+- Enumeration types should be used instead of integer types (and constants) to select from a limited series of choices.
+- This rule finds`switch`statements that use an integer instead of an enumeration. Enumerations are preferred when dealing with a limited number of choices as they makes it easier to see if a case has been left out.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 148.cpp`):
+```
+typedef enum {
+	CASE_VAL1,
+	CASE_VAL2
+} caseVals;
+
+void f() {
+	int caseVal;
+	//Wrong: switch statement uses an integer
+	switch(caseVal) {
+	case 1:
+		//...
+	case 0xFF:
+		//...
+	default:
+		//...
+	}
+
+	//Correct: switch statement uses enum. It is easier to see if a case 
+	//has been left out, and that all cases are valid values
+	caseVals caseVal2;
+	switch (caseVal2) {
+	case CASE_VAL1:
+		//...
+	case CASE_VAL2:
+		//...
+	default:
+	}
+}
+```

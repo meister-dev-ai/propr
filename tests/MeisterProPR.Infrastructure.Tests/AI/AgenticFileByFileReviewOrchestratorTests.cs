@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -9,7 +10,10 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.ProRV.Abstractions;
+using MeisterProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -193,6 +197,144 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
         Assert.Contains(partialResult.Comments, comment => comment.Message == preservedComment.Message);
         Assert.Contains(storedResults, result => result.FilePath == "a.cs" && result.IsComplete && !result.IsFailed);
         Assert.Contains(storedResults, result => result.FilePath == "b.cs" && result.IsFailed && !result.IsComplete);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_AgenticProfileWithoutProRvDispatchStage_DoesNotInvokeProRvPrefilter()
+    {
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+        protocolRecorder.SetCompletedAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordAiCallAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordProRvEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var repository = Substitute.For<IJobRepository>();
+        var storedResults = new List<ReviewFileResult>();
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.AgenticExperimentalProfileId);
+
+        repository.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repository.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repository.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("file summary", []));
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, CreateNoInvestigationPlan("src/Web/Program.cs"))),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "fallback summary")));
+
+        var profileProvider = Substitute.For<IReviewPipelineProfileProvider>();
+        profileProvider.GetProfiles(ReviewStrategy.AgenticFileByFile).Returns(
+        [
+            new ReviewPipelineProfile(
+                ReviewPipelineProfileProvider.AgenticBaselineProfileId,
+                "Agentic baseline",
+                ReviewStrategy.AgenticFileByFile,
+                [AgenticProRvPrefilterStage.StageIdConstant],
+                [
+                    AgenticConfidenceFloorStage.StageIdConstant,
+                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                    AgenticInfoCommentStripStage.StageIdConstant,
+                    AgenticVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                true),
+            new ReviewPipelineProfile(
+                ReviewPipelineProfileProvider.AgenticExperimentalProfileId,
+                "Agentic experimental",
+                ReviewStrategy.AgenticFileByFile,
+                [],
+                [
+                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                    AgenticInfoCommentStripStage.StageIdConstant,
+                    AgenticVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                false),
+        ]);
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        var perFilePipeline = new ReviewPipelineRunner<PerFileReviewContext>(
+        [
+            new AgenticProRvPrefilterStage(
+                protocolRecorder,
+                proRvPrefilter,
+                null,
+                null,
+                null,
+                Substitute.For<ILogger<AgenticProRvPrefilterStage>>()),
+            new AgenticSpeculativeCommentFilterStage(),
+            new AgenticInfoCommentStripStage(),
+            new AgenticVagueSuggestionFilterStage(),
+        ]);
+
+        var sut = new AgenticFileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            repository,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, ModelId = "test-model" }),
+            Substitute.For<ILogger<AgenticFileByFileReviewOrchestrator>>(),
+            perFilePipeline: perFilePipeline,
+            pipelineProfileProvider: profileProvider,
+            proRvPrefilter: proRvPrefilter);
+
+        await sut.ReviewAsync(job, CreatePr(), new ReviewSystemContext(null, [], null), CancellationToken.None, chatClient);
+
+        await proRvPrefilter.DidNotReceive()
+            .RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+        await protocolRecorder.Received().RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(),
+            ReviewProtocolEventNames.ReviewPipelineProfileApplied,
+            Arg.Any<string>(),
+            Arg.Is<string?>(output => output != null && output.Contains(ReviewPipelineProfileProvider.AgenticExperimentalProfileId, StringComparison.Ordinal)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
     }
 
     private static string CreateNoInvestigationPlan(string filePath)

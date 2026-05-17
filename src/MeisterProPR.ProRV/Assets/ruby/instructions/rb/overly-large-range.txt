@@ -1,0 +1,12 @@
+Review focus: Overly permissive regular expression range
+
+What to look for:
+- Overly permissive regular expression ranges match a wider range of characters than intended.
+- It's easy to write a regular expression range that matches a wider range of characters than you intended. For example,`/[a-zA-z]/`matches all lowercase and all uppercase letters, as you would expect, but it also matches the characters:`[ \ ] ^ _``. Another common problem is failing to escape the dash character in a regular expression. An unescaped dash is interpreted as part of a range. For example, in the character class`[a-zA-Z0-9%=.,-_]`the last character range matches the 55 characters between`,`and`_`(both included), which overlaps with the range`[0-9]`and is clearly not intended by the writer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

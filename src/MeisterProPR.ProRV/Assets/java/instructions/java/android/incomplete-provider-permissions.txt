@@ -1,0 +1,12 @@
+Review focus: Missing read or write permission in a content provider
+
+What to look for:
+- Android content providers which do not configure both read and write permissions can allow permission bypass.
+- The Android manifest file specifies the content providers for the application using`provider`elements. The`provider`element specifies the explicit permissions an application requires in order to access a resource using that provider. You specify the permissions using the`android:readPermission`,`android:writePermission`, or`android:permission`attributes. If you do not specify the permission required to perform an operation, the application will implicitly have access to perform that operation. For example, if you specify only`android:readPermission`, the application must have explicit permission to read data, but requires no permission to write data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

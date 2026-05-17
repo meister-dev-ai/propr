@@ -1,0 +1,34 @@
+Review focus: Uncontrolled process operation
+
+What to look for:
+- Using externally controlled strings in a process operation can allow an attacker to execute malicious commands.
+- The code passes user input directly to`system`,`dlopen`,`LoadLibrary`or some other process or library routine. As a result, the user can cause execution of arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`UncontrolledProcessOperation.c`):
+```
+int main(int argc, char** argv) {
+  char *lib = argv[2];
+  
+  // BAD: the user can cause arbitrary code to be loaded
+  void* handle = dlopen(lib, RTLD_LAZY);
+  
+  // GOOD: only hard-coded libraries can be loaded
+  void* handle2;
+
+  if (!strcmp(lib, "inmem")) {
+    handle2 = dlopen("/usr/share/dbwrap/inmem", RTLD_LAZY);
+  } else if (!strcmp(lib, "mysql")) {
+    handle2 = dlopen("/usr/share/dbwrap/mysql", RTLD_LAZY);
+  } else {
+    die("Invalid library specified\n");
+  }
+}
+```

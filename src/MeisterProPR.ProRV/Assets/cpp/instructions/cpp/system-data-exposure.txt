@@ -1,0 +1,32 @@
+Review focus: Exposure of system data to an unauthorized control sphere
+
+What to look for:
+- Exposing system data or debugging information helps a malicious user learn about the system and form an attack plan.
+- Exposing system data or debugging information may help a malicious user learn about the system and form an attack plan. An attacker can use error messages that reveal technologies, operating systems, and product versions to tune their attack against known vulnerabilities in the software. This query finds locations where system configuration information might be revealed to a remote user.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`ExposedSystemDataIncorrect.cpp`):
+```
+char* path = getenv("PATH");
+
+//...
+
+sprintf(buffer, "Cannot find exe on path: %s", path);
+send(socket, buffer, strlen(buffer), 0);
+```
+- Reference example (`ExposedSystemDataCorrect.cpp`):
+```
+char* path = getenv("PATH");
+
+//...
+
+message = "An internal error has occurred. Please try again or contact a system administrator.\n";
+send(socket, message, strlen(message), 0);
+```

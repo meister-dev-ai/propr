@@ -1,0 +1,12 @@
+Review focus: Incorrect serialVersionUID field
+
+What to look for:
+- A 'serialVersionUID' field that is declared in a serializable class but is of the wrong type cannot be used by the serialization framework.
+- A serializable class that uses the`serialVersionUID`field to act as an object version number must declare the field to be`final`,`static`, and of type`long`for it to be used by the Java serialization framework.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

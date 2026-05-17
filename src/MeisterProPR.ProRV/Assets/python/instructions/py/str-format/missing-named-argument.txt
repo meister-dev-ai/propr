@@ -1,0 +1,23 @@
+Review focus: Missing named arguments in formatting call
+
+What to look for:
+- A string formatting operation, such as '"{name}".format(key=b)', where the names of format items in the format string differs from the names of the values to be formatted will...
+- A formatting expression, that is an expression of the form`the_format.format(args)`or`format(the_format, args)`, can use named fields. If it does, then keyword arguments must be supplied for all named fields. If any of the keyword arguments are missing then a`KeyError`will be raised.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WrongNameInArgumentsFor3101Format.py`):
+```
+def unsafe_named_format():
+    the_format = "{spam} {eggs}"
+    if unlikely_condition():
+        return the_format.format(spam="spam", completely_different="eggs")
+    else:
+        return the_format.format(spam="spam", eggs="eggs")
+```

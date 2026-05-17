@@ -1,0 +1,86 @@
+Review focus: Multiple calls to `__init__` during object initialization
+
+What to look for:
+- A duplicated call to a superclass `__init__` method may lead to objects of this class not being properly initialized.
+- Python, unlike some other object-oriented languages such as Java, allows the developer complete freedom in when and how superclass initializers are called during object initialization. However, the developer has responsibility for ensuring that objects are properly initialized. Calling an`__init__`method more than once during object initialization risks the object being incorrectly initialized, as the method and the rest of the inheritance chain may not have been written with the expectation that it could be called multiple times. For example, it may set attributes to a default value in a way that unexpectedly overwrites values setting those attributes in a subclass. There are a number of ways that an`__init__`method may be called more than once.
+- There may be more than one explicit call to the method in the hierarchy of`__init__`methods.
+- In situations involving multiple inheritance, an initialization method may call the initializers of each of its base types, which themselves both call the initializer of a shared base type. (This is an example of the Diamond Inheritance problem)
+- Another situation involving multiple inheritance arises when a subclass calls the`__init__`methods of each of its base classes, one of which calls`super().__init__`. This super call resolves to the next class in the Method Resolution Order (MRO) of the subclass, which may be another base class that already has its initializer explicitly called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuperclassInitCalledMultipleTimesBad1.py`):
+```
+class A:
+    def __init__(self):
+        self.state = None 
+
+class B(A):
+    def __init__(self):
+        A.__init__(self)
+        self.state = "B"
+        self.b = 3 
+
+class C(A):
+    def __init__(self):
+        A.__init__(self)
+        self.c = 2 
+
+class D(B,C):
+    def __init__(self):
+        B.__init__(self)
+        C.__init__(self) # BAD: This calls A.__init__ a second time, setting self.state to None.
+```
+- Reference example (`SuperclassInitCalledMultipleTimesGood2.py`):
+```
+class A:
+    def __init__(self):
+        self.state = None 
+
+class B(A):
+    def __init__(self):
+        super().__init__()
+        self.state = "B"
+        self.b = 3 
+
+class C(A):
+    def __init__(self):
+        super().__init__()
+        self.c = 2 
+
+class D(B,C):
+    def __init__(self): # GOOD: Each method calls super, so each init method runs once. self.state will be set to "B".
+        super().__init__()
+        self.d = 1
+```
+- Reference example (`SuperclassInitCalledMultipleTimesBad3.py`):
+```
+class A:
+    def __init__(self):
+        print("A")
+        self.state = None 
+
+class B(A):
+    def __init__(self):
+        print("B")
+        super().__init__() # When called from D, this calls C.__init__
+        self.state = "B"
+        self.b = 3 
+
+class C(A):
+    def __init__(self):
+        print("C")
+        super().__init__()
+        self.c = 2 
+
+class D(B,C):
+    def __init__(self): 
+        B.__init__(self)
+        C.__init__(self) # BAD: C.__init__ is called a second time
+```

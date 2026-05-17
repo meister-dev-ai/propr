@@ -1,0 +1,24 @@
+Review focus: Bitwise exclusive-or used like exponentiation
+
+What to look for:
+- Using ^ as exponentiation is a mistake, as it is the bitwise exclusive-or operator.
+- The caret symbol (`^`) is sometimes used to represent exponentiation but in Go, as in many C-like languages, it represents the bitwise exclusive-or operation. The expression as`2^32`thus evaluates the number 34, not 232, and it is likely that patterns such as this are mistakes.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MistypedExponentiation.go`):
+```
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println(2 ^ 32) // should be 1 << 32
+}
+```

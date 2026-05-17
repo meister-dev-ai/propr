@@ -1,0 +1,28 @@
+Review focus: Wrong type of arguments to formatting function
+
+What to look for:
+- Calling a printf-like function with the wrong type of arguments causes unpredictable behavior.
+- Each call to the`printf`function or a related function should include the type and sequence of arguments defined by the format. If the function is passed arguments of a different type or in a different sequence then the arguments are reinterpreted to fit the type and sequence expected, resulting in unpredictable behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WrongTypeFormatArgumentsBad.cpp`):
+```
+int main() {
+  printf("%s\n", 42); // BAD: printf will treat 42 as a char*, will most likely segfault
+  return 0;
+}
+```
+- Reference example (`WrongTypeFormatArgumentsGood.cpp`):
+```
+int main() {
+  printf("%i\n", 42); // GOOD: printf will treat 42 as an int
+  return 0;
+}
+```

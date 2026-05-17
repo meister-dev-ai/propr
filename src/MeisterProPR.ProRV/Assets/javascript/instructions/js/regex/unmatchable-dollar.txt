@@ -1,0 +1,19 @@
+Review focus: Unmatchable dollar in regular expression
+
+What to look for:
+- If a dollar assertion '$' appears in a regular expression before another term that cannot match the empty string, then this assertion can never match, so the entire regular...
+- The dollar character`$`in a regular expression only matches at the end of the input, or (for multi-line regular expressions) at the end of a line. If it is followed by a pattern that must match a non-empty sequence of (non-newline) input characters, it cannot possibly match, rendering the entire regular expression unmatchable.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnmatchableDollar.js`):
+```
+if (file.match(/\.\(\w+$\)/))
+	console.log("Found it.");
+```

@@ -1,0 +1,12 @@
+Review focus: Use setter injection instead of constructor injection
+
+What to look for:
+- When using the Spring Framework, using setter injection instead of constructor injection is more flexible, especially when several properties are optional.
+- When you use the Spring Framework, using setter injection instead of constructor injection is more flexible, particularly for Spring beans with a large number of optional properties. Constructor injection should be used only on required bean properties; using constructor injection on optional bean properties requires a large number of constructors to handle different combinations of properties. Although the generally accepted best practice is to use constructor injection for mandatory dependencies, and setter injection for optional dependencies, the`@Required`annotation allows you to forgo constructor injection completely. Using the`@Required`annotation on a setter method makes the framework check that a dependency is injected using that method.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,21 @@
+Review focus: Unhashable object hashed
+
+What to look for:
+- Hashing an object which is not hashable will result in a TypeError at runtime.
+- If an object is used as a key in a dictionary or as a member of a set then it must be hashable, that is it must define a`__hash__`method. All built-in immutable types are hashable, but mutable ones are not. Common hashable types include all numbers, strings (both`unicode`and`bytes`) and`tuple`. Common unhashable types include`list`,`dict`and`set`. In order to store a key in a`dict`or`set`a hash value is needed. To determine this value the built-in function`hash()`is called which in turn calls the`__hash__`method on the object. If the object's class does not have the`__hash__`method, then a`TypeError`will be raised.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`HashedButNoHash.py`):
+```
+def lookup_with_default_key(mapping, key=None):
+    if key is None:
+        key = [] # Should be key = ()
+    return mapping[key]
+```

@@ -1,0 +1,48 @@
+Review focus: Missing await
+
+What to look for:
+- Using a promise without awaiting its result can lead to unexpected behavior.
+- In JavaScript,`async`functions always return a promise object. To obtain the underlying value of the promise, use the`await`operator or call the`then`method. Attempting to use a promise object instead of its underlying value can lead to unexpected behavior.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissingAwait.js`):
+```
+async function getData(id) {
+  let req = await fetch(`https://example.com/data?id=${id}`);
+  if (!req.ok) return null;
+  return req.json();
+}
+
+async function showData(id) {
+  let data = getData(id);
+  if (data == null) {
+    console.warn("No data for: " + id);
+    return;
+  }
+  // ...
+}
+```
+- Reference example (`MissingAwaitGood.js`):
+```
+async function getData(id) {
+  let req = await fetch(`https://example.com/data?id=${id}`);
+  if (!req.ok) return null;
+  return req.json();
+}
+
+async function showData(id) {
+  let data = await getData(id);
+  if (data == null) {
+    console.warn("No data for: " + id);
+    return;
+  }
+  // ...
+}
+```

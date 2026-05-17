@@ -1,0 +1,47 @@
+Review focus: Unguarded next in generator
+
+What to look for:
+- Calling next() in a generator may cause unintended early termination of an iteration.
+- The function`next()`will raise a`StopIteration`exception if the underlying iterator is exhausted. Normally this is fine, but in a generator may cause problems. Since the`StopIteration`is an exception it will be propagated out of the generator causing termination of the generator. This is unlikely to be the expected behavior and may mask errors. This problem is considered sufficiently serious that PEP 479 has been accepted to modify the handling of`StopIteration`in generators. Consequently, code that does not handle`StopIteration`properly is likely to fail in future versions of Python.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnguardedNextInGeneratorBad.py`):
+```
+test_files = [
+    ["header1", "text10", "text11", "text12"],
+    ["header2", "text20", "text21", "text22"],
+    [],
+    ["header4", "text40", "text41", "text42"],
+]
+
+def separate_headers(files):
+    for file in files:
+        lines = iter(file)
+        header = next(lines) # Will raise StopIteration if lines is exhausted
+        body = [ l for l in lines ]
+        yield header, body
+
+def process_files(files):
+    for header, body in separate_headers(files):
+        print(format_page(header, body))
+```
+- Reference example (`UnguardedNextInGeneratorGood.py`):
+```
+def separate_headers(files):
+    for file in files:
+        lines = iter(file)
+        try:
+            header = next(lines) # Will raise StopIteration if lines is exhausted
+        except StopIteration:
+            #Empty file -- Just ignore
+            continue
+        body = [ l for l in lines ]
+        yield header, body
+```

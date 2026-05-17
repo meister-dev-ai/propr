@@ -1,0 +1,12 @@
+Review focus: Serializable inner class of non-serializable class
+
+What to look for:
+- A class that is serializable with an enclosing class that is not serializable causes serialization to fail.
+- Non-static nested classes that implement`Serializable`must be defined in an enclosing class that is also serializable. Non-static nested classes retain an implicit reference to an instance of their enclosing class. If the enclosing class is not serializable, the Java serialization mechanism fails with a`java.io.NotSerializableException`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

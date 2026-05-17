@@ -1,0 +1,30 @@
+Review focus: Nested loops with same variable
+
+What to look for:
+- The behavior of nested loops that both have the same iteration variable can be difficult to understand, as the inner loop will affect the iteration of the outer loop.
+- Inner loops should not write to the iteration variables of the enclosing loop. If an inner loop changes the iteration variable of the enclosing loop this is normally because the programmer mistyped the iteration variable of the inner loop. If this is the intended behavior, then this is an example of bad practice. Loops should be designed so that each loop controls its own iteration. Nested loops where iteration is shared between loops are more difficult to understand and maintain.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedLoopsSameVariable.cs`):
+```
+class NestedLoopsSameVariable
+{
+    static void Main(string[] args)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; i++)
+            {
+                Console.WriteLine(i + " " + j);
+            }
+        }
+    }
+}
+```

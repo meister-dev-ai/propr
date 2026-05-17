@@ -1,0 +1,26 @@
+Review focus: Should use a 'with' statement
+
+What to look for:
+- Using a 'try-finally' block to ensure only that a resource is closed makes code more difficult to read.
+- The`with`statement was introduced by PEP343 to allow standard uses of`try-finally`statements to be factored out. Using this simplification makes code easier to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ShouldUseWithStatement.py`):
+```
+f = open("filename")
+try:                         # Method of ensuring file closure
+    f.write(...)
+finally:
+    f.close()
+
+
+with open("filename") as f:  # Simpler method of ensuring file closure
+    f.write(...)
+```

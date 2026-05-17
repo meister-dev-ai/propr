@@ -1,0 +1,28 @@
+Review focus: Logical expression could be simplified
+
+What to look for:
+- When a logical expression can be easily simplified, there may be an opportunity to improve readability by doing so, or it may indicate that the code contains a typo.
+- This rule finds uses of the short-circuit operators`&&`and`||`where at least one of their operands is a compile-time constant. Such expressions may be confusing for readers and can always be simplified to a constant value, or to the non-constant operand. The rule also finds comparisons on constant values (like`1 > 0`), which can be evaluated ahead of time.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`LogicalExprCouldBeSimplified.cpp`):
+```
+if (0 || condition) { //wrong: can be converted to just 'condition'
+	//...
+}
+
+if (0 && condition) { //wrong: always evaluates to false, if statement can be removed
+	// ...
+}
+
+if ('A' == 65 && condition) { // wrong: can be converted to just 'condition'
+	// ...
+}
+```

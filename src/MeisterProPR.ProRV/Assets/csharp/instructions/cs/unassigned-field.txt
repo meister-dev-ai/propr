@@ -1,0 +1,26 @@
+Review focus: Field is never assigned a non-default value
+
+What to look for:
+- Fields are automatically initialised with the default values for their type, which may not be the intent: prefer explicit initialisation.
+- Fields are automatically given a default value when declared. If they are never assigned then they will always have their default value.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NonAssignedFields.cs`):
+```
+class Person
+{
+    private string name;
+    private int age;
+    public Person(string name, int age)
+    {
+        this.age = age;
+    }
+}
+```

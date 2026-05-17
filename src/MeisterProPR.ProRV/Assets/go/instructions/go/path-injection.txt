@@ -1,0 +1,86 @@
+Review focus: Uncontrolled data used in path expression
+
+What to look for:
+- Accessing paths influenced by users can allow an attacker to access unexpected resources.
+- Accessing files using paths constructed from user-controlled data can allow an attacker to access unexpected resources. This can result in sensitive information being revealed or deleted, or an attacker being able to influence behavior by modifying unexpected files. Paths that are naively constructed from data controlled by a user may be absolute paths, or may contain unexpected special characters such as "..". Such a path could point anywhere on the file system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`TaintedPath.go`):
+```
+package main
+
+import (
+	"io/ioutil"
+	"net/http"
+	"path/filepath"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query()["path"][0]
+
+	// BAD: This could read any file on the file system
+	data, _ := ioutil.ReadFile(path)
+	w.Write(data)
+
+	// BAD: This could still read any file on the file system
+	data, _ = ioutil.ReadFile(filepath.Join("/home/user/", path))
+	w.Write(data)
+}
+```
+- Reference example (`TaintedPathGood.go`):
+```
+package main
+
+import (
+	"io/ioutil"
+	"net/http"
+	"path/filepath"
+	"strings"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query()["path"][0]
+
+	// GOOD: ensure that the filename has no path separators or parent directory references
+	// (Note that this is only suitable if `path` is expected to have a single component!)
+	if strings.Contains(path, "/") || strings.Contains(path, "\\") || strings.Contains(path, "..") {
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	data, _ := ioutil.ReadFile(filepath.Join("/home/user/", path))
+	w.Write(data)
+}
+```
+- Reference example (`TaintedPathGood2.go`):
+```
+package main
+
+import (
+	"io/ioutil"
+	"net/http"
+	"path/filepath"
+	"strings"
+)
+
+const safeDir = "/home/user/"
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query()["path"][0]
+
+	// GOOD: ensure that the resolved path is within the safe directory
+	absPath, err := filepath.Abs(filepath.Join(safeDir, path))
+	if err != nil || !strings.HasPrefix(absPath, safeDir) {
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	data, _ := ioutil.ReadFile(absPath)
+	w.Write(data)
+}
+```

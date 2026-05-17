@@ -1,0 +1,23 @@
+Review focus: Memory is never freed
+
+What to look for:
+- A function always returns before freeing memory that was allocated in the function.
+- This rule finds calls to the`alloc`family of functions without a corresponding`free`call in the entire program. This leads to memory leaks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MemoryNeverFreed.cpp`):
+```
+int main(int argc, char* argv[]) {
+	int *buff = malloc(SIZE * sizeof(int));
+	int status = 0;
+	... //code that does not free buff
+	return status; //buff is never closed
+}
+```

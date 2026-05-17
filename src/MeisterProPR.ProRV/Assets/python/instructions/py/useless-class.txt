@@ -1,0 +1,33 @@
+Review focus: Useless class
+
+What to look for:
+- Class only defines one public method (apart from `__init__` or `__new__`) and should be replaced by a function
+- If a class has only one public method (other than its`__init__`) it should be replaced with a function.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UselessClass.py`):
+```
+class GCDFinder(object):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def calculate(self):
+        a = self.a 
+        b = self.b
+        while a != 0 and b != 0:
+            if a > b:
+                a = a % b
+            else:
+                b = b % a
+        if a == 0:
+            return b
+        return a
+```

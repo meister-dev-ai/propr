@@ -1,0 +1,12 @@
+Review focus: Unsafe certificate trust
+
+What to look for:
+- SSLSocket/SSLEngine ignores all SSL certificate validation errors when establishing an HTTPS connection, thereby making the app vulnerable to man-in-the-middle attacks.
+- Java offers two mechanisms for SSL authentication - trust manager and hostname verifier (the later is checked by the`java/insecure-hostname-verifier`query). The trust manager validates the peer's certificate chain while hostname verification establishes that the hostname in the URL matches the hostname in the server's identification. When`SSLSocket`or`SSLEngine`are created without a secure`setEndpointIdentificationAlgorithm`, hostname verification is disabled by default. This query checks whether`setEndpointIdentificationAlgorithm`is missing, thereby making the application vulnerable to man-in-the-middle attacks. The query also covers insecure configurations of`com.rabbitmq.client.ConnectionFactory`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

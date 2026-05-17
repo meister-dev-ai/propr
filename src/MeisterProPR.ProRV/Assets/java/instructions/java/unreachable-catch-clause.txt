@@ -1,0 +1,16 @@
+Review focus: Unreachable catch clause
+
+What to look for:
+- An unreachable 'catch' clause may indicate a mistake in exception handling or may be unnecessary.
+- An unreachable`catch`clause may indicate a logical mistake in the exception handling code or may simply be unnecessary. Although certain unreachable`catch`clauses cause a compiler error, there are also unreachable`catch`clauses that do not cause a compiler error. A`catch`clause`C`is considered reachable by the compiler if both of the following conditions are true:
+- A checked exception that is thrown in the`try`block is assignable to the parameter of`C`.
+- There is no previous`catch`clause whose parameter type is equal to, or a supertype of, the parameter type of`C`. However, a`catch`clause that is considered reachable by the compiler can be unreachable if both of the following conditions are true:
+- The`catch`clause's parameter type`E`does not include any unchecked exceptions.
+- All exceptions that are thrown in the`try`block whose type is a (strict) subtype of`E`are already handled by previous`catch`clauses.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

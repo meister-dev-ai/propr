@@ -1,0 +1,15 @@
+Review focus: Chain of 'instanceof' tests
+
+What to look for:
+- Long sequences of type tests on a variable are difficult to maintain.
+- Long sequences of type tests are often used to dispatch control to different branches of the code based on the type of a variable, as shown in the example below. They are often used to simulate pattern-matching in languages that do not support it. Whilst this works as a dispatch method, there are a number of problems:
+- They are difficult to maintain. It is easy to add a new subtype and forget to modify all of the type test sequences throughout your code.
+- They introduce unwanted dependencies on concrete classes. Code cannot be written only in terms of an interface but must instead be written considering all of the different special cases.
+- They can be error-prone - it is easy to test for a base type before a derived type, resulting in a failure to execute the code handling the derived type.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

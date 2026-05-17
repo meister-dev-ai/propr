@@ -1,0 +1,21 @@
+Review focus: Suspicious 'sizeof' use
+
+What to look for:
+- Taking 'sizeof' of an array parameter is often mistakenly thought to yield the size of the underlying array, but it always yields the machine pointer size.
+- This rule finds expressions that take the size of a function parameter of array type. In C, function parameters of array type are treated as if they had the corresponding pointer type, so their size is always the size of the pointer type (typically either four or eight). In particular, one cannot determine the size of a memory buffer passed as a parameter in this way. Using the`sizeof`operator on pointer types will produce unexpected results if the developer intended to get the size of an array instead of the pointer.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousSizeof.cpp`):
+```
+void f(char s[]) {
+	int size = sizeof(s); //wrong: s is now a char*, not an array. 
+	                      //sizeof(s) will evaluate to sizeof(char *)
+}
+```

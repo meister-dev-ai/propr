@@ -1,0 +1,49 @@
+Review focus: Loop bound injection
+
+What to look for:
+- Iterating over an object with a user-controlled .length property can cause indefinite looping.
+- Using the`.length`property of an untrusted object as a loop bound may cause indefinite looping since a malicious attacker can set the`.length`property to a very large number. For example, when a program that expects an array is passed a JSON object such as`{length: 1e100}`, the loop will be run for 10100 iterations. This may cause the program to hang or run out of memory, which can be used to mount a denial-of-service (DoS) attack.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`LoopBoundInjection.js`):
+```
+var express = require('express');
+var app = express();
+
+app.post("/foo", (req, res) => {
+    var obj = req.body;
+
+    var ret = [];
+
+    // Potential DoS if obj.length is large.
+    for (var i = 0; i < obj.length; i++) {
+        ret.push(obj[i]);
+    }
+});
+```
+- Reference example (`LoopBoundInjection_fixed.js`):
+```
+var express = require('express');
+var app = express();
+
+app.post("/foo", (req, res) => {
+    var obj = req.body;
+    
+    if (!(obj instanceof Array)) { // Prevents DoS.
+        return [];
+    }
+
+    var ret = [];
+
+    for (var i = 0; i < obj.length; i++) {
+        ret.push(obj[i]);
+    }
+});
+```

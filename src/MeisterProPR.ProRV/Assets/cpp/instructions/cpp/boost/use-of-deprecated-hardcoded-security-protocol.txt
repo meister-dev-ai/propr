@@ -1,0 +1,32 @@
+Review focus: boost::asio use of deprecated hardcoded protocol
+
+What to look for:
+- Using a deprecated hard-coded protocol using the boost::asio library.
+- Using boost::asio library but specifying a deprecated hardcoded protocol.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UseOfDeprecatedHardcodedProtocolBad.cpp`):
+```
+void useProtocol_bad()
+{
+	boost::asio::ssl::context ctx_sslv2(boost::asio::ssl::context::sslv2); // BAD: outdated protocol
+
+	// ...
+}
+```
+- Reference example (`UseOfDeprecatedHardcodedProtocolGood.cpp`):
+```
+void useProtocol_good()
+{
+	boost::asio::ssl::context cxt_tlsv13(boost::asio::ssl::context::tlsv13);
+
+	// ...
+}
+```

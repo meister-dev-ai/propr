@@ -1,0 +1,65 @@
+Review focus: SQL query built from user-controlled sources
+
+What to look for:
+- Building a SQL query from user-controlled sources is vulnerable to insertion of malicious SQL code by the user.
+- If a SQL query is built using string concatenation, and the components of the concatenation include user input, a user is likely to be able to run malicious database queries.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`SqlInjection.cs`):
+```
+using System.Data;
+using System.Data.SqlClient;
+using System.Web.UI.WebControls;
+
+class SqlInjection
+{
+    TextBox categoryTextBox;
+    string connectionString;
+
+    public DataSet GetDataSetByCategory()
+    {
+        // BAD: the category might have SQL special characters in it
+        using (var connection = new SqlConnection(connectionString))
+        {
+            var query1 = "SELECT ITEM,PRICE FROM PRODUCT WHERE ITEM_CATEGORY='"
+              + categoryTextBox.Text + "' ORDER BY PRICE";
+            var adapter = new SqlDataAdapter(query1, connection);
+            var result = new DataSet();
+            adapter.Fill(result);
+            return result;
+        }
+
+        // GOOD: use parameters with stored procedures
+        using (var connection = new SqlConnection(connectionString))
+        {
+            var adapter = new SqlDataAdapter("ItemsStoredProcedure", connection);
+            adapter.SelectCommand.CommandType = CommandType.StoredProcedure;
+            var parameter = new SqlParameter("category", categoryTextBox.Text);
+            adapter.SelectCommand.Parameters.Add(parameter);
+            var result = new DataSet();
+            adapter.Fill(result);
+            return result;
+        }
+
+        // GOOD: use parameters with dynamic SQL
+        using (var connection = new SqlConnection(connectionString))
+        {
+            var query2 = "SELECT ITEM,PRICE FROM PRODUCT WHERE ITEM_CATEGORY="
+              + "@category ORDER BY PRICE";
+            var adapter = new SqlDataAdapter(query2, connection);
+            var parameter = new SqlParameter("category", categoryTextBox.Text);
+            adapter.SelectCommand.Parameters.Add(parameter);
+            var result = new DataSet();
+            adapter.Fill(result);
+            return result;
+        }
+    }
+}
+```

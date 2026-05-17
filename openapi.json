@@ -14101,6 +14101,7 @@
       "AiPurpose": {
         "enum": [
           "reviewDefault",
+          "proRvPrefilter",
           "reviewLowEffort",
           "reviewMediumEffort",
           "reviewHighEffort",
@@ -17269,21 +17270,69 @@
         "additionalProperties": false,
         "description": "Follow-up visibility metadata for one file-linked protocol pass."
       },
+      "ProtocolProRvPrefilterDto": {
+        "type": "object",
+        "properties": {
+          "selected": {
+            "type": "boolean"
+          },
+          "executionState": {
+            "type": "string",
+            "nullable": true
+          },
+          "stageId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "runtimeSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelId": {
+            "type": "string",
+            "nullable": true
+          },
+          "language": {
+            "type": "string",
+            "nullable": true
+          },
+          "prefilterStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "guidanceCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "aiCallRecorded": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "ProRV prefilter execution visibility metadata for one protocol pass."
+      },
       "ProtocolRepeatedJudgmentDto": {
         "type": "object",
         "properties": {
           "findingId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "evidenceSetId": {
             "type": "string",
             "nullable": true
           },
           "agreementState": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "recommendedDisposition": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "usedSameEvidenceSet": {
             "type": "boolean"
@@ -17879,6 +17928,9 @@
           },
           "repeatedJudgment": {
             "$ref": "#/components/schemas/ProtocolRepeatedJudgmentDto"
+          },
+          "proRvPrefilter": {
+            "$ref": "#/components/schemas/ProtocolProRvPrefilterDto"
           }
         },
         "additionalProperties": false,

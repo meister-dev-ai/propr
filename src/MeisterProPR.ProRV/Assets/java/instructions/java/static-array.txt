@@ -1,0 +1,12 @@
+Review focus: Array constant vulnerable to change
+
+What to look for:
+- Array constants are mutable and can be changed by malicious code or by accident.
+- Constant values are typically represented by public, static, final fields. When defining several related constants, it is sometimes tempting to define a public, static, final field with an array type, and initialize it with a list of all the different constant values. However, the`final`keyword applies only to the field itself (that is, the array reference), and not to the contents of the array. This means that the field always refers to the same array instance, but each element of the array may be modified freely. This possibly invalidates important assumptions of client code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

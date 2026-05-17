@@ -1,0 +1,16 @@
+Review focus: Implicit import
+
+What to look for:
+- An implicit import obscures the dependencies of a file and may cause confusing compile-time errors.
+- Imports can be categorized as explicit (for example`import java.util.List;`) or implicit (also known as 'on-demand', for example`import java.util.*;`):
+- Implicit imports give access to all visible types in the type (or package) that precedes the ".*"; types imported in this way never shadow other types.
+- Explicit imports give access to just the named type; they can shadow other types that would normally be visible through an implicit import, or through the normal package visibility rules. It is often considered bad practice to use implicit imports. The only advantage to doing so is making the code more concise, and there are a number of disadvantages:
+- The exact dependencies of a file are not visible at a glance.
+- Confusing compile-time errors can be introduced if a type name is used that could originate from several implicit imports.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

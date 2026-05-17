@@ -1,0 +1,48 @@
+Review focus: Variable name is too short
+
+What to look for:
+- Using meaningful names for variables makes code easier to understand.
+- Source code with lots of short variable names is likely to be difficult to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`VariableNameTooShort.cs`):
+```
+class VariableNameTooShort
+{
+    public static void Main(string[] args)
+    {
+        int q = 5;
+        int s = 2;
+        int x = 15;
+        int qx = q * x;
+        // later on in the code
+        int r = q + (2 * qx) / (x + s);
+    }
+}
+```
+- Reference example (`VariableNameTooShortAcceptable.cs`):
+```
+class VariableNameTooShortAcceptableCase
+{
+    public static void Main(string[] args)
+    {
+        /*
+         * u - object starting position
+         * t - time
+         * a - acceleration
+         * s - speed
+         */
+        double u = 5;
+        double t = 2;
+        double a = 9.81;
+        double s = (u * t) + ((1.0 / 2.0) * a * Math.Pow(t, 2));
+    }
+}
+```

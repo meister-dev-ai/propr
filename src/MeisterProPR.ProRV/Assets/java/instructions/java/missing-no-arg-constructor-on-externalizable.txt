@@ -1,0 +1,12 @@
+Review focus: Externalizable but no public no-argument constructor
+
+What to look for:
+- A class that implements 'Externalizable' but does not have a public no-argument constructor causes an 'InvalidClassException' to be thrown.
+- A class that implements`java.io.Externalizable`must have a public no-argument constructor. The constructor is used by the Java serialization framework when it creates the object during deserialization. If the class does not define such a constructor, the Java serialization framework throws an`InvalidClassException`. The Java Development Kit API documentation for`Externalizable`states: When an`Externalizable`object is reconstructed, an instance is created using the public no-arg constructor, then the`readExternal`method called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

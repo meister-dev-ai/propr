@@ -1,0 +1,44 @@
+Review focus: Duplicate switch case
+
+What to look for:
+- If two cases in a switch statement have the same label, the second case will never be executed.
+- If two cases in a 'switch' statement are identical, the second case will never be executed. This most likely indicates a copy-paste error where the first case was copied and then not properly adjusted.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DuplicateSwitchCase.go`):
+```
+package main
+
+func controller(msg string) {
+	switch {
+	case msg == "start":
+		start()
+	case msg == "start":
+		stop()
+	default:
+		panic("Message not understood.")
+	}
+}
+```
+- Reference example (`DuplicateSwitchCaseGood.go`):
+```
+package main
+
+func controllerGood(msg string) {
+	switch {
+	case msg == "start":
+		start()
+	case msg == "stop":
+		stop()
+	default:
+		panic("Message not understood.")
+	}
+}
+```

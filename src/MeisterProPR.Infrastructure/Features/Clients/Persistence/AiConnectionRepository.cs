@@ -541,7 +541,7 @@ public sealed class AiConnectionRepository(
         var binding = record.PurposeBindings.FirstOrDefault(candidate =>
             string.Equals(candidate.Purpose, purpose.ToString(), StringComparison.Ordinal) && candidate.IsEnabled);
 
-        if (binding is not null || !IsReviewEffortOverride(purpose))
+        if (binding is not null || !UsesReviewDefaultFallback(purpose))
         {
             return binding;
         }
@@ -550,9 +550,9 @@ public sealed class AiConnectionRepository(
             string.Equals(candidate.Purpose, AiPurpose.ReviewDefault.ToString(), StringComparison.Ordinal) && candidate.IsEnabled);
     }
 
-    private static bool IsReviewEffortOverride(AiPurpose purpose)
+    private static bool UsesReviewDefaultFallback(AiPurpose purpose)
     {
-        return purpose is AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
+        return purpose is AiPurpose.ProRVPrefilter or AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
     }
 
     private static bool IsBindingValid(AiPurpose purpose, AiConfiguredModelRecord model, AiPurposeBindingRecord binding)

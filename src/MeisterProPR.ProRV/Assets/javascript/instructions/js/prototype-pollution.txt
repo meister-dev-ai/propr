@@ -1,0 +1,36 @@
+Review focus: Prototype-polluting merge call
+
+What to look for:
+- Recursively merging a user-controlled object into another object can allow an attacker to modify the built-in Object prototype, and possibly escalate to remote code execution or...
+- Most JavaScript objects inherit the properties of the built-in`Object.prototype`object. Prototype pollution is a type of vulnerability in which an attacker is able to modify`Object.prototype`. Since most objects inherit from the compromised`Object.prototype`, the attacker can use this to tamper with the application logic, and often escalate to remote code execution or cross-site scripting. One way to cause prototype pollution is through use of an unsafe merge or extend function to recursively copy properties from an untrusted source object. Such a call can modify any object reachable from the destination object, and the built-in`Object.prototype`is usually reachable through the special properties`__proto__`and`constructor.prototype`. An attacker can abuse this by sending an object with these property names and thereby modify`Object.prototype`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`PrototypePollutingMergeCall1.js`):
+```
+app.get('/news', (req, res) => {
+  let prefs = lodash.merge({}, JSON.parse(req.query.prefs));
+})
+```
+- Reference example (`PrototypePollutingMergeCall_fixed.json`):
+```
+{
+  "dependencies": {
+    "lodash": "^4.17.12"
+  }
+}
+```
+- Reference example (`PrototypePollutingMergeCall2.js`):
+```
+app.get('/news', (req, res) => {
+  let config = lodash.merge({}, {
+    prefs: req.query.prefs
+  });
+})
+```

@@ -1,0 +1,34 @@
+Review focus: Sensitive server cookie exposed to the client
+
+What to look for:
+- Sensitive cookies set by a server can be read by the client if the `httpOnly` flag is not set.
+- Authentication cookies stored by a server can be accessed by a client if the`httpOnly`flag is not set. An attacker that manages a cross-site scripting (XSS) attack can read the cookie and hijack the session.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ClientExposedCookieBad.js`):
+```
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.setHeader("Set-Cookie", `authKey=${makeAuthkey()}`);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h2>Hello world</h2>');
+});
+```
+- Reference example (`ClientExposedCookieGood.js`):
+```
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    res.setHeader("Set-Cookie", `authKey=${makeAuthkey()}; secure; httpOnly`);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h2>Hello world</h2>');
+});
+```

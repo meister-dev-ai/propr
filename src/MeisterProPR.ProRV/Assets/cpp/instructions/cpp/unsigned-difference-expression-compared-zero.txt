@@ -1,0 +1,31 @@
+Review focus: Unsigned difference expression compared to zero
+
+What to look for:
+- A subtraction with an unsigned result can never be negative.
+- This rule finds relational comparisons between the result of an unsigned subtraction and the value`0`. Such comparisons are likely to be wrong as the value of an unsigned subtraction can never be negative. So the relational comparison ends up checking whether the result of the subtraction is equal to`0`. This is probably not what the programmer intended.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnsignedDifferenceExpressionComparedZero.c`):
+```
+uint32_t limit = get_limit();
+uint32_t total = 0;
+
+while (limit - total > 0) { // BAD: if `total` is greater than `limit` this will underflow and continue executing the loop.
+  total += get_data();
+}
+
+while (total < limit) { // GOOD: never underflows here because there is no arithmetic.
+  total += get_data();
+}
+
+while ((int64_t)limit - total > 0) { // GOOD: never underflows here because the result always fits in an `int64_t`.
+  total += get_data();
+}
+```

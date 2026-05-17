@@ -1,0 +1,48 @@
+Review focus: Possible loss of precision
+
+What to look for:
+- Dividing or multiplying integral expressions and converting the result to a floating-point value may result in a loss of precision.
+- Converting the result of dividing, or multiplying, two integral expressions to a floating-point value may result in a loss of precision. For integral division, any fractional component of the result will be lost. For integral multiplication, the result may be outside the integral range and overflow.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`PossibleLossOfPrecision.cs`):
+```
+void DivisionLossOfPrecision()
+{
+    int a = 21;
+    int b = 4;
+    float c = a / b;
+}
+```
+- Reference example (`PossibleLossOfPrecisionFix.cs`):
+```
+void DivisionNoLossOfPrecision()
+{
+    int a = 21;
+    int b = 4;
+    float c = (float)a / b;
+}
+```
+- Reference example (`PossibleLossOfPrecision2.cs`):
+```
+void MultiplicationLossOfPrecision(int a)
+{
+    int b = 4;
+    float c = a * b;
+}
+```
+- Reference example (`PossibleLossOfPrecisionFix2.cs`):
+```
+void MultiplicationNoLossOfPrecision(int a)
+{
+    int b = 4;
+    float c = (float)a * b;
+}
+```

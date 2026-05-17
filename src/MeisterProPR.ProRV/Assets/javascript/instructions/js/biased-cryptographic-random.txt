@@ -1,0 +1,42 @@
+Review focus: Creating biased random numbers from a cryptographically secure source
+
+What to look for:
+- Some mathematical operations on random numbers can cause bias in the results and compromise security.
+- Generating secure random numbers can be an important part of creating a secure software system. This can be done using APIs that create cryptographically secure random numbers. However, using some mathematical operations on these cryptographically secure random numbers can create biased results, where some outcomes are more likely than others. Such biased results can make it easier for an attacker to guess the random numbers, and thereby break the security of the software system.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Bad example (`bad-random.js`):
+```
+const crypto = require('crypto');
+
+const digits = [];
+for (let i = 0; i < 10; i++) {
+    digits.push(crypto.randomBytes(1)[0] % 10); // NOT OK
+}
+```
+- Bad example (`bad-random-fixed.js`):
+```
+const cryptoRandomString = require('crypto-random-string');
+
+const digits = cryptoRandomString({length: 10, type: 'numeric'});
+```
+- Bad example (`bad-random-fixed2.js`):
+```
+const crypto = require('crypto');
+
+const digits = [];
+while (digits.length < 10) {
+    const byte = crypto.randomBytes(1)[0];
+    if (byte >= 250) {
+        continue;
+    }
+    digits.push(byte % 10); // OK
+}
+```

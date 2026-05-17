@@ -1,0 +1,32 @@
+Review focus: String length conflation
+
+What to look for:
+- Using a length value from an `NSString` in a `String`, or a count from a `String` in an `NSString`, may cause unexpected behavior.
+- Using a length value from an`NSString`in a`String`, or a count from a`String`in an`NSString`, may cause unexpected behavior including (in some cases) buffer overwrites. This is because certain unicode sequences are represented as one character in a`String`but as a sequence of multiple characters in an`NSString`. For example, a 'thumbs up' emoji with a skin tone modifier (&#x1F44D;&#x1F3FF;) is represented as U+1F44D (&#x1F44D;) then the modifier U+1F3FF. This issue can also arise from using the values of`String.utf8.count`,`String.utf16.count`or`String.unicodeScalars.count`in an unsuitable place.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Bad example (`StringLengthConflationBad.swift`):
+```
+func myFunction(s: String) {
+	let ns = NSString(string: s)
+	let nsrange = NSMakeRange(0, s.count) // BAD: String length used in NSMakeRange
+
+	// ... use nsrange to process ns
+}
+```
+- Good example (`StringLengthConflationGood.swift`):
+```
+func myFunction(s: String) {
+	let ns = NSString(string: s)
+	let nsrange = NSMakeRange(0, ns.length) // Fixed: NSString length used in NSMakeRange
+
+	// ... use nsrange to process ns
+}
+```

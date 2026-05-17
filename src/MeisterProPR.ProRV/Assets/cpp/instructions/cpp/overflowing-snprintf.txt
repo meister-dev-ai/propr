@@ -1,0 +1,52 @@
+Review focus: Potentially overflowing call to snprintf
+
+What to look for:
+- Using the return value from snprintf without proper checks can cause overflow.
+- The return value of a call to`snprintf`is the number of characters that would have been written to the buffer assuming there was sufficient space. In the event that the operation reaches the end of the buffer and more than one character is discarded, the return value will be greater than the buffer size. This can cause incorrect behavior, for example:
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SnprintfOverflowBad.cpp`):
+```
+#define BUF_SIZE (32)
+
+int main(int argc, char *argv[])
+{
+	char buffer[BUF_SIZE];
+	size_t pos = 0;
+	int i;
+
+	for (i = 0; i < argc; i++)
+	{
+		pos += snprintf(buffer + pos, BUF_SIZE - pos, "%s", argv[i]);
+			// BUF_SIZE - pos may overflow
+	}
+}
+```
+- Reference example (`SnprintfOverflowGood.cpp`):
+```
+#define BUF_SIZE (32)
+
+int main(int argc, char *argv[])
+{
+	char buffer[BUF_SIZE];
+	size_t pos = 0;
+	int i;
+
+	for (i = 0; i < argc; i++)
+	{
+		int n = snprintf(buffer + pos, BUF_SIZE - pos, "%s", argv[i]);
+		if (n < 0 || n >= BUF_SIZE - pos)
+		{
+			break;
+		}
+		pos += n;
+	}
+}
+```

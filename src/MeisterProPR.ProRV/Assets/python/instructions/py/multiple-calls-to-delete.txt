@@ -1,0 +1,49 @@
+Review focus: Multiple calls to `__del__` during object destruction
+
+What to look for:
+- A duplicated call to a superclass `__del__` method may lead to class instances not be cleaned up properly.
+- Python, unlike some other object-oriented languages such as Java, allows the developer complete freedom in when and how superclass finalizers are called during object finalization. However, the developer has responsibility for ensuring that objects are properly cleaned up. Objects with a`__del__`method (a finalizer) often hold resources such as file handles that need to be cleaned up. If a superclass finalizer is called multiple times, this may lead to errors such as closing an already closed file, and lead to objects not being cleaned up properly as expected. There are a number of ways that a`__del__`method may be called more than once.
+- There may be more than one explicit call to the method in the hierarchy of`__del__`methods.
+- In situations involving multiple inheritance, an finalization method may call the finalizers of each of its base types, which themselves both call the finalizer of a shared base type. (This is an example of the Diamond Inheritance problem)
+- Another situation involving multiple inheritance arises when a subclass calls the`__del__`methods of each of its base classes, one of which calls`super().__del__`. This super call resolves to the next class in the Method Resolution Order (MRO) of the subclass, which may be another base class that already has its initializer explicitly called.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuperclassDelCalledMultipleTimes.py`):
+```
+#Calling a method multiple times by using explicit calls when a base uses super()
+class Vehicle(object):
+     
+    def __del__(self):
+        recycle(self.base_parts)
+        super(Vehicle, self).__del__()
+        
+class Car(Vehicle):
+    
+    def __del__(self):
+        recycle(self.car_parts)
+        super(Car, self).__del__()
+        
+        
+class SportsCar(Car, Vehicle):
+    
+    # BAD: Vehicle.__del__ will get called twice
+    def __del__(self):
+        recycle(self.sports_car_parts)
+        Car.__del__(self)
+        Vehicle.__del__(self)
+        
+        
+# GOOD: super() is used ensuring each del method is called once.
+class FixedSportsCar(Car, Vehicle):
+    
+    def __del__(self):
+        recycle(self.sports_car_parts)
+        super(SportsCar, self).__del__()
+```

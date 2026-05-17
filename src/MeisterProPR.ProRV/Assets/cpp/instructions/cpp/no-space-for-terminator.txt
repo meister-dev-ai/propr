@@ -1,0 +1,26 @@
+Review focus: No space for zero terminator
+
+What to look for:
+- Allocating a buffer using 'malloc' without ensuring that there is always space for the entire string and a zero terminator can cause a buffer overrun.
+- This rule identifies calls to`malloc`that call`strlen`to determine the required buffer size, but do not allocate space for the zero terminator.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NoSpaceForZeroTerminator.c`):
+```
+void flawed_strdup(const char *input)
+{
+	char *copy;
+
+	/* Fail to allocate space for terminating '\0' */
+	copy = (char *)malloc(strlen(input));
+	strcpy(copy, input);
+	return copy;
+}
+```

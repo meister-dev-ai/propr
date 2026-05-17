@@ -1,0 +1,22 @@
+Review focus: Unused parameter
+
+What to look for:
+- Parameter is defined but not used
+- A parameter is never used.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnusedParameter.py`):
+```
+import random
+
+def write_to_file(text, filename):
+    with open("log.txt", "w") as file:
+        file.write(text)
+```

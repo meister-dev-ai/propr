@@ -1,0 +1,31 @@
+Review focus: Use of potentially dangerous function
+
+What to look for:
+- Use of a standard library function that is not thread-safe.
+- This rule finds calls to functions that are dangerous to use. Currently, it checks for calls to`gmtime`,`localtime`,`ctime`and`asctime`. The time related functions such as`gmtime`fill data into a`tm`struct or`char`array in shared memory and then returns a pointer to that memory. If the function is called from multiple places in the same program, and especially if it is called from multiple threads in the same program, then the calls will overwrite each other's data.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`PotentiallyDangerousFunction.c`):
+```
+// BAD: using gmtime
+int is_morning_bad() {
+    const time_t now_seconds = time(NULL);
+    struct tm *now = gmtime(&now_seconds);
+    return (now->tm_hour < 12);
+}
+
+// GOOD: using gmtime_r
+int is_morning_good() {
+    const time_t now_seconds = time(NULL);
+    struct tm now;
+    gmtime_r(&now_seconds, &now);
+    return (now.tm_hour < 12);
+}
+```

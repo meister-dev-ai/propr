@@ -3,12 +3,18 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AI;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
+using MeisterProPR.ProRV.Abstractions;
+using MeisterProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -68,7 +74,10 @@ public class FileByFileReviewOrchestratorTests
         IChatClient chatClient,
         IOptions<AiReviewOptions>? options = null,
         IAiConnectionRepository? aiConnectionRepository = null,
-        IAiChatClientFactory? aiClientFactory = null)
+        IAiChatClientFactory? aiClientFactory = null,
+        IAiRuntimeResolver? aiRuntimeResolver = null,
+        IReviewPipelineProfileProvider? pipelineProfileProvider = null,
+        IProRVPrefilter? proRvPrefilter = null)
     {
         return new FileByFileReviewOrchestrator(
             aiCore,
@@ -78,7 +87,19 @@ public class FileByFileReviewOrchestratorTests
             options ?? DefaultOptions(),
             Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
             aiConnectionRepository,
-            aiClientFactory);
+            aiClientFactory,
+            null,
+            aiRuntimeResolver,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            pipelineProfileProvider,
+            proRvPrefilter);
     }
 
     private static IJobRepository CreateJobRepo(ReviewJob? jobWithResults = null)
@@ -761,6 +782,275 @@ public class FileByFileReviewOrchestratorTests
             .ReviewAsync(
                 Arg.Any<PullRequest>(),
                 Arg.Is<ReviewSystemContext>(ctx => ctx.TierChatClient == defaultChatClient),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ProRvPrefilterRuntimeExists_InjectsFocusedReviewGuidanceIntoContext()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.FileByFileBaselineProfileId);
+        var pr = CreatePr(
+            new ChangedFile(
+                "src/Web/ErrorPage.cs",
+                ChangeType.Edit,
+                "content",
+                "+ var page = Request.QueryString[\"page\"];\n+ Response.Write(page);"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var prefilterClient = Substitute.For<IChatClient>();
+        var prefilterModel = AiConnectionTestFactory.CreateChatModel("gpt-4.1-nano");
+        var prefilterBinding = AiConnectionTestFactory.CreateBinding(AiPurpose.ProRVPrefilter, prefilterModel);
+        var prefilterConnection = AiConnectionTestFactory.CreateConnection(job.ClientId, [prefilterModel], [prefilterBinding]);
+        var prefilterRuntime = new ResolvedAiChatRuntime(prefilterConnection, prefilterModel, prefilterBinding, prefilterClient);
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
+            .Returns(prefilterRuntime);
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        proRvPrefilter.RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ProRVPrefilterResult(
+                    ProRVPrefilterStatus.Success,
+                    "src/Web/ErrorPage.cs",
+                    "csharp",
+                    [
+                        new ProRVRelevantItem(
+                            "cs/web/xss",
+                            "Cross-site scripting",
+                            "Writing request input directly to a response path.",
+                            "What to look for:\n- Direct writes of request input to a response sink.",
+                            "Request input is written to the response path.",
+                            96,
+                            "error",
+                            "high",
+                            ["security", "xss"]),
+                    ],
+                    "{\"ranked_checks\":[]}",
+                    inputTokens: 12,
+                    outputTokens: 4));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            defaultChatClient,
+            aiRuntimeResolver: aiRuntimeResolver,
+            proRvPrefilter: proRvPrefilter);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await proRvPrefilter.Received(1)
+            .RankRelevantItemsAsync(
+                Arg.Is<ProRVPrefilterRequest>(request => request.FilePath == "src/Web/ErrorPage.cs" && request.Language == "csharp" && request.MaxResults == 4),
+                prefilterClient,
+                Arg.Is<ChatOptions?>(options => options != null && options.ModelId == "gpt-4.1-nano"),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(context =>
+                    context.PerFileHint != null &&
+                    context.PerFileHint.FocusedReviewGuidance.Count == 1 &&
+                    context.PerFileHint.FocusedReviewGuidance[0].Id == "cs/web/xss"),
+                Arg.Any<CancellationToken>());
+
+        await protocolRecorder.Received()
+            .RecordAiCallAsync(
+                Arg.Any<Guid>(),
+                0,
+                12,
+                4,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                ReviewProtocolEventNames.ProRVPrefilterAiCall,
+                Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_PythonFile_MapsToPythonProRvLanguage()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.FileByFileBaselineProfileId);
+        var pr = CreatePr(
+            new ChangedFile(
+                "src/service.py",
+                ChangeType.Edit,
+                "content",
+                "+def handle(path):\n+    return open(path).read()"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var prefilterClient = Substitute.For<IChatClient>();
+        var prefilterModel = AiConnectionTestFactory.CreateChatModel("gpt-4.1-nano");
+        var prefilterBinding = AiConnectionTestFactory.CreateBinding(AiPurpose.ProRVPrefilter, prefilterModel);
+        var prefilterConnection = AiConnectionTestFactory.CreateConnection(job.ClientId, [prefilterModel], [prefilterBinding]);
+        var prefilterRuntime = new ResolvedAiChatRuntime(prefilterConnection, prefilterModel, prefilterBinding, prefilterClient);
+        var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
+        aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
+            .Returns(prefilterRuntime);
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        proRvPrefilter.RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ProRVPrefilterResult(
+                    ProRVPrefilterStatus.Success,
+                    "src/service.py",
+                    "python",
+                    [],
+                    "{\"ranked_checks\":[]}",
+                    inputTokens: 6,
+                    outputTokens: 2));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            defaultChatClient,
+            aiRuntimeResolver: aiRuntimeResolver,
+            proRvPrefilter: proRvPrefilter);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await proRvPrefilter.Received(1)
+            .RankRelevantItemsAsync(
+                Arg.Is<ProRVPrefilterRequest>(request => request.FilePath == "src/service.py" && request.Language == "python" && request.MaxResults == 4),
+                prefilterClient,
+                Arg.Is<ChatOptions?>(options => options != null && options.ModelId == "gpt-4.1-nano"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_FileByFileProfileWithoutProRvDispatchStage_DoesNotInvokeProRvPrefilter()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            "file-by-file-no-prorv");
+
+        var pr = CreatePr(new ChangedFile("src/Web/ErrorPage.cs", ChangeType.Edit, "content", "+ Response.Write(page);"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var profileProvider = Substitute.For<IReviewPipelineProfileProvider>();
+        profileProvider.GetProfiles(ReviewStrategy.FileByFile).Returns(
+        [
+            new ReviewPipelineProfile(
+                ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
+                "File-by-file baseline",
+                ReviewStrategy.FileByFile,
+                [FileByFileProRvPrefilterStage.StageIdConstant],
+                [
+                    FileByFileConfidenceFloorStage.StageIdConstant,
+                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                    FileByFileInfoCommentStripStage.StageIdConstant,
+                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                true),
+            new ReviewPipelineProfile(
+                "file-by-file-no-prorv",
+                "File-by-file without ProRV",
+                ReviewStrategy.FileByFile,
+                [],
+                [
+                    FileByFileConfidenceFloorStage.StageIdConstant,
+                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                    FileByFileInfoCommentStripStage.StageIdConstant,
+                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                ],
+                [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
+                false),
+        ]);
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            defaultChatClient,
+            pipelineProfileProvider: profileProvider,
+            proRvPrefilter: proRvPrefilter);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await proRvPrefilter.DidNotReceive()
+            .RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(context =>
+                    context.PerFileHint != null &&
+                    context.PerFileHint.FocusedReviewGuidance.Count == 0),
                 Arg.Any<CancellationToken>());
     }
 

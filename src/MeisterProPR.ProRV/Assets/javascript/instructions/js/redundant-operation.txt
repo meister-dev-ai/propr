@@ -1,0 +1,31 @@
+Review focus: Identical operands
+
+What to look for:
+- Passing identical, or seemingly identical, operands to an operator such as subtraction or conjunction may indicate a typo; even if it is intentional, it makes the code hard to...
+- Many arithmetic or logical operators yield a trivial result when applied to identical operands: for instance,`x-x`yields zero if`x`is a number, and yields`NaN`otherwise;`x&&x`is always equal to`x`. Code like this is often the result of a typo, such as misspelling a variable name. Even if it is intentional (relying, for instance, on side effects), such code is hard to read and understand and should be avoided.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`RedundantExpression.js`):
+```
+function avg(x, y) {
+	return (x + x)/2;
+}
+```
+- Reference example (`RedundantExpressionGood.js`):
+```
+function avg(x, y) {
+	return (x + y)/2;
+}
+```
+- Reference example (`RedundantExpressionGood2.js`):
+```
+if (f())
+	f();
+```

@@ -1,0 +1,20 @@
+Review focus: Futile conditional
+
+What to look for:
+- An if-statement with an empty then-branch and no else-branch may indicate that the code is incomplete.
+- This rule finds If-statements with an empty then-branch and no else-branch. These statements are usually unimplemented skeleton code that should be implemented, or real unused code that should be removed to avoid confusion and misuse.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`FutileConditional.cpp`):
+```
+//empty then and else branches, will not do anything (other than the check)
+if (check(i)) {
+}
+```

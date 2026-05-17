@@ -1,0 +1,12 @@
+Review focus: Sign check of bitwise operation
+
+What to look for:
+- Checking the sign of the result of a bitwise operation may yield unexpected results.
+- This rule finds code that checks the sign of the result of a bitwise operation. Such a check may yield unexpected results. As an example, consider the following code that checks if the`n`th bit of a variable`x`is set: x & (1 << n) > 0 If`x`is a 32-bit signed integer, the value of`x & (1 << 31)`is interpreted as a signed number. If`x`is negative (that is, its sign bit is set), and`n`is 31, then`x & (1 << 31)`evaluates to`0x80000000`(all bits zero except the sign bit). The sign check on this value fails, implying that the 31st bit of`x`is unset. This is clearly incorrect.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

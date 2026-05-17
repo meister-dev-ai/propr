@@ -1,0 +1,80 @@
+Review focus: Wrapped error is always nil
+
+What to look for:
+- Finds calls to `Wrap` from `pkg/errors` where the error argument is always nil.
+- The`pkg.errors`package provides the`errors.Wrap`function for annotating an error with a stack trace. When passed`nil`, this function returns`nil`. When the first parameter to`errors.Wrap`is always`nil`, the function call has no effect and likely indicates a programming mistake. A common example of this is when an`errors.Wrap(err, "message")`call is copied from an earlier error-handling block in the same function and used in a subsequent error-handling block that does not check`err`in its guard. In this case the return of a`nil`value to the caller indicates by convention that the operation succeeded, and so the failure is masked.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`WrappedErrorAlwaysNil.go`):
+```
+package main
+
+import (
+	"github.com/pkg/errors"
+)
+
+func f1(input string) error {
+	if input == "1" {
+		return errors.Errorf("error in f1")
+	}
+	return nil
+}
+
+func f2(input string) (bool, error) {
+	if input == "2" {
+		return false, errors.Errorf("error in f2")
+	}
+	return true, nil
+}
+
+func test1(input string) error {
+	err := f1(input)
+	if err != nil {
+		return errors.Wrap(err, "input is the first non-negative integer")
+	}
+	if ok2, _ := f2(input); !ok2 {
+		return errors.Wrap(err, "input is the second non-negative integer")
+	}
+	return nil
+}
+```
+- Reference example (`WrappedErrorAlwaysNilGood.go`):
+```
+package main
+
+import (
+	"github.com/pkg/errors"
+)
+
+func f1(input string) error {
+	if input == "1" {
+		return errors.Errorf("error in f1")
+	}
+	return nil
+}
+
+func f2(input string) (bool, error) {
+	if input == "2" {
+		return false, errors.Errorf("error in f2")
+	}
+	return true, nil
+}
+
+func test1(input string) error {
+	err := f1(input)
+	if err != nil {
+		return errors.Wrap(err, "input is the first non-negative integer")
+	}
+	if ok2, _ := f2(input); !ok2 {
+		return errors.New("input is the second non-negative integer")
+	}
+	return nil
+}
+```

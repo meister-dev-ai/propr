@@ -1,0 +1,54 @@
+Review focus: Size computation for allocation may overflow
+
+What to look for:
+- When computing the size of an allocation based on the size of a large object, the result may overflow and cause a runtime panic.
+- Performing calculations involving the size of potentially large strings or slices can result in an overflow (for signed integer types) or a wraparound (for unsigned types). An overflow causes the result of the calculation to become negative, while a wraparound results in a small (positive) number. This can cause further issues. If, for example, the result is then used in an allocation, it will cause a runtime panic if it is negative, and allocate an unexpectedly small buffer otherwise.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`AllocationSizeOverflow.go`):
+```
+package main
+
+import "encoding/json"
+
+func encryptValue(v interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	size := len(jsonData) + (len(jsonData) % 16)
+	buffer := make([]byte, size)
+	copy(buffer, jsonData)
+	return encryptBuffer(buffer)
+}
+```
+- Reference example (`AllocationSizeOverflowGood.go`):
+```
+package main
+
+import (
+	"encoding/json"
+	"errors"
+)
+
+func encryptValueGood(v interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	if len(jsonData) > 64*1024*1024 {
+		return nil, errors.New("value too large")
+	}
+	size := len(jsonData) + (len(jsonData) % 16)
+	buffer := make([]byte, size)
+	copy(buffer, jsonData)
+	return encryptBuffer(buffer)
+}
+```

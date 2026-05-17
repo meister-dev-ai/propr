@@ -1,0 +1,44 @@
+Review focus: Indirect uncontrolled command line
+
+What to look for:
+- Forwarding command-line arguments to a child process executed within a shell may indirectly introduce command-line injection vulnerabilities.
+- Forwarding command-line arguments to`child_process.exec`or some other library routine that executes a system command within a shell can change the meaning of the command unexpectedly due to unescaped special characters. When the forwarded command-line arguments come from a parent process that has not escaped the special characters in the arguments, then the parent process may indirectly be vulnerable to command-line injection since the special characters are evaluated unexpectedly.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`indirect-command-injection.js`):
+```
+var cp = require("child_process");
+
+const args = process.argv.slice(2);
+const script = path.join(__dirname, 'bin', 'main.js');
+cp.execSync(`node ${script} ${args.join(' ')}`); // BAD
+```
+- Reference example (`indirect-command-injection_fixed.js`):
+```
+var cp = require("child_process");
+
+const args = process.argv.slice(2);
+const script = path.join(__dirname, 'bin', 'main.js');
+cp.execFileSync('node', [script].concat(args)); // GOOD
+```
+- Reference example (`indirect-command-injection_shellquote.js`):
+```
+var cp = require("child_process"),
+    shellQuote = require("shell-quote");
+
+const args = process.argv.slice(2);
+let nodeOpts = '';
+if (args[0] === '--node-opts') {
+    nodeOpts = args[1];
+    args.splice(0, 2);
+}
+const script = path.join(__dirname, 'bin', 'main.js');
+cp.execFileSync('node', shellQuote.parse(nodeOpts).concat(script).concat(args)); // GOOD
+```

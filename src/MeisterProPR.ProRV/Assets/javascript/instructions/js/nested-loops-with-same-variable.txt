@@ -1,0 +1,30 @@
+Review focus: Nested loops with same variable
+
+What to look for:
+- Nested loops in which the iteration variable is the same for each loop are difficult to understand.
+- Nested 'for' loops with the same iteration variable are hard to understand, since the inner loop affects the iteration variable of the outer loop. Sometimes this behavior is unintended and indicates a bug.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`NestedLoopsSameVariable.js`):
+```
+for (var i=0; i<10; ++i) {
+	// NOT OK
+	for (var j=i; i>5; --i)
+		f(i, j);
+}
+```
+- Reference example (`NestedLoopsSameVariableGood.js`):
+```
+for (var i=0; i<10; ++i) {
+	// NOT OK
+	for (var j=i; j>5; --j)
+		f(i, j);
+}
+```

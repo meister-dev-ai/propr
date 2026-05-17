@@ -1,0 +1,31 @@
+Review focus: Likely overrunning write
+
+What to look for:
+- Buffer write operations that do not control the length of data written may overflow
+- The program performs a buffer copy or write operation with no upper limit on the size of the copy. By analyzing the bounds of the expressions involved, it appears that certain inputs will cause a buffer overflow to occur in this case. In addition to causing program instability, techniques exist which may allow an attacker to use this vulnerability to execute arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`VeryLikelyOverrunWrite.c`):
+```
+int sayHello(uint32_t userId)
+{
+	char buffer[17];
+
+	if (userId > 9999) return USER_ID_OUT_OF_BOUNDS;
+
+	// BAD: this message overflows the buffer if userId >= 1000,
+	// as no space for the null terminator was accounted for
+	sprintf(buffer, "Hello, user %d!", userId);
+
+	MessageBox(hWnd, buffer, "New Message", MB_OK);
+	
+	return SUCCESS;
+}
+```

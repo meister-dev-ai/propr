@@ -1,0 +1,27 @@
+Review focus: Incorrect suffix check
+
+What to look for:
+- Using indexOf to implement endsWith functionality is error-prone if the -1 case is not explicitly handled.
+- The`indexOf`and`lastIndexOf`methods are sometimes used to check if a substring occurs at a certain position in a string. However, if the returned index is compared to an expression that might evaluate to -1, the check may pass in some cases where the substring was not found at all. Specifically, this can easily happen when implementing`endsWith`using`indexOf`.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`IncorrectSuffixCheck.js`):
+```
+function endsWith(x, y) {
+  return x.lastIndexOf(y) === x.length - y.length;
+}
+```
+- Reference example (`IncorrectSuffixCheckGood.js`):
+```
+function endsWith(x, y) {
+  let index = x.lastIndexOf(y);
+  return index !== -1 && index === x.length - y.length;
+}
+```

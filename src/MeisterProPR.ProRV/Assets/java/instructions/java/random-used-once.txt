@@ -1,0 +1,12 @@
+Review focus: Random used only once
+
+What to look for:
+- Creating an instance of 'Random' for each pseudo-random number required does not guarantee an evenly distributed sequence of random numbers.
+- A program that uses`java.util.Random`to generate a sequence of pseudo-random numbers should not create a new instance of`Random`every time a new pseudo-random number is required (for example,`new Random().nextInt()`). According to the Java API Specification: If two instances of`Random`are created with the same seed, and the same sequence of method calls is made for each, they will generate and return identical sequences of numbers. The sequence of pseudo-random numbers returned by these calls depends only on the value of the seed. If you construct a new`Random`object each time a pseudo-random number is needed, this does not generate a good distribution of pseudo-random numbers, even though the parameterless`Random()`constructor tries to initialize itself with a unique seed.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

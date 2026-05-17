@@ -1,0 +1,12 @@
+Review focus: Assignment in Boolean expression
+
+What to look for:
+- Assignments in Boolean conditions can be confused with equality tests and make the condition more difficult to understand.
+- The assignment operator (`=`) can easily be confused with the equality operator (`==`), and can make a Boolean expression more difficult to understand. Consequently, assignments in Boolean expressions should be avoided. Some useful idioms are an exception to this rule, such as checking that some bytes have been read from an input-stream, as shown in the`readConfiguration`method in the example below. More precisely, an assignment is allowed in a Boolean expression if the result of the assignment is compared to another value.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,46 @@
+Review focus: Case-sensitive middleware path
+
+What to look for:
+- Middleware with case-sensitive paths do not protect endpoints with case-insensitive paths.
+- Using a case-sensitive regular expression path in a middleware route enables an attacker to bypass that middleware when accessing an endpoint with a case-insensitive path. Paths specified using a string are case-insensitive, whereas regular expressions are case-sensitive by default.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`CaseSensitiveMiddlewarePath.js`):
+```
+const app = require('express')();
+
+app.use(/\/admin\/.*/, (req, res, next) => {
+    if (!req.user.isAdmin) {
+        res.status(401).send('Unauthorized');
+    } else {
+        next();
+    }
+});
+
+app.get('/admin/users/:id', (req, res) => {
+    res.send(app.database.users[req.params.id]);
+});
+```
+- Reference example (`CaseSensitiveMiddlewarePathGood.js`):
+```
+const app = require('express')();
+
+app.use(/\/admin\/.*/i, (req, res, next) => {
+    if (!req.user.isAdmin) {
+        res.status(401).send('Unauthorized');
+    } else {
+        next();
+    }
+});
+
+app.get('/admin/users/:id', (req, res) => {
+    res.send(app.database.users[req.params.id]);
+});
+```

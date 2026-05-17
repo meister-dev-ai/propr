@@ -1,0 +1,12 @@
+Review focus: Accidental rethrow
+
+What to look for:
+- When there is nothing to rethrow, attempting to rethrow an exception will terminate the program.
+- The C++`throw`expression can take several forms. One form throws a new exception, whereas the other re-throws the current exception. In the latter case, if there is no current exception, then the program will be terminated. Presence of a re-throw outside of an exception handling context is often caused by the programmer not knowing what kind of exception to throw.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

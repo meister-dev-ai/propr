@@ -1,0 +1,48 @@
+Review focus: Resources exhaustion from deep object traversal
+
+What to look for:
+- Processing user-controlled object hierarchies inefficiently can lead to denial of service.
+- Processing user-controlled data with a method that allocates excessive amounts of memory can lead to denial of service. If the JSON schema validation library`ajv`is configured with`allErrors: true`there is no limit to how many error objects will be allocated. An attacker can exploit this by sending an object that deliberately contains a huge number of errors, and in some cases, with longer and longer error messages. This can cause the service to become unresponsive due to the slow error-checking process.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`DeepObjectResourceExhaustion.js`):
+```
+import express from 'express';
+import Ajv from 'ajv';
+
+let ajv = new Ajv({ allErrors: true });
+ajv.addSchema(require('./input-schema'), 'input');
+
+var app = express();
+app.get('/user/:id', function(req, res) {
+	if (!ajv.validate('input', req.body)) {
+		res.end(ajv.errorsText());
+		return;
+	}
+	// ...
+});
+```
+- Reference example (`DeepObjectResourceExhaustion_fixed.js`):
+```
+import express from 'express';
+import Ajv from 'ajv';
+
+let ajv = new Ajv({ allErrors: process.env['REST_DEBUG'] });
+ajv.addSchema(require('./input-schema'), 'input');
+
+var app = express();
+app.get('/user/:id', function(req, res) {
+	if (!ajv.validate('input', req.body)) {
+		res.end(ajv.errorsText());
+		return;
+	}
+	// ...
+});
+```

@@ -15,8 +15,10 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
+using MeisterProPR.ProRV.Abstractions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
@@ -86,7 +88,9 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IReviewFindingVerifier? reviewFindingVerifier = null,
         IReviewEvidenceCollector? reviewEvidenceCollector = null,
         ISummaryReconciliationService? summaryReconciliationService = null,
-        IReviewPipeline<PerFileReviewContext>? perFilePipeline = null)
+        IReviewPipeline<PerFileReviewContext>? perFilePipeline = null,
+        IReviewPipelineProfileProvider? pipelineProfileProvider = null,
+        IProRVPrefilter? proRvPrefilter = null)
         : this(
             protocolRecorder,
             jobRepository,
@@ -99,14 +103,22 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 jobRepository,
                 options.Value,
                 logger,
-                perFilePipeline,
+                perFilePipeline ?? CreateDefaultPerFilePipeline(
+                    options.Value,
+                    protocolRecorder,
+                    proRvPrefilter,
+                    aiConnectionRepository,
+                    aiClientFactory,
+                    aiRuntimeResolver,
+                    logger),
                 aiConnectionRepository,
                 aiClientFactory,
                 memoryService,
                 aiRuntimeResolver,
                 new CommentRelevanceFilterExecutor(commentRelevanceFilterRegistry, protocolRecorder),
                 reviewInvariantFactProviders,
-                new LocalReviewVerificationExecutor(reviewClaimExtractor, reviewFindingVerifier, protocolRecorder)),
+                new LocalReviewVerificationExecutor(reviewClaimExtractor, reviewFindingVerifier, protocolRecorder),
+                pipelineProfileProvider),
             null,
             null,
             null,
@@ -152,6 +164,31 @@ internal sealed partial class FileByFileReviewOrchestrator(
         }
 
         return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
+    }
+
+    private static IReviewPipeline<PerFileReviewContext> CreateDefaultPerFilePipeline(
+        AiReviewOptions options,
+        IProtocolRecorder protocolRecorder,
+        IProRVPrefilter? proRvPrefilter,
+        IAiConnectionRepository? aiConnectionRepository,
+        IAiChatClientFactory? aiClientFactory,
+        IAiRuntimeResolver? aiRuntimeResolver,
+        ILogger<FileByFileReviewOrchestrator> logger)
+    {
+        return new ReviewPipelineRunner<PerFileReviewContext>(
+        [
+            new FileByFileProRvPrefilterStage(
+                protocolRecorder,
+                proRvPrefilter,
+                aiConnectionRepository,
+                aiClientFactory,
+                aiRuntimeResolver,
+                NullLogger<FileByFileProRvPrefilterStage>.Instance),
+            new FileByFileConfidenceFloorStage(options),
+            new FileByFileSpeculativeCommentFilterStage(),
+            new FileByFileInfoCommentStripStage(),
+            new FileByFileVagueSuggestionFilterStage(),
+        ]);
     }
 
     private async Task<ReviewResult> SynthesizeResultsAsync(

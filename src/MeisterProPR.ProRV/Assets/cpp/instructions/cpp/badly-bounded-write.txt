@@ -1,0 +1,27 @@
+Review focus: Badly bounded write
+
+What to look for:
+- Buffer write operations with a length parameter that does not match the size of the destination buffer may overflow.
+- The program performs a buffer copy or write operation with an incorrect upper limit on the size of the copy. A sufficiently long input will overflow the target buffer. In addition to causing program instability, techniques exist which may allow an attacker to use this vulnerability to execute arbitrary code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`BadlyBoundedWrite.c`):
+```
+void congratulateUser(const char *userName)
+{
+	char buffer[80];
+
+	// BAD: even though snprintf is used, this could overflow the buffer
+	// because the size specified is too large.
+	snprintf(buffer, 256, "Congratulations, %s!", userName);
+
+	MessageBox(hWnd, buffer, "New Message", MB_OK);
+}
+```

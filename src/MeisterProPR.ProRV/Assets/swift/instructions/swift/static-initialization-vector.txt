@@ -1,0 +1,36 @@
+Review focus: Static initialization vector for encryption
+
+What to look for:
+- Using a static initialization vector (IV) for encryption is not secure.
+- When a cipher is used in certain modes (such as CBC or GCM), it requires an initialization vector (IV). Under the same secret key, IVs should be unique and ideally unpredictable. If the same IV is used with the same secret key, then the same plaintext results in the same ciphertext. This behavior may enable an attacker to learn if the same data pieces are transferred or stored, or help the attacker run a dictionary attack. In particular, if the IV is hardcoded or constant, an attacker may just look up potential keys in a dictionary, then concatenate those with the hardcoded or constant IV rather than trying to discover the entire encryption key.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`StaticInitializationVector.swift`):
+```
+func encrypt(padding : Padding) {
+	// ...
+
+	// BAD: Using static IVs for encryption
+	let iv: Array<UInt8> = [0x2a, 0x3a, 0x80, 0x05]
+	let ivString = "this is a constant string"
+	let key = getRandomKey()
+	_ = try AES(key: key, iv: ivString)
+	_ = try CBC(iv: iv)
+
+	// GOOD: Using randomly generated IVs for encryption
+	let iv = (0..<10).map({ _ in UInt8.random(in: 0...UInt8.max) })
+	let ivString = String(cString: iv)
+	let key = getRandomKey())
+	_ = try AES(key: key, iv: ivString)
+	_ = try CBC(iv: iv)
+
+	// ...
+}
+```

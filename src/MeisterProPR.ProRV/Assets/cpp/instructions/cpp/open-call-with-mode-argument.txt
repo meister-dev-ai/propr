@@ -1,0 +1,26 @@
+Review focus: File opened with O_CREAT flag but without mode argument
+
+What to look for:
+- Opening a file with the O_CREAT flag but without mode argument reads arbitrary bytes from the stack.
+- When opening a file with the`O_CREAT`or`O_TMPFILE`flag, the`mode`must be supplied. If the`mode`argument is omitted, some arbitrary bytes from the stack will be used as the file mode. This leaks some bits from the stack into the permissions of the file.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`OpenCallMissingModeArgument.c`):
+```
+int open_file_bad() {
+	// BAD - this uses arbitrary bytes from the stack as mode argument
+        return open(FILE, O_CREAT)
+}
+
+int open_file_good() {
+	// GOOD - the mode argument is supplied
+        return open(FILE, O_CREAT, S_IRUSR | S_IWUSR)
+}
+```

@@ -29,7 +29,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     FileByFileBaselineProfileId,
                     "File-by-file baseline",
                     ReviewStrategy.FileByFile,
-                    [DispatchStageFamilyId],
+                    [FileByFileProRvPrefilterStage.StageIdConstant],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
                         FileByFileSpeculativeCommentFilterStage.StageIdConstant,
@@ -45,7 +45,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     AgenticBaselineProfileId,
                     "Agentic baseline",
                     ReviewStrategy.AgenticFileByFile,
-                    [DispatchStageFamilyId],
+                    [AgenticProRvPrefilterStage.StageIdConstant],
                     [
                         AgenticConfidenceFloorStage.StageIdConstant,
                         AgenticSpeculativeCommentFilterStage.StageIdConstant,
@@ -58,7 +58,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     AgenticExperimentalProfileId,
                     "Agentic experimental",
                     ReviewStrategy.AgenticFileByFile,
-                    [DispatchStageFamilyId],
+                    [AgenticProRvPrefilterStage.StageIdConstant],
                     [
                         AgenticSpeculativeCommentFilterStage.StageIdConstant,
                         AgenticInfoCommentStripStage.StageIdConstant,

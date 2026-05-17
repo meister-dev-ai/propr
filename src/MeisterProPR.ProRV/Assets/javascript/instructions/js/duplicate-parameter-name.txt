@@ -1,0 +1,20 @@
+Review focus: Duplicate parameter names
+
+What to look for:
+- If a function has two parameters with the same name, the second parameter shadows the first one, which makes the code hard to understand and error-prone.
+- In non-strict mode, JavaScript allows a function to have several parameters with the same name, where later parameters shadow earlier parameters. This is an error-prone feature which makes code hard to understand and should be avoided.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UniqueParameterNames.js`):
+```
+function f(x, x) {
+	return x+y;
+}
+```

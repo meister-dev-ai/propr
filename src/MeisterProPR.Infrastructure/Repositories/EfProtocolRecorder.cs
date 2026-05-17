@@ -304,6 +304,18 @@ public sealed class EfProtocolRecorder(
         await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "pr-wide-review");
     }
 
+    /// <inheritdoc />
+    public async Task RecordProRvEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "prorv-prefilter");
+    }
+
     private async Task RecordEventAsync(
         Guid protocolId,
         ProtocolEventKind kind,

@@ -358,11 +358,12 @@ An AI profile is activation-ready when these bindings are valid and enabled:
 
 The effort-specific review bindings are optional overrides:
 
+- `proRvPrefilter`
 - `reviewLowEffort`
 - `reviewMediumEffort`
 - `reviewHighEffort`
 
-If one of those effort-specific bindings is missing or disabled, ProPR falls back to `reviewDefault`
+If one of those optional override bindings is missing or disabled, ProPR falls back to `reviewDefault`
 at runtime instead of forcing duplicate configuration.
 
 ### When Are Default Headers Or Query Parameters Needed?

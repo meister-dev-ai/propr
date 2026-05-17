@@ -1,0 +1,21 @@
+Review focus: No raw arrays in interfaces
+
+What to look for:
+- Arrays should not be used in interfaces.
+- This rule finds class members (functions or data) that are or use arrays. This is particularly important for functions with array type parameters, as these parameters are treated as pointers to the array's first element inside the function (array decay). Assuming that it is still has the type of the array passed to the function can cause unexpected behavior (e.g. when using the`sizeof`operator).
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`AV Rule 97.cpp`):
+```
+void f(char buf[]) { //wrong: uses an array as a parameter type
+	int length = sizeof(buf); //will return sizeof(char*), not the size of the array passed
+	...
+}
+```

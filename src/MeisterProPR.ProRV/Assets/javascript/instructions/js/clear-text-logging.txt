@@ -1,0 +1,25 @@
+Review focus: Clear-text logging of sensitive information
+
+What to look for:
+- Logging sensitive information without encryption or hashing can expose it to an attacker.
+- If sensitive data is written to a log entry it could be exposed to an attacker who gains access to the logs. Potential attackers can obtain sensitive user data when the log output is displayed. Additionally that data may expose system information such as full path names, system information, and sometimes usernames and passwords.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is path-sensitive. Keep it only when the diff suggests a plausible source-to-sink or input-to-operation path worth deeper inspection.
+
+Reference examples:
+- Reference example (`CleartextLogging.js`):
+```
+// BAD: Logging cleartext sensitive data
+console.info(`[INFO] Environment: ${JSON.stringify(process.env)}`);
+```
+- Reference example (`CleartextLoggingGood.js`):
+```
+let not_sensitive_data = { a: 1, b : 2} 
+// GOOD: it is fine to log data that is not sensitive
+console.info(`[INFO] Some object contains: ${JSON.stringify(not_sensitive_data)}`);
+```

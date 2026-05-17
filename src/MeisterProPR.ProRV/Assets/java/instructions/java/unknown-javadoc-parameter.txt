@@ -1,0 +1,12 @@
+Review focus: Spurious Javadoc @param tags
+
+What to look for:
+- Javadoc @param tags that do not match any parameters in the method or constructor or any type parameters of the annotated class are confusing.
+- Javadoc comments for public methods, constructors and generic classes should use the`@param`tag to describe the available parameters and type parameters. If the comment includes any empty, incorrect or outdated parameter names then this will make the documentation more difficult to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

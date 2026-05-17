@@ -1,0 +1,45 @@
+Review focus: Conflicting function declarations
+
+What to look for:
+- If two functions with the same name are declared in the same scope, one of the declarations overrides the other without warning.
+- If two functions with the same name are declared in the same scope, one of the declarations overrides the other without warning. This makes the code hard to read and maintain. In some cases, which declaration overrides which may be platform dependent.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`ConflictingFunctions.js`):
+```
+function getConverter(dir) {
+	if (dir === 'c2f') {
+		function converter(c) {
+			return c * 9/5 + 32;
+		}
+	} else {
+		function converter(f) {
+			return (f - 32) * 5/9;
+		}
+	}
+	return converter;
+}
+```
+- Reference example (`ConflictingFunctionsGood.js`):
+```
+function getConverter(dir) {
+	var converter;
+	if (dir === 'c2f') {
+		converter = function (c) {
+			return c * 9/5 + 32;
+		};
+	} else {
+		converter = function (f) {
+			return (f - 32) * 5/9;
+		};
+	}
+	return converter;
+}
+```

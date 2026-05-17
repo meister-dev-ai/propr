@@ -1,0 +1,34 @@
+Review focus: Useless assignment to field
+
+What to look for:
+- An assignment to a field that is not used later on has no effect.
+- A value is assigned to a field, but its value is never read. This means that the assignment has no effect, and could indicate a logic error or incomplete code.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DeadStoreOfField.go`):
+```
+package main
+
+type counter struct {
+	val int
+}
+
+func (c counter) reset() {
+	c.val = 0
+}
+```
+- Reference example (`DeadStoreOfFieldGood.go`):
+```
+package main
+
+func (c *counter) resetGood() {
+	c.val = 0
+}
+```

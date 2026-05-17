@@ -1,0 +1,12 @@
+Review focus: Unnecessary import
+
+What to look for:
+- A redundant 'import' statement introduces unnecessary and undesirable dependencies.
+- An`import`statement that is not necessary (because no part of the file that it is in uses any imported type) should be avoided. Although importing too many types does not affect performance, redundant`import`statements introduce unnecessary and undesirable dependencies in the code. If an imported type is renamed or deleted, the source code cannot be compiled because the`import`statement cannot be resolved. Unnecessary`import`statements are often an indication of incomplete refactoring.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.

@@ -1,0 +1,26 @@
+Review focus: Call to function with fewer arguments than declared parameters
+
+What to look for:
+- A function call is passing fewer arguments than the number of declared parameters of the function.
+- A function is called with fewer arguments than there are parameters of the function. This may indicate that an incorrect function is being called, or that the signature (parameter list) of the called function is not known to the author. In C, function calls generally need to provide the same number of arguments as there are arguments to the function. (Variadic functions can accept additional arguments.) Providing fewer arguments than there are parameters is extremely dangerous, as the called function will nevertheless try to obtain the missing arguments' values, either from the stack or from machine registers. As a result, the function may behave unpredictably. If the called function modifies a parameter corresponding to a missing argument, it may alter the state of the program upon its return. An attacker could use this to, for example, alter the control flow of the program to access forbidden resources.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`TooFewArguments.c`):
+```
+void one_argument();
+
+void calls() {
+	one_argument(1); // GOOD: `one_argument` will accept and use the argument
+	
+	one_argument(); // BAD: `one_argument` will receive an undefined value
+}
+
+void one_argument(int x);
+```

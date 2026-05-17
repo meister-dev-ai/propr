@@ -1,0 +1,24 @@
+Review focus: Unused loop iteration variable
+
+What to look for:
+- A loop iteration variable is unused, which suggests an error.
+- Most`for...in`and`for...of`statements use their iteration variable in the loop body, unless they simply count the number of iterations by incrementing a loop counter in the loop body, or check whether the loop body is executed at all. Loops that do not use their iteration variable but do not fall into one of these two categories may indicate a logic error or typo.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`SuspiciousUnusedLoopIterationVariable.js`):
+```
+function countOccurrences(xs, p) {
+	var count = 0;
+	for (let x of xs)
+		if (p())
+			++count;
+	return count;
+}
+```

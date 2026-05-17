@@ -1,0 +1,26 @@
+Review focus: Unsafe array for days of the year
+
+What to look for:
+- An array of 365 items typically indicates one entry per day of the year, but without considering leap years, which would be 366 days.
+- This query helps to detect when a developer allocates an array or other fixed-length data structure such as`std::vector`with 365 elements – one for each day of the year. Since leap years have 366 days, there will be no allocated element on December 31st at the end of a leap year; which will lead to a buffer overflow on a leap year.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`UnsafeArrayForDaysOfYearBad.c`):
+```
+int items[365];
+items[dayOfYear - 1] = x; // buffer overflow on December 31st of any leap year
+```
+- Reference example (`UnsafeArrayForDaysOfYearGood.c`):
+```
+bool isLeapYear = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+int *items = new int[isLeapYear ? 366 : 365];
+// ...
+delete[] items;
+```

@@ -1,0 +1,29 @@
+Review focus: Initialization code not run
+
+What to look for:
+- Not running initialization code may lead to unexpected behavior.
+- The query finds code that initializes a global variable (that is, uses it as an L-value) but is never called from`main`. Unless there is another entry point that triggers the initialization, the code should be modified so that the variable is initialized. Uninitialized variables may contain any value, as not all compilers generate code that zero-out memory, especially when optimizations are enabled or the compiler is not compliant with the latest language standards.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`InitialisationNotRun.cpp`):
+```
+GlobalStorage *g_storage;
+
+void init() { //initializes g_storage, but is never run from main
+	g_storage = new GlobalStorage();
+	...
+}
+
+int main(int argc, char *argv[]) {
+	... //init not called
+	strcpy(g_storage->name, argv[1]); // g_storage is used before init() is called
+	...
+}
+```

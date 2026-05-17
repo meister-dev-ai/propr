@@ -1,0 +1,84 @@
+Review focus: Missed opportunity to use OfType
+
+What to look for:
+- The intent of a foreach loop that immediately uses 'as' to coerce its iteration variable to another type and then never uses the iteration variable again can often be better...
+- Programmers often use`as`to iterate over a collection of one type of element that may contain some elements of another - possibly more specific - type. For example,``might refer to a collection of objects, some of which refer to an instance of`D`, a class derived from`B`. Programmers often write a loop to iterate over the collection and coerce each`B`in turn to`D`before using it.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`MissedOfTypeOpportunity.cs`):
+```
+class MissedOfTypeOpportunity
+{
+    class Animal { }
+
+    class Cat : Animal { }
+
+    class Dog : Animal
+    {
+        private string name;
+
+        public Dog(string name)
+        {
+            this.name = name;
+        }
+
+        public void Woof()
+        {
+            Console.WriteLine("Woof! My name is " + name + ".");
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> lst = new List<Animal> { new Dog("Rover"), new Cat(), new Dog("Basil") };
+
+        foreach (Animal a in lst)
+        {
+            Dog d = a as Dog;
+            if (d != null)
+                d.Woof();
+        }
+    }
+}
+```
+- Reference example (`MissedOfTypeOpportunityFix.cs`):
+```
+class MissedOfTypeOpportunityFix
+{
+    class Animal { }
+
+    class Cat : Animal { }
+
+    class Dog : Animal
+    {
+        private string name;
+
+        public Dog(string name)
+        {
+            this.name = name;
+        }
+
+        public void Woof()
+        {
+            Console.WriteLine("Woof! My name is " + name + ".");
+        }
+    }
+
+    public static void Main(string[] args)
+    {
+        List<Animal> lst = new List<Animal> { new Dog("Rover"), new Cat(), new Dog("Basil") };
+
+        foreach (Dog d in lst.OfType<Dog>())
+        {
+            d.Woof();
+        }
+    }
+}
+```

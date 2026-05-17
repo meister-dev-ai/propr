@@ -6,6 +6,8 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Diagnostics;
@@ -414,5 +416,121 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.Equal("Publish", returnedProtocol.RepeatedJudgment.RecommendedDisposition);
         Assert.True(returnedProtocol.RepeatedJudgment.UsedSameEvidenceSet);
         Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, returnedProtocol.RepeatedJudgment.ReasonCodes);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenProtocolContainsProRvEvents_ProjectsProRvVisibility()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 17, 1);
+        job.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.AgenticBaselineProfileId);
+
+        var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
+        fileResult.MarkCompleted("Per-file summary", []);
+        job.FileReviewResults.Add(fileResult);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            FileResultId = fileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewPipelineProfileApplied,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-4),
+                InputTextSample = "{\"filePath\":\"src/Foo.cs\",\"profileId\":\"agentic-baseline\",\"strategy\":\"AgenticFileByFile\"}",
+                OutputSummary =
+                    $"{{\"profileId\":\"agentic-baseline\",\"dispatchStageIds\":[\"{AgenticProRvPrefilterStage.StageIdConstant}\"],\"perFileStageIds\":[\"{AgenticConfidenceFloorStage.StageIdConstant}\"],\"finalizationStageIds\":[\"{ReviewPipelineProfileProvider.FinalizeStageFamilyId}\"]}}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ProRVPrefilterStarted,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-3),
+                InputTextSample =
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"details\":null}}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = ReviewProtocolEventNames.ProRVPrefilterAiCall,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+                InputTextSample =
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"status\":\"Success\",\"language\":\"csharp\",\"runtimeSource\":\"dedicated_runtime\"}}",
+                SystemPrompt =
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"modelId\":\"gpt-5.4-mini\",\"runtimeSource\":\"dedicated_runtime\"}}",
+                OutputSummary = "{\"ranked_checks\":[]}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ProRVPrefilterCompleted,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                InputTextSample =
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"details\":null}}",
+                OutputSummary =
+                    "{\"runtimeSource\":\"dedicated_runtime\",\"modelId\":\"gpt-5.4-mini\",\"proRvStatus\":\"Success\",\"guidanceCount\":1,\"language\":\"csharp\"}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = "{\"filePath\":\"src/Foo.cs\",\"promptKind\":\"agentic_file_planning\",\"applied\":true,\"guidanceCount\":1}",
+                OutputSummary = "{\"guidanceIds\":[\"js/incomplete-sanitization\"]}",
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+
+        var returnedProtocol = Assert.Single(result!.Protocols);
+        Assert.NotNull(returnedProtocol.ProRvPrefilter);
+        Assert.True(returnedProtocol.ProRvPrefilter!.Selected);
+        Assert.True(returnedProtocol.ProRvPrefilter.AiCallRecorded);
+        Assert.Equal("completed", returnedProtocol.ProRvPrefilter.ExecutionState);
+        Assert.Equal(AgenticProRvPrefilterStage.StageIdConstant, returnedProtocol.ProRvPrefilter.StageId);
+        Assert.Equal("dedicated_runtime", returnedProtocol.ProRvPrefilter.RuntimeSource);
+        Assert.Equal("gpt-5.4-mini", returnedProtocol.ProRvPrefilter.ModelId);
+        Assert.Equal("csharp", returnedProtocol.ProRvPrefilter.Language);
+        Assert.Equal("Success", returnedProtocol.ProRvPrefilter.PrefilterStatus);
+        Assert.Equal(1, returnedProtocol.ProRvPrefilter.GuidanceCount);
+        Assert.True(returnedProtocol.ProRvPrefilter.GuidanceApplied);
+        Assert.Equal("agentic_file_planning", returnedProtocol.ProRvPrefilter.AppliedPromptKind);
+        Assert.Contains("js/incomplete-sanitization", returnedProtocol.ProRvPrefilter.AppliedGuidanceIds);
     }
 }

@@ -245,6 +245,65 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildPerFileContextPrompt_WithFocusedReviewGuidance_IncludesGuidanceSection()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint(
+                "src/Foo.cs",
+                1,
+                2,
+                [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit), new ChangedFileSummary("src/Bar.cs", ChangeType.Edit)])
+            {
+                FocusedReviewGuidance =
+                [
+                    new FocusedReviewGuidanceItem(
+                        "cs/web/xss",
+                        "Cross-site scripting",
+                        "Writing user input directly to a response path.",
+                        "What to look for:\n- Writes user input to the response.",
+                        "Request input is written to the response.",
+                        96),
+                ],
+            },
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 2);
+
+        Assert.Contains("Focused Review Guidance", prompt, StringComparison.Ordinal);
+        Assert.Contains("cs/web/xss", prompt, StringComparison.Ordinal);
+        Assert.Contains("Request input is written to the response.", prompt, StringComparison.Ordinal);
+        Assert.Contains("What to look for:", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildAgenticFilePlanningSystemPrompt_WithFocusedReviewGuidance_IncludesGuidanceSection()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)])
+            {
+                FocusedReviewGuidance =
+                [
+                    new FocusedReviewGuidanceItem(
+                        "cs/xml-injection",
+                        "XML injection",
+                        "Unsafe XML construction from user input.",
+                        "What to look for:\n- Raw XML APIs with user input.",
+                        "The diff introduces XML-building code paths.",
+                        81),
+                ],
+            },
+        };
+
+        var prompt = ReviewPrompts.BuildAgenticFilePlanningSystemPrompt(context);
+
+        Assert.Contains("Focused Review Guidance", prompt, StringComparison.Ordinal);
+        Assert.Contains("cs/xml-injection", prompt, StringComparison.Ordinal);
+        Assert.Contains("The diff introduces XML-building code paths.", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPrWideSynthesisUserMessage_ContainsInvestigationCandidatesAndTaskIds()
     {
         var plan = new PrWideReviewPlan(

@@ -1,0 +1,27 @@
+Review focus: Incorrect parameter name in documentation
+
+What to look for:
+- The parameter name given in a `<param>` tag does not exist.
+- Documentation comments for public methods and constructors should use the``tag to describe the available parameters. If the comment includes any empty, incorrect or outdated parameter names then this will make the documentation more difficult to read.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`XmldocExtraParam.cs`):
+```
+/// <summary>
+///   Increments the value of the counter.
+/// </summary>
+///
+/// <param name="amount">The amount to increment.</param>
+/// <exception cref="System.OverflowException">If the counter would overflow.</exception>
+/// <returns>The new value of the counter.</returns>
+///
+/// <remarks>This method is threadsafe.</remarks>
+public int Increment(int incrementBy = 1)
+```

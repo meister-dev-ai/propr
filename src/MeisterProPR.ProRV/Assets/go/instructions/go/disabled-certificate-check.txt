@@ -1,0 +1,32 @@
+Review focus: Disabled TLS certificate check
+
+What to look for:
+- If an application disables TLS certificate checking, it may be vulnerable to man-in-the-middle attacks.
+- The field`InsecureSkipVerify`controls whether a TLS client verifies the server's certificate chain and host name. If set to`true`, the client will accept any certificate and any host name in that certificate, making it susceptible to man-in-the-middle attacks.
+- Keep the check only when the changed code appears to introduce, remove, bypass, or misuse the risky behavior itself.
+- Prefer explicit code evidence such as API calls, removed guards, changed data flow steps, changed arguments, or changed signatures over broad similarity.
+
+Relevance threshold:
+- Drop this check if the diff only changes naming, comments, formatting, or unrelated plumbing.
+- Do not keep this check solely because the file belongs to a broad category like security, configuration, or API usage.
+- This is direct-pattern focused. Keep it only when the diff shows the unsafe call, broken contract, or misuse pattern itself.
+
+Reference examples:
+- Reference example (`DisabledCertificateCheck.go`):
+```
+package main
+
+import (
+	"crypto/tls"
+	"net/http"
+)
+
+func doAuthReq(authReq *http.Request) *http.Response {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	res, _ := client.Do(authReq)
+	return res
+}
+```
