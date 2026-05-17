@@ -60,6 +60,14 @@ public interface IClientRegistry
     Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether ProRV should execute for the given client.
+    ///     Defaults to <see langword="true" /> if the client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetProRvEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.
     /// </summary>
     Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default);

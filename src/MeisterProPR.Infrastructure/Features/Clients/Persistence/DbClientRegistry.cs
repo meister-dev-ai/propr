@@ -124,6 +124,16 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetProRvEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.EnableProRV)
+                   .FirstOrDefaultAsync(ct)
+               ?? true;
+    }
+
+    /// <inheritdoc />
     public async Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

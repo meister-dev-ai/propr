@@ -1568,6 +1568,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("default_review_strategy");
 
+                    b.Property<bool>("EnableProRV")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("enable_prorv");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasColumnType("text")

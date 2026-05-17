@@ -170,6 +170,18 @@
                                         </p>
                                     </label>
                                 </div>
+                            </div>
+                            <div class="inline-field-row review-publication-row">
+                                <div class="form-field flex-1 review-publication-field">
+                                    <label class="checkbox-field" for="enableProRV">
+                                        <input id="enableProRV" v-model="editedEnableProRV" name="enableProRV"
+                                            type="checkbox" />
+                                        <strong>Run ProRV verification</strong>
+                                        <p class="muted review-publication-copy">
+                                            Disable this to skip ProRV during review generation for this client.
+                                        </p>
+                                    </label>
+                                </div>
                                 <button :disabled="!isAdvancedSettingsButtonEnabled()"
                                     class="btn-primary inline-save-btn scm-advanced-settings-save-btn"
                                     @click="saveAdvancedSettings">
@@ -448,6 +460,7 @@ interface Client {
     createdAt: string;
     defaultReviewStrategy?: ReviewStrategy;
     scmCommentPostingEnabled: boolean;
+    enableProRV: boolean;
 }
 
 const router = useRouter();
@@ -466,6 +479,7 @@ const showDeleteDialog = ref(false);
 const editedDisplayName = ref("");
 const editedDefaultReviewStrategy = ref<ReviewStrategy>("fileByFile");
 const editedScmCommentPostingEnabled = ref(true);
+const editedEnableProRV = ref(true);
 const canManageClient = computed(() => hasClientRole(clientId, 1));
 const canViewClient = computed(() => hasClientRole(clientId, 0));
 const availableTabs = computed<DetailTab[]>(() => {
@@ -565,6 +579,7 @@ onMounted(async () => {
         editedScmCommentPostingEnabled.value = Boolean(
             (data as Client).scmCommentPostingEnabled
         );
+        editedEnableProRV.value = Boolean((data as Client).enableProRV);
     } catch {
         notFound.value = true;
         router.push({ name: "clients" });
@@ -659,6 +674,7 @@ async function saveDisplayName() {
             client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
+        editedEnableProRV.value = client.value.enableProRV;
     } catch {
         saveError.value = "Failed to save.";
     } finally {
@@ -680,6 +696,7 @@ async function toggleStatus() {
             client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
+        editedEnableProRV.value = client.value.enableProRV;
     } catch {
         saveError.value = "Failed to update status.";
     } finally {
@@ -698,6 +715,7 @@ async function saveAdvancedSettings() {
             body: {
                 defaultReviewStrategy: editedDefaultReviewStrategy.value,
                 scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
+                enableProRV: editedEnableProRV.value,
             },
         });
         client.value = data as Client;
@@ -705,6 +723,7 @@ async function saveAdvancedSettings() {
             client.value.defaultReviewStrategy ?? "fileByFile";
         editedScmCommentPostingEnabled.value =
             client.value.scmCommentPostingEnabled;
+        editedEnableProRV.value = client.value.enableProRV;
     } catch {
         saveError.value = "Failed to save review publication setting.";
     } finally {
@@ -719,6 +738,7 @@ function isAdvancedSettingsButtonEnabled(): boolean {
         (
             editedScmCommentPostingEnabled.value !==
                 Boolean(client.value.scmCommentPostingEnabled) ||
+            editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
             editedDefaultReviewStrategy.value !==
                 (client.value.defaultReviewStrategy ?? "fileByFile")
         )

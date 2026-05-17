@@ -44,6 +44,7 @@ public interface IClientAdminService
     ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
     /// </param>
     /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
+    /// <param name="enableProRV">When non-null, sets whether ProRV executes for new reviews.</param>
     /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
@@ -53,6 +54,7 @@ public interface IClientAdminService
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
         bool? scmCommentPostingEnabled = null,
+        bool? enableProRV = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default);
 

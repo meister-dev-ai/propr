@@ -30,6 +30,7 @@ public sealed partial class ClientsController(
             client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
+            client.EnableProRV,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName);
@@ -274,6 +275,7 @@ public sealed partial class ClientsController(
             request.CommentResolutionBehavior,
             request.CustomSystemMessage,
             request.ScmCommentPostingEnabled,
+            request.EnableProRV,
             request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
@@ -290,6 +292,7 @@ public sealed record ClientResponse(
     ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
+    bool EnableProRV,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName);
@@ -336,4 +339,5 @@ public sealed record PatchClientRequest(
     CommentResolutionBehavior? CommentResolutionBehavior = null,
     string? CustomSystemMessage = null,
     bool? ScmCommentPostingEnabled = null,
+    bool? EnableProRV = null,
     ReviewStrategy? DefaultReviewStrategy = null);

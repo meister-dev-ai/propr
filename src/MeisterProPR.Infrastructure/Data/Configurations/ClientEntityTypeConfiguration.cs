@@ -53,6 +53,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("scm_comment_posting_enabled")
             .HasDefaultValue(true);
 
+        builder.Property(c => c.EnableProRV)
+            .HasColumnName("enable_prorv")
+            .HasDefaultValue(true);
+
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

@@ -331,6 +331,26 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.True(result);
     }
 
+    [Fact]
+    public async Task GetProRvEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.EnableProRV = false;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetProRvEnabledAsync(client.Id, CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetProRvEnabledAsync_UnknownClient_DefaultsToTrue()
+    {
+        var result = await this._registry.GetProRvEnabledAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result);
+    }
+
     private async Task<ClientRecord> SeedClientAsync()
     {
         var record = new ClientRecord

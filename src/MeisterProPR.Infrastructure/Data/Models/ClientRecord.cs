@@ -32,6 +32,12 @@ public sealed class ClientRecord
     /// </summary>
     public bool ScmCommentPostingEnabled { get; set; } = true;
 
+    /// <summary>
+    ///     Controls whether ProRV executes during review generation for this client.
+    ///     Defaults to <see langword="true" /> so existing clients keep current verification behavior.
+    /// </summary>
+    public bool EnableProRV { get; set; } = true;
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

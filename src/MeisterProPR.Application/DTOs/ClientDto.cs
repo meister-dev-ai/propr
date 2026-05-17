@@ -18,6 +18,7 @@ public sealed record ClientDto(
     ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
+    bool EnableProRV,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null);

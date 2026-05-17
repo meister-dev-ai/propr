@@ -44,6 +44,8 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<string?>(null));
         clientRegistry.GetScmCommentPostingEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
+        clientRegistry.GetProRvEnabledAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         instructionFetcher
             .FetchAsync(
@@ -2900,6 +2902,59 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
                 Arg.Is<ReviewSystemContext>(ctx => ctx.ClientSystemMessage == expectedMessage),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ProRvSetting_ReachesAiReviewCore()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
+                logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetProRvEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(result);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.Received(1)
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(ctx => !ctx.EnableProRV),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
     }

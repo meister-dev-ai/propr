@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const pushMock = vi.fn()
 const replaceMock = vi.fn()
 const getClientMock = vi.fn()
+const patchClientMock = vi.fn()
 const hasClientRoleMock = vi.fn(() => false)
 const getCapabilityMock = vi.fn((key: string) => {
   if (key === 'procursor') {
@@ -32,7 +33,7 @@ vi.mock('vue-router', async () => {
 vi.mock('@/services/api', () => ({
   createAdminClient: () => ({
     GET: getClientMock,
-    PATCH: vi.fn(),
+    PATCH: patchClientMock,
     DELETE: vi.fn(),
   }),
 }))
@@ -90,8 +91,20 @@ describe('ClientDetailView', () => {
         isActive: true,
         createdAt: '2026-04-25T10:00:00Z',
         scmCommentPostingEnabled: true,
+        enableProRV: true,
       },
       response: { status: 200 },
+    })
+    patchClientMock.mockResolvedValue({
+      data: {
+        id: 'client-1',
+        displayName: 'Acme Review Team',
+        isActive: true,
+        createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
+        enableProRV: false,
+        defaultReviewStrategy: 'fileByFile',
+      },
     })
   })
 
@@ -119,13 +132,14 @@ describe('ClientDetailView', () => {
     expect(wrapper.text()).toContain('Prompt Overrides')
   })
 
-  it('shows the SCM comment posting setting only for client administrators', async () => {
+  it('shows advanced settings toggles only for client administrators', async () => {
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
 
     const adminWrapper = await mountView()
     await flushPromises()
 
     expect(adminWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(true)
+    expect(adminWrapper.find('input[name="enableProRV"]').exists()).toBe(true)
 
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole === 0)
 
@@ -133,5 +147,26 @@ describe('ClientDetailView', () => {
     await flushPromises()
 
     expect(userWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(false)
+    expect(userWrapper.find('input[name="enableProRV"]').exists()).toBe(false)
+  })
+
+  it('sends enableProRV when saving advanced settings', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('input[name="enableProRV"]').setValue(false)
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        defaultReviewStrategy: 'fileByFile',
+        scmCommentPostingEnabled: true,
+        enableProRV: false,
+      },
+    })
   })
 })

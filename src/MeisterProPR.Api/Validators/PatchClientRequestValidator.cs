@@ -20,5 +20,9 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         this.RuleFor(r => r.ScmCommentPostingEnabled)
             .Must(_ => true)
             .When(r => r.ScmCommentPostingEnabled.HasValue);
+
+        this.RuleFor(r => r.EnableProRV)
+            .Must(_ => true)
+            .When(r => r.EnableProRV.HasValue);
     }
 }

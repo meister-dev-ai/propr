@@ -177,4 +177,14 @@ public sealed class ClientsValidatorTests
 
         Assert.True(result.IsValid);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PatchClient_EnableProRvBoolean_Passes(bool value)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(EnableProRV: value));
+
+        Assert.True(result.IsValid);
+    }
 }

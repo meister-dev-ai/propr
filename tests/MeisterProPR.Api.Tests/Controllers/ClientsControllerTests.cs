@@ -516,6 +516,72 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.False(body.RootElement.GetProperty("scmCommentPostingEnabled").GetBoolean());
     }
 
+    [Fact]
+    public async Task PatchClient_EnableProRv_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "prorv-test", "ProRV Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "ProRV Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            EnableProRV = true,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { enableProRV = false });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.False(updated.EnableProRV);
+    }
+
+    [Fact]
+    public async Task PatchClient_OmittedEnableProRv_LeavesExistingValueUnchanged()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "prorv-omit", "ProRV Omit Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "ProRV Omit",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            EnableProRV = false,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Renamed ProRV Client" });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
+    }
+
     private static TenantRecord CreateTenantRecord(Guid tenantId, string slug, string displayName)
     {
         return new TenantRecord

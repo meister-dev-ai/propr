@@ -14392,6 +14392,9 @@
           "scmCommentPostingEnabled": {
             "type": "boolean"
           },
+          "enableProRV": {
+            "type": "boolean"
+          },
           "tenantId": {
             "type": "string",
             "format": "uuid",
@@ -15813,6 +15816,10 @@
             "nullable": true
           },
           "scmCommentPostingEnabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enableProRV": {
             "type": "boolean",
             "nullable": true
           },

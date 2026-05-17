@@ -74,6 +74,7 @@ public sealed class ClientAdminService(
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
         bool? scmCommentPostingEnabled = null,
+        bool? enableProRV = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
@@ -120,6 +121,11 @@ public sealed class ClientAdminService(
         if (scmCommentPostingEnabled.HasValue)
         {
             client.ScmCommentPostingEnabled = scmCommentPostingEnabled.Value;
+        }
+
+        if (enableProRV.HasValue)
+        {
+            client.EnableProRV = enableProRV.Value;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -273,6 +279,7 @@ public sealed class ClientAdminService(
             client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
+            client.EnableProRV,
             tenantId,
             tenantSlug,
             tenantDisplayName);

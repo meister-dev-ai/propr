@@ -525,6 +525,7 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
+        var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
 
         var reviewTools = reviewContextToolsFactory.Create(
             new ReviewContextToolsRequest(
@@ -572,6 +573,7 @@ public sealed partial class ReviewOrchestrationService(
         {
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
+            EnableProRV = enableProRv,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,
