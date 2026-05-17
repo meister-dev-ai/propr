@@ -118,6 +118,7 @@ public sealed class ReviewWorkflowRunner(
                 ExclusionRules = exclusionRules,
                 ModelId = request.Configuration?.ModelSelection.ModelId ?? request.ModelId,
                 Temperature = request.Configuration?.Temperature,
+                EnableProRV = request.Configuration?.EnableProRV ?? true,
             };
 
             var result = await reviewStrategyDispatcher.ReviewAsync(

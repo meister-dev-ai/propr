@@ -218,6 +218,7 @@ internal sealed partial class AgenticFileReviewer(
             PromptOverrides = baseContext.PromptOverrides,
             ModelId = tierModelId ?? baseContext.ModelId,
             Temperature = baseContext.Temperature,
+            EnableProRV = baseContext.EnableProRV,
             TierChatClient = tierClient ?? effectiveClient,
         };
 
@@ -259,6 +260,7 @@ internal sealed partial class AgenticFileReviewer(
             DefaultReviewChatClient = fileContext.DefaultReviewChatClient,
             DefaultReviewModelId = fileContext.DefaultReviewModelId,
             Temperature = fileContext.Temperature,
+            EnableProRV = fileContext.EnableProRV,
             PerFileHint = hint is null ? null : hint with { AgenticPlan = plan, AgenticInvestigations = investigations },
         };
     }
@@ -1056,7 +1058,7 @@ internal sealed partial class AgenticFileReviewer(
         string promptKind,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue)
+        if (!protocolId.HasValue || !fileContext.EnableProRV)
         {
             return;
         }

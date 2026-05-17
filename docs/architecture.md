@@ -9,7 +9,7 @@ instead of as a single long page.
 | Document | Focus |
 |----------|-------|
 | [docs/architecture/licensing-and-feature-flags.md](architecture/licensing-and-feature-flags.md) | Installation edition persistence, premium capability resolution, feature-management integration, and onboarding steps for new licensed features |
-| [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, per-file filtering, verification, synthesis, deterministic final finding gate, job lifecycle, and token optimization |
+| [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, ProRV-focused per-file guidance, filtering, verification, synthesis, deterministic final finding gate, job lifecycle, and token optimization |
 | [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) | Provider connection onboarding, mixed-provider webhook activation, Azure DevOps crawl compatibility, and operational audit |
 | [docs/architecture/security-and-access.md](architecture/security-and-access.md) | Login, PATs, request auth evaluation, and Azure credential resolution |
 | [docs/architecture/procursor.md](architecture/procursor.md) | ProCursor runtime boundary, verification-time evidence retrieval, refresh flow, and token reporting |
@@ -23,9 +23,10 @@ background workers perform review and crawl execution, PostgreSQL stores durable
 OpenAI or AI Foundry provides model execution. Azure DevOps provides guided discovery, crawl
 materialization, and ProCursor source validation. GitHub, GitLab, and Forgejo-family hosts integrate
 through shared provider-neutral review, webhook, publication, and observability seams without
-forking lifecycle, mention, or audit logic. The reviewing flow includes structured verification
-before publication: local contradiction checks precede per-file persistence, PR-level evidence
-retrieval and bounded AI micro-verification precede the deterministic final gate, summary
+forking lifecycle, mention, or audit logic. The reviewing flow includes an optional ProRV prefilter
+that ranks file-specific review guidance before the main file review, followed by structured
+verification before publication: local contradiction checks precede per-file persistence, PR-level
+evidence retrieval and bounded AI micro-verification precede the deterministic final gate, summary
 reconciliation aligns the final summary with surviving outcomes, and a client-owned publication
 policy can suppress outbound SCM comments without skipping internal review result persistence or
 diagnostics.

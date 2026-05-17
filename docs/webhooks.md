@@ -1,22 +1,22 @@
 # Webhooks — User Guide
 
-This page explains how to configure and verify Azure DevOps webhooks for ProPR from a user/administrator perspective.
+This page explains how to configure and verify SCM webhooks for ProPR from a user or administrator perspective.
 
 Overview
 
 
-Webhooks let ProPR receive pull-request events from Azure DevOps (PR created/updated/commented) so the service can queue AI review jobs automatically. A webhook consists of two parts:
+Webhooks let ProPR receive pull-request or merge-request events from supported SCM providers so the service can queue AI review jobs automatically. A webhook consists of two parts:
 
 - A **webhook configuration** in ProPR (Admin UI) which defines the organization/project/repository scope, enabled events, and exposes a one-time secret and listener URL.
-- A **service hook** in Azure DevOps that calls the ProPR listener URL when events occur.
+- A **provider-side webhook or service hook** that calls the ProPR listener URL when events occur.
 
 Quick checklist (what must be true)
 
 
 - ProPR instance is reachable by Azure DevOps (public URL / NAT / firewall); HTTPS is recommended.
 - You have Admin access to ProPR's Admin UI to create webhook configurations.
-- You can create a service hook in the target Azure DevOps project.
-- You have (or can obtain) appropriate ADO credentials for any downstream ADO API operations ProPR will perform (these are configured per-client in the Admin UI).
+- You can create the matching webhook or service hook in the target provider.
+- You have an active provider connection in ProPR for the target host and scope.
 - Database and background workers for ProPR are running (reviews are queued and processed asynchronously).
 
 Create the webhook configuration (ProPR Admin UI)
@@ -33,7 +33,7 @@ Create the webhook configuration (ProPR Admin UI)
 
 If ProPR runs behind a reverse proxy and the generated `listenerUrl` points at an internal backend host, set `MEISTER_PUBLIC_BASE_URL` on the API to the public proxy base URL so newly generated listener URLs use the externally reachable host.
 
-Register the service hook in Azure DevOps
+Register the provider-side webhook
 
 1. In Azure DevOps, open the target project and go to **Project settings → Service hooks**.
 2. Create a new subscription and choose **Web Hooks**.
@@ -41,6 +41,10 @@ Register the service hook in Azure DevOps
 4. For the endpoint URL use the `listenerUrl` from ProPR (the `/webhooks/v1/providers/ado/{pathKey}` URL).
 5. Under security choose **Basic** authentication. Any username is fine; paste the ProPR **generated secret** as the password.
 6. Test the subscription (Azure DevOps provides a test option) and save.
+
+GitHub, GitLab, and Forgejo-family providers use the same ProPR-side configuration flow, but the
+provider-specific registration steps and secret transport differ by host. ProPR always exposes the
+same public listener shape: `/webhooks/v1/providers/{provider}/{pathKey}`.
 
 Testing locally (synthetic events)
 
@@ -167,4 +171,5 @@ If you need help
 - Capture a delivery entry from **Admin → Webhook Configurations → Deliveries** and include the `failureReason` and `actionSummaries` when asking for assistance.
 - For auth issues capture the service hook test response in Azure DevOps and verify the timestamped delivery in the ProPR UI.
 
-This guide is intended for administrators setting up Azure DevOps webhooks for ProPR. For API-level automation examples (curl, scripts for automation), see the developer-oriented `docs/api.md`.
+This guide is intended for administrators setting up provider webhooks for ProPR. For API-level
+automation examples, see `docs/api.md`.

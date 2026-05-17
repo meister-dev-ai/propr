@@ -151,7 +151,7 @@ Define:
 - whether it requires Commercial
 
 If the feature just needs the standard persisted override behavior, this step does not require a new
-database migration.
+schema change.
 
 ### 3. Enforce it at the owning behavior
 
@@ -207,7 +207,7 @@ For each new licensed feature, add focused coverage for:
 
 ## Practical Notes
 
-- A new capability key usually does not need a migration because overrides are stored generically by
+- A new capability key usually does not need a schema change because overrides are stored generically by
   key.
 - The edition and capability snapshot is intended to be the shared language between backend and UI.
 - `GET /api/auth/options` is a generic pre-login bootstrap endpoint, not an SSO-only endpoint. New

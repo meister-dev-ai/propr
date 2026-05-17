@@ -9,9 +9,9 @@ through the Admin UI. For low-level API automation and scripted examples, use `d
 | Requirement                                       | Version             |
 |---------------------------------------------------|---------------------|
 | [.NET SDK](https://dotnet.microsoft.com/download) | 10.0.103 or later   |
-| Azure subscription                                | n/a                 |
+| Azure subscription for Azure-hosted AI            | optional            |
 | Azure OpenAI **or** Azure AI Foundry resource     | n/a                 |
-| Azure DevOps organisation                         | n/a                 |
+| At least one supported SCM provider account       | n/a                 |
 | PostgreSQL 17 (or Docker)                         | 17.x                |
 | Docker (optional, for container runs)             | any recent version  |
 
@@ -56,16 +56,20 @@ Use this order when setting up a new client.
    - Add any additional operator users from the Admin UI.
 
 2. Create a client.
-   - Each client owns its own AI connections, ADO scopes, sources, and crawl configuration.
+   - Each client owns its own SCM provider connections, scopes, reviewer-trigger identity, AI connections, ProCursor sources, and crawl or webhook configuration.
 
-3. Configure Azure DevOps credentials.
-   - Add a per-client service principal if the client should not use the global backend identity.
+3. Add one or more provider connections.
+   - Configure Azure DevOps, GitHub, GitLab, or Forgejo access from the Providers UI.
+   - For Azure DevOps, add a provider connection that uses `oauthClientCredentials`.
+   - For GitHub, choose either PAT or GitHub App installation authentication.
 
-4. Configure the reviewer identity.
-   - Resolve the Azure DevOps identity that should own reviews and save it on the client.
+4. Add provider scopes.
+   - Provider scopes define which organizations or host-level areas the client is allowed to use.
+   - For Azure DevOps, add the organization scopes that guided discovery and automation may use.
 
-5. Register Azure DevOps organization scopes.
-   - Add the organizations this client is allowed to access.
+5. Configure the reviewer identity when needed.
+   - Reviewer identity is an optional trigger/filter for automatic PR selection.
+   - Provider writes still use the authenticated provider connection identity.
 
 6. Configure ProCursor sources.
    - Use guided discovery to pick repositories or wikis, then create sources from the selected scope.
@@ -76,6 +80,7 @@ Use this order when setting up a new client.
 
 8. Configure AI connections.
    - Add the client's AI endpoint and activate the model it should use.
+   - Add an optional `proRvPrefilter` purpose binding when you want ProRV to use a dedicated model instead of falling back to the main review runtime.
 
 Webhook configurations expose the same optional review temperature field. Use it when webhook-triggered reviews should run with a different temperature than crawl-triggered reviews for the same client.
 
@@ -107,12 +112,18 @@ That script:
 2. Starts `MeisterProPR.Api` with `PROCURSOR_REMOTE_MODE=proprManagedRemote` and `PROCURSOR_SERVICE_BASE_URL` pointing at the local ProCursor host.
 3. Starts `MeisterProPR.ProCursor.Service` with `PROCURSOR_PROPR_BASE_URL` pointing back at the local API host.
 4. Sets `PROCURSOR_DB_CONNECTION_STRING` for the ProCursor host only, defaulting it to the same value as `DB_CONNECTION_STRING` unless you override it explicitly.
-5. Reuses one local `MEISTER_DATA_PROTECTION_KEYS_PATH` directory for both services by default so previously protected local secrets remain readable across the split runtime. Set `RUN_LOCAL_KEYS_DIR` if you intentionally want an isolated key ring; a shared key ring is not required by the architecture.
+5. Reuses one local `MEISTER_DATA_PROTECTION_KEYS_PATH` directory for both services by default so protected local secrets stay readable across the split runtime. Set `RUN_LOCAL_KEYS_DIR` if you intentionally want an isolated key ring; a shared key ring is not required by the architecture.
 6. Waits for `http://localhost:8080/healthz` and `http://localhost:8081/healthz` before starting the admin UI.
 
 If you intentionally deploy ProPR without ProCursor, set `PROCURSOR_REMOTE_MODE=disabled` and leave the
 other ProCursor remote settings unset. In that mode ProPR omits ProCursor review tools instead of
 surfacing a broken dependency, and `/healthz` does not include the `procursor-remote` dependency check.
+
+## Review runtime notes
+
+- ProPR supports provider-neutral review execution across Azure DevOps, GitHub, GitLab, and Forgejo-family hosts.
+- Azure DevOps remains the guided-discovery provider for projects, branches, crawl filters, and ProCursor source selection.
+- ProRV is an optional review-knowledge prefilter that runs before file review when its AI purpose is configured. Without a dedicated `proRvPrefilter` binding, ProPR falls back to the active file-review runtime.
 
 For release-based deployments, keep the three runtime image tags aligned:
 

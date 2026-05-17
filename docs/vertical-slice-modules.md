@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the durable ownership map for the backend modular-monolith migration. It defines the module catalog, what each module owns, and which seams remain shared support rather than business modules.
+This document is the durable ownership map for the backend modular monolith. It defines the module catalog, what each module owns, and which seams remain shared support rather than business modules.
 
 ## Module Catalog
 
@@ -40,7 +40,7 @@ These concerns remain shared support because they provide technical capabilities
 
 ## Review Checklist Alignment
 
-Use the wave-review checklist in `specs/034-vertical-slice-migration/checklists/wave-review.md` to confirm that each new slice follows this ownership map before a legacy seam is removed.
+Use this ownership map when introducing or moving backend features so each slice keeps a clear module boundary and shared support does not absorb feature-owned workflows.
 
 ## Reviewing Boundary Notes
 

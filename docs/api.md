@@ -1,18 +1,18 @@
 # API Reference - ProPR Backend
 
-This page contains technical API examples for automating administrative tasks that are
-also available from the Admin UI. Use the Admin UI for interactive configuration; use the
-endpoints below for automation and scripting.
+This page contains technical API examples for automating administrative tasks that are also
+available from the Admin UI. Use the Admin UI for interactive configuration; use the endpoints
+below for automation and scripting.
 
-> NOTE: This file intentionally contains low-level `curl` examples. For UI-guided steps,
-> use the Admin UI (https://localhost:5443/) after first login.
+> NOTE: This file intentionally contains low-level `curl` examples. For UI-guided steps, use the
+> Admin UI (`https://localhost:5443/`) after first login.
 >
 > The `curl -k` examples below are for local development against the self-signed
 > `https://localhost:5443` endpoint only.
 
 ## Admin Authentication
 
-Exchange admin credentials for a JWT (used by subsequent admin calls):
+Exchange admin credentials for a JWT:
 
 ```bash
 curl -k -X POST https://localhost:5443/api/auth/login \
@@ -21,8 +21,8 @@ curl -k -X POST https://localhost:5443/api/auth/login \
 ```
 
 Response contains `accessToken` and `refreshToken`. Use `Authorization: Bearer <token>` on
-subsequent admin requests. To refresh the access token, call `POST /api/auth/refresh` with
-the refresh token.
+subsequent admin requests. To refresh the access token, call `POST /api/auth/refresh` with the
+refresh token.
 
 ## Client Management
 
@@ -32,60 +32,144 @@ Create a client:
 curl -k -X POST https://localhost:5443/api/clients \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
-  -d '{"displayName": "My First Client"}'
+  -d '{"displayName": "My First Client", "tenantId": "<tenant-id>", "defaultReviewStrategy": "fileByFile"}'
 ```
 
-Set per-client Azure DevOps credentials (service principal):
+List provider connections for a client:
 
 ```bash
-# <client-id> is the UUID returned when creating the client
-curl -k -X PUT https://localhost:5443/api/clients/<client-id>/ado-credentials \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{
-    "tenantId": "<azure-tenant-id>",
-    "clientId": "<service-principal-appId>",
-    "secret":   "<service-principal-secret>"
-  }'
-```
-
-Remove per-client credentials (revert to global identity):
-
-```bash
-curl -k -X DELETE https://localhost:5443/api/clients/<client-id>/ado-credentials \
+curl -k https://localhost:5443/api/clients/<client-id>/provider-connections \
   -H "Authorization: Bearer <accessToken>"
 ```
 
-Resolve and store a reviewer identity (VSS identity GUID):
+Create an Azure DevOps provider connection:
 
 ```bash
-curl -k "https://localhost:5443/api/identities/resolve?clientId=<client-id>&orgUrl=https://dev.azure.com/my-org&displayName=My%20Service%20Principal" \
-  -H "Authorization: Bearer <accessToken>"
-
-# Store the chosen identity on the client
-curl -k -X PUT https://localhost:5443/api/clients/<client-id>/reviewer-identity \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <accessToken>" \
-  -d '{"reviewerId": "<resolved-vss-identity-guid>"}'
-```
-
-Register an allowed Azure DevOps organization for the client:
-
-```bash
-curl -k -X POST https://localhost:5443/api/clients/<client-id>/ado-organization-scopes \
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
   -d '{
-    "organizationUrl": "https://dev.azure.com/my-org",
-    "displayName": "My Org"
+    "providerFamily": "azureDevOps",
+    "hostBaseUrl": "https://dev.azure.com",
+    "authenticationKind": "oauthClientCredentials",
+    "oAuthTenantId": "<tenant-id>",
+    "oAuthClientId": "<application-client-id>",
+    "displayName": "Contoso Azure DevOps",
+    "secret": "<client-secret-value>",
+    "isActive": true
   }'
 ```
 
-The returned scope `id` is used by discovery, guided source creation, and crawl configuration.
+Create a GitHub provider connection:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "providerFamily": "github",
+    "hostBaseUrl": "https://github.com",
+    "authenticationKind": "personalAccessToken",
+    "displayName": "GitHub Cloud",
+    "secret": "<github-pat>",
+    "isActive": true
+  }'
+```
+
+Patch one provider connection:
+
+```bash
+curl -k -X PATCH https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id> \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "displayName": "Primary GitHub",
+    "isActive": true
+  }'
+```
+
+Create a provider scope on a connection:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/scopes \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "scopeType": "organization",
+    "externalScopeId": "my-org",
+    "scopePath": "https://dev.azure.com/my-org",
+    "displayName": "My Org",
+    "isEnabled": true
+  }'
+```
+
+Verify a provider connection:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/verify \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Resolve and store a reviewer identity for a provider connection:
+
+```bash
+curl -k "https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/reviewer-identities/resolve?search=My%20Service%20Principal" \
+  -H "Authorization: Bearer <accessToken>"
+
+curl -k -X PUT https://localhost:5443/api/clients/<client-id>/provider-connections/<connection-id>/reviewer-identity \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "externalUserId": "<resolved-provider-user-id>",
+    "login": "my-service-principal",
+    "displayName": "My Service Principal",
+    "isBot": true
+  }'
+```
+
+## AI Connection Profiles
+
+Create an AI connection profile:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/ai-connections \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "displayName": "Foundry Primary",
+    "providerKind": "azureOpenAi",
+    "baseUrl": "https://my-foundry.services.ai.azure.com/models",
+    "auth": {
+      "mode": "apiKey",
+      "apiKey": "<api-key>"
+    },
+    "discoveryMode": "manualOnly",
+    "configuredModels": [
+      {
+        "remoteModelId": "gpt-5.4-mini",
+        "displayName": "gpt-5.4-mini",
+        "capabilities": ["chat"]
+      }
+    ],
+    "purposeBindings": [
+      {
+        "purpose": "reviewDefault",
+        "remoteModelId": "gpt-5.4-mini"
+      },
+      {
+        "purpose": "proRvPrefilter",
+        "remoteModelId": "gpt-5.4-mini"
+      }
+    ]
+  }'
+```
+
+The optional `proRvPrefilter` binding gives ProRV a dedicated runtime. If it is absent, the review
+pipeline falls back to the main file-review runtime.
 
 ## Guided Discovery Endpoints
 
-These endpoints are used by the Admin UI to populate cascading dropdowns.
+These endpoints are used by the Admin UI to populate Azure DevOps guided discovery flows.
 
 ```bash
 # List projects
@@ -103,7 +187,7 @@ curl -k "https://localhost:5443/api/admin/clients/<client-id>/ado/discovery/bran
 
 ## ProCursor Source Management
 
-Create a guided ProCursor source (repository example):
+Create a guided ProCursor source:
 
 ```bash
 curl -k -X POST https://localhost:5443/api/admin/clients/<client-id>/procursor/sources \
@@ -169,19 +253,19 @@ When `selectedSources` is used the chosen source IDs are snapshotted onto queued
 
 ## Webhook Configurations
 
-Webhook configurations are managed per client and can coexist with crawl configurations for the
-same repositories. The create response returns the listener URL and a one-time secret that must be
-copied into the Azure DevOps service-hook registration.
+Webhook configurations are managed per client and can coexist with crawl configurations for the same
+repositories. The create response returns the listener URL and a one-time secret that must be copied
+into the provider-side webhook registration.
 
 For a user-focused walkthrough and configuration checklist, see [docs/webhooks.md](webhooks.md).
 
 ```bash
 # List webhook configurations visible to the caller
-curl -k https://localhost:5443/admin/webhook-configurations \
+curl -k https://localhost:5443/api/admin/webhook-configurations \
   -H "Authorization: Bearer <accessToken>"
 
 # Create a webhook configuration
-curl -k -X POST https://localhost:5443/admin/webhook-configurations \
+curl -k -X POST https://localhost:5443/api/admin/webhook-configurations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
   -d '{
@@ -197,6 +281,7 @@ curl -k -X POST https://localhost:5443/admin/webhook-configurations \
     ],
     "repoFilters": [
       {
+        "repositoryName": "platform-docs",
         "displayName": "platform-docs",
         "canonicalSourceRef": {
           "provider": "azureDevOps",
@@ -212,14 +297,14 @@ Webhook configurations also accept optional `reviewTemperature` values between `
 
 Expected create response highlights:
 
-- `listenerUrl`: public HTTPS path under `/webhooks/v1/providers/ado/{pathKey}`
+- `listenerUrl`: public HTTPS path under `/webhooks/v1/providers/{provider}/{pathKey}`
 - `generatedSecret`: returned once at creation time
 - `repoFilters`: server-owned persisted repository and branch scope
 
 Inspect recent delivery history for one webhook configuration:
 
 ```bash
-curl -k "https://localhost:5443/admin/webhook-configurations/<config-id>/deliveries?take=20" \
+curl -k "https://localhost:5443/api/admin/webhook-configurations/<config-id>/deliveries?take=20" \
   -H "Authorization: Bearer <accessToken>"
 ```
 
@@ -234,7 +319,7 @@ status, and the downstream actions that were invoked. Outcomes are:
 Update or delete an existing webhook configuration:
 
 ```bash
-curl -k -X PATCH https://localhost:5443/admin/webhook-configurations/<config-id> \
+curl -k -X PATCH https://localhost:5443/api/admin/webhook-configurations/<config-id> \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <accessToken>" \
   -d '{
@@ -244,13 +329,13 @@ curl -k -X PATCH https://localhost:5443/admin/webhook-configurations/<config-id>
     "repoFilters": []
   }'
 
-curl -k -X DELETE https://localhost:5443/admin/webhook-configurations/<config-id> \
+curl -k -X DELETE https://localhost:5443/api/admin/webhook-configurations/<config-id> \
   -H "Authorization: Bearer <accessToken>"
 ```
 
 ## Public Webhook Receiver
 
-Azure DevOps Web Hooks should target the one-time `listenerUrl` returned by webhook configuration
+Azure DevOps webhooks should target the one-time `listenerUrl` returned by webhook configuration
 creation and use Basic auth with the generated secret as the password.
 
 ```bash
@@ -301,5 +386,6 @@ In Development mode, Swagger UI is available at `https://localhost:5443/swagger`
 
 ## More
 
-For additional endpoints (prompt overrides, dismissal search, token reporting, and ProCursor token usage),
-search the source code or consult the API OpenAPI specification in `openapi.json` at the repo root.
+For additional endpoints such as prompt overrides, dismissal search, token reporting, ProCursor token
+usage, tenant administration, and review diagnostics, consult the OpenAPI specification in
+`openapi.json` at the repo root.

@@ -52,7 +52,8 @@ public sealed class ReviewWorkflowRunnerTests
         var configuration = new EvaluationConfiguration(
             "baseline",
             new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"));
+            new EvaluationOutputOptions("artifacts/run.json", "full"),
+            EnableProRV: false);
         var request = new ReviewWorkflowRequest(job, Substitute.For<IChatClient>(), "gpt-4o", fixture, configuration);
         var pullRequest = CreatePullRequest();
         var reviewTools = Substitute.For<IReviewContextTools>();
@@ -117,7 +118,8 @@ public sealed class ReviewWorkflowRunnerTests
             pullRequest,
             Arg.Is<ReviewSystemContext>(context =>
                 context.ModelId == "gpt-4o"
-                && context.Temperature == null),
+                && context.Temperature == null
+                && !context.EnableProRV),
             Arg.Any<CancellationToken>(),
             request.ChatClient);
     }

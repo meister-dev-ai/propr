@@ -1,14 +1,15 @@
 # ProRV
 
-ProRV is the bounded review-knowledge library for ProReview.
+ProRV is the bounded review-knowledge library used by ProPR review execution.
 
 It stores embedded derivative assets plus modular prompt and ranking components for:
 
 - fast per-file check applicability screening
 - focused refinement of selected checks
+- focused review guidance generation for file-based review strategies
 
-The current generated asset set originates from CodeQL knowledge, but the runtime approach is fully
-ProRV-specific.
+The generated asset set is derived from CodeQL knowledge, but the runtime approach, prompt design,
+and integration model are ProRV-specific.
 
 ## Project Structure
 

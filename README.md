@@ -47,6 +47,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 ### Review Optimizations
 
 - **Token-optimized reviews** — diff-only input (full file available on demand via tool call), cache-friendly parallel message structure, system prompt pruned from step 2+ of review loops, tool result excerpts capped at 1 000 chars in deep loops
+- **ProRV-focused review guidance** — an optional per-file ProRV prefilter ranks relevant review checks from the changed diff and feeds focused guidance into baseline and agentic file review before verification and publication
 - **Per-automation temperature control** - crawl configurations and webhook configurations can override the review temperature with a value between `0.0` and `2.0`
 - **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
 - **Verification-backed publication control** — structured claim extraction, local contradiction checks, PR-level evidence attempt recording, bounded AI micro-verification, and deterministic final gating reduce false positives without replacing the existing staged review flow; support hints and fetched files do not publish broad findings without explicit supported claim outcomes
@@ -71,7 +72,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **File exclusion rules** — generated files (EF Core migrations etc.) are skipped automatically; per-repo custom patterns via `.meister-propr/exclude` on the target branch using gitignore-style globs; excluded files are recorded in the audit trail with zero token cost
 - **Review history** - all reviews, protocols, comments, calls to AI, tools and more are store and can be checked from the management interface
 - **Filter decision diagnostics** — job protocol inspection shows per-file comment-relevance events, discarded-comment reasons, degraded fallback markers, implementation identity, and any hybrid evaluator token cost without reading raw logs
-- **Verification diagnostics** — job protocol inspection also shows claim extraction, local verification, evidence-source attempts, ProCursor result status, degraded verification states, final-gate decisions, and summary reconciliation for each review run
+- **Verification diagnostics** — job protocol inspection also shows ProRV prefilter execution, focused-guidance application, claim extraction, local verification, evidence-source attempts, ProCursor result status, degraded verification states, final-gate decisions, and summary reconciliation for each review run
 - **Strategy and file-outcome diagnostics** — review history and job protocol views expose the resolved review strategy, strategy-selection source, and per-file terminal outcomes, including degraded `Agentic File-by-File` investigations
 - **Follow-up and repeated-judgment diagnostics** — job protocol views expose trigger family, follow-up completion/dependency, and repeated-judgment agreement or disagreement details so rollout reviews can distinguish diagnostics from actionable output
 - **Token usage dashboard** — per-client AI token consumption tracked by model and date
@@ -145,11 +146,10 @@ deployment convenience for the example topology, not a corrected-architecture re
 ProCursor may use independent key-ring stores as long as each service can still decrypt the secrets it
 owns.
 
-If you are upgrading from the retired client System Azure DevOps setup, recreate each Azure DevOps
-integration through the Providers tab before re-enabling crawl or webhook automation: add the
-provider connection, add the organization scope, and confirm the reviewer identity on that
-connection. The reviewer identity is only an optional trigger/filter for automatic PR processing.
-Posting still uses the authenticated provider connection identity.
+Azure DevOps integrations are configured through provider connections: add the provider connection,
+add the organization scope, and confirm the reviewer identity on that connection before enabling
+crawl or webhook automation. The reviewer identity is only an optional trigger/filter for automatic
+PR processing. Posting uses the authenticated provider connection identity.
 
 For source-based development without Docker, `./scripts/run-local.sh` now generates one per-run shared
 ProCursor key, starts `MeisterProPR.Api`, waits for its health endpoint, starts

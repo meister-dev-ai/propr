@@ -125,4 +125,9 @@ public sealed class ReviewSystemContext
     ///     The effective review temperature to pass into chat calls for this job-scoped execution context.
     /// </summary>
     public float? Temperature { get; set; }
+
+    /// <summary>
+    ///     Controls whether ProRV-focused review guidance should run for this execution context.
+    /// </summary>
+    public bool EnableProRV { get; set; } = true;
 }

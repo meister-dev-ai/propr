@@ -44,7 +44,8 @@ public sealed record EvaluationConfigurationMetadata(
     string ConfigurationId,
     string ModelId,
     string DetailMode,
-    ReviewStrategy Strategy);
+    ReviewStrategy Strategy,
+    bool EnableProRV);
 
 /// <summary>
 ///     Structured verification outcome for comparing generated review output against fixture expectations.

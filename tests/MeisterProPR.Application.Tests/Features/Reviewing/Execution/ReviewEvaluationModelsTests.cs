@@ -28,7 +28,8 @@ public sealed class ReviewEvaluationModelsTests
         var configuration = new EvaluationConfiguration(
             "baseline",
             new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"));
+            new EvaluationOutputOptions("artifacts/run.json", "full"),
+            EnableProRV: false);
 
         var request = new ReviewWorkflowRequest(job, chatClient, "gpt-4o", fixture, configuration);
 
@@ -37,6 +38,7 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("gpt-4o", request.ModelId);
         Assert.Same(fixture, request.Fixture);
         Assert.Same(configuration, request.Configuration);
+        Assert.False(request.Configuration.EnableProRV);
     }
 
     [Fact]
@@ -63,7 +65,7 @@ public sealed class ReviewEvaluationModelsTests
                 "completed",
                 "resolved"),
             new EvaluationFixtureMetadata("fixture-sample", "1.0", "synthetic"),
-            new EvaluationConfigurationMetadata("baseline", "gpt-4o", "full", ReviewStrategy.PrWideAgentic),
+            new EvaluationConfigurationMetadata("baseline", "gpt-4o", "full", ReviewStrategy.PrWideAgentic, true),
             new ReviewResult(
                 "Sample summary",
                 [
@@ -110,6 +112,7 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("fixture-sample", artifact.Fixture.FixtureId);
         Assert.Equal("baseline", artifact.Configuration.ConfigurationId);
         Assert.Equal(ReviewStrategy.PrWideAgentic, artifact.Configuration.Strategy);
+        Assert.True(artifact.Configuration.EnableProRV);
         Assert.Single(artifact.FinalResult.Comments);
         Assert.Single(artifact.Stages);
         Assert.Equal(20, artifact.TokenUsage.TotalInputTokens);

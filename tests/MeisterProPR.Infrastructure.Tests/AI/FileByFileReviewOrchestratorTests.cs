@@ -1054,6 +1054,56 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_WithProRvDisabledInContext_DoesNotInvokeProRvPrefilter()
+    {
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/service.py", ChangeType.Edit, "content", "+ return render(title)"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            defaultChatClient,
+            proRvPrefilter: proRvPrefilter);
+
+        var context = CreateContext();
+        context.EnableProRV = false;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await proRvPrefilter.DidNotReceive()
+            .RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(reviewContext =>
+                    !reviewContext.EnableProRV &&
+                    reviewContext.PerFileHint != null &&
+                    reviewContext.PerFileHint.FocusedReviewGuidance.Count == 0),
+                Arg.Any<CancellationToken>());
+    }
+
     // ─── T049: synthesis JSON cross_cutting_concerns ──────────────────────────────
 
     [Fact]

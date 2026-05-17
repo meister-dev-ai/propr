@@ -5,7 +5,7 @@ configuration, ProCursor persistence, the core review and access model, and tena
 
 ## Guided Configuration Slice
 
-The guided configuration slice persists organization-scoped state, canonical crawl filters,
+The guided configuration slice persists provider-scoped configuration, canonical crawl filters,
 optional selected-source associations, and review-job source snapshots beneath the client boundary.
 
 ```mermaid
@@ -144,7 +144,7 @@ Verification metadata is stored in review-domain records and protocol payloads:
 erDiagram
     Client {
         uuid Id PK
-        string Key "legacy plaintext (deprecated)"
+        string Key "inactive plaintext compatibility field"
         string KeyHash "BCrypt hash of active key"
         string PreviousKeyHash "BCrypt hash (7-day grace period after rotation)"
         datetime KeyExpiresAt

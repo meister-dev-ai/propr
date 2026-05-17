@@ -1530,6 +1530,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             ModelId = source.ModelId,
             DefaultReviewChatClient = source.DefaultReviewChatClient,
             DefaultReviewModelId = source.DefaultReviewModelId,
+            Temperature = source.Temperature,
+            EnableProRV = source.EnableProRV,
         };
     }
 

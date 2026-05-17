@@ -211,6 +211,8 @@ internal sealed partial class FileReviewer(
             ExclusionRules = baseContext.ExclusionRules,
             DismissedPatterns = baseContext.DismissedPatterns,
             ModelId = tierModelId ?? baseContext.ModelId,
+            Temperature = baseContext.Temperature,
+            EnableProRV = baseContext.EnableProRV,
             // Tier-specific client wins; fall back to per-client active connection so the
             // global default chatClient is never used when a per-client connection is configured.
             TierChatClient = tierClient ?? effectiveClient,
@@ -345,7 +347,7 @@ internal sealed partial class FileReviewer(
         string promptKind,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue)
+        if (!protocolId.HasValue || !fileContext.EnableProRV)
         {
             return;
         }

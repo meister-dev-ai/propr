@@ -13,7 +13,8 @@ public sealed record EvaluationConfiguration(
     IReadOnlyList<ProtectedValueReference>? ProtectedValueReferences = null,
     IReadOnlyDictionary<string, string>? RunMetadata = null,
     EvaluationAiConnection? AiConnection = null,
-    float? Temperature = null)
+    float? Temperature = null,
+    bool EnableProRV = true)
 {
     /// <summary>Protected values that must be resolved before execution begins.</summary>
     public IReadOnlyList<ProtectedValueReference> ProtectedValueReferencesOrEmpty => this.ProtectedValueReferences ?? [];

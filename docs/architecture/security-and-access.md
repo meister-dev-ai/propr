@@ -1,8 +1,8 @@
 # Security And Access
 
 This page describes how callers authenticate into the admin and review surfaces, how provider
-secrets are protected at rest, and how the backend resolves Azure credentials for Azure DevOps
-compatibility operations.
+secrets are protected at rest, and how provider and Azure credentials are resolved for downstream
+SCM operations.
 
 ## Admin Authentication Flow
 
@@ -77,13 +77,13 @@ First-time external sign-in never auto-links to an existing local account by ema
 
 ## Protected Provider Secrets
 
-Provider connection secrets, webhook secrets, and per-client Azure DevOps credentials are stored
-through the shared `ISecretProtectionCodec` path backed by ASP.NET Core Data Protection. Provider
-operational audit records and webhook delivery history store normalized status, failure category,
-summary data, and readiness explanations without persisting raw secrets or authorization headers.
-Reviewer-trigger identity is configuration-only state stored separately from connection secrets;
-creating, updating, or clearing it does not rotate connection credentials or change the authenticated
-identity used for provider publication.
+Provider connection secrets, webhook secrets, and any client-owned Azure credential material are
+stored through the shared `ISecretProtectionCodec` path backed by ASP.NET Core Data Protection.
+Provider operational audit records and webhook delivery history store normalized status, failure
+category, summary data, and readiness explanations without persisting raw secrets or authorization
+headers. Reviewer-trigger identity is configuration-only state stored separately from connection
+secrets; creating, updating, or clearing it does not rotate connection credentials or change the
+authenticated identity used for provider publication.
 
 ## Request Auth Evaluation Order
 
@@ -112,11 +112,11 @@ multiple clients.
 
 Tenant-specific controller actions must likewise validate the caller against the requested tenant. Tenant administrators can manage only their own tenant's memberships, local-login policy, and external providers. Platform administrators remain separate from tenant-local policy and keep the recovery path at `/auth/login`, even if a tenant disables local login or misconfigures all tenant-user external providers.
 
-## Azure DevOps Credential Resolution
+## Downstream Credential Resolution
 
-For Azure DevOps calls, the backend resolves the effective Azure credential per client. A client
-may either use its own stored service principal or fall back to the shared
-`DefaultAzureCredential` chain.
+Provider-backed SCM calls resolve credentials from the saved provider connection for the target host
+and provider family. Azure DevOps also supports Azure credential resolution for compatibility paths
+that still require Azure identity material.
 
 ```mermaid
 flowchart TD
@@ -134,10 +134,11 @@ flowchart TD
     CACHE_G --> ADO
 ```
 
-Per-client ADO credentials are stored in PostgreSQL and protected at rest. If a client has no
-dedicated credential, the backend uses the deployment-wide Azure identity configured for the host.
-GitHub, GitLab, and Forgejo-family calls use the connection-scoped secret stored on the provider
-connection record instead of Azure identity resolution. For GitHub App-backed connections, the
-stored secret is the private key PEM; installation access tokens are minted just in time, reused
-only through a bounded in-memory cache, and never persisted back to the database. Reviewer-trigger
-identity never substitutes for these authenticated connection paths.
+Azure DevOps provider connections use `oauthClientCredentials` and store the required tenant,
+client, and secret material on the connection itself. Compatibility flows that still use Azure
+identity can fall back to deployment-wide `DefaultAzureCredential` when no client-specific Azure
+credential is present. GitHub, GitLab, and Forgejo-family calls use the connection-scoped secret
+stored on the provider connection record instead of Azure identity resolution. For GitHub App-backed
+connections, the stored secret is the private key PEM; installation access tokens are minted just in
+time, reused only through a bounded in-memory cache, and never persisted back to the database.
+Reviewer-trigger identity never substitutes for these authenticated connection paths.

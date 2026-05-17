@@ -337,6 +337,90 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_WithProRvDisabledInContext_DoesNotInvokeProRvPrefilter()
+    {
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+        protocolRecorder.SetCompletedAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordAiCallAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var repository = Substitute.For<IJobRepository>();
+        var storedResults = new List<ReviewFileResult>();
+        var job = CreateJob();
+        repository.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repository.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repository.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("file summary", []));
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, CreateNoInvestigationPlan("src/Web/Program.cs"))),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "fallback summary")));
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+
+        var sut = new AgenticFileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            repository,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, ModelId = "test-model" }),
+            Substitute.For<ILogger<AgenticFileByFileReviewOrchestrator>>(),
+            proRvPrefilter: proRvPrefilter);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            EnableProRV = false,
+        };
+
+        await sut.ReviewAsync(job, CreatePr(), context, CancellationToken.None, chatClient);
+
+        await proRvPrefilter.DidNotReceive()
+            .RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.Received()
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(reviewContext =>
+                    !reviewContext.EnableProRV &&
+                    reviewContext.PerFileHint != null &&
+                    reviewContext.PerFileHint.FocusedReviewGuidance.Count == 0),
+                Arg.Any<CancellationToken>());
+    }
+
     private static string CreateNoInvestigationPlan(string filePath)
     {
         return $$"""

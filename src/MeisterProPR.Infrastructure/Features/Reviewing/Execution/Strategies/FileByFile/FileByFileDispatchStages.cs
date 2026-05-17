@@ -25,7 +25,8 @@ internal sealed class FileByFileProRvPrefilterStage(
     public async Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
     {
         if (context.ReviewResult is not null ||
-            context.FileReviewContext.PerFileHint is null)
+            context.FileReviewContext.PerFileHint is null ||
+            !context.FileReviewContext.EnableProRV)
         {
             return context;
         }

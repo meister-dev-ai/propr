@@ -1,8 +1,8 @@
 # Reviewing Workflows
 
 This page covers the runtime path from provider-neutral review submission to posted provider-native
-comments, plus the filtering, verification, synthesis, final-gate, dedup, and token-control
-mechanics that keep the review loop safe and efficient.
+comments, plus ProRV-focused guidance, filtering, verification, synthesis, final-gate, dedup, and
+token-control mechanics that keep the review loop safe and efficient.
 
 ## Review Strategies
 
@@ -96,11 +96,35 @@ The filter uses the review protocol transport instead of introducing a separate 
 `ai_call_comment_relevance_evaluator` are stored on `ReviewJobProtocol` so the Job Protocol UI can
 explain why a comment was discarded or retained.
 
+## ProRV Focused Guidance
+
+The Reviewing module can run a ProRV prefilter stage before each file review. ProRV is a bounded
+review-knowledge library that ranks the most relevant review checks for one changed file from the
+file path, diff, and optional language hints. The ranked items become focused guidance for the
+downstream file review rather than standalone findings.
+
+1. `ProRVFocusedReviewGuidanceResolver.TryResolveAsync(...)` runs before the main file prompt for
+   both `FileByFile` and `AgenticFileByFile`.
+2. The stage is skipped when ProRV is not configured, the file is binary, the file was deleted, or
+   the diff is empty.
+3. Runtime selection prefers a dedicated `proRvPrefilter` AI purpose binding. If that binding is not
+   available, the stage falls back to the file review runtime instead of failing the whole review.
+4. `IProRVPrefilter` resolves a supported language from file extension or technology hints, loads
+   the embedded ProRV knowledge catalog for that language, and asks the configured chat runtime to
+   rank the most relevant checks.
+5. The result is bounded to a small set of ranked guidance items and recorded as protocol events.
+   The review continues when ProRV returns no items or an unusable response.
+6. `FileReviewer` and `AgenticFileReviewer` inject the ranked guidance into the file-scoped prompts
+   and emit `prorv_focused_guidance_applied` when guidance influenced the review context.
+7. ProRV narrows reviewer attention early, but verification, synthesis, deduplication, and the final
+   finding gate stay authoritative for publication decisions.
+
 ## Synthesis And Final Finding Gate
 
 ```mermaid
 flowchart TD
-    CTX["Build review context"] --> FILE["Parallel per-file review"]
+    CTX["Build review context"] --> PRORV["Optional ProRV prefilter"]
+    PRORV --> FILE["Parallel per-file review"]
     FILE --> HARD["Hard guards"]
     HARD --> REL["Comment relevance filter"]
     REL --> MEM["Thread memory reconsideration"]
@@ -116,49 +140,54 @@ flowchart TD
 ```
 
 1. `ReviewOrchestrationService.BuildReviewContextAsync(...)` creates `ReviewSystemContext` with
-    repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
-    runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
-2. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
-    `get_changed_files`, `get_file_tree`, `get_file_content`, `ask_procursor_knowledge`, and
-    `get_procursor_symbol_info` while investigating a finding.
-3. When the job strategy is `AgenticFileByFile`, `FileReviewer` first runs a file-scoped planning
-   step (`agentic_file_planning`) and then executes bounded investigation tasks before emitting the
-   same per-file result shape used by the baseline pipeline. Protocol events record
-   `review_strategy_selected`, `agentic_file_plan_created`, `agentic_file_investigation_launched`,
-   `agentic_file_investigation_result`, `agentic_file_evidence_collected`, and
-   `agentic_file_degraded` when investigation falls back.
-4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
-    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
-    thread-memory reconsideration before extracting structured claims and running local verification.
-    Deterministic contradiction checks use curated invariant facts, while evidence-needing local
-    generic claims are withheld conservatively until a bounded verifier can support them.
-5. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
-    Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
-    stored comment set, and the per-file summary is rewritten from the surviving verified findings so
-    synthesis input does not repeat unsupported local assertions.
-6. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
-    runtime, and asks the model for both a PR narrative summary and structured synthesized
-    cross-cutting findings.
-7. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
-    `supportingFindingIds`, `supportingFiles`, `evidenceResolutionState`, and `evidenceSource`.
-    These fields are retrieval hints only; fetched files or support metadata do not prove a claim.
-8. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
-    instances. PR-level findings then route through targeted verification work items, evidence
-    retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
-    Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
-    states in the evidence bundle.
-9. Eligible unresolved deeper-follow-up findings may enter one repeated-judgment pass. That pass
+   repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
+   runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
+2. Before the main file prompt, ProRV can rank a small set of focused review guidance items from the
+   changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
+   runtime as a fallback.
+3. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
+   `get_changed_files`, `get_file_tree`, `get_file_content`, `ask_procursor_knowledge`, and
+   `get_procursor_symbol_info` while investigating a finding.
+4. When the job strategy is `AgenticFileByFile`, `FileReviewer` first runs a file-scoped planning
+    step (`agentic_file_planning`) and then executes bounded investigation tasks before emitting the
+    same per-file result shape used by the baseline pipeline. Protocol events record
+    `review_strategy_selected`, `agentic_file_plan_created`, `agentic_file_investigation_launched`,
+    `agentic_file_investigation_result`, `agentic_file_evidence_collected`, and
+    `agentic_file_degraded` when investigation falls back.
+5. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
+   `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
+   thread-memory reconsideration before extracting structured claims and running local verification.
+   Deterministic contradiction checks use curated invariant facts, while evidence-needing local
+   generic claims are withheld conservatively until a bounded verifier can support them.
+6. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
+   Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
+   stored comment set, and the per-file summary is rewritten from the surviving verified findings so
+   synthesis input does not repeat unsupported local assertions.
+7. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
+   runtime, and asks the model for both a PR narrative summary and structured synthesized
+   cross-cutting findings.
+8. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
+   `supportingFindingIds`, `supportingFiles`, `evidenceResolutionState`, and `evidenceSource`.
+   These fields are retrieval hints only; fetched files or support metadata do not prove a claim.
+9. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
+   instances. PR-level findings then route through targeted verification work items, evidence
+   retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
+   Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
+   states in the evidence bundle.
+10. Eligible unresolved deeper-follow-up findings may enter one repeated-judgment pass. That pass
     reuses the same bounded evidence set and claim identity from the prior PR-level verification path;
     it does not widen search, re-run Stage B planning, or fetch broader repository context.
-10. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
-     and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
-11. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
-     surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
-12. The protocol records machine-readable verification and final-gate events, including
-      `verification_claims_extracted`, `verification_local_decision`,
-      `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
-      `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
-      `review_finding_gate_decision`.
+11. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
+    and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
+12. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
+    surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
+13. The protocol records machine-readable ProRV, verification, and final-gate events, including
+    `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
+    `prorv_prefilter_failed`, `prorv_focused_guidance_applied`,
+    `verification_claims_extracted`, `verification_local_decision`,
+    `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
+    `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
+    `review_finding_gate_decision`.
 
 For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The baseline and experimental profiles differ by ordered stage composition rather than by introducing a new top-level orchestrator.
 
