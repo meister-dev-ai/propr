@@ -574,6 +574,7 @@ public sealed partial class ReviewOrchestrationService(
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
             EnableProRV = enableProRv,
+            AugmentationMode = enableProRv ? ReviewAugmentationMode.LateAugmentation : ReviewAugmentationMode.Disabled,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,

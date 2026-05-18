@@ -2954,7 +2954,60 @@ public class ReviewOrchestrationServiceTests
             .ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
-                Arg.Is<ReviewSystemContext>(ctx => !ctx.EnableProRV),
+                Arg.Is<ReviewSystemContext>(ctx => !ctx.EnableProRV && ctx.AugmentationMode == ReviewAugmentationMode.Disabled),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ProRvEnabled_UsesLateAugmentationMode()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
+                logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        clientRegistry.GetProRvEnabledAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(result);
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.Received(1)
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(ctx => ctx.EnableProRV && ctx.AugmentationMode == ReviewAugmentationMode.LateAugmentation),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
     }
