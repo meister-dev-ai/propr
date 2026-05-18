@@ -3,6 +3,19 @@
 
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 
+public enum ReviewPassKind
+{
+    Baseline,
+    ProRVAugmentation,
+}
+
+public enum FindingProvenanceKind
+{
+    BaselineOnly,
+    ProRVOnly,
+    Both,
+}
+
 /// <summary>
 ///     Stable origin metadata for a final candidate finding.
 /// </summary>
@@ -47,7 +60,9 @@ public sealed record CandidateFindingProvenance
         int? sourceCommentOrdinal = null,
         string? evidenceSetId = null,
         bool requiresExplicitSupport = false,
-        string? sourceOriginId = null)
+        string? sourceOriginId = null,
+        ReviewPassKind reviewPassKind = ReviewPassKind.Baseline,
+        FindingProvenanceKind findingProvenanceKind = FindingProvenanceKind.BaselineOnly)
     {
         if (string.IsNullOrWhiteSpace(originKind))
         {
@@ -67,6 +82,8 @@ public sealed record CandidateFindingProvenance
         this.EvidenceSetId = string.IsNullOrWhiteSpace(evidenceSetId) ? null : evidenceSetId;
         this.RequiresExplicitSupport = requiresExplicitSupport;
         this.SourceOriginId = string.IsNullOrWhiteSpace(sourceOriginId) ? null : sourceOriginId;
+        this.ReviewPassKind = reviewPassKind;
+        this.FindingProvenanceKind = findingProvenanceKind;
     }
 
     /// <summary>
@@ -108,4 +125,14 @@ public sealed record CandidateFindingProvenance
     ///     Gets the stable origin identifier for deeper follow-up or repeated-judgment findings when available.
     /// </summary>
     public string? SourceOriginId { get; }
+
+    /// <summary>
+    ///     Gets the review pass that produced the current candidate instance.
+    /// </summary>
+    public ReviewPassKind ReviewPassKind { get; }
+
+    /// <summary>
+    ///     Gets the merged provenance classification for the current candidate instance.
+    /// </summary>
+    public FindingProvenanceKind FindingProvenanceKind { get; }
 }

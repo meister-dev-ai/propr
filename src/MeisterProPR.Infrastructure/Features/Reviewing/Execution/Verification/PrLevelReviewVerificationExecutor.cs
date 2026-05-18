@@ -54,10 +54,12 @@ internal sealed class PrLevelReviewVerificationExecutor(
 
         foreach (var finding in synthesizedFindings)
         {
+            var effectiveFinding = ElevateProRvOnlyFinding(finding);
+
             IReadOnlyList<ClaimDescriptor> claims;
             try
             {
-                claims = reviewClaimExtractor.ExtractClaims(finding);
+                claims = reviewClaimExtractor.ExtractClaims(effectiveFinding);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -65,7 +67,7 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     protocolId,
                     new
                     {
-                        findingId = finding.FindingId,
+                        findingId = effectiveFinding.FindingId,
                         stage = ClaimDescriptor.PrLevelStage,
                         degradedComponent = "claim_extraction",
                     },
@@ -73,7 +75,7 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     ex.Message,
                     ct);
 
-                verified.Add(CreateClaimExtractionDegradedFinding(finding, ex.Message));
+                verified.Add(CreateClaimExtractionDegradedFinding(effectiveFinding, ex.Message));
                 continue;
             }
 
@@ -86,11 +88,11 @@ internal sealed class PrLevelReviewVerificationExecutor(
             var claim = claims[0];
             var initialWorkItem = new VerificationWorkItem(
                 claim,
-                finding.Provenance,
+                effectiveFinding.Provenance,
                 claim.Stage,
                 VerificationWorkItem.CrossFileScope,
                 true,
-                finding.Evidence);
+                effectiveFinding.Evidence);
 
             EvidenceBundle evidence;
             try
@@ -103,7 +105,7 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     protocolId,
                     new
                     {
-                        findingId = finding.FindingId,
+                        findingId = effectiveFinding.FindingId,
                         claimId = claim.ClaimId,
                         stage = ClaimDescriptor.PrLevelStage,
                         degradedComponent = "evidence_collection",
@@ -112,23 +114,23 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     ex.Message,
                     ct);
 
-                verified.Add(CreateEvidenceCollectionDegradedFinding(finding, claim, ex.Message));
+                verified.Add(CreateEvidenceCollectionDegradedFinding(effectiveFinding, claim, ex.Message));
                 continue;
             }
 
-            await this.RecordEvidenceCollectedAsync(protocolId, finding, claim, evidence, ct);
+            await this.RecordEvidenceCollectedAsync(protocolId, effectiveFinding, claim, evidence, ct);
 
-            var updatedEvidence = BuildUpdatedEvidence(finding, evidence);
+            var updatedEvidence = BuildUpdatedEvidence(effectiveFinding, evidence);
             var evidenceBackedWorkItem = new VerificationWorkItem(
                 claim,
-                finding.Provenance,
+                effectiveFinding.Provenance,
                 claim.Stage,
                 VerificationWorkItem.CrossFileScope,
                 true,
                 updatedEvidence);
 
             var outcome = await this.VerifyClaimAsync(
-                finding,
+                effectiveFinding,
                 claim,
                 evidence,
                 updatedEvidence,
@@ -143,20 +145,55 @@ internal sealed class PrLevelReviewVerificationExecutor(
 
             verified.Add(
                 new CandidateReviewFinding(
-                    finding.FindingId,
-                    finding.Provenance,
-                    finding.Severity,
-                    finding.Message,
-                    finding.Category,
-                    finding.FilePath,
-                    finding.LineNumber,
+                    effectiveFinding.FindingId,
+                    effectiveFinding.Provenance,
+                    effectiveFinding.Severity,
+                    effectiveFinding.Message,
+                    effectiveFinding.Category,
+                    effectiveFinding.FilePath,
+                    effectiveFinding.LineNumber,
                     evidenceBackedWorkItem.ExistingEvidence,
-                    finding.CandidateSummaryText,
-                    finding.InvariantCheckContext,
+                    effectiveFinding.CandidateSummaryText,
+                    effectiveFinding.InvariantCheckContext,
                     outcome));
         }
 
         return verified;
+    }
+
+    private static CandidateReviewFinding ElevateProRvOnlyFinding(CandidateReviewFinding finding)
+    {
+        if (finding.Provenance.FindingProvenanceKind != FindingProvenanceKind.ProRVOnly ||
+            finding.Provenance.RequiresExplicitSupport)
+        {
+            return finding;
+        }
+
+        return new CandidateReviewFinding(
+            finding.FindingId,
+            new CandidateFindingProvenance(
+                finding.Provenance.OriginKind,
+                finding.Provenance.GeneratedByStage,
+                finding.Provenance.SourceFilePath,
+                finding.Provenance.SourceFileResultId,
+                finding.Provenance.SourceCommentOrdinal,
+                finding.Provenance.EvidenceSetId,
+                true,
+                finding.Provenance.SourceOriginId,
+                finding.Provenance.ReviewPassKind,
+                finding.Provenance.FindingProvenanceKind),
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber,
+            finding.Evidence,
+            finding.CandidateSummaryText,
+            finding.InvariantCheckContext,
+            finding.VerificationOutcome)
+        {
+            MergedFinding = finding.MergedFinding,
+        };
     }
 
     public async Task<RepeatedJudgmentOutcome?> RunRepeatedJudgmentAsync(

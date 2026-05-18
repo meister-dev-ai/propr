@@ -19,10 +19,12 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
 {
     public List<CandidateReviewFinding> Build(
         IReadOnlyList<ReviewFileResult> freshResults,
-        IReadOnlyList<ReviewComment>? commentsOverride = null)
+        IReadOnlyList<ReviewComment>? commentsOverride = null,
+        ReviewPassKind passKind = ReviewPassKind.Baseline)
     {
         var originalFindings = new List<CandidateReviewFinding>();
         var findingsBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
+        var provenanceKind = GetProvenanceKind(passKind);
 
         foreach (var fileResult in freshResults.Where(result => result.IsComplete && result.Comments is not null))
         {
@@ -39,7 +41,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                         "per_file_review",
                         fileResult.FilePath,
                         fileResult.Id,
-                        index + 1),
+                        index + 1,
+                        reviewPassKind: passKind,
+                        findingProvenanceKind: provenanceKind),
                     comment.Severity,
                     comment.Message,
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
@@ -75,10 +79,70 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 continue;
             }
 
-            finalFindings.Add(this.CreateDerivedCandidateFinding(comment, derivedOrdinal++));
+            finalFindings.Add(this.CreateDerivedCandidateFinding(comment, derivedOrdinal++, passKind));
         }
 
         return finalFindings;
+    }
+
+    public static IReadOnlyList<CandidateReviewFinding> MergeFindings(
+        IReadOnlyList<CandidateReviewFinding> baselineFindings,
+        IReadOnlyList<CandidateReviewFinding> augmentationFindings)
+    {
+        if (augmentationFindings.Count == 0)
+        {
+            return baselineFindings
+                .Select(finding => finding.WithMergedProvenance(
+                    FindingProvenanceKind.BaselineOnly,
+                    [ReviewPassKind.Baseline],
+                    "baseline_only",
+                    CreateFindingIdentityKey(finding)))
+                .ToList();
+        }
+
+        var augmentationByIdentity = augmentationFindings
+            .GroupBy(CreateFindingIdentityKey, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => new Queue<CandidateReviewFinding>(group), StringComparer.Ordinal);
+        var merged = new List<CandidateReviewFinding>(baselineFindings.Count + augmentationFindings.Count);
+
+        foreach (var baselineFinding in baselineFindings)
+        {
+            var identityKey = CreateFindingIdentityKey(baselineFinding);
+            if (augmentationByIdentity.TryGetValue(identityKey, out var matches) && matches.Count > 0)
+            {
+                matches.Dequeue();
+                merged.Add(
+                    baselineFinding.WithMergedProvenance(
+                        FindingProvenanceKind.Both,
+                        [ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation],
+                        "exact_identity_match",
+                        identityKey));
+                continue;
+            }
+
+            merged.Add(
+                baselineFinding.WithMergedProvenance(
+                    FindingProvenanceKind.BaselineOnly,
+                    [ReviewPassKind.Baseline],
+                    "baseline_only",
+                    identityKey));
+        }
+
+        foreach (var remaining in augmentationByIdentity)
+        {
+            while (remaining.Value.Count > 0)
+            {
+                var augmentationFinding = remaining.Value.Dequeue();
+                merged.Add(
+                    augmentationFinding.WithMergedProvenance(
+                        FindingProvenanceKind.ProRVOnly,
+                        [ReviewPassKind.ProRVAugmentation],
+                        "augmentation_only",
+                        remaining.Key));
+            }
+        }
+
+        return merged;
     }
 
     public static IReadOnlyList<CandidateReviewFinding> AssignSynthesisFindingIds(IReadOnlyList<CandidateReviewFinding> synthesizedFindings)
@@ -117,8 +181,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             $"{comment.FilePath}|{FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)}|{comment.Severity}|{comment.Message}");
     }
 
-    private CandidateReviewFinding CreateDerivedCandidateFinding(ReviewComment comment, int ordinal)
+    private CandidateReviewFinding CreateDerivedCandidateFinding(ReviewComment comment, int ordinal, ReviewPassKind passKind)
     {
+        var provenanceKind = GetProvenanceKind(passKind);
         if (TryBuildDerivedCrossFileEvidence(comment, out var evidence))
         {
             var findingId = $"finding-dedup-{ordinal:D3}";
@@ -126,7 +191,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 findingId,
                 new CandidateFindingProvenance(
                     CandidateFindingProvenance.PerFileCommentOrigin,
-                    "finding_deduplication"),
+                    "finding_deduplication",
+                    reviewPassKind: passKind,
+                    findingProvenanceKind: provenanceKind),
                 comment.Severity,
                 comment.Message,
                 CandidateReviewFinding.CrossCuttingCategory,
@@ -144,7 +211,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             new CandidateFindingProvenance(
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 comment.FilePath is null ? "post_processing" : "quality_filter",
-                comment.FilePath),
+                comment.FilePath,
+                reviewPassKind: passKind,
+                findingProvenanceKind: provenanceKind),
             comment.Severity,
             comment.Message,
             FileByFileReviewOrchestrator.DetermineCategory(comment),
@@ -178,7 +247,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             new CandidateFindingProvenance(
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 "routing_probe",
-                filePath),
+                filePath,
+                reviewPassKind: ReviewPassKind.Baseline,
+                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
             comment.Severity,
             comment.Message,
             category,
@@ -208,7 +279,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 "per_file_review",
                 fileResult.FilePath,
                 fileResult.Id,
-                ordinal),
+                ordinal,
+                reviewPassKind: ReviewPassKind.Baseline,
+                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
             comment.Severity,
             comment.Message,
             FileByFileReviewOrchestrator.DetermineCategory(comment),
@@ -217,6 +290,19 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
 
         var claims = reviewClaimExtractor.ExtractClaims(probeFinding);
         return claims.Count == 0 ? null : CandidateReviewFinding.CreateInvariantCheckContext(claims);
+    }
+
+    private static FindingProvenanceKind GetProvenanceKind(ReviewPassKind passKind)
+    {
+        return passKind == ReviewPassKind.ProRVAugmentation
+            ? FindingProvenanceKind.ProRVOnly
+            : FindingProvenanceKind.BaselineOnly;
+    }
+
+    private static string CreateFindingIdentityKey(CandidateReviewFinding finding)
+    {
+        return $"{finding.FilePath}|{FileByFileReviewOrchestrator.NormalizeLineNumber(finding.LineNumber)}|{finding.Severity}|{finding.Message.Trim()}"
+            .ToLowerInvariant();
     }
 
     private static bool TryBuildDerivedCrossFileEvidence(ReviewComment comment, out EvidenceReference? evidence)

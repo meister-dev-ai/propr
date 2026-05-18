@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -130,4 +131,14 @@ public sealed class ReviewSystemContext
     ///     Controls whether ProRV-focused review guidance should run for this execution context.
     /// </summary>
     public bool EnableProRV { get; set; } = true;
+
+    /// <summary>
+    ///     Controls whether review execution uses disabled, early-steering, or late-augmentation semantics.
+    /// </summary>
+    public ReviewAugmentationMode AugmentationMode { get; set; } = ReviewAugmentationMode.EarlySteering;
+
+    /// <summary>
+    ///     Identifies whether the current execution context is the baseline review pass or a ProRV augmentation pass.
+    /// </summary>
+    public ReviewPassKind PassKind { get; set; } = ReviewPassKind.Baseline;
 }

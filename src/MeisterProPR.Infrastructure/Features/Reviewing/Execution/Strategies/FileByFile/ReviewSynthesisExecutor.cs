@@ -49,6 +49,7 @@ internal sealed class ReviewSynthesisExecutor(
         PullRequest pr,
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
+        IReadOnlyList<CandidateReviewFinding>? augmentationCandidateFindings,
         CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
@@ -94,6 +95,10 @@ internal sealed class ReviewSynthesisExecutor(
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
         }
 
+        var baselineFindings = candidateFindingFactory.Build(freshResults, deduped);
+        var mergedPerFileFindings = CandidateFindingFactory.MergeFindings(baselineFindings, augmentationCandidateFindings ?? []);
+        await this.RecordLateSteeringMergeEventAsync(baseContext, baselineFindings, augmentationCandidateFindings ?? [], mergedPerFileFindings, ct);
+
         var gate = deterministicReviewFindingGate;
         if (gate is null)
         {
@@ -126,7 +131,7 @@ internal sealed class ReviewSynthesisExecutor(
                 defaultChatClient,
                 ct);
 
-        var candidateFindings = candidateFindingFactory.Build(freshResults, deduped)
+        var candidateFindings = mergedPerFileFindings
             .Concat(prLevelFindings)
             .ToList();
 
@@ -136,7 +141,9 @@ internal sealed class ReviewSynthesisExecutor(
                              ?? [];
         var gateDecisions = await gate.EvaluateAsync(candidateFindings, invariantFacts, ct);
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();
-        var reconciliation = reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions);
+        var reconciliation = GroundSummaryToFinalGateOutcomes(
+            reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
+            gateDecisions);
 
         if (protocolId.HasValue)
         {
@@ -212,6 +219,126 @@ internal sealed class ReviewSynthesisExecutor(
                               ?? options.ModelId;
 
         return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId);
+    }
+
+    private static SummaryReconciliationResult GroundSummaryToFinalGateOutcomes(
+        SummaryReconciliationResult reconciliation,
+        IReadOnlyList<FinalGateDecision> gateDecisions)
+    {
+        ArgumentNullException.ThrowIfNull(reconciliation);
+        ArgumentNullException.ThrowIfNull(gateDecisions);
+
+        var publishCount = gateDecisions.Count(decision =>
+            string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal));
+        var summaryOnlyItems = gateDecisions
+            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
+            .Select(decision => decision.SummaryText)
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var groundedSummary = BuildGroundedSummary(reconciliation.FinalSummary, publishCount, summaryOnlyItems);
+        if (string.Equals(reconciliation.FinalSummary, groundedSummary, StringComparison.Ordinal))
+        {
+            return reconciliation;
+        }
+
+        return new SummaryReconciliationResult(
+            reconciliation.OriginalSummary,
+            groundedSummary,
+            reconciliation.DroppedFindingIds,
+            reconciliation.SummaryOnlyFindingIds,
+            true,
+            "deterministic_summary_grounding");
+    }
+
+    private static string BuildGroundedSummary(string reconciledSummary, int publishCount, IReadOnlyList<string> summaryOnlyItems)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reconciledSummary);
+
+        if (publishCount == 0 && summaryOnlyItems.Count == 0)
+        {
+            return "No publishable or summary-only findings remained after verification.";
+        }
+
+        var lines = new List<string>();
+        var overview = ExtractGroundedOverview(reconciledSummary);
+        if (!string.IsNullOrWhiteSpace(overview))
+        {
+            lines.Add(overview);
+            lines.Add(string.Empty);
+        }
+
+        if (publishCount > 0)
+        {
+            lines.Add($"Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.");
+        }
+
+        if (summaryOnlyItems.Count > 0)
+        {
+            if (publishCount == 0)
+            {
+                lines.Add("No publishable findings remained after verification.");
+            }
+
+            lines.Add(string.Empty);
+            lines.Add("Summary-only findings:");
+            lines.AddRange(summaryOnlyItems.Select(item => $"- {item}"));
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            lines.Where((line, index) => index == 0 || !(string.IsNullOrEmpty(line) && string.IsNullOrEmpty(lines[index - 1]))));
+    }
+
+    private static string? ExtractGroundedOverview(string summary)
+    {
+        var trimmed = summary.Trim();
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        var summaryOnlyIndex = trimmed.IndexOf("Summary-only findings:", StringComparison.Ordinal);
+        if (summaryOnlyIndex >= 0)
+        {
+            trimmed = trimmed[..summaryOnlyIndex].TrimEnd();
+        }
+
+        if (!trimmed.StartsWith("This PR ", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string[] safeLeadVerbs =
+        [
+            "This PR makes ",
+            "This PR advances ",
+            "This PR moves ",
+            "This PR updates ",
+            "This PR introduces ",
+            "This PR adds ",
+            "This PR broadens ",
+            "This PR expands ",
+            "This PR improves ",
+            "This PR refactors ",
+            "This PR reorganizes ",
+            "This PR changes ",
+        ];
+
+        if (!safeLeadVerbs.Any(verb => trimmed.StartsWith(verb, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        var contrastIndex = trimmed.IndexOf(", but ", StringComparison.OrdinalIgnoreCase);
+        if (contrastIndex > 0)
+        {
+            return trimmed[..contrastIndex].TrimEnd().TrimEnd('.', ';', ',') + ".";
+        }
+
+        return null;
     }
 
     private async Task<Guid?> BeginSynthesisProtocolAsync(
@@ -429,6 +556,43 @@ internal sealed class ReviewSynthesisExecutor(
                 null,
                 ct);
         }
+    }
+
+    private async Task RecordLateSteeringMergeEventAsync(
+        ReviewSystemContext baseContext,
+        IReadOnlyList<CandidateReviewFinding> baselineFindings,
+        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
+        IReadOnlyList<CandidateReviewFinding> mergedPerFileFindings,
+        CancellationToken ct)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
+            !baseContext.ActiveProtocolId.HasValue ||
+            baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.LateSteeringMergeCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    baselineCandidateCount = baselineFindings.Count,
+                    proRvCandidateCount = augmentationFindings.Count,
+                    mergedCandidateCount = mergedPerFileFindings.Count,
+                },
+                FinalGateJsonOptions),
+            JsonSerializer.Serialize(
+                new
+                {
+                    baselineOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.BaselineOnly),
+                    proRvOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly),
+                    bothCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.Both),
+                },
+                FinalGateJsonOptions),
+            null,
+            ct);
     }
 
     private static IReadOnlyList<ReviewComment> MaterializePublishedComments(

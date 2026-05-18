@@ -28,16 +28,17 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         IChatClient effectiveClient,
         CancellationToken ct)
     {
+        var executionContext = CreateExecutionContext(baseContext);
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         var existingResults = jobWithResults.FileReviewResults.ToDictionary(r => r.FilePath);
-        var selection = ReviewFileSelectionService.SelectFilesForReview(pr.ChangedFiles, existingResults, baseContext.ExclusionRules);
+        var selection = ReviewFileSelectionService.SelectFilesForReview(pr.ChangedFiles, existingResults, executionContext.ExclusionRules);
         var filesToReview = selection.FilesToReview.ToList();
 
         foreach (var excludedFile in selection.ExcludedFiles)
         {
             var existingExcluded = existingResults.GetValueOrDefault(excludedFile.Path);
-            await this.MarkFileExcludedAsync(job, excludedFile, baseContext, existingExcluded, ct);
+            await this.MarkFileExcludedAsync(job, excludedFile, executionContext, existingExcluded, ct);
         }
 
         filesToReview =
@@ -74,7 +75,7 @@ internal sealed class AgenticFileReviewDispatchPlanner(
                     file,
                     fileIndex,
                     allChangedFiles.Count,
-                    baseContext,
+                    executionContext,
                     existingResult,
                     effectiveClient,
                     ct);
@@ -107,6 +108,33 @@ internal sealed class AgenticFileReviewDispatchPlanner(
 
         await Task.WhenAll(tasks);
         return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
+    }
+
+    private static ReviewSystemContext CreateExecutionContext(ReviewSystemContext baseContext)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
+        {
+            return baseContext;
+        }
+
+        return new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
+        {
+            LoopMetrics = baseContext.LoopMetrics,
+            ActiveProtocolId = baseContext.ActiveProtocolId,
+            ProtocolRecorder = baseContext.ProtocolRecorder,
+            ExclusionRules = baseContext.ExclusionRules,
+            DismissedPatterns = baseContext.DismissedPatterns,
+            PromptOverrides = baseContext.PromptOverrides,
+            TierChatClient = baseContext.TierChatClient,
+            ModelId = baseContext.ModelId,
+            DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
+            DefaultReviewModelId = baseContext.DefaultReviewModelId,
+            Temperature = baseContext.Temperature,
+            EnableProRV = false,
+            AugmentationMode = baseContext.AugmentationMode,
+            PassKind = baseContext.PassKind,
+            PerFileHint = baseContext.PerFileHint,
+        };
     }
 
     private async Task MarkFileExcludedAsync(

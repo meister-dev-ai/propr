@@ -233,6 +233,91 @@ public sealed class LocalReviewVerificationExecutorTests
         Assert.Equal("The final Docker stage runs as root because a runtime USER directive is missing.", publishedComment.Message);
     }
 
+    [Fact]
+    public async Task ApplyDetailedAsync_ProRvOnlyFinding_ElevatesExplicitSupportBeforeVerifierHandoff()
+    {
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>())
+            .Returns(callInfo =>
+            {
+                var finding = callInfo.Arg<CandidateReviewFinding>();
+                return
+                [
+                    new ClaimDescriptor(
+                        $"claim-{finding.FindingId}",
+                        finding.FindingId,
+                        ClaimDescriptor.LocalStage,
+                        CandidateReviewFinding.GenericReviewAssertionClaimKind,
+                        finding.Message,
+                        finding.Severity,
+                        ClaimDescriptor.DeterministicOnlyMode,
+                        ClaimDescriptor.CodeContractFamily),
+                ];
+            });
+
+        IReadOnlyList<VerificationWorkItem>? capturedWorkItems = null;
+        var verifier = Substitute.For<IReviewFindingVerifier>();
+        verifier.VerifyAsync(Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedWorkItems = callInfo.Arg<IReadOnlyList<VerificationWorkItem>>();
+                return Task.FromResult<IReadOnlyList<VerificationOutcome>>(
+                    capturedWorkItems
+                        .Select(item => VerificationOutcome.Supported(item.Claim, ReviewFindingGateReasonCodes.DefaultPublish, "Supported."))
+                        .ToList());
+            });
+
+        var sut = new LocalReviewVerificationExecutor(extractor, verifier, CreateProtocolRecorder());
+        var fileResult = new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs");
+        var baselineFinding = CreateMergedFinding(
+            "finding-baseline",
+            "Baseline issue remains publishable.",
+            FindingProvenanceKind.BaselineOnly);
+        var prorvFinding = CreateMergedFinding(
+            "finding-prorv",
+            "ProRV-only issue needs stronger support.",
+            FindingProvenanceKind.ProRVOnly);
+
+        await sut.ApplyDetailedAsync(
+            new ReviewResult(
+                "summary",
+                [
+                    new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, baselineFinding.Message),
+                    new ReviewComment("src/Foo.cs", 20, CommentSeverity.Warning, prorvFinding.Message),
+                ]),
+            fileResult,
+            null,
+            [],
+            [baselineFinding, prorvFinding],
+            CancellationToken.None);
+
+        Assert.NotNull(capturedWorkItems);
+        Assert.Collection(
+            capturedWorkItems!,
+            workItem => Assert.False(workItem.FindingProvenance.RequiresExplicitSupport),
+            workItem => Assert.True(workItem.FindingProvenance.RequiresExplicitSupport));
+    }
+
+    private static CandidateReviewFinding CreateMergedFinding(
+        string findingId,
+        string message,
+        FindingProvenanceKind findingProvenanceKind)
+    {
+        return new CandidateReviewFinding(
+            findingId,
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "late_steering_merge",
+                "src/Foo.cs",
+                reviewPassKind: findingProvenanceKind == FindingProvenanceKind.ProRVOnly ? ReviewPassKind.ProRVAugmentation : ReviewPassKind.Baseline,
+                findingProvenanceKind: findingProvenanceKind),
+            CommentSeverity.Warning,
+            message,
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            findingId == "finding-baseline" ? 10 : 20);
+    }
+
     private static IProtocolRecorder CreateProtocolRecorder()
     {
         var recorder = Substitute.For<IProtocolRecorder>();

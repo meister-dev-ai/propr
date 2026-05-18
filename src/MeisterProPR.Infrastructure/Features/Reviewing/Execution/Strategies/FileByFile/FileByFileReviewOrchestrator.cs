@@ -13,6 +13,7 @@ using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.Abstractions;
@@ -144,6 +145,9 @@ internal sealed partial class FileByFileReviewOrchestrator(
         var effectiveClient = overrideClient ?? chatClient
             ?? throw new InvalidOperationException("No chat client available for file review orchestration.");
         var dispatchResult = await this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
+        await this.RecordLateSteeringBaselinePassEventAsync(baseContext, pr, dispatchResult.Exceptions.Count, ct);
+        var augmentationFindings = await this.BuildAugmentationFindingsAsync(job, pr, baseContext, effectiveClient, ct);
+        await this.RecordLateSteeringAugmentationPassEventAsync(baseContext, pr, augmentationFindings.Count, ct);
 
         if (dispatchResult.Exceptions.Count > 0)
         {
@@ -153,7 +157,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ReviewResult? partialResult = null;
             try
             {
-                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
+                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, augmentationFindings, ct);
             }
             catch (Exception ex)
             {
@@ -163,7 +167,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             throw new PartialReviewFailureException(dispatchResult.Exceptions.Count, pr.ChangedFiles.Count, dispatchResult.Exceptions, partialResult);
         }
 
-        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
+        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, augmentationFindings, ct);
     }
 
     private static IReviewPipeline<PerFileReviewContext> CreateDefaultPerFilePipeline(
@@ -196,9 +200,128 @@ internal sealed partial class FileByFileReviewOrchestrator(
         PullRequest pr,
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
+        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
         CancellationToken ct)
     {
-        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, ct);
+        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, augmentationFindings, ct);
+    }
+
+    private async Task<IReadOnlyList<CandidateReviewFinding>> BuildAugmentationFindingsAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        IChatClient effectiveClient,
+        CancellationToken ct)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
+        {
+            return [];
+        }
+
+        var filesToReview = pr.ChangedFiles
+            .Where(file => !baseContext.ExclusionRules.Matches(file.Path))
+            .ToList();
+        if (filesToReview.Count == 0)
+        {
+            return [];
+        }
+
+        var findings = new List<CandidateReviewFinding>();
+        for (var index = 0; index < filesToReview.Count; index++)
+        {
+            var file = filesToReview[index];
+            var augmentationResult = await fileReviewer.ReviewAugmentationAsync(
+                job,
+                pr,
+                file,
+                index + 1,
+                filesToReview.Count,
+                baseContext,
+                effectiveClient,
+                ct);
+            if (augmentationResult.Comments.Count == 0)
+            {
+                continue;
+            }
+
+            var transientResult = new ReviewFileResult(job.Id, file.Path);
+            transientResult.MarkCompleted(augmentationResult.Summary, augmentationResult.Comments);
+            findings.AddRange(this.GetCandidateFindingFactory().Build([transientResult], passKind: ReviewPassKind.ProRVAugmentation));
+        }
+
+        return findings;
+    }
+
+    private async Task RecordLateSteeringBaselinePassEventAsync(
+        ReviewSystemContext baseContext,
+        PullRequest pr,
+        int failedFileCount,
+        CancellationToken ct)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
+            !baseContext.ActiveProtocolId.HasValue ||
+            baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.LateSteeringBaselinePassCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    augmentationMode = baseContext.AugmentationMode.ToString(),
+                    passKind = ReviewPassKind.Baseline.ToString(),
+                    proRvEnabled = false,
+                    scopedFileCount = CountFilesInScope(pr, baseContext),
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    completed = failedFileCount == 0,
+                    failedFileCount,
+                }),
+            null,
+            ct);
+    }
+
+    private async Task RecordLateSteeringAugmentationPassEventAsync(
+        ReviewSystemContext baseContext,
+        PullRequest pr,
+        int augmentationCandidateCount,
+        CancellationToken ct)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
+            !baseContext.ActiveProtocolId.HasValue ||
+            baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.LateSteeringAugmentationPassCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    augmentationMode = baseContext.AugmentationMode.ToString(),
+                    passKind = ReviewPassKind.ProRVAugmentation.ToString(),
+                    proRvEnabled = true,
+                    scopedFileCount = CountFilesInScope(pr, baseContext),
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    augmentationCandidateCount,
+                }),
+            null,
+            ct);
+    }
+
+    private static int CountFilesInScope(PullRequest pr, ReviewSystemContext baseContext)
+    {
+        return pr.ChangedFiles.Count(file => !baseContext.ExclusionRules.Matches(file.Path));
     }
 
 

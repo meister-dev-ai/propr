@@ -26,7 +26,9 @@ internal sealed class FileByFileProRvPrefilterStage(
     {
         if (context.ReviewResult is not null ||
             context.FileReviewContext.PerFileHint is null ||
-            !context.FileReviewContext.EnableProRV)
+            !context.FileReviewContext.EnableProRV ||
+            (context.FileReviewContext.AugmentationMode != ReviewAugmentationMode.EarlySteering
+             && context.FileReviewContext.PassKind != ReviewPassKind.ProRVAugmentation))
         {
             return context;
         }

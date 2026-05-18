@@ -119,6 +119,7 @@ public sealed class ReviewWorkflowRunner(
                 ModelId = request.Configuration?.ModelSelection.ModelId ?? request.ModelId,
                 Temperature = request.Configuration?.Temperature,
                 EnableProRV = request.Configuration?.EnableProRV ?? true,
+                AugmentationMode = request.EffectiveAugmentationMode,
             };
 
             var result = await reviewStrategyDispatcher.ReviewAsync(
@@ -133,7 +134,12 @@ public sealed class ReviewWorkflowRunner(
 
             var protocols = (await diagnosticsReader.GetJobProtocolAsync(job.Id, cancellationToken))?.Protocols ?? [];
 
-            return new ReviewWorkflowResult(jobs.GetById(job.Id) ?? job, result, protocols, this._boundaryIssues);
+            return new ReviewWorkflowResult(
+                jobs.GetById(job.Id) ?? job,
+                result,
+                protocols,
+                this._boundaryIssues,
+                context.AugmentationMode);
         }
         catch (Exception ex)
         {

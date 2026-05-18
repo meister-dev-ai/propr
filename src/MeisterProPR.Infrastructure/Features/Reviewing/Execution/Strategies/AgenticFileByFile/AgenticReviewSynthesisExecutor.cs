@@ -46,6 +46,7 @@ internal sealed class AgenticReviewSynthesisExecutor(
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding>? agenticCandidateFindings,
+        IReadOnlyList<CandidateReviewFinding>? augmentationCandidateFindings,
         CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
@@ -92,6 +93,17 @@ internal sealed class AgenticReviewSynthesisExecutor(
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
         }
 
+        var baselinePerFileFindings = candidateFindingFactory.Build(freshResults, deduped, agenticCandidateFindings);
+        var perFileCandidateFindings = CandidateFindingFactory.MergeFindings(
+            baselinePerFileFindings,
+            augmentationCandidateFindings ?? []);
+        await this.RecordLateSteeringMergeEventAsync(
+            baseContext,
+            baselinePerFileFindings.Count,
+            augmentationCandidateFindings ?? [],
+            perFileCandidateFindings,
+            ct);
+
         var gate = deterministicReviewFindingGate;
         if (gate is null)
         {
@@ -124,7 +136,6 @@ internal sealed class AgenticReviewSynthesisExecutor(
                 defaultChatClient,
                 ct);
 
-        var perFileCandidateFindings = candidateFindingFactory.Build(freshResults, deduped, agenticCandidateFindings);
         var perFileFindingsRequiringPrVerification = perFileCandidateFindings
             .Where(RequiresPrLevelVerification)
             .ToList();
@@ -617,6 +628,43 @@ internal sealed class AgenticReviewSynthesisExecutor(
                 null,
                 ct);
         }
+    }
+
+    private async Task RecordLateSteeringMergeEventAsync(
+        ReviewSystemContext baseContext,
+        int baselineCandidateCount,
+        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
+        IReadOnlyList<CandidateReviewFinding> mergedPerFileFindings,
+        CancellationToken ct)
+    {
+        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
+            !baseContext.ActiveProtocolId.HasValue ||
+            baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.LateSteeringMergeCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    baselineCandidateCount,
+                    proRvCandidateCount = augmentationFindings.Count,
+                    mergedCandidateCount = mergedPerFileFindings.Count,
+                },
+                FinalGateJsonOptions),
+            JsonSerializer.Serialize(
+                new
+                {
+                    baselineOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.BaselineOnly),
+                    proRvOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly),
+                    bothCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.Both),
+                },
+                FinalGateJsonOptions),
+            null,
+            ct);
     }
 
     private static IReadOnlyList<ReviewComment> MaterializePublishedComments(

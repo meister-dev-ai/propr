@@ -39,7 +39,7 @@ public sealed class CandidateFindingFactoryTests
                     null,
                     null,
                     CommentSeverity.Warning,
-                    "[Cross-file] Shared issue across services. Affected files: src/Foo.cs, src/Bar.cs, src/Foo.cs")
+                    "[Cross-file] Shared issue across services. Affected files: src/Foo.cs, src/Bar.cs, src/Foo.cs"),
             ]);
 
         var finding = Assert.Single(findings);
@@ -97,7 +97,7 @@ public sealed class CandidateFindingFactoryTests
     {
         CandidateReviewFinding[] synthesized =
         [
-            new CandidateReviewFinding(
+            new(
                 "finding-cc-unassigned-001",
                 new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "synthesis"),
                 CommentSeverity.Warning,
@@ -105,7 +105,7 @@ public sealed class CandidateFindingFactoryTests
                 CandidateReviewFinding.CrossCuttingCategory,
                 evidence: new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "synthesis_payload"),
                 candidateSummaryText: "Issue one summary."),
-            new CandidateReviewFinding(
+            new(
                 "finding-cc-unassigned-002",
                 new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "synthesis"),
                 CommentSeverity.Error,
@@ -120,6 +120,69 @@ public sealed class CandidateFindingFactoryTests
         Assert.Equal("Issue one summary.", assigned[0].CandidateSummaryText);
         Assert.Equal(CommentSeverity.Error, assigned[1].Severity);
         Assert.Equal(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, assigned[0].Provenance.OriginKind);
+    }
+
+    [Fact]
+    public void MergeFindings_AugmentationOnlyFinding_IsTaggedAsProRvOnly()
+    {
+        var augmentationFinding = new CandidateReviewFinding(
+            "finding-aug-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Foo.cs",
+                reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
+            CommentSeverity.Warning,
+            "Augmentation-only issue.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+
+        var merged = CandidateFindingFactory.MergeFindings([], [augmentationFinding]);
+
+        var finding = Assert.Single(merged);
+        Assert.NotNull(finding.MergedFinding);
+        Assert.Equal(FindingProvenanceKind.ProRVOnly, finding.MergedFinding!.Provenance);
+        Assert.Equal([ReviewPassKind.ProRVAugmentation], finding.MergedFinding.SourcePasses);
+    }
+
+    [Fact]
+    public void MergeFindings_ExactBaselineAndAugmentationMatch_MergesToBoth()
+    {
+        var baselineFinding = new CandidateReviewFinding(
+            "finding-base-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Foo.cs",
+                reviewPassKind: ReviewPassKind.Baseline,
+                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
+            CommentSeverity.Warning,
+            "Shared issue.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+        var augmentationFinding = new CandidateReviewFinding(
+            "finding-aug-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Foo.cs",
+                reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
+            CommentSeverity.Warning,
+            "Shared issue.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+
+        var merged = CandidateFindingFactory.MergeFindings([baselineFinding], [augmentationFinding]);
+
+        var finding = Assert.Single(merged);
+        Assert.NotNull(finding.MergedFinding);
+        Assert.Equal(FindingProvenanceKind.Both, finding.MergedFinding!.Provenance);
+        Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation], finding.MergedFinding.SourcePasses);
     }
 
     private static ReviewFileResult CreateCompletedFileResult(string filePath, IReadOnlyList<ReviewComment> comments)

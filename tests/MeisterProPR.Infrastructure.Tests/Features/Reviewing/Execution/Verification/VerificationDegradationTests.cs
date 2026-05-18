@@ -163,6 +163,86 @@ public sealed class VerificationDegradationTests
         Assert.Contains(ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport, outcome.ReasonCodes);
     }
 
+    [Fact]
+    public async Task DeterministicLocalReviewVerifier_ProRvOnlyGenericClaim_RemainsConservativeSummaryOnly()
+    {
+        var sut = new DeterministicLocalReviewVerifier();
+        var claim = new ClaimDescriptor(
+            "claim-prorv-1",
+            "finding-prorv-1",
+            ClaimDescriptor.LocalStage,
+            CandidateReviewFinding.GenericReviewAssertionClaimKind,
+            "ProRV-only issue needs stronger support.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.NeedsEvidenceMode,
+            ClaimDescriptor.CodeContractFamily);
+
+        var outcomes = await sut.VerifyAsync(
+            [
+                new VerificationWorkItem(
+                    claim,
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.PerFileCommentOrigin,
+                        "late_steering_merge",
+                        "src/Foo.cs",
+                        requiresExplicitSupport: true,
+                        reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                        findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
+                    ClaimDescriptor.LocalStage,
+                    VerificationWorkItem.AnchorOnlyScope,
+                    false),
+            ],
+            [],
+            CancellationToken.None);
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, outcome.ReasonCodes);
+        Assert.False(outcome.BlocksPublication);
+    }
+
+    [Fact]
+    public async Task DeterministicLocalReviewVerifier_ProRvOnlyObjectiveClaim_StillRequiresBoundedSupport()
+    {
+        var sut = new DeterministicLocalReviewVerifier();
+        var claim = new ClaimDescriptor(
+            "claim-prorv-obj-1",
+            "finding-prorv-obj-1",
+            ClaimDescriptor.LocalStage,
+            CandidateReviewFinding.DockerFinalStageRootUserClaimKind,
+            "The final Docker stage runs as root because a runtime USER directive is missing.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.DeterministicOnlyMode,
+            ClaimDescriptor.OperationalRiskFamily,
+            anchorFilePath: "Dockerfile",
+            anchorLineNumber: 8);
+
+        var outcomes = await sut.VerifyAsync(
+            [
+                new VerificationWorkItem(
+                    claim,
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.PerFileCommentOrigin,
+                        "late_steering_merge",
+                        "Dockerfile",
+                        requiresExplicitSupport: true,
+                        reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                        findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
+                    ClaimDescriptor.LocalStage,
+                    VerificationWorkItem.AnchorOnlyScope,
+                    false),
+            ],
+            [],
+            CancellationToken.None);
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, outcome.RecommendedDisposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, outcome.ReasonCodes);
+        Assert.False(outcome.BlocksPublication);
+    }
+
     private sealed class ThrowingInvariantFactList : List<InvariantFact>, IReadOnlyList<InvariantFact>
     {
         public new IEnumerator<InvariantFact> GetEnumerator()

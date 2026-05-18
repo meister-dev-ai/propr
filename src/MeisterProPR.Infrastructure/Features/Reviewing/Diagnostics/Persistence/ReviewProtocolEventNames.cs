@@ -9,6 +9,9 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence
 /// </summary>
 public static class ReviewProtocolEventNames
 {
+    public const string LateSteeringBaselinePassCompleted = "late_steering_baseline_pass_completed";
+    public const string LateSteeringAugmentationPassCompleted = "late_steering_augmentation_pass_completed";
+    public const string LateSteeringMergeCompleted = "late_steering_merge_completed";
     public const string ReviewPipelineProfileApplied = "review_pipeline_profile_applied";
     public const string ReviewStrategySelected = "review_strategy_selected";
     public const string AgenticFilePlanCreated = "agentic_file_plan_created";

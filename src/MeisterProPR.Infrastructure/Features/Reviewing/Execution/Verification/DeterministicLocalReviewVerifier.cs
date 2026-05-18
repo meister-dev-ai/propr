@@ -26,7 +26,7 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
             try
             {
                 var claim = workItem.Claim;
-                if (SupportsObjectiveDeterministicVerification(claim))
+                if (SupportsObjectiveDeterministicVerification(claim) && !RequiresBoundedEvidence(workItem))
                 {
                     outcomes.Add(
                         VerificationOutcome.Supported(
@@ -36,7 +36,7 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
                     continue;
                 }
 
-                if (RequiresBoundedEvidence(claim))
+                if (RequiresBoundedEvidence(workItem))
                 {
                     outcomes.Add(CreateConservativeLocalOutcome(claim));
                     continue;
@@ -83,11 +83,13 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
         return Task.FromResult<IReadOnlyList<VerificationOutcome>>(outcomes);
     }
 
-    private static bool RequiresBoundedEvidence(ClaimDescriptor claim)
+    private static bool RequiresBoundedEvidence(VerificationWorkItem workItem)
     {
-        return !string.Equals(claim.VerificationMode, ClaimDescriptor.DeterministicOnlyMode, StringComparison.Ordinal) ||
-               claim.RequiresCrossFileEvidence ||
-               claim.RequiresSymbolEvidence;
+        return !string.Equals(workItem.Claim.VerificationMode, ClaimDescriptor.DeterministicOnlyMode, StringComparison.Ordinal) ||
+               workItem.Claim.RequiresCrossFileEvidence ||
+               workItem.Claim.RequiresSymbolEvidence ||
+               (workItem.FindingProvenance.RequiresExplicitSupport &&
+                workItem.FindingProvenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly);
     }
 
     private static bool SupportsObjectiveDeterministicVerification(ClaimDescriptor claim)

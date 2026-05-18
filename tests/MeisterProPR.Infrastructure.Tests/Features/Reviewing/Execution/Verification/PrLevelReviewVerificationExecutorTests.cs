@@ -35,7 +35,7 @@ public sealed class PrLevelReviewVerificationExecutorTests
                     EvidenceBundle.CompleteCoverage));
 
         var sut = new PrLevelReviewVerificationExecutor(extractor, collector, CreateProtocolRecorder(), new AiReviewOptions { ModelId = "fallback-model" });
-        var finding = CreateSynthesizedFinding(evidence: new EvidenceReference([], ["src/Seed.cs"], EvidenceReference.MissingState, "synthesis_payload"));
+        var finding = CreateSynthesizedFinding(new EvidenceReference([], ["src/Seed.cs"], EvidenceReference.MissingState, "synthesis_payload"));
 
         var result = await sut.ApplyAsync([finding], new ReviewSystemContext(null, [], null), "feature/x", null, null, CancellationToken.None);
 
@@ -116,8 +116,7 @@ public sealed class PrLevelReviewVerificationExecutorTests
             Arg.Any<string?>(),
             Arg.Is<string?>(output => output != null && output.Contains("\"verdict\":\"supported\"", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>(),
-            "ai_call_pr_verification",
-            null);
+            "ai_call_pr_verification");
     }
 
     [Fact]
@@ -141,7 +140,7 @@ public sealed class PrLevelReviewVerificationExecutorTests
         Assert.Equal(VerificationOutcome.DeterministicRulesEvaluator, outcome.EvaluatedBy);
         Assert.Contains(ReviewFindingGateReasonCodes.VerificationDegraded, outcome.ReasonCodes);
 
-        _ = collector.DidNotReceiveWithAnyArgs().CollectEvidenceAsync(default!, default, default!, default);
+        _ = collector.DidNotReceiveWithAnyArgs().CollectEvidenceAsync(default!, default, default!);
         await protocolRecorder.Received().RecordVerificationEventAsync(
             Arg.Is(protocolId),
             Arg.Is(ReviewProtocolEventNames.VerificationDegraded),
@@ -149,6 +148,66 @@ public sealed class PrLevelReviewVerificationExecutorTests
             Arg.Is<string?>(value => value == null),
             Arg.Is<string?>(value => value == "claim explosion"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ProRvOnlyFinding_UsesCrossFileEvidenceVerificationWithoutPublicationAdvantage()
+    {
+        ClaimDescriptor? capturedClaim = null;
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns(callInfo =>
+        {
+            var finding = callInfo.Arg<CandidateReviewFinding>();
+            capturedClaim = new ClaimDescriptor(
+                $"claim-{finding.FindingId}",
+                finding.FindingId,
+                ClaimDescriptor.PrLevelStage,
+                CandidateReviewFinding.GenericReviewAssertionClaimKind,
+                finding.Message,
+                finding.Severity,
+                ClaimDescriptor.NeedsEvidenceMode,
+                ClaimDescriptor.CodeContractFamily,
+                requiresCrossFileEvidence: finding.Provenance.RequiresExplicitSupport);
+            return [capturedClaim];
+        });
+
+        VerificationWorkItem? capturedWorkItem = null;
+        var collector = Substitute.For<IReviewEvidenceCollector>();
+        collector.CollectEvidenceAsync(Arg.Any<VerificationWorkItem>(), Arg.Any<IReviewContextTools?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedWorkItem = callInfo.Arg<VerificationWorkItem>();
+                return new EvidenceBundle(
+                    capturedWorkItem.Claim.ClaimId,
+                    [new EvidenceItem("file_content", "Relevant evidence", "src/Foo.cs")],
+                    EvidenceBundle.PartialCoverage);
+            });
+
+        var sut = new PrLevelReviewVerificationExecutor(extractor, collector, CreateProtocolRecorder(), new AiReviewOptions { ModelId = "fallback-model" });
+        var finding = new CandidateReviewFinding(
+            "finding-prorv-only",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "late_steering_merge",
+                "src/Foo.cs",
+                reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
+            CommentSeverity.Warning,
+            "ProRV-only issue needs stronger support.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            20);
+
+        var result = await sut.ApplyAsync([finding], new ReviewSystemContext(null, [], null), "feature/x", null, null, CancellationToken.None);
+
+        Assert.NotNull(capturedClaim);
+        Assert.True(capturedClaim!.RequiresCrossFileEvidence);
+        Assert.NotNull(capturedWorkItem);
+        Assert.True(capturedWorkItem!.FindingProvenance.RequiresExplicitSupport);
+
+        var verifiedFinding = Assert.Single(result);
+        Assert.NotNull(verifiedFinding.VerificationOutcome);
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, verifiedFinding.VerificationOutcome!.RecommendedDisposition);
     }
 
     private static ClaimDescriptor CreateClaim(string findingId)

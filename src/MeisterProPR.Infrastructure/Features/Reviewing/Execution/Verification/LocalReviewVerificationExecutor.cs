@@ -147,11 +147,46 @@ internal sealed class LocalReviewVerificationExecutor(
             var signature = CreateCommentSignature(comment);
             if (enrichedBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
             {
-                candidateFindings.Add(queue.Dequeue());
+                candidateFindings.Add(ElevateProRvOnlyFinding(queue.Dequeue()));
             }
         }
 
         return candidateFindings;
+    }
+
+    private static CandidateReviewFinding ElevateProRvOnlyFinding(CandidateReviewFinding finding)
+    {
+        if (finding.Provenance.FindingProvenanceKind != FindingProvenanceKind.ProRVOnly ||
+            finding.Provenance.RequiresExplicitSupport)
+        {
+            return finding;
+        }
+
+        return new CandidateReviewFinding(
+            finding.FindingId,
+            new CandidateFindingProvenance(
+                finding.Provenance.OriginKind,
+                finding.Provenance.GeneratedByStage,
+                finding.Provenance.SourceFilePath,
+                finding.Provenance.SourceFileResultId,
+                finding.Provenance.SourceCommentOrdinal,
+                finding.Provenance.EvidenceSetId,
+                true,
+                finding.Provenance.SourceOriginId,
+                finding.Provenance.ReviewPassKind,
+                finding.Provenance.FindingProvenanceKind),
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber,
+            finding.Evidence,
+            finding.CandidateSummaryText,
+            finding.InvariantCheckContext,
+            finding.VerificationOutcome)
+        {
+            MergedFinding = finding.MergedFinding,
+        };
     }
 
     private static CandidateReviewFinding AttachVerificationOutcome(

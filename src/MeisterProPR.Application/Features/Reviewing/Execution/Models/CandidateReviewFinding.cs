@@ -229,6 +229,39 @@ public sealed record CandidateReviewFinding
     public VerificationOutcome? VerificationOutcome { get; }
 
     /// <summary>
+    ///     Gets merged-candidate metadata when the finding has been through late-steering merge.
+    /// </summary>
+    public MergedCandidateFinding? MergedFinding { get; init; }
+
+    /// <summary>
+    ///     Creates a new instance of <see cref="CandidateReviewFinding" /> with merged provenance information.
+    /// </summary>
+    /// <param name="findingProvenanceKind">The kind of provenance for the merged finding.</param>
+    /// <param name="sourcePasses">The review passes that contributed to the merged finding.</param>
+    /// <param name="mergeDecision">The decision made during the merge process.</param>
+    /// <param name="identityKey">The identity key for the merged finding.</param>
+    /// <param name="mergeGroupKey">The group key for the merged finding.</param>
+    /// <returns>A new instance of <see cref="CandidateReviewFinding" /> with merged provenance information.</returns>
+    public CandidateReviewFinding WithMergedProvenance(
+        FindingProvenanceKind findingProvenanceKind,
+        IReadOnlyList<ReviewPassKind>? sourcePasses = null,
+        string? mergeDecision = null,
+        string? identityKey = null,
+        string? mergeGroupKey = null)
+    {
+        return this with
+        {
+            MergedFinding = new MergedCandidateFinding(
+                this,
+                findingProvenanceKind,
+                sourcePasses ?? [this.Provenance.ReviewPassKind],
+                identityKey ?? this.FindingId,
+                mergeDecision ?? findingProvenanceKind.ToString(),
+                mergeGroupKey),
+        };
+    }
+
+    /// <summary>
     ///     Builds invariant-check context values from the supplied claims.
     /// </summary>
     /// <param name="claims">Claims to summarize into invariant-check metadata.</param>
@@ -252,3 +285,17 @@ public sealed record CandidateReviewFinding
         };
     }
 }
+
+public sealed record PassCandidateFinding(
+    ReviewPassKind PassKind,
+    CandidateReviewFinding Finding,
+    string IdentityKey,
+    string? MergeGroupKey = null);
+
+public sealed record MergedCandidateFinding(
+    CandidateReviewFinding Finding,
+    FindingProvenanceKind Provenance,
+    IReadOnlyList<ReviewPassKind> SourcePasses,
+    string IdentityKey,
+    string MergeDecision,
+    string? MergeGroupKey = null);

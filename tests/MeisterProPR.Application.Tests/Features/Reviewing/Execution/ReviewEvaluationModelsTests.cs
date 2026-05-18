@@ -39,6 +39,121 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Same(fixture, request.Fixture);
         Assert.Same(configuration, request.Configuration);
         Assert.False(request.Configuration.EnableProRV);
+        Assert.Equal(ReviewAugmentationMode.Disabled, request.Configuration.EffectiveAugmentationMode);
+        Assert.Equal(ReviewAugmentationMode.Disabled, request.EffectiveAugmentationMode);
+    }
+
+    [Fact]
+    public void ReviewWorkflowRequest_ExplicitAugmentationModeOverridesConfiguration()
+    {
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/example",
+            "sample-project",
+            "sample-repository",
+            42,
+            1);
+        var chatClient = Substitute.For<IChatClient>();
+        var configuration = new EvaluationConfiguration(
+            "baseline",
+            new EvaluationModelSelection(["gpt-4o"]),
+            new EvaluationOutputOptions("artifacts/run.json", "full"),
+            AugmentationMode: ReviewAugmentationMode.Disabled);
+
+        var request = new ReviewWorkflowRequest(
+            job,
+            chatClient,
+            "gpt-4o",
+            Configuration: configuration,
+            AugmentationMode: ReviewAugmentationMode.LateAugmentation);
+
+        Assert.Equal(ReviewAugmentationMode.LateAugmentation, request.EffectiveAugmentationMode);
+    }
+
+    [Fact]
+    public void EvaluationConfiguration_ExplicitAugmentationModeOverridesLegacyBoolean()
+    {
+        var configuration = new EvaluationConfiguration(
+            "late-steering",
+            new EvaluationModelSelection(["gpt-4o"]),
+            new EvaluationOutputOptions("artifacts/run.json", "full"),
+            EnableProRV: true,
+            AugmentationMode: ReviewAugmentationMode.LateAugmentation);
+
+        Assert.Equal(ReviewAugmentationMode.LateAugmentation, configuration.EffectiveAugmentationMode);
+    }
+
+    [Fact]
+    public void CandidateReviewFinding_WithMergedProvenanceCapturesLateSteeringMetadata()
+    {
+        var finding = new CandidateReviewFinding(
+            "finding-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Example.cs",
+                reviewPassKind: ReviewPassKind.Baseline,
+                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
+            CommentSeverity.Warning,
+            "Baseline finding",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Example.cs",
+            12);
+
+        var merged = finding.WithMergedProvenance(
+            FindingProvenanceKind.Both,
+            [ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation],
+            "deduped identical semantic issue",
+            "identity-1",
+            "merge-group-1");
+
+        Assert.NotNull(merged.MergedFinding);
+        Assert.Equal(FindingProvenanceKind.Both, merged.MergedFinding!.Provenance);
+        Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation], merged.MergedFinding.SourcePasses);
+        Assert.Equal("identity-1", merged.MergedFinding.IdentityKey);
+        Assert.Equal("merge-group-1", merged.MergedFinding.MergeGroupKey);
+    }
+
+    [Fact]
+    public void ReviewWorkflowResult_ExposesMergedCandidateFindingsAndAugmentationMode()
+    {
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/example",
+            "sample-project",
+            "sample-repository",
+            42,
+            1);
+        var finding = new CandidateReviewFinding(
+            "finding-001",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Example.cs"),
+            CommentSeverity.Warning,
+            "Merged finding",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Example.cs",
+            7);
+        var mergedFinding = new MergedCandidateFinding(
+            finding,
+            FindingProvenanceKind.BaselineOnly,
+            [ReviewPassKind.Baseline],
+            "identity-001",
+            "baseline retained");
+
+        var result = new ReviewWorkflowResult(
+            job,
+            new ReviewResult("summary", []),
+            [],
+            AugmentationMode: ReviewAugmentationMode.LateAugmentation,
+            MergedCandidateFindings: [mergedFinding]);
+
+        Assert.Equal(ReviewAugmentationMode.LateAugmentation, result.AugmentationMode);
+        Assert.Single(result.MergedCandidateFindingsOrEmpty);
+        Assert.Equal("identity-001", result.MergedCandidateFindingsOrEmpty[0].IdentityKey);
     }
 
     [Fact]
@@ -65,7 +180,19 @@ public sealed class ReviewEvaluationModelsTests
                 "completed",
                 "resolved"),
             new EvaluationFixtureMetadata("fixture-sample", "1.0", "synthetic"),
-            new EvaluationConfigurationMetadata("baseline", "gpt-4o", "full", ReviewStrategy.PrWideAgentic, true),
+            new EvaluationConfigurationMetadata(
+                "baseline",
+                "gpt-4o",
+                "full",
+                ReviewStrategy.PrWideAgentic,
+                true,
+                ReviewAugmentationMode.EarlySteering.ToString(),
+                new Dictionary<string, int>(StringComparer.Ordinal)
+                {
+                    ["baselineOnly"] = 0,
+                    ["proRvOnly"] = 0,
+                    ["both"] = 0,
+                }),
             new ReviewResult(
                 "Sample summary",
                 [

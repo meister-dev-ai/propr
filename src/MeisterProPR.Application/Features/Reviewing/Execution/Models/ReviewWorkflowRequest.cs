@@ -15,4 +15,13 @@ public sealed record ReviewWorkflowRequest(
     string ModelId,
     ReviewEvaluationFixture? Fixture = null,
     EvaluationConfiguration? Configuration = null,
-    string? PipelineProfileId = null);
+    string? PipelineProfileId = null,
+    ReviewAugmentationMode? AugmentationMode = null)
+{
+    /// <summary>
+    ///     Effective augmentation mode for this review workflow request. Explicit mode wins; otherwise preserve existing.
+    /// </summary>
+    public ReviewAugmentationMode EffectiveAugmentationMode => this.AugmentationMode
+                                                               ?? this.Configuration?.EffectiveAugmentationMode
+                                                               ?? ReviewAugmentationMode.EarlySteering;
+}

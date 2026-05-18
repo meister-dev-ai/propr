@@ -14,4 +14,12 @@ public sealed record ReviewWorkflowResult(
     ReviewJob Job,
     ReviewResult FinalResult,
     IReadOnlyList<ReviewJobProtocolDto> Protocols,
-    IReadOnlyList<BoundaryIssueReport>? BoundaryIssues = null);
+    IReadOnlyList<BoundaryIssueReport>? BoundaryIssues = null,
+    ReviewAugmentationMode AugmentationMode = ReviewAugmentationMode.EarlySteering,
+    IReadOnlyList<MergedCandidateFinding>? MergedCandidateFindings = null)
+{
+    /// <summary>
+    ///     Merged candidate findings for this review workflow result. Returns an empty list if no merged findings are available.
+    /// </summary>
+    public IReadOnlyList<MergedCandidateFinding> MergedCandidateFindingsOrEmpty => this.MergedCandidateFindings ?? [];
+}
