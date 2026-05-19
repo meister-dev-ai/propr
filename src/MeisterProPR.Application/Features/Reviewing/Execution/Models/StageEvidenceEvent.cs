@@ -17,4 +17,5 @@ public sealed record StageEvidenceEvent(
     string? InputSample,
     string? SystemPrompt,
     string? OutputSummary,
-    string? Error);
+    string? Error,
+    PromptExperimentEvidence? PromptExperimentEvidence = null);

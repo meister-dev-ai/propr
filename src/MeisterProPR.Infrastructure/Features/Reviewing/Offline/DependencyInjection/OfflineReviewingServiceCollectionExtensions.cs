@@ -37,6 +37,7 @@ public static class OfflineReviewingServiceCollectionExtensions
         services.TryAddScoped<IThreadMemoryService, ThreadMemoryService>();
         services.TryAddSingleton<IReviewJobIntakeStore, OfflineReviewJobIntakeStore>();
         services.TryAddScoped<IReviewEvaluationFixtureValidator, ReviewEvaluationFixtureValidator>();
+        services.TryAddScoped<IReviewPromptExperimentValidator, ReviewPromptExperimentValidator>();
         services.TryAddScoped<IProtectedValueResolver, ConfigurationProtectedValueResolver>();
         services.TryAddScoped<IEvaluationArtifactWriter, JsonEvaluationArtifactWriter>();
 

@@ -51,4 +51,5 @@ public static class ReviewProtocolEventNames
     public const string SummaryReconciliation = "summary_reconciliation";
     public const string VerificationDegraded = "verification_degraded";
     public const string RepeatedJudgmentDecision = "repeated_judgment_decision";
+    public const string PromptStageEvidenceRecorded = "prompt_stage_evidence_recorded";
 }

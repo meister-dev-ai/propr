@@ -1532,6 +1532,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             DefaultReviewModelId = source.DefaultReviewModelId,
             Temperature = source.Temperature,
             EnableProRV = source.EnableProRV,
+            PromptExperiment = source.PromptExperiment,
         };
     }
 

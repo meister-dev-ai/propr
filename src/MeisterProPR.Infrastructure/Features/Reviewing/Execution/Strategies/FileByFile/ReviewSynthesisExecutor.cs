@@ -391,13 +391,16 @@ internal sealed class ReviewSynthesisExecutor(
                 pr.Title,
                 pr.Description,
                 allComments,
-                perFileCandidateFindings);
+                perFileCandidateFindings,
+                baseContext);
             synthesisInputSample = userMessage;
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, systemPrompt),
                 new(ChatRole.User, userMessage),
             };
+            await PromptStageEvidenceRecorder.RecordAsync(baseContext, PromptStageKeys.SynthesisSystem, systemPrompt, null, ct);
+            await PromptStageEvidenceRecorder.RecordAsync(baseContext, PromptStageKeys.SynthesisUser, null, userMessage, ct);
 
             var response = await effectiveClient.GetResponseAsync(
                 messages,

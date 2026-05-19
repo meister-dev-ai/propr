@@ -5,12 +5,14 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -69,7 +71,8 @@ public sealed partial class ToolAwareAiReviewCore(
                     pullRequest.ExistingThreads ?? [],
                     pullRequest.Title,
                     pullRequest.SourceBranch,
-                    pullRequest.TargetBranch)
+                    pullRequest.TargetBranch,
+                    systemContext)
                 : ReviewPrompts.BuildUserMessage(pullRequest);
         }
         else
@@ -80,6 +83,28 @@ public sealed partial class ToolAwareAiReviewCore(
         }
 
         state.Messages.Add(new ChatMessage(ChatRole.User, userMessage));
+
+        if (systemContext.PerFileHint is not null)
+        {
+            await PromptStageEvidenceRecorder.RecordAsync(
+                systemContext,
+                PromptStageKeys.GlobalSystem,
+                state.Messages.FirstOrDefault(message => message.Role == ChatRole.System)?.Text,
+                null,
+                cancellationToken);
+            await PromptStageEvidenceRecorder.RecordAsync(
+                systemContext,
+                PromptStageKeys.PerFileContextSystem,
+                state.Messages.OfType<ChatMessage>().Skip(1).FirstOrDefault(message => message.Role == ChatRole.System)?.Text,
+                null,
+                cancellationToken);
+            await PromptStageEvidenceRecorder.RecordAsync(
+                systemContext,
+                PromptStageKeys.PerFileUser,
+                null,
+                userMessage,
+                cancellationToken);
+        }
 
         var registeredTools = BuildTools(systemContext.ReviewTools, cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;

@@ -178,7 +178,7 @@ internal static class ReviewPrompts
 
         // Fixed reviewer-persona primer — always included regardless of client configuration.
         var baseSystemPrompt = context?.PromptOverrides.GetValueOrDefault("SystemPrompt") ?? SystemPrompt;
-        sb.AppendLine(baseSystemPrompt);
+        sb.AppendLine(ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt));
         sb.AppendLine();
 
         // Agentic loop guidance — always included for all tool-aware reviews.
@@ -263,7 +263,7 @@ internal static class ReviewPrompts
     {
         if (context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, overrideText!);
         }
 
         var sb = new StringBuilder();
@@ -353,14 +353,14 @@ internal static class ReviewPrompts
         sb.AppendLine();
         sb.AppendLine(OutputKeyReminder);
 
-        return sb.ToString().TrimEnd();
+        return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, sb.ToString().TrimEnd());
     }
 
     internal static string BuildAgenticFilePlanningSystemPrompt(ReviewSystemContext? context)
     {
         if (context?.PromptOverrides.TryGetValue("AgenticFilePlanningSystemPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return ComposePrompt(context, PromptStageKeys.AgenticFilePlanningSystem, PromptStageRole.System, overrideText!);
         }
 
         var sb = new StringBuilder();
@@ -413,7 +413,7 @@ internal static class ReviewPrompts
             }
             """);
 
-        return sb.ToString().TrimEnd();
+        return ComposePrompt(context, PromptStageKeys.AgenticFilePlanningSystem, PromptStageRole.System, sb.ToString().TrimEnd());
     }
 
     private static void AppendFocusedReviewGuidanceSection(
@@ -450,7 +450,7 @@ internal static class ReviewPrompts
         }
     }
 
-    internal static string BuildAgenticFilePlanningUserMessage(ChangedFile file, PullRequest pr)
+    internal static string BuildAgenticFilePlanningUserMessage(ChangedFile file, PullRequest pr, ReviewSystemContext? context = null)
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(pr);
@@ -478,54 +478,59 @@ internal static class ReviewPrompts
         sb.AppendLine($"Anchor file diff for {file.Path}:");
         sb.AppendLine(file.IsBinary ? "[binary file omitted]" : file.UnifiedDiff);
 
-        return sb.ToString().TrimEnd();
+        return ComposePrompt(context, PromptStageKeys.AgenticFilePlanningUser, PromptStageRole.User, sb.ToString().TrimEnd());
     }
 
     internal static string BuildAgenticFileInvestigationSystemPrompt(ReviewSystemContext? context)
     {
         if (context?.PromptOverrides.TryGetValue("AgenticFileInvestigationSystemPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return ComposePrompt(context, PromptStageKeys.AgenticFileInvestigationSystem, PromptStageRole.System, overrideText!);
         }
 
-        return """
-               You are running Stage B of an agentic file-scoped review workflow.
-               Your job is to test one bounded concern for the anchor file using only the provided scope,
-               tool budget, and allowed tools. Do not produce final review comments.
+        return ComposePrompt(
+            context,
+            PromptStageKeys.AgenticFileInvestigationSystem,
+            PromptStageRole.System,
+            """
+            You are running Stage B of an agentic file-scoped review workflow.
+            Your job is to test one bounded concern for the anchor file using only the provided scope,
+            tool budget, and allowed tools. Do not produce final review comments.
 
-               Respond with a single raw JSON object only.
-               Schema:
-               {
-                 "task_id": "task-001",
-                 "status": "completed"|"skipped"|"degraded",
-                 "evidence": [
-                   { "kind": "file_content", "summary": "<summary>", "source_id": "<nullable source>" }
-                 ],
-                 "candidate_findings": [
-                   {
-                     "id": "candidate-001",
-                     "message": "<candidate message>",
-                     "category": "per_file_comment|cross_cutting|configuration|robustness|test|documentation|non_actionable",
-                     "severity": "info|warning|error|suggestion",
-                     "confidence": { "concern": "<area>", "score": <0-100> },
-                     "supporting_files": ["<relative path>"],
-                     "file_path": "<relative path or null>",
-                     "line_number": <positive integer or null>,
-                     "candidate_summary_text": "<nullable summary wording>"
-                   }
-                 ],
-                 "tool_usage": [
-                   { "tool_name": "get_file_content", "status": "success|blocked_not_allowed|blocked_budget_exhausted|blocked_scope_violation|failed", "target": "<nullable target>" }
-                 ],
-                 "degraded": true|false
-               }
-               """;
+            Respond with a single raw JSON object only.
+            Schema:
+            {
+              "task_id": "task-001",
+              "status": "completed"|"skipped"|"degraded",
+              "evidence": [
+                { "kind": "file_content", "summary": "<summary>", "source_id": "<nullable source>" }
+              ],
+              "candidate_findings": [
+                {
+                  "id": "candidate-001",
+                  "message": "<candidate message>",
+                  "category": "per_file_comment|cross_cutting|configuration|robustness|test|documentation|non_actionable",
+                  "severity": "info|warning|error|suggestion",
+                  "confidence": { "concern": "<area>", "score": <0-100> },
+                  "supporting_files": ["<relative path>"],
+                  "file_path": "<relative path or null>",
+                  "line_number": <positive integer or null>,
+                  "candidate_summary_text": "<nullable summary wording>"
+                }
+              ],
+              "tool_usage": [
+                { "tool_name": "get_file_content", "status": "success|blocked_not_allowed|blocked_budget_exhausted|blocked_scope_violation|failed", "target": "<nullable target>" }
+               ],
+               "degraded": true|false
+             }
+            """);
     }
 
     internal static string BuildAgenticFileInvestigationUserMessage(
         AgenticFileReviewPlan plan,
         AgenticFileInvestigationTask task,
-        PullRequest pr)
+        PullRequest pr,
+        ReviewSystemContext? context = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(task);
@@ -547,40 +552,48 @@ internal static class ReviewPrompts
             sb.AppendLine($"- {path}");
         }
 
-        return sb.ToString().TrimEnd();
+        return ComposePrompt(context, PromptStageKeys.AgenticFileInvestigationUser, PromptStageRole.User, sb.ToString().TrimEnd());
     }
 
     internal static string BuildSynthesisSystemPrompt(ReviewSystemContext? context, bool jsonMode = false)
     {
         if (context?.PromptOverrides.TryGetValue("SynthesisSystemPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, overrideText!);
         }
 
         if (jsonMode)
         {
-            return """
-                   You are an expert code reviewer. You will be given a set of per-file review summaries and findings for a pull request.
+            return ComposePrompt(
+                context,
+                PromptStageKeys.SynthesisSystem,
+                PromptStageRole.System,
+                """
+                You are an expert code reviewer. You will be given a set of per-file review summaries and findings for a pull request.
 
-                   Your task: write a single cohesive narrative summary for the overall pull request and identify any cross-cutting concerns.
-                   Focus on the most important findings across all files.
-                   Do not invent new findings that are not mentioned in the per-file summaries.
-                   Do not call any tools.
-                   Respond with a single raw JSON object ONLY — no markdown fences, no prose before or after.
-                   The very first character must be '{' and the very last character must be '}'.
-                   Schema: { "summary": "<overall narrative>", "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }] }
-                   """;
+                Your task: write a single cohesive narrative summary for the overall pull request and identify any cross-cutting concerns.
+                Focus on the most important findings across all files.
+                Do not invent new findings that are not mentioned in the per-file summaries.
+                Do not call any tools.
+                Respond with a single raw JSON object ONLY — no markdown fences, no prose before or after.
+                The very first character must be '{' and the very last character must be '}'.
+                Schema: { "summary": "<overall narrative>", "cross_cutting_concerns": [{ "message": "<concern>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }] }
+                """);
         }
 
-        return """
-               You are an expert code reviewer. You will be given a set of per-file review summaries for a pull request.
+        return ComposePrompt(
+            context,
+            PromptStageKeys.SynthesisSystem,
+            PromptStageRole.System,
+            """
+            You are an expert code reviewer. You will be given a set of per-file review summaries for a pull request.
 
-               Your task: write a single cohesive narrative summary for the overall pull request.
-               Focus on the most important findings across all files.
-               Do not invent new findings that are not mentioned in the per-file summaries.
-               Do not call any tools.
-               Respond with plain text only — no JSON, no markdown fences, no bullet lists unless they aid clarity.
-               """;
+            Your task: write a single cohesive narrative summary for the overall pull request.
+            Focus on the most important findings across all files.
+            Do not invent new findings that are not mentioned in the per-file summaries.
+            Do not call any tools.
+            Respond with plain text only — no JSON, no markdown fences, no bullet lists unless they aid clarity.
+            """);
     }
 
     internal static string BuildUserMessage(PullRequest pr)
@@ -635,7 +648,8 @@ internal static class ReviewPrompts
         IReadOnlyList<PrCommentThread> relevantThreads,
         string prTitle,
         string sourceBranch,
-        string targetBranch)
+        string targetBranch,
+        ReviewSystemContext? context = null)
     {
         var sb = new StringBuilder();
 
@@ -701,7 +715,7 @@ internal static class ReviewPrompts
             }
         }
 
-        return sb.ToString();
+        return ComposePrompt(context, PromptStageKeys.PerFileUser, PromptStageRole.User, sb.ToString());
     }
 
     internal static string BuildSynthesisUserMessage(
@@ -709,7 +723,8 @@ internal static class ReviewPrompts
         string prTitle,
         string? prDescription,
         IReadOnlyList<ReviewComment>? allComments = null,
-        IReadOnlyList<CandidateReviewFinding>? candidateFindings = null)
+        IReadOnlyList<CandidateReviewFinding>? candidateFindings = null,
+        ReviewSystemContext? context = null)
     {
         var sb = new StringBuilder();
 
@@ -775,7 +790,7 @@ internal static class ReviewPrompts
                 "Write a single cohesive narrative summary for the overall pull request. Focus on the most important findings across all files. Do not invent new findings. Respond with plain text only.");
         }
 
-        return sb.ToString();
+        return ComposePrompt(context, PromptStageKeys.SynthesisUser, PromptStageRole.User, sb.ToString());
     }
 
     internal static string BuildPrWidePlanningSystemPrompt(ReviewSystemContext? context)
@@ -1101,33 +1116,37 @@ internal static class ReviewPrompts
     {
         if (context?.PromptOverrides.TryGetValue("PrVerificationSystemPrompt", out var overrideText) == true)
         {
-            return overrideText!;
+            return ComposePrompt(context, PromptStageKeys.PrVerificationSystem, PromptStageRole.System, overrideText!);
         }
 
-        return """
-               You are verifying a synthesized PR-level review finding against independently retrieved repository evidence.
-               Your task is not to discover new issues. Your task is only to decide whether the existing claim is supported.
+        return ComposePrompt(
+            context,
+            PromptStageKeys.PrVerificationSystem,
+            PromptStageRole.System,
+            """
+            You are verifying a synthesized PR-level review finding against independently retrieved repository evidence.
+            Your task is not to discover new issues. Your task is only to decide whether the existing claim is supported.
 
-               Rules:
-               1. Return SUPPORTED only when the provided evidence directly confirms the claim.
-               2. Return UNRESOLVED when the evidence is partial, indirect, ambiguous, or missing.
-               3. Do not invent facts beyond the supplied claim and evidence bundle.
-               4. Recommend Publish only for SUPPORTED findings. Recommend SummaryOnly for UNRESOLVED findings.
+            Rules:
+            1. Return SUPPORTED only when the provided evidence directly confirms the claim.
+            2. Return UNRESOLVED when the evidence is partial, indirect, ambiguous, or missing.
+            3. Do not invent facts beyond the supplied claim and evidence bundle.
+            4. Recommend Publish only for SUPPORTED findings. Recommend SummaryOnly for UNRESOLVED findings.
 
-               Respond ONLY with a single raw JSON object in this format:
-               {
-                 "verdict": "supported"|"unresolved",
-                 "recommended_disposition": "Publish"|"SummaryOnly",
-                 "reason_codes": ["<machine_readable_reason>"],
-                 "summary": "<brief evidence-based rationale>"
-               }
-               """;
+            Respond ONLY with a single raw JSON object in this format:
+            {
+              "verdict": "supported"|"unresolved",
+              "recommended_disposition": "Publish"|"SummaryOnly",
+              "reason_codes": ["<machine_readable_reason>"],
+              "summary": "<brief evidence-based rationale>"
+            }
+            """);
     }
 
     /// <summary>
     ///     User message for bounded PR-level verification.
     /// </summary>
-    internal static string BuildPrVerificationUserMessage(ClaimDescriptor claim, EvidenceBundle evidence)
+    internal static string BuildPrVerificationUserMessage(ClaimDescriptor claim, EvidenceBundle evidence, ReviewSystemContext? context = null)
     {
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(evidence);
@@ -1189,7 +1208,27 @@ internal static class ReviewPrompts
             }
         }
 
-        return sb.ToString().TrimEnd();
+        return ComposePrompt(context, PromptStageKeys.PrVerificationUser, PromptStageRole.User, sb.ToString().TrimEnd());
+    }
+
+    private static string ComposePrompt(
+        ReviewSystemContext? context,
+        string stageKey,
+        PromptStageRole promptRole,
+        string defaultText)
+    {
+        if (context?.PromptExperiment?.TryGetVariant(stageKey, promptRole, out var variant) != true || variant is null)
+        {
+            return defaultText;
+        }
+
+        return variant.CompositionMode switch
+        {
+            PromptCompositionMode.Replace => variant.Content,
+            PromptCompositionMode.Prepend => string.Concat(variant.Content, Environment.NewLine, Environment.NewLine, defaultText),
+            PromptCompositionMode.Append => string.Concat(defaultText, Environment.NewLine, Environment.NewLine, variant.Content),
+            _ => defaultText,
+        };
     }
 
     /// <summary>

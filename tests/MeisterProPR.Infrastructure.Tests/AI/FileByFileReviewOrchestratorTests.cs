@@ -1475,4 +1475,82 @@ public class FileByFileReviewOrchestratorTests
         await chatClient.Received(2)
             .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ReviewAsync_WithPromptExperiment_PassesExperimentToPerFileReviewAndSynthesis()
+    {
+        ReviewSystemContext? capturedFileContext = null;
+        List<(ChatRole Role, string? Text)>? capturedSynthesisMessages = null;
+
+        var promptExperiment = new PromptExperimentContext(
+            "variant-a",
+            [
+                new StagePromptVariant(
+                    PromptStageKeys.SynthesisSystem,
+                    PromptStageRole.System,
+                    PromptCompositionMode.Prepend,
+                    "Variant synthesis header"),
+                new StagePromptVariant(
+                    PromptStageKeys.SynthesisUser,
+                    PromptStageRole.User,
+                    PromptCompositionMode.Append,
+                    "Variant synthesis tail"),
+            ]);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Do<ReviewSystemContext>(context => capturedFileContext = context),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "file summary",
+                    [new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, "Potential issue")]));
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Do<IList<ChatMessage>>(messages =>
+                    capturedSynthesisMessages = messages.Select(message => (message.Role, message.Text)).ToList()),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"summary":"Synthesized summary.","cross_cutting_concerns":[]}""")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PromptExperiment = promptExperiment,
+        };
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Equal("Synthesized summary.", result.Summary);
+        Assert.NotNull(capturedFileContext);
+        Assert.Same(promptExperiment, capturedFileContext!.PromptExperiment);
+        Assert.NotNull(capturedSynthesisMessages);
+        Assert.Contains(
+            capturedSynthesisMessages!,
+            message => message.Role == ChatRole.System
+                       && message.Text is not null
+                       && message.Text.StartsWith("Variant synthesis header", StringComparison.Ordinal));
+        Assert.Contains(
+            capturedSynthesisMessages!,
+            message => message.Role == ChatRole.User
+                       && message.Text is not null
+                       && message.Text.Contains("Variant synthesis tail", StringComparison.Ordinal));
+    }
 }

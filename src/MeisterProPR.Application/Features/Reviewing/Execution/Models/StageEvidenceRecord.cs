@@ -20,4 +20,5 @@ public sealed record StageEvidenceRecord(
     int? FinalConfidence,
     string? ModelId,
     AiConnectionModelCategory? ConnectionCategory,
-    IReadOnlyList<StageEvidenceEvent> Events);
+    IReadOnlyList<StageEvidenceEvent> Events,
+    PromptExperimentEvidence? PromptExperimentEvidence = null);

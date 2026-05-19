@@ -58,6 +58,12 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                 modelId = artifact.Configuration.ModelId,
                 detailMode = artifact.Configuration.DetailMode,
                 strategy = artifact.Configuration.Strategy,
+                enableProRV = artifact.Configuration.EnableProRV,
+                augmentationMode = artifact.Configuration.AugmentationMode,
+                provenanceCounts = artifact.Configuration.ProvenanceCounts,
+                variantName = artifact.Configuration.VariantName,
+                targetedStageKeys = artifact.Configuration.TargetedStageKeys,
+                usedPromptExperiment = artifact.Configuration.UsedPromptExperiment,
             },
             finalResult = new
             {
@@ -85,6 +91,17 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                 finalConfidence = stage.FinalConfidence,
                 modelId = stage.ModelId,
                 connectionCategory = stage.ConnectionCategory?.ToString(),
+                promptExperimentEvidence = stage.PromptExperimentEvidence is null
+                    ? null
+                    : new
+                    {
+                        stageKey = stage.PromptExperimentEvidence.StageKey,
+                        variantName = stage.PromptExperimentEvidence.VariantName,
+                        usedDefaultConstruction = stage.PromptExperimentEvidence.UsedDefaultConstruction,
+                        compositionMode = stage.PromptExperimentEvidence.CompositionMode.ToString().ToLowerInvariant(),
+                        systemPromptText = stage.PromptExperimentEvidence.SystemPromptText,
+                        userPromptText = stage.PromptExperimentEvidence.UserPromptText,
+                    },
                 events = stage.Events.Select(@event => new
                 {
                     kind = @event.Kind.ToString(),
@@ -96,6 +113,17 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                     systemPrompt = @event.SystemPrompt,
                     outputSummary = @event.OutputSummary,
                     error = @event.Error,
+                    promptExperimentEvidence = @event.PromptExperimentEvidence is null
+                        ? null
+                        : new
+                        {
+                            stageKey = @event.PromptExperimentEvidence.StageKey,
+                            variantName = @event.PromptExperimentEvidence.VariantName,
+                            usedDefaultConstruction = @event.PromptExperimentEvidence.UsedDefaultConstruction,
+                            compositionMode = @event.PromptExperimentEvidence.CompositionMode.ToString().ToLowerInvariant(),
+                            systemPromptText = @event.PromptExperimentEvidence.SystemPromptText,
+                            userPromptText = @event.PromptExperimentEvidence.UserPromptText,
+                        },
                 }),
             }),
             tokenUsage = new

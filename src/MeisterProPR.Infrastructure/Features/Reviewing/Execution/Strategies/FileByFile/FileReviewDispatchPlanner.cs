@@ -130,6 +130,7 @@ internal sealed class FileReviewDispatchPlanner(
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PerFileHint = baseContext.PerFileHint,
+            PromptExperiment = baseContext.PromptExperiment,
         };
     }
 

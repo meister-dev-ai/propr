@@ -134,6 +134,7 @@ internal sealed class AgenticFileReviewDispatchPlanner(
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PerFileHint = baseContext.PerFileHint,
+            PromptExperiment = baseContext.PromptExperiment,
         };
     }
 

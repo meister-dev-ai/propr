@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -63,6 +64,27 @@ public interface IProtocolRecorder
         CancellationToken ct = default,
         string? name = null,
         string? error = null);
+
+    /// <summary>
+    ///     Records explicit prompt-stage evidence for one executed prompt-driven stage. Never throws.
+    /// </summary>
+    /// <param name="protocolId">The protocol this evidence belongs to.</param>
+    /// <param name="stageKey">The key of the stage for which the evidence is recorded (e.g. "drafting", "pro_rv_prefilter", etc.).</param>
+    /// <param name="variantName">The name of the prompt experiment variant, or null if not applicable.</param>
+    /// <param name="compositionMode">The composition mode of the prompt experiment, or null if not applicable.</param>
+    /// <param name="usedDefaultConstruction">Indicates whether the default construction was used for this stage.</param>
+    /// <param name="systemPromptText">The system prompt text used for this stage, or null if not applicable.</param>
+    /// <param name="userPromptText">The user prompt text used for this stage, or null if not applicable.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RecordPromptStageEvidenceAsync(
+        Guid protocolId,
+        string stageKey,
+        string variantName,
+        PromptCompositionMode compositionMode,
+        bool usedDefaultConstruction,
+        string? systemPromptText,
+        string? userPromptText,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Records a single tool call event. Never throws.

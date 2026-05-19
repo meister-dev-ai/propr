@@ -16,7 +16,8 @@ public sealed record ReviewWorkflowRequest(
     ReviewEvaluationFixture? Fixture = null,
     EvaluationConfiguration? Configuration = null,
     string? PipelineProfileId = null,
-    ReviewAugmentationMode? AugmentationMode = null)
+    ReviewAugmentationMode? AugmentationMode = null,
+    PromptExperimentContext? PromptExperiment = null)
 {
     /// <summary>
     ///     Effective augmentation mode for this review workflow request. Explicit mode wins; otherwise preserve existing.

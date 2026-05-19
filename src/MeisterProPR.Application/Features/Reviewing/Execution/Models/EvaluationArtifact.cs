@@ -48,7 +48,10 @@ public sealed record EvaluationConfigurationMetadata(
     ReviewStrategy Strategy,
     bool EnableProRV,
     string AugmentationMode,
-    IReadOnlyDictionary<string, int> ProvenanceCounts);
+    IReadOnlyDictionary<string, int> ProvenanceCounts,
+    string VariantName,
+    IReadOnlyList<string> TargetedStageKeys,
+    bool UsedPromptExperiment);
 
 /// <summary>
 ///     Structured verification outcome for comparing generated review output against fixture expectations.

@@ -1,10 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -85,6 +88,48 @@ public sealed class EfProtocolRecorder(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to record AI call event for protocol {ProtocolId}", protocolId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RecordPromptStageEvidenceAsync(
+        Guid protocolId,
+        string stageKey,
+        string variantName,
+        PromptCompositionMode compositionMode,
+        bool usedDefaultConstruction,
+        string? systemPromptText,
+        string? userPromptText,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await contextFactory.CreateDbContextAsync(ct);
+            var ev = new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocolId,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.PromptStageEvidenceRecorded,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = Sanitize(userPromptText),
+                SystemPrompt = Sanitize(systemPromptText),
+                OutputSummary = Sanitize(
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            stageKey,
+                            variantName,
+                            compositionMode = compositionMode.ToString().ToLowerInvariant(),
+                            usedDefaultConstruction,
+                        })),
+            };
+            db.ProtocolEvents.Add(ev);
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to record prompt stage evidence for protocol {ProtocolId} stage {StageKey}", protocolId, stageKey);
         }
     }
 

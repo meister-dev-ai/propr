@@ -61,6 +61,32 @@ comment threads back to the originating provider.
 
 Production execution enters through `ReviewOrchestrationService`, and offline evaluation enters through `ReviewWorkflowRunner`. Both flows resolve strategy and profile routing through `IReviewStrategyDispatcher`.
 
+## Offline Prompt Experiment Harness
+
+The offline harness can replay one fixture as a batch of baseline and named prompt variants without
+changing production review behavior. This path stays behind `ReviewWorkflowRunner` and
+`PromptExperimentBatchRunner`; production orchestration does not accept or persist prompt experiment
+configuration.
+
+1. `PromptExperimentBatchRunner` validates one `PromptExperimentBatch`, resolves the offline chat
+   runtime once for the batch, clones the target `ReviewJob` per run, and attaches a
+   `PromptExperimentContext` only for that offline execution.
+2. Shared prompt construction remains centralized in `ReviewPrompts`. Offline variants target a
+   neutral prompt-stage catalog keyed by stage ids such as `per_file_user`, `synthesis_system`, and
+   `pr_verification_user`.
+3. Each stage variant declares one prompt role (`system` or `user`) plus one composition mode:
+   `replace`, `prepend`, or `append`. Unconfigured stages keep their default prompt construction.
+4. Prompt-stage evidence is recorded explicitly at the prompt-driven execution sites rather than
+   inferred only from protocol labels. The recorder stores stage key, variant name, composition
+   mode, default-vs-variant usage, and the actual system and user prompt text used.
+5. Offline artifact assembly projects that evidence into `EvaluationArtifact` stage records so one
+   artifact can show both stage execution and the exact prompt content that produced it.
+6. When explicit prompt-stage evidence is absent, offline projection keeps a fallback inference path
+   for older protocol data so previously captured artifacts remain readable.
+
+This boundary lets reviewers compare baseline and variant runs by stage and prompt text while
+preserving the default production prompt path when no offline experiment context is present.
+
 Provider operational readiness is evaluated separately from onboarding verification. A provider
 connection can be verified and ready for onboarding while lacking workflow-complete proof, such as
 enabled scope or full host-variant support evidence. Reviewer-trigger identity is surfaced as an

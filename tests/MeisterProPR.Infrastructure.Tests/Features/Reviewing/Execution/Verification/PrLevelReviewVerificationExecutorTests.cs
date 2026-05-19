@@ -210,6 +210,65 @@ public sealed class PrLevelReviewVerificationExecutorTests
         Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, verifiedFinding.VerificationOutcome!.RecommendedDisposition);
     }
 
+    [Fact]
+    public async Task ApplyAsync_WithPromptExperiment_UsesVariantVerificationMessages()
+    {
+        var protocolId = Guid.NewGuid();
+        var claim = CreateClaim("finding-001");
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns([claim]);
+
+        var collector = Substitute.For<IReviewEvidenceCollector>();
+        collector.CollectEvidenceAsync(Arg.Any<VerificationWorkItem>(), Arg.Any<IReviewContextTools?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new EvidenceBundle(
+                    claim.ClaimId,
+                    [new EvidenceItem("file_content", "Foo registration", "src/Foo.cs")],
+                    EvidenceBundle.PartialCoverage));
+
+        List<ChatMessage>? capturedMessages = null;
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Do<IList<ChatMessage>>(messages => capturedMessages = messages.ToList()),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        "{" +
+                        "\"verdict\":\"supported\"," +
+                        "\"recommended_disposition\":\"Publish\"," +
+                        "\"summary\":\"Repository evidence confirms the claim.\"}")));
+
+        var promptExperiment = new PromptExperimentContext(
+            "variant-a",
+            [
+                new StagePromptVariant(
+                    PromptStageKeys.PrVerificationSystem, PromptStageRole.System, PromptCompositionMode.Prepend, "Variant verification system"),
+                new StagePromptVariant(PromptStageKeys.PrVerificationUser, PromptStageRole.User, PromptCompositionMode.Replace, "Variant verification user"),
+            ]);
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var sut = new PrLevelReviewVerificationExecutor(extractor, collector, protocolRecorder, new AiReviewOptions { ModelId = "fallback-model" });
+        var reviewContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = chatClient,
+            DefaultReviewModelId = "micro-model",
+            PromptExperiment = promptExperiment,
+        };
+
+        var result = await sut.ApplyAsync([CreateSynthesizedFinding()], reviewContext, "feature/x", protocolId, null, CancellationToken.None);
+
+        var verifiedFinding = Assert.Single(result);
+        Assert.Equal(FinalGateDecision.PublishDisposition, verifiedFinding.VerificationOutcome!.RecommendedDisposition);
+        Assert.NotNull(capturedMessages);
+        var systemMessage = Assert.Single(capturedMessages!, message => message.Role == ChatRole.System);
+        var userMessage = Assert.Single(capturedMessages, message => message.Role == ChatRole.User);
+        Assert.StartsWith("Variant verification system", systemMessage.Text, StringComparison.Ordinal);
+        Assert.Equal("Variant verification user", userMessage.Text);
+    }
+
     private static ClaimDescriptor CreateClaim(string findingId)
     {
         return new ClaimDescriptor(

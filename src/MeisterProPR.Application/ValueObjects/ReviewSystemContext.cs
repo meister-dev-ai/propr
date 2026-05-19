@@ -141,4 +141,9 @@ public sealed class ReviewSystemContext
     ///     Identifies whether the current execution context is the baseline review pass or a ProRV augmentation pass.
     /// </summary>
     public ReviewPassKind PassKind { get; set; } = ReviewPassKind.Baseline;
+
+    /// <summary>
+    ///     Offline-only prompt experiment context applied to this workflow execution.
+    /// </summary>
+    public PromptExperimentContext? PromptExperiment { get; init; }
 }

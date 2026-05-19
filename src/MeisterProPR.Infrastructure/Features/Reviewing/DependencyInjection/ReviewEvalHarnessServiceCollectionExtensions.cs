@@ -32,6 +32,7 @@ public static class ReviewEvalHarnessServiceCollectionExtensions
         services.AddReviewingModule(configuration);
         services.RemoveAll<ReviewOrchestrationService>();
         services.RemoveAll<IReviewJobProcessor>();
+        services.AddScoped<IPromptExperimentBatchRunner, PromptExperimentBatchRunner>();
         services.AddScoped<IPullRequestFetcher, FixturePullRequestFetcher>();
         services.AddScoped<IReviewContextToolsFactory, FixtureReviewContextToolsFactory>();
         services.AddScoped<IRepositoryInstructionFetcher, FixtureRepositoryInstructionFetcher>();

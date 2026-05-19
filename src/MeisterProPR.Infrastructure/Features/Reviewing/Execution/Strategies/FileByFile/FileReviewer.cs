@@ -223,6 +223,7 @@ internal sealed partial class FileReviewer(
             EnableProRV = enableProRvForCurrentPass,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
+            PromptExperiment = baseContext.PromptExperiment,
             // Tier-specific client wins; fall back to per-client active connection so the
             // global default chatClient is never used when a per-client connection is configured.
             TierChatClient = tierClient ?? effectiveClient,
@@ -327,6 +328,7 @@ internal sealed partial class FileReviewer(
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
+            PromptExperiment = baseContext.PromptExperiment,
         };
     }
 

@@ -738,4 +738,91 @@ public class ReviewPromptsTests
 
         Assert.Equal("Custom per-file instructions", prompt);
     }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_WithPromptExperimentReplace_UsesVariantContent()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PromptExperiment = new PromptExperimentContext(
+                "variant-a",
+                [
+                    new StagePromptVariant(
+                        PromptStageKeys.PerFileContextSystem, PromptStageRole.System, PromptCompositionMode.Replace, "Variant per-file context"),
+                ]),
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 3);
+
+        Assert.Equal("Variant per-file context", prompt);
+    }
+
+    [Fact]
+    public void BuildPerFileUserMessage_WithPromptExperimentAppend_AppendsVariantContent()
+    {
+        var file = CreateFile("src/Foo.cs");
+        var allFiles = AsSummaries(file);
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PromptExperiment = new PromptExperimentContext(
+                "variant-a",
+                [new StagePromptVariant(PromptStageKeys.PerFileUser, PromptStageRole.User, PromptCompositionMode.Append, "Extra user framing")]),
+        };
+
+        var message = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main", context);
+
+        Assert.Contains("Reviewing file 1 of 1: src/Foo.cs", message);
+        Assert.Contains("Extra user framing", message);
+    }
+
+    [Fact]
+    public void BuildSynthesisSystemPrompt_WithPromptExperimentPrepend_PrependsVariantContent()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PromptExperiment = new PromptExperimentContext(
+                "variant-a",
+                [new StagePromptVariant(PromptStageKeys.SynthesisSystem, PromptStageRole.System, PromptCompositionMode.Prepend, "Variant synthesis header")]),
+        };
+
+        var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(context, true);
+
+        Assert.StartsWith("Variant synthesis header", prompt, StringComparison.Ordinal);
+        Assert.Contains("cross_cutting_concerns", prompt);
+    }
+
+    [Fact]
+    public void BuildPrVerificationUserMessage_WithPromptExperimentReplace_UsesVariantContent()
+    {
+        var claim = new ClaimDescriptor(
+            "claim-1",
+            "finding-1",
+            ClaimDescriptor.PrLevelStage,
+            CandidateReviewFinding.CrossFileEvidenceRequiredClaimKind,
+            "Cross-file DI registration is missing.",
+            CommentSeverity.Warning,
+            ClaimDescriptor.NeedsEvidenceMode,
+            ClaimDescriptor.CrossFileConsistencyFamily,
+            "ServiceRegistration",
+            requiresCrossFileEvidence: true,
+            requiresSymbolEvidence: true);
+        var evidence = new EvidenceBundle(
+            claim.ClaimId,
+            [new EvidenceItem("FileContentRange", "Fetched file", "src/Foo.cs", "services.AddFoo();")],
+            EvidenceBundle.PartialCoverage,
+            "One supporting file was retrieved.");
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PromptExperiment = new PromptExperimentContext(
+                "variant-a",
+                [
+                    new StagePromptVariant(
+                        PromptStageKeys.PrVerificationUser, PromptStageRole.User, PromptCompositionMode.Replace, "Variant verification request"),
+                ]),
+        };
+
+        var message = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, context);
+
+        Assert.Equal("Variant verification request", message);
+    }
 }

@@ -229,6 +229,7 @@ internal sealed partial class AgenticFileReviewer(
             EnableProRV = enableProRvForCurrentPass,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
+            PromptExperiment = baseContext.PromptExperiment,
             TierChatClient = tierClient ?? effectiveClient,
         };
 
@@ -274,6 +275,7 @@ internal sealed partial class AgenticFileReviewer(
             AugmentationMode = fileContext.AugmentationMode,
             PassKind = fileContext.PassKind,
             PerFileHint = hint is null ? null : hint with { AgenticPlan = plan, AgenticInvestigations = investigations },
+            PromptExperiment = fileContext.PromptExperiment,
         };
     }
 
@@ -375,6 +377,7 @@ internal sealed partial class AgenticFileReviewer(
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
+            PromptExperiment = baseContext.PromptExperiment,
         };
     }
 
@@ -507,8 +510,20 @@ internal sealed partial class AgenticFileReviewer(
             var messages = new[]
             {
                 new ChatMessage(ChatRole.System, ReviewPrompts.BuildAgenticFilePlanningSystemPrompt(fileContext)),
-                new ChatMessage(ChatRole.User, ReviewPrompts.BuildAgenticFilePlanningUserMessage(file, filePr)),
+                new ChatMessage(ChatRole.User, ReviewPrompts.BuildAgenticFilePlanningUserMessage(file, filePr, fileContext)),
             };
+            await PromptStageEvidenceRecorder.RecordAsync(
+                fileContext,
+                PromptStageKeys.AgenticFilePlanningSystem,
+                messages[0].Text,
+                null,
+                ct);
+            await PromptStageEvidenceRecorder.RecordAsync(
+                fileContext,
+                PromptStageKeys.AgenticFilePlanningUser,
+                null,
+                messages[1].Text,
+                ct);
             var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = fileContext.ModelId }, ct);
             await this.RecordAiStageResponseAsync(fileContext, messages, response, "agentic_file_planning", ct);
 
@@ -733,8 +748,20 @@ internal sealed partial class AgenticFileReviewer(
         var messages = new List<ChatMessage>
         {
             new(ChatRole.System, ReviewPrompts.BuildAgenticFileInvestigationSystemPrompt(fileContext)),
-            new(ChatRole.User, ReviewPrompts.BuildAgenticFileInvestigationUserMessage(plan, task, filePr)),
+            new(ChatRole.User, ReviewPrompts.BuildAgenticFileInvestigationUserMessage(plan, task, filePr, fileContext)),
         };
+        await PromptStageEvidenceRecorder.RecordAsync(
+            fileContext,
+            PromptStageKeys.AgenticFileInvestigationSystem,
+            messages[0].Text,
+            null,
+            ct);
+        await PromptStageEvidenceRecorder.RecordAsync(
+            fileContext,
+            PromptStageKeys.AgenticFileInvestigationUser,
+            null,
+            messages[1].Text,
+            ct);
 
         var registeredTools = BuildBoundedInvestigationTools(boundedTools, ct);
         var chatOptions = new ChatOptions

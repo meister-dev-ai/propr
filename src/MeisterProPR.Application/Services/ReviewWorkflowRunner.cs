@@ -121,6 +121,7 @@ public sealed class ReviewWorkflowRunner(
                 Temperature = request.Configuration?.Temperature,
                 EnableProRV = request.Configuration?.EnableProRV ?? true,
                 AugmentationMode = request.EffectiveAugmentationMode,
+                PromptExperiment = request.PromptExperiment,
             };
 
             var result = await reviewStrategyDispatcher.ReviewAsync(

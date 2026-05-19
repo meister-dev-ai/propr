@@ -235,7 +235,7 @@ internal sealed class PrLevelReviewVerificationExecutor(
         }
 
         var systemPrompt = ReviewPrompts.BuildPrVerificationSystemPrompt(reviewContext);
-        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
+        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, reviewContext);
         var response = await client.GetResponseAsync(
             [
                 new ChatMessage(ChatRole.System, systemPrompt),
@@ -297,7 +297,9 @@ internal sealed class PrLevelReviewVerificationExecutor(
         }
 
         var systemPrompt = ReviewPrompts.BuildPrVerificationSystemPrompt(reviewContext);
-        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence);
+        var userMessage = ReviewPrompts.BuildPrVerificationUserMessage(claim, evidence, reviewContext);
+        await PromptStageEvidenceRecorder.RecordAsync(reviewContext, PromptStageKeys.PrVerificationSystem, systemPrompt, null, ct);
+        await PromptStageEvidenceRecorder.RecordAsync(reviewContext, PromptStageKeys.PrVerificationUser, null, userMessage, ct);
 
         try
         {

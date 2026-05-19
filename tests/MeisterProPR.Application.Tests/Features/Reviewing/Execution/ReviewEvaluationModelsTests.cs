@@ -192,7 +192,10 @@ public sealed class ReviewEvaluationModelsTests
                     ["baselineOnly"] = 0,
                     ["proRvOnly"] = 0,
                     ["both"] = 0,
-                }),
+                },
+                "baseline",
+                [],
+                false),
             new ReviewResult(
                 "Sample summary",
                 [
