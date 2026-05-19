@@ -50,6 +50,7 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                 fixtureId = artifact.Fixture.FixtureId,
                 fixtureVersion = artifact.Fixture.FixtureVersion,
                 provenance = artifact.Fixture.Provenance,
+                scenarioId = artifact.Fixture.ScenarioId,
             },
             configuration = new
             {

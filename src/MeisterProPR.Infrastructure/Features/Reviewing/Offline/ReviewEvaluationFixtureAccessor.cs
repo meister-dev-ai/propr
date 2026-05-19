@@ -13,4 +13,13 @@ public sealed class ReviewEvaluationFixtureAccessor : IReviewEvaluationFixtureAc
 {
     /// <inheritdoc />
     public ReviewEvaluationFixture? Fixture { get; set; }
+
+    /// <inheritdoc />
+    public string? ScenarioId { get; set; }
+
+    /// <inheritdoc />
+    public FixtureScenario? Scenario => string.IsNullOrWhiteSpace(this.ScenarioId)
+        ? null
+        : this.Fixture?.ScenariosOrEmpty.FirstOrDefault(scenario =>
+            string.Equals(scenario.ScenarioId, this.ScenarioId, StringComparison.Ordinal));
 }

@@ -12,4 +12,10 @@ public interface IReviewEvaluationFixtureAccessor
 {
     /// <summary>Gets or sets the active fixture for the current execution scope.</summary>
     ReviewEvaluationFixture? Fixture { get; set; }
+
+    /// <summary>Gets or sets the active scenario identifier for the current execution scope.</summary>
+    string? ScenarioId { get; set; }
+
+    /// <summary>Gets the active scenario for the current execution scope when one is selected.</summary>
+    FixtureScenario? Scenario { get; }
 }

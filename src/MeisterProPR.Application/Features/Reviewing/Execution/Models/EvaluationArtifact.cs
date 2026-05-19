@@ -35,7 +35,8 @@ public sealed record EvaluationRunMetadata(
 public sealed record EvaluationFixtureMetadata(
     string FixtureId,
     string FixtureVersion,
-    string Provenance);
+    string Provenance,
+    string? ScenarioId = null);
 
 /// <summary>
 ///     Configuration identity metadata stored in the artifact.

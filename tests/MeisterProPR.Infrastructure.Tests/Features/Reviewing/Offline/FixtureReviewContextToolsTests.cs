@@ -63,6 +63,60 @@ public sealed class FixtureReviewContextToolsTests
     }
 
     [Fact]
+    public async Task FixtureReviewContextTools_WhenScenarioOverlayIsActive_UsesOverlayFiles()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = "test-review-eval-jwt-secret-32!",
+                })
+            .Build();
+
+        services.AddLogging();
+        services.AddReviewEvalHarness(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var fixture = CreateFixture() with
+        {
+            Scenarios =
+            [
+                new FixtureScenario(
+                    "instructions-good",
+                    RepositoryOverlay: new FixtureRepositoryOverlay(
+                    [
+                        new RepositoryFileEntry(
+                            ".meister-propr/instructions-csharp.md",
+                            "Prefer behavioral regressions over style nits. Sitemap coverage must include article routes."),
+                    ])),
+            ],
+        };
+        var accessor = scope.ServiceProvider.GetRequiredService<IReviewEvaluationFixtureAccessor>();
+        accessor.Fixture = fixture.WithScenario("instructions-good");
+        accessor.ScenarioId = "instructions-good";
+
+        var toolsFactory = scope.ServiceProvider.GetRequiredService<IReviewContextToolsFactory>();
+        var tools = toolsFactory.Create(
+            new ReviewContextToolsRequest(
+                fixture.PullRequestSnapshot.CodeReview,
+                fixture.PullRequestSnapshot.SourceBranch,
+                1,
+                null));
+
+        var fileContent = await tools.GetFileContentAsync(
+            ".meister-propr/instructions-csharp.md",
+            "feature/offline-review",
+            1,
+            20,
+            CancellationToken.None);
+
+        Assert.Contains("Sitemap coverage must include article routes", fileContent);
+    }
+
+    [Fact]
     public void AddReviewEvalHarness_RegistersSharedDispatcherSeamForOfflineExecution()
     {
         var services = new ServiceCollection();

@@ -47,6 +47,7 @@ public sealed class ReviewWorkflowRunner(
         try
         {
             fixtureAccessor.Fixture = fixture;
+            fixtureAccessor.ScenarioId = fixture.ActiveScenarioIdOrNull;
             await fixtureValidator.ValidateAsync(fixture, cancellationToken);
 
             job.SetPrContext(
@@ -152,6 +153,7 @@ public sealed class ReviewWorkflowRunner(
         }
         finally
         {
+            fixtureAccessor.ScenarioId = null;
             fixtureAccessor.Fixture = null;
         }
     }

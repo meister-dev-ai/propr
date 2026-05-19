@@ -16,18 +16,95 @@ public sealed record ReviewEvaluationFixture(
     RepositorySnapshot RepositorySnapshot,
     PullRequestSnapshot PullRequestSnapshot,
     IReadOnlyList<FixtureThread>? Threads = null,
+    IReadOnlyList<FixtureScenario>? Scenarios = null,
     FixtureExpectations? Expectations = null,
-    FixtureProRVPrefilterExpectations? ProRVPrefilterExpectations = null)
+    FixtureProRVPrefilterExpectations? ProRVPrefilterExpectations = null,
+    string? ActiveScenarioId = null)
 {
     /// <summary>Optional prior discussion threads supplied with the fixture.</summary>
     public IReadOnlyList<FixtureThread> ThreadsOrEmpty => this.Threads ?? [];
+
+    /// <summary>Optional execution scenarios that layer additional steering inputs on the base fixture.</summary>
+    public IReadOnlyList<FixtureScenario> ScenariosOrEmpty => this.Scenarios ?? [];
+
+    /// <summary>Currently selected scenario identifier for this fixture instance, if any.</summary>
+    public string? ActiveScenarioIdOrNull => this.ActiveScenarioId;
+
+    /// <summary>Returns the active scenario when a scenario identifier is selected.</summary>
+    public FixtureScenario? ActiveScenarioOrNull => string.IsNullOrWhiteSpace(this.ActiveScenarioId)
+        ? null
+        : this.ScenariosOrEmpty.FirstOrDefault(scenario =>
+            string.Equals(scenario.ScenarioId, this.ActiveScenarioId, StringComparison.Ordinal));
 
     /// <summary>Optional expected review outcomes used by evaluation verification.</summary>
     public FixtureExpectations? ExpectationsOrNull => this.Expectations;
 
     /// <summary>Optional expected ProRV prefilter outcomes used by deterministic ranked-item verification.</summary>
     public FixtureProRVPrefilterExpectations? ProRVPrefilterExpectationsOrNull => this.ProRVPrefilterExpectations;
+
+    /// <summary>
+    ///     Returns a copy of the fixture with the supplied scenario applied to the repository snapshot and metadata.
+    /// </summary>
+    public ReviewEvaluationFixture WithScenario(string? scenarioId)
+    {
+        if (string.IsNullOrWhiteSpace(scenarioId))
+        {
+            return this with { ActiveScenarioId = null };
+        }
+
+        var scenario = this.ScenariosOrEmpty.FirstOrDefault(candidate =>
+            string.Equals(candidate.ScenarioId, scenarioId, StringComparison.Ordinal));
+        if (scenario is null)
+        {
+            throw new InvalidOperationException($"Fixture scenario '{scenarioId}' was not defined for fixture '{this.FixtureId}'.");
+        }
+
+        return this with
+        {
+            RepositorySnapshot = this.RepositorySnapshot.ApplyOverlay(scenario.RepositoryOverlay),
+            ActiveScenarioId = scenario.ScenarioId,
+        };
+    }
 }
+
+/// <summary>
+///     Optional execution scenario that overlays fixture steering inputs without changing the base diff.
+/// </summary>
+public sealed record FixtureScenario(
+    string ScenarioId,
+    string? Description = null,
+    FixtureRepositoryOverlay? RepositoryOverlay = null,
+    FixtureThreadMemory? ThreadMemory = null);
+
+/// <summary>
+///     Repository overlay applied for one fixture scenario.
+/// </summary>
+public sealed record FixtureRepositoryOverlay(IReadOnlyList<RepositoryFileEntry>? Files = null)
+{
+    /// <summary>Overlay files that replace or add to the base repository snapshot.</summary>
+    public IReadOnlyList<RepositoryFileEntry> FilesOrEmpty => this.Files ?? [];
+}
+
+/// <summary>
+///     Deterministic thread-memory inputs used by offline evaluation scenarios.
+/// </summary>
+public sealed record FixtureThreadMemory(IReadOnlyList<FixtureThreadMemoryMatch>? Matches = null)
+{
+    /// <summary>Explicit memory matches returned to the reconsideration stage.</summary>
+    public IReadOnlyList<FixtureThreadMemoryMatch> MatchesOrEmpty => this.Matches ?? [];
+}
+
+/// <summary>
+///     One explicit historical memory match supplied by a fixture scenario.
+/// </summary>
+public sealed record FixtureThreadMemoryMatch(
+    Guid? MemoryRecordId,
+    long ThreadId,
+    string? FilePath,
+    string ResolutionSummary,
+    float SimilarityScore,
+    string MatchSource = "semantic",
+    MemorySource Source = MemorySource.ThreadResolved);
 
 /// <summary>
 ///     Optional expected outcomes used to evaluate whether a generated review hit the intended positives,
@@ -99,7 +176,30 @@ public sealed record RepositorySnapshot(
     string SourceBranch,
     string TargetBranch,
     IReadOnlyList<RepositoryFileEntry> Files,
-    string? RepositoryName = null);
+    string? RepositoryName = null)
+{
+    /// <summary>Returns a copy of the snapshot with overlay files replacing or adding to the base file list.</summary>
+    public RepositorySnapshot ApplyOverlay(FixtureRepositoryOverlay? overlay)
+    {
+        if (overlay is null || overlay.FilesOrEmpty.Count == 0)
+        {
+            return this;
+        }
+
+        var files = this.Files.ToDictionary(file => file.Path, StringComparer.Ordinal);
+        foreach (var file in overlay.FilesOrEmpty)
+        {
+            files[file.Path] = file;
+        }
+
+        return this with
+        {
+            Files = files.Values
+                .OrderBy(file => file.Path, StringComparer.Ordinal)
+                .ToList(),
+        };
+    }
+}
 
 /// <summary>
 ///     One file in the offline repository snapshot.
