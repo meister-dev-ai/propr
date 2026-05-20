@@ -177,7 +177,16 @@ internal static partial class ReviewPrompts
         var sb = new StringBuilder();
 
         // Fixed reviewer-persona primer — always included regardless of client configuration.
-        var baseSystemPrompt = context?.PromptOverrides.GetValueOrDefault("SystemPrompt") ?? SystemPrompt;
+        string baseSystemPrompt;
+        if (context?.PromptOverrides.TryGetValue("SystemPrompt", out var overrideText) == true)
+        {
+            baseSystemPrompt = overrideText!;
+        }
+        else
+        {
+            baseSystemPrompt = PromptTemplateRuntime.RenderStage(PromptStageKeys.GlobalSystem);
+        }
+
         sb.AppendLine(ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt));
         sb.AppendLine();
 
@@ -386,28 +395,9 @@ internal static partial class ReviewPrompts
             return ComposePrompt(context, PromptStageKeys.PrVerificationSystem, PromptStageRole.System, overrideText!);
         }
 
-        return ComposePrompt(
-            context,
-            PromptStageKeys.PrVerificationSystem,
-            PromptStageRole.System,
-            """
-            You are verifying a synthesized PR-level review finding against independently retrieved repository evidence.
-            Your task is not to discover new issues. Your task is only to decide whether the existing claim is supported.
+        var defaultText = PromptTemplateRuntime.RenderStage(PromptStageKeys.PrVerificationSystem);
 
-            Rules:
-            1. Return SUPPORTED only when the provided evidence directly confirms the claim.
-            2. Return UNRESOLVED when the evidence is partial, indirect, ambiguous, or missing.
-            3. Do not invent facts beyond the supplied claim and evidence bundle.
-            4. Recommend Publish only for SUPPORTED findings. Recommend SummaryOnly for UNRESOLVED findings.
-
-            Respond ONLY with a single raw JSON object in this format:
-            {
-              "verdict": "supported"|"unresolved",
-              "recommended_disposition": "Publish"|"SummaryOnly",
-              "reason_codes": ["<machine_readable_reason>"],
-              "summary": "<brief evidence-based rationale>"
-            }
-            """);
+        return ComposePrompt(context, PromptStageKeys.PrVerificationSystem, PromptStageRole.System, defaultText);
     }
 
     /// <summary>
@@ -418,64 +408,33 @@ internal static partial class ReviewPrompts
         ArgumentNullException.ThrowIfNull(claim);
         ArgumentNullException.ThrowIfNull(evidence);
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"Claim ID: {claim.ClaimId}");
-        sb.AppendLine($"Finding ID: {claim.FindingId}");
-        sb.AppendLine($"Claim kind: {claim.ClaimKind}");
-        sb.AppendLine($"Claim family: {claim.ClaimFamily}");
-        sb.AppendLine($"Assertion: {claim.AssertionText}");
-        sb.AppendLine($"Coverage state: {evidence.CoverageState}");
-        if (evidence.HasProCursorAttempt)
-        {
-            sb.AppendLine($"ProCursor result status: {evidence.ProCursorResultStatus}");
-        }
+        var defaultText = PromptTemplateRuntime.RenderStage(
+            PromptStageKeys.PrVerificationUser,
+            new PromptTemplateModels.PrVerificationUserModel(
+                claim.ClaimId,
+                claim.FindingId,
+                claim.ClaimKind,
+                claim.ClaimFamily,
+                claim.AssertionText,
+                evidence.CoverageState,
+                evidence.HasProCursorAttempt,
+                evidence.ProCursorResultStatus,
+                evidence.RetrievalNotes,
+                evidence.EvidenceItems.Count > 0,
+                evidence.EvidenceItems.Select(item => new PromptTemplateModels.PromptEvidenceItemModel(
+                    item.Kind,
+                    item.SourceId,
+                    item.Summary,
+                    item.PayloadReference)).ToList(),
+                evidence.EvidenceAttempts.Count > 0,
+                evidence.EvidenceAttempts.Select(attempt => new PromptTemplateModels.PromptEvidenceAttemptModel(
+                    attempt.SourceFamily,
+                    attempt.Status,
+                    attempt.CoverageImpact,
+                    attempt.ScopeSummary,
+                    attempt.FailureReason)).ToList()));
 
-        if (!string.IsNullOrWhiteSpace(evidence.RetrievalNotes))
-        {
-            sb.AppendLine($"Retrieval notes: {evidence.RetrievalNotes}");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Evidence items:");
-
-        if (evidence.EvidenceItems.Count == 0)
-        {
-            sb.AppendLine("- (none)");
-        }
-        else
-        {
-            foreach (var item in evidence.EvidenceItems)
-            {
-                sb.AppendLine($"- Kind: {item.Kind}");
-                if (!string.IsNullOrWhiteSpace(item.SourceId))
-                {
-                    sb.AppendLine($"  Source: {item.SourceId}");
-                }
-
-                sb.AppendLine($"  Summary: {item.Summary}");
-                if (!string.IsNullOrWhiteSpace(item.PayloadReference))
-                {
-                    sb.AppendLine($"  Payload: {item.PayloadReference}");
-                }
-            }
-        }
-
-        if (evidence.EvidenceAttempts.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Evidence attempts:");
-            foreach (var attempt in evidence.EvidenceAttempts)
-            {
-                sb.AppendLine($"- Source: {attempt.SourceFamily}; Status: {attempt.Status}; Impact: {attempt.CoverageImpact}");
-                sb.AppendLine($"  Scope: {attempt.ScopeSummary}");
-                if (!string.IsNullOrWhiteSpace(attempt.FailureReason))
-                {
-                    sb.AppendLine($"  Failure: {attempt.FailureReason}");
-                }
-            }
-        }
-
-        return ComposePrompt(context, PromptStageKeys.PrVerificationUser, PromptStageRole.User, sb.ToString().TrimEnd());
+        return ComposePrompt(context, PromptStageKeys.PrVerificationUser, PromptStageRole.User, defaultText);
     }
 
     private static string ComposePrompt(

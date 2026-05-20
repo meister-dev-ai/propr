@@ -1,0 +1,12 @@
+PR: {{prTitle}}
+Source branch: {{sourceBranch}}
+Target branch: {{targetBranch}}
+Anchor file: {{anchorFilePath}}
+{{#if description}}
+Description: {{description}}
+{{/if}}
+
+{{> file-manifest heading="Changed file manifest:" manifestItems=manifestItems}}
+
+Anchor file diff for {{anchorFilePath}}:
+{{{anchorFileDiff}}}

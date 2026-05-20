@@ -1,0 +1,31 @@
+The following per-file review summaries were produced for PR "{{prTitle}}":
+{{#if prDescription}}
+PR Description: {{prDescription}}
+{{/if}}
+
+{{#each summaries}}
+## {{filePath}}
+{{summary}}
+
+{{/each}}
+{{#if hasFindings}}
+## All Per-File Findings
+
+{{#if hasCandidateFindings}}
+| Finding ID | File | Severity | Message |
+|------------|------|----------|---------|
+{{#each candidateFindings}}
+| {{findingId}} | {{filePath}} | {{severity}} | {{message}} |
+{{/each}}
+{{else}}
+| File | Severity | Message |
+|------|----------|---------|
+{{#each comments}}
+| {{filePath}} | {{severity}} | {{message}} |
+{{/each}}
+{{/if}}
+
+Based on the above findings, identify any cross-cutting concerns — issues that span multiple files or form a coherent architectural or behavioral pattern. Return a JSON object with a `cross_cutting_concerns` array field. Each entry should be: { "message": "<concern description>", "severity": "<info|warning|error|suggestion>", "category": "<cross_cutting|architecture|documentation|test|ui|configuration|robustness|non_actionable>", "candidateSummaryText": "<summary-only wording>", "supportingFindingIds": ["<finding-id>"], "supportingFiles": ["<path>"], "evidenceResolutionState": "<resolved|missing|partial>", "evidenceSource": "<synthesis_payload>" }. {{findingIdInstructionSuffix}}If there are no cross-cutting concerns, return { "cross_cutting_concerns": [] }. Also write a single cohesive narrative summary for the PR. Wrap the summary in a `summary` field in the same JSON object.
+{{else}}
+Write a single cohesive narrative summary for the overall pull request. Focus on the most important findings across all files. Do not invent new findings. Respond with plain text only.
+{{/if}}

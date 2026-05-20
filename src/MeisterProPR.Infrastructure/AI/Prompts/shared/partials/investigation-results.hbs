@@ -1,0 +1,23 @@
+{{#if hasInvestigations}}
+
+Investigation outputs:
+{{#each investigations}}
+
+### {{taskId}} [{{status}}]
+{{#if hasEvidence}}
+Evidence:
+{{#each evidence}}
+- {{kind}}: {{summary}} ({{sourceId}})
+{{/each}}
+{{/if}}
+{{#if hasCandidateFindings}}
+Candidate findings:
+{{#each candidateFindings}}
+- {{id}}: {{message}}
+  Category: {{category}}
+  Confidence: {{confidence}}
+  Supporting files: {{supportingFiles}}
+{{/each}}
+{{/if}}
+{{/each}}
+{{/if}}

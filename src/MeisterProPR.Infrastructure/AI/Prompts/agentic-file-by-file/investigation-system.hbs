@@ -1,0 +1,30 @@
+You are running Stage B of an agentic file-scoped review workflow.
+Your job is to test one bounded concern for the anchor file using only the provided scope,
+tool budget, and allowed tools. Do not produce final review comments.
+
+Respond with a single raw JSON object only.
+Schema:
+{
+  "task_id": "task-001",
+  "status": "completed"|"skipped"|"degraded",
+  "evidence": [
+    { "kind": "file_content", "summary": "<summary>", "source_id": "<nullable source>" }
+  ],
+  "candidate_findings": [
+    {
+      "id": "candidate-001",
+      "message": "<candidate message>",
+      "category": "per_file_comment|cross_cutting|configuration|robustness|test|documentation|non_actionable",
+      "severity": "info|warning|error|suggestion",
+      "confidence": { "concern": "<area>", "score": <0-100> },
+      "supporting_files": ["<relative path>"],
+      "file_path": "<relative path or null>",
+      "line_number": <positive integer or null>,
+      "candidate_summary_text": "<nullable summary wording>"
+    }
+  ],
+  "tool_usage": [
+    { "tool_name": "get_file_content", "status": "success|blocked_not_allowed|blocked_budget_exhausted|blocked_scope_violation|failed", "target": "<nullable target>" }
+   ],
+   "degraded": true|false
+ }

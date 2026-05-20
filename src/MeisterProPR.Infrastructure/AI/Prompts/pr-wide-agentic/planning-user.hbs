@@ -1,0 +1,16 @@
+PR: {{prTitle}}
+Source branch: {{sourceBranch}}
+Target branch: {{targetBranch}}
+Changed file count: {{changedFileCount}}
+{{#if description}}
+Description: {{description}}
+{{/if}}
+
+{{> file-manifest heading="Changed file manifest:" manifestItems=manifestItems}}
+
+Diff excerpts:
+{{#each diffExcerpts}}
+
+## {{path}}
+{{{diffText}}}
+{{/each}}

@@ -105,6 +105,27 @@ public sealed class ReviewPromptExperimentValidatorTests
     }
 
     [Fact]
+    public async Task ValidateAsync_WithPrWideStageVariant_CompletesSuccessfully()
+    {
+        var batch = new PromptExperimentBatch(
+            "batch-001",
+            "fixture-001",
+            null,
+            "config-a",
+            [
+                new PromptExperimentRunRequest(
+                    "run-variant",
+                    "variant-a",
+                    "artifacts/variant-a.json",
+                    [new StagePromptVariant("pr_wide_synthesis_user", PromptStageRole.User, PromptCompositionMode.Append, "extra pr-wide synthesis guidance")]),
+            ]);
+
+        var sut = new ReviewPromptExperimentValidator();
+
+        await sut.ValidateAsync(batch, CancellationToken.None);
+    }
+
+    [Fact]
     public async Task ValidateAsync_WhenRunContainsDuplicateSkippedStep_ThrowsInvalidOperationException()
     {
         var batch = new PromptExperimentBatch(

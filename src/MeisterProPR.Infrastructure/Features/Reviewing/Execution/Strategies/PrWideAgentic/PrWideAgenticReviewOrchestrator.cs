@@ -173,6 +173,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatMessage(ChatRole.System, ReviewPrompts.BuildPrWidePlanningSystemPrompt(baseContext)),
                     new ChatMessage(ChatRole.User, ReviewPrompts.BuildPrWidePlanningUserMessage(pr)),
                 };
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_planning_system", messages[0].Text, null, ct);
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_planning_user", null, messages[1].Text, ct);
                 var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;
@@ -355,6 +357,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatMessage(ChatRole.System, ReviewPrompts.BuildPrWideInvestigationSystemPrompt(baseContext)),
                     new ChatMessage(ChatRole.User, ReviewPrompts.BuildPrWideInvestigationUserMessage(plan, task, pr)),
                 };
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_investigation_system", messages[0].Text, null, ct);
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_investigation_user", null, messages[1].Text, ct);
                 var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;
@@ -688,6 +692,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatMessage(ChatRole.System, ReviewPrompts.BuildPrWideSynthesisSystemPrompt(baseContext)),
                     new ChatMessage(ChatRole.User, ReviewPrompts.BuildPrWideSynthesisUserMessage(plan, investigations)),
                 };
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_synthesis_system", messages[0].Text, null, ct);
+                await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_synthesis_user", null, messages[1].Text, ct);
                 var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;

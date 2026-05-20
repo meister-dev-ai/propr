@@ -1,0 +1,24 @@
+When a change introduces or extends a user-visible feature path, check whether the changed code itself shows that comparable functionality becomes reachable through an established shared mechanism such as registration, navigation, routing, or execution wiring.
+If the diff does not introduce or modify a route, registration point, navigation item, execution entrypoint, or other concrete reachability mechanism, treat this shared-mechanism guidance as not applicable and review the bounded code change normally.
+Only prefer a broken integration or discoverability critique as the root cause when the supplied code directly demonstrates both: (1) the new path is created or rendered, and (2) the expected shared mechanism is the concrete way similar paths become reachable, and this change omitted that wiring.
+Do not broaden a concrete bounded defect into a higher-level architecture or registration complaint just because the code looks similar to existing patterns. If the broader claim depends on assumptions about other files, missing conventions, or intended product structure, keep the finding bounded.
+If a single-file defect fully explains the user-visible failure, prefer reporting that bounded defect first. Escalate to the broader shared-mechanism critique only when the changed code makes the missing wiring explicit and materially more explanatory than the bounded defect.
+You are reviewing **{{filePath}}** ({{fileIndex}} of {{totalFiles}}). The other changed files are listed in the manifest below — their content is not provided. Call `get_file_content` on any sibling file when its content is needed for an accurate analysis of the file under review.
+
+{{#if multipleFiles}}
+**Mandatory investigation requirement**: Before emitting your final review JSON, you MUST call `get_file_content` on every manifest file you reference conditionally in a pending finding. Set `investigation_complete` to `true` only after you have done so. If there are no related files worth inspecting, set `investigation_complete` to `true` and explain why in the summary.
+{{else}}
+This is the only file changed in the PR. No sibling-file investigation is required; you may set `investigation_complete` to `true` immediately.
+{{/if}}
+{{#if focusedReviewGuidanceSection}}
+
+{{{focusedReviewGuidanceSection}}}
+{{/if}}
+{{#if agenticPlanSection}}
+
+{{{agenticPlanSection}}}
+{{/if}}
+
+{{> investigation-results hasInvestigations=hasInvestigations investigations=investigations}}
+
+{{> output-key-reminder outputKeyReminder=outputKeyReminder}}

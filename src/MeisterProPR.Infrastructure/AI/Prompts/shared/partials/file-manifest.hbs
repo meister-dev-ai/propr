@@ -1,0 +1,6 @@
+{{#if heading}}
+{{heading}}
+{{/if}}
+{{#each manifestItems}}
+- {{path}} [{{changeType}}]{{#if isCurrentFile}} [CURRENT FILE]{{/if}}{{#if isAnchorFile}} [ANCHOR FILE]{{/if}}
+{{/each}}

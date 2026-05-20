@@ -711,6 +711,8 @@ public class ToolAwareAiReviewCoreTests
             DefaultOptions(10),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
+        var expectedGlobalSystemPrompt = ReviewPrompts.BuildGlobalSystemPrompt(context);
+
         // Act
         await sut.ReviewAsync(pr, context);
 
@@ -719,13 +721,13 @@ public class ToolAwareAiReviewCoreTests
         var iter1Messages = capturedCallArgs[0];
         var iter1SystemMsgs = iter1Messages.Where(m => m.Role == ChatRole.System).ToList();
         Assert.Equal(2, iter1SystemMsgs.Count);
-        Assert.Contains(ReviewPrompts.SystemPrompt, iter1SystemMsgs[0].Text ?? "");
+        Assert.Contains(expectedGlobalSystemPrompt, iter1SystemMsgs[0].Text ?? "");
 
         // On iteration 2+, only one System message (per-file context; global dropped)
         var iter2Messages = capturedCallArgs[1];
         var iter2SystemMsgs = iter2Messages.Where(m => m.Role == ChatRole.System).ToList();
         Assert.Single(iter2SystemMsgs);
-        Assert.DoesNotContain(ReviewPrompts.SystemPrompt, iter2SystemMsgs[0].Text ?? "");
+        Assert.DoesNotContain(expectedGlobalSystemPrompt, iter2SystemMsgs[0].Text ?? "");
         Assert.Contains("src/Foo.cs", iter2SystemMsgs[0].Text ?? "");
     }
 

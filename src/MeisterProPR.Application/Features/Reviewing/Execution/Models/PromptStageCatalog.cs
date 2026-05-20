@@ -41,6 +41,24 @@ public static class PromptStageCatalog
             [PromptStageKeys.PrVerificationUser] = new(
                 PromptStageKeys.PrVerificationUser, "PR verification user prompt", "shared-downstream", PromptStageRole.User,
                 "ReviewPrompts.BuildPrVerificationUserMessage"),
+            ["pr_wide_planning_system"] = new(
+                "pr_wide_planning_system", "PR-wide planning system prompt", "pr-wide-agentic", PromptStageRole.System,
+                "ReviewPrompts.BuildPrWidePlanningSystemPrompt"),
+            ["pr_wide_planning_user"] = new(
+                "pr_wide_planning_user", "PR-wide planning user prompt", "pr-wide-agentic", PromptStageRole.User,
+                "ReviewPrompts.BuildPrWidePlanningUserMessage"),
+            ["pr_wide_investigation_system"] = new(
+                "pr_wide_investigation_system", "PR-wide investigation system prompt", "pr-wide-agentic", PromptStageRole.System,
+                "ReviewPrompts.BuildPrWideInvestigationSystemPrompt"),
+            ["pr_wide_investigation_user"] = new(
+                "pr_wide_investigation_user", "PR-wide investigation user prompt", "pr-wide-agentic", PromptStageRole.User,
+                "ReviewPrompts.BuildPrWideInvestigationUserMessage"),
+            ["pr_wide_synthesis_system"] = new(
+                "pr_wide_synthesis_system", "PR-wide synthesis system prompt", "pr-wide-agentic", PromptStageRole.System,
+                "ReviewPrompts.BuildPrWideSynthesisSystemPrompt"),
+            ["pr_wide_synthesis_user"] = new(
+                "pr_wide_synthesis_user", "PR-wide synthesis user prompt", "pr-wide-agentic", PromptStageRole.User,
+                "ReviewPrompts.BuildPrWideSynthesisUserMessage"),
         };
 
     /// <summary>

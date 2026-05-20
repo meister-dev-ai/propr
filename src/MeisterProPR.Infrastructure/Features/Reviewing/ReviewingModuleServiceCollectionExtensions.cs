@@ -79,6 +79,13 @@ public static class ReviewingModuleServiceCollectionExtensions
         services.AddReviewingThreadMemory();
         services.TryAddScoped<IRepositoryInstructionFetcher, ProviderRepositoryInstructionFetcher>();
         services.TryAddScoped<IRepositoryExclusionFetcher, ProviderRepositoryExclusionFetcher>();
+        services.TryAddSingleton(sp =>
+        {
+            var contentRootPath = environment?.ContentRootPath ?? AppContext.BaseDirectory;
+            return new PromptTemplateFileProvider(contentRootPath);
+        });
+        services.TryAddSingleton(sp => new PromptTemplatePartialRegistry(sp.GetRequiredService<PromptTemplateFileProvider>()));
+        services.TryAddSingleton(_ => new HandlebarsPromptRenderer());
 
         services.AddSingleton<ApplicationIAiReviewCore>(sp => new ToolAwareAiReviewCore(
             null,

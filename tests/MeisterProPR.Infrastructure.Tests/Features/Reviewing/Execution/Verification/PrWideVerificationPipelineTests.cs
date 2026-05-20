@@ -66,6 +66,9 @@ public sealed class PrWideVerificationPipelineTests
             ActiveProtocolId = Guid.NewGuid(),
             ProtocolRecorder = protocolRecorder,
             ModelId = "test-model",
+            PromptExperiment = new PromptExperimentContext(
+                "variant-a",
+                [new StagePromptVariant("pr_wide_synthesis_user", PromptStageRole.User, PromptCompositionMode.Append, "extra pr-wide synthesis guidance")]),
         };
 
         var sut = new PrWideAgenticReviewOrchestrator(
@@ -111,6 +114,45 @@ public sealed class PrWideVerificationPipelineTests
             Arg.Any<string?>(),
             Arg.Is<string?>(output => output != null && output.Contains("\"summaryOnlyCount\":1", StringComparison.Ordinal)),
             Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+
+        await protocolRecorder.Received().RecordPromptStageEvidenceAsync(
+            context.ActiveProtocolId.Value,
+            "pr_wide_planning_system",
+            Arg.Is<string>(variantName => variantName == "variant-a"),
+            Arg.Is(PromptCompositionMode.Default),
+            Arg.Is(true),
+            Arg.Is<string?>(text =>
+                !string.IsNullOrWhiteSpace(text) && text.Contains("Stage A of a PR-wide agentic review workflow", StringComparison.Ordinal)),
+            Arg.Is<string?>(text => text == null),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received().RecordPromptStageEvidenceAsync(
+            context.ActiveProtocolId.Value,
+            "pr_wide_planning_user",
+            Arg.Is<string>(variantName => variantName == "variant-a"),
+            Arg.Is(PromptCompositionMode.Default),
+            Arg.Is(true),
+            Arg.Is<string?>(text => text == null),
+            Arg.Is<string?>(text => !string.IsNullOrWhiteSpace(text) && text.Contains("Changed file manifest:", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received().RecordPromptStageEvidenceAsync(
+            context.ActiveProtocolId.Value,
+            "pr_wide_synthesis_system",
+            Arg.Is<string>(variantName => variantName == "variant-a"),
+            Arg.Is(PromptCompositionMode.Default),
+            Arg.Is(true),
+            Arg.Is<string?>(text =>
+                !string.IsNullOrWhiteSpace(text) && text.Contains("Stage C of a PR-wide agentic review workflow", StringComparison.Ordinal)),
+            Arg.Is<string?>(text => text == null),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received().RecordPromptStageEvidenceAsync(
+            context.ActiveProtocolId.Value,
+            "pr_wide_synthesis_user",
+            Arg.Is<string>(variantName => variantName == "variant-a"),
+            Arg.Is(PromptCompositionMode.Append),
+            Arg.Is(false),
+            Arg.Is<string?>(text => text == null),
+            Arg.Is<string?>(text => !string.IsNullOrWhiteSpace(text) && text.Contains("Investigation outputs:", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
     }
 

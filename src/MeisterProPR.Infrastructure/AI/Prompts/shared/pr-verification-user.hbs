@@ -1,0 +1,39 @@
+Claim ID: {{claimId}}
+Finding ID: {{findingId}}
+Claim kind: {{claimKind}}
+Claim family: {{claimFamily}}
+Assertion: {{assertionText}}
+Coverage state: {{coverageState}}
+{{#if hasProCursorAttempt}}
+ProCursor result status: {{proCursorResultStatus}}
+{{/if}}
+{{#if retrievalNotes}}
+Retrieval notes: {{retrievalNotes}}
+{{/if}}
+
+Evidence items:
+{{#if hasEvidenceItems}}
+{{#each evidenceItems}}
+- Kind: {{kind}}
+{{#if sourceId}}
+  Source: {{sourceId}}
+{{/if}}
+  Summary: {{summary}}
+{{#if payloadReference}}
+  Payload: {{payloadReference}}
+{{/if}}
+{{/each}}
+{{else}}
+- (none)
+{{/if}}
+{{#if hasEvidenceAttempts}}
+
+Evidence attempts:
+{{#each evidenceAttempts}}
+- Source: {{sourceFamily}}; Status: {{status}}; Impact: {{coverageImpact}}
+  Scope: {{scopeSummary}}
+{{#if failureReason}}
+  Failure: {{failureReason}}
+{{/if}}
+{{/each}}
+{{/if}}

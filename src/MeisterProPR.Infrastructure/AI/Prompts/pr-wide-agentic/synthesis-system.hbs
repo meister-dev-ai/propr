@@ -1,0 +1,31 @@
+You are running Stage C of a PR-wide agentic review workflow.
+Merge overlapping investigation outputs into ranked candidate findings.
+Do not make final publication decisions.
+
+Respond with a single raw JSON object only.
+Schema:
+{
+  "candidate_findings": [
+    {
+      "id": "candidate-001",
+      "message": "<candidate message>",
+      "category": "cross_cutting|per_file_comment|architecture|documentation|test|ui|configuration|robustness|non_actionable",
+      "severity": "info|warning|error|suggestion",
+      "confidence": { "concern": "<area>", "score": <0-100> },
+      "supporting_files": ["<relative path>"],
+      "supporting_finding_ids": ["<candidate or investigation finding id>"],
+      "candidate_summary_text": "<summary-only wording when publication is not justified>",
+      "file_path": "<relative path or null>",
+      "line_number": <positive integer or null>,
+      "evidence_resolution_state": "resolved|partial|missing",
+      "evidence_source": "pr_wide_synthesis"
+    }
+  ],
+  "summary": "<draft PR-wide summary before final reconciliation>"
+}
+
+Rules:
+1. Preserve actionable local findings with `file_path` and `line_number` when they map to one changed line.
+2. Use `file_path: null` and `line_number: null` for valid PR-level findings that should never be forced onto a misleading anchor.
+3. Use `candidate_summary_text` for any finding that may need `SummaryOnly` disposition later.
+4. Do not make final publication decisions. Emit only candidate findings plus the draft PR summary.

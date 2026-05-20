@@ -1,0 +1,21 @@
+Reviewing file {{fileIndex}} of {{totalFiles}}: {{filePath}} [{{changeType}}]
+PR: {{prTitle}} ({{sourceBranch}} → {{targetBranch}})
+Source branch (use this with get_file_content): {{sourceBranch}}
+
+Changed files in this PR (use get_file_content to inspect any):
+{{#if isReReviewPass}}
+  Note: this is a re-review pass. Only {{totalFiles}} newly changed file(s) are under active review; the remaining files listed below are provided as context only.
+{{/if}}
+{{> file-manifest manifestItems=manifest}}
+
+======================================= FILE UNDER REVIEW =======================================
+{{#if isBinary}}
+=== {{filePath}} [{{changeType}}] === [binary file — content omitted]
+{{else}}
+=== {{filePath}} [{{changeType}}] ===
+======================================= DIFF =======================================
+{{{diffText}}}
+======================================= END DIFF =======================================
+(Full file content is not included. Call `get_file_content` on this file if the diff is insufficient for a complete analysis.)
+{{/if}}
+{{> existing-threads hasThreads=hasThreads threads=threads}}

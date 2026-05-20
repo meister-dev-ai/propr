@@ -1,0 +1,12 @@
+{{#if hasThreads}}
+
+## Existing Review Threads
+The following threads already exist on this PR. Take them into account: avoid re-flagging resolved issues, and consider developer responses.
+{{#each threads}}
+
+### Thread at {{location}}
+{{#each comments}}
+  [{{authorName}}]: {{content}}
+{{/each}}
+{{/each}}
+{{/if}}
