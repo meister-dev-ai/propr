@@ -110,6 +110,48 @@ internal sealed class NullReviewContextTools : IReviewContextTools, IProCursorAv
     }
 
     /// <inheritdoc />
+    public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new CodeSearchResult(
+                RepositorySearchStatuses.NoMatch,
+                request.BranchSide,
+                request.PathScope,
+                request.SearchMode,
+                request.Filters,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
+    public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new PathSearchResult(
+                RepositorySearchStatuses.NoMatch,
+                request.BranchSide,
+                request.PathScope,
+                request.MatchMode,
+                request.Filters,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
+    public Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+    {
+        return Task.FromResult(RepositoryOverview.CreateBlocked(branchSide, RepositorySearchStatuses.NoMatch));
+    }
+
+    /// <inheritdoc />
+    public Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+    {
+        return Task.FromResult(FileNeighborhood.CreateBlocked(branchSide, filePath, RepositorySearchStatuses.NoMatch));
+    }
+
+    /// <inheritdoc />
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
     {
         return Task.FromResult(

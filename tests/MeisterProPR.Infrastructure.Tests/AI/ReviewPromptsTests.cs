@@ -152,6 +152,29 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildSystemPrompt_ContainsDiscoveryToolGuidance()
+    {
+        var prompt = ReviewPrompts.BuildSystemPrompt(null);
+
+        Assert.Contains("search_code", prompt, StringComparison.Ordinal);
+        Assert.Contains("search_paths", prompt, StringComparison.Ordinal);
+        Assert.Contains("get_repository_overview", prompt, StringComparison.Ordinal);
+        Assert.Contains("get_file_neighborhood", prompt, StringComparison.Ordinal);
+        Assert.Contains("exact_identifier", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildAgenticFilePlanningSystemPrompt_ContainsDiscoveryToolsAsAllowedOptions()
+    {
+        var prompt = ReviewPrompts.BuildAgenticFilePlanningSystemPrompt(null);
+
+        Assert.Contains("search_code", prompt, StringComparison.Ordinal);
+        Assert.Contains("search_paths", prompt, StringComparison.Ordinal);
+        Assert.Contains("get_repository_overview", prompt, StringComparison.Ordinal);
+        Assert.Contains("get_file_neighborhood", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildAgenticFilePlanningUserMessage_ContainsAnchorFileAndManifest()
     {
         var currentFile = CreateFile("src/Foo.cs", diff: "+services.AddFoo();");
@@ -549,7 +572,7 @@ public class ReviewPromptsTests
         Assert.Contains("search_source_changed_files", guidance, StringComparison.Ordinal);
         Assert.Contains("search_target_repo", guidance, StringComparison.Ordinal);
         Assert.Contains("search_target_changed_files", guidance, StringComparison.Ordinal);
-        Assert.Contains("Use repository search before broad file reads", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Use search_code before broad file reads", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

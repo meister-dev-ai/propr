@@ -324,6 +324,79 @@ public class AdoReviewContextToolsTests
         Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.ResultTruncated);
     }
 
+    [Fact]
+    public async Task SearchCodeAsync_TargetChangedFiles_UsesTargetBranchAndChangedScope()
+    {
+        var sut = new TestableAdoReviewContextTools(
+            DefaultOptions(),
+            "feature/my-pr",
+            "main",
+            [new ChangedPathSnapshot("src/Foo.cs", ChangeType.Edit, true, true)]);
+        sut.SetTree("src/Foo.cs", "src/Other.cs");
+        sut.SetFile("src/Foo.cs", "private const string Marker = \"baseline\";", "main");
+        sut.SetFile("src/Other.cs", "private const string Marker = \"baseline\";", "main");
+
+        var result = await sut.SearchCodeAsync(
+            new CodeSearchRequest(
+                "baseline",
+                CodeSearchModes.ExactPhrase,
+                RepositorySearchBranchSides.Target,
+                RepositorySearchPathScopes.ChangedFiles),
+            CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, result.Status);
+        var match = Assert.Single(result.Matches);
+        Assert.Equal("src/Foo.cs", match.FilePath);
+        Assert.Equal("main", sut.LastFetchedBranch);
+    }
+
+    [Fact]
+    public async Task SearchPathsAsync_SourceRepo_ReturnsPathMatches()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Foo.cs", "tests/FooTests.cs", "src/Bar.cs");
+
+        var result = await sut.SearchPathsAsync(
+            new PathSearchRequest(
+                "Foo",
+                PathSearchModes.Contains,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.Repository,
+                new CodeSearchFilterSet("csharp", ExcludeTests: true)),
+            CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Partial, result.Status);
+        var match = Assert.Single(result.Paths);
+        Assert.Equal("src/Foo.cs", match.FilePath);
+    }
+
+    [Fact]
+    public async Task GetRepositoryOverviewAsync_SourceBranch_ReturnsStructuredOverview()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/App/Program.cs", "src/App/App.csproj", "tests/App.Tests/FooTests.cs", "docs/architecture.md");
+
+        var result = await sut.GetRepositoryOverviewAsync(RepositorySearchBranchSides.Source, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, result.Status);
+        Assert.Contains("src/App/App.csproj", result.Projects.Paths);
+        Assert.Contains("src/App/Program.cs", result.EntryPoints.Paths);
+        Assert.Contains("tests/App.Tests/FooTests.cs", result.TestLocations.Paths);
+        Assert.Contains("docs/architecture.md", result.DocsAndSpecs.Paths);
+    }
+
+    [Fact]
+    public async Task GetFileNeighborhoodAsync_MissingFile_ReturnsNotFoundLimitation()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Other.cs");
+
+        var result = await sut.GetFileNeighborhoodAsync("src/Missing.cs", RepositorySearchBranchSides.Source, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.InvalidRequest, result.Status);
+        Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.FileNotFound);
+    }
+
     /// <summary>
     ///     Testable subclass of <see cref="AdoReviewContextTools" /> that replaces
     ///     <see cref="AdoReviewContextTools.FetchRawFileContentAsync" /> with a controlled

@@ -196,6 +196,83 @@ public sealed class ReviewContextToolsTests
     }
 
     [Fact]
+    public async Task SearchCodeAsync_WhenToolNotAllowed_ReturnsStructuredBlockedResult()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        var sut = new BoundedReviewContextTools(
+            inner,
+            [BoundedReviewContextTools.GetChangedFilesToolName],
+            1);
+
+        var request = new CodeSearchRequest(
+            "needle",
+            CodeSearchModes.ExactPhrase,
+            RepositorySearchBranchSides.Source,
+            RepositorySearchPathScopes.Repository);
+
+        var result = await sut.SearchCodeAsync(request, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.BlockedNotAllowed, result.Status);
+        Assert.Equal(RepositorySearchBranchSides.Source, result.BranchSide);
+        Assert.Equal(RepositorySearchPathScopes.Repository, result.PathScope);
+        Assert.Empty(result.Matches);
+        await inner.DidNotReceive().SearchCodeAsync(Arg.Any<CodeSearchRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchPathsAsync_AfterBudgetExhausted_ReturnsStructuredBudgetBlock()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        inner.SearchPathsAsync(Arg.Any<PathSearchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new PathSearchResult(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    PathSearchModes.Contains,
+                    null,
+                    [new PathSearchMatch("src/Foo.cs", "csharp", 1)],
+                    [],
+                    false));
+
+        var sut = new BoundedReviewContextTools(
+            inner,
+            [BoundedReviewContextTools.SearchPathsToolName],
+            1);
+
+        var request = new PathSearchRequest(
+            "Foo",
+            PathSearchModes.Contains,
+            RepositorySearchBranchSides.Source,
+            RepositorySearchPathScopes.Repository);
+
+        var first = await sut.SearchPathsAsync(request, CancellationToken.None);
+        var second = await sut.SearchPathsAsync(request, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, first.Status);
+        Assert.Equal(RepositorySearchStatuses.BlockedBudgetExhausted, second.Status);
+        Assert.Equal(BoundedReviewContextTools.SuccessStatus, sut.Attempts[0].Status);
+        Assert.Equal(BoundedReviewContextTools.BlockedBudgetExhaustedStatus, sut.Attempts[1].Status);
+    }
+
+    [Fact]
+    public async Task GetFileNeighborhoodAsync_PathOutsideSeedScope_ReturnsScopeBlock()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        var sut = new BoundedReviewContextTools(
+            inner,
+            [BoundedReviewContextTools.GetFileNeighborhoodToolName],
+            2,
+            ["src/Allowed.cs"]);
+
+        var result = await sut.GetFileNeighborhoodAsync("src/Other.cs", RepositorySearchBranchSides.Source, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.BlockedScopeViolation, result.Status);
+        Assert.Equal("src/Other.cs", result.FilePath);
+        await inner.DidNotReceive().GetFileNeighborhoodAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SearchSourceRepoAsync_InnerNoMatchResult_PassesStructuredResultThrough()
     {
         var inner = Substitute.For<IReviewContextTools>();

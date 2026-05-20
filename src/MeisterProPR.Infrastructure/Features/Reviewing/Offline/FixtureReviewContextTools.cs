@@ -26,7 +26,9 @@ public sealed class FixtureReviewContextTools(
     IReadOnlyList<Guid>? knowledgeSourceIds) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
     private readonly AiReviewOptions _options = options.Value;
+    private readonly Dictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
 
     public bool SupportsProCursorTools => proCursorGateway is not DisabledProCursorGateway;
 
@@ -110,6 +112,102 @@ public sealed class FixtureReviewContextTools(
         return this.SearchAsync(
             new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
             ct);
+    }
+
+    public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryCodeSearchExecutor.ExecuteAsync(
+            request,
+            fixture.PullRequestSnapshot.SourceBranch,
+            fixture.PullRequestSnapshot.TargetBranch,
+            fixture.PullRequestSnapshot.ChangedFiles.Select(ChangedPathSnapshot.FromFixtureChangedFile).ToList().AsReadOnly(),
+            (branch, _) => Task.FromResult<IReadOnlyList<string>>(
+                this.ResolveFilesForBranch(branch)
+                    .Select(file => file.Path)
+                    .OrderBy(path => path, StringComparer.Ordinal)
+                    .ToList()
+                    .AsReadOnly()),
+            (path, branch, _) => Task.FromResult<string?>(
+                this.ResolveFilesForBranch(branch)
+                    .FirstOrDefault(file => string.Equals(file.Path, path.Trim(), StringComparison.Ordinal))?
+                    .Content),
+            NormalizeBranch,
+            path => path.Trim(),
+            this._options.MaxFileSizeBytes,
+            ct);
+    }
+
+    public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryPathSearchExecutor.ExecuteAsync(
+            request,
+            fixture.PullRequestSnapshot.SourceBranch,
+            fixture.PullRequestSnapshot.TargetBranch,
+            fixture.PullRequestSnapshot.ChangedFiles.Select(ChangedPathSnapshot.FromFixtureChangedFile).ToList().AsReadOnly(),
+            (branch, _) => Task.FromResult<IReadOnlyList<string>>(
+                this.ResolveFilesForBranch(branch)
+                    .Select(file => file.Path)
+                    .OrderBy(path => path, StringComparer.Ordinal)
+                    .ToList()
+                    .AsReadOnly()),
+            NormalizeBranch,
+            path => path.Trim(),
+            ct);
+    }
+
+    public Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        if (this._repositoryOverviewCache.TryGetValue(normalizedBranchSide, out var cached))
+        {
+            return Task.FromResult(cached);
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            fixture.PullRequestSnapshot.SourceBranch,
+            fixture.PullRequestSnapshot.TargetBranch,
+            NormalizeBranch);
+        if (branch is null)
+        {
+            return Task.FromResult(RepositoryOverview.CreateBlocked(normalizedBranchSide, RepositorySearchStatuses.InvalidRequest));
+        }
+
+        var overview = RepositoryOverviewBuilder.Build(
+            normalizedBranchSide,
+            branch,
+            this.ResolveFilesForBranch(branch).Select(file => file.Path).ToList().AsReadOnly());
+        this._repositoryOverviewCache[normalizedBranchSide] = overview;
+        return Task.FromResult(overview);
+    }
+
+    public Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        var normalizedPath = filePath.Trim().TrimStart('/');
+        var cacheKey = $"{normalizedBranchSide}:{normalizedPath}";
+        if (this._fileNeighborhoodCache.TryGetValue(cacheKey, out var cached))
+        {
+            return Task.FromResult(cached);
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            fixture.PullRequestSnapshot.SourceBranch,
+            fixture.PullRequestSnapshot.TargetBranch,
+            NormalizeBranch);
+        if (branch is null)
+        {
+            return Task.FromResult(FileNeighborhood.CreateBlocked(normalizedBranchSide, normalizedPath, RepositorySearchStatuses.InvalidRequest));
+        }
+
+        var neighborhood = FileNeighborhoodBuilder.Build(
+            normalizedBranchSide,
+            branch,
+            normalizedPath,
+            this.ResolveFilesForBranch(branch).Select(file => file.Path).ToList().AsReadOnly());
+        this._fileNeighborhoodCache[cacheKey] = neighborhood;
+        return Task.FromResult(neighborhood);
     }
 
     public async Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
@@ -209,6 +307,13 @@ public sealed class FixtureReviewContextTools(
         return branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
             ? branch["refs/heads/".Length..]
             : branch.Trim();
+    }
+
+    private static string NormalizeBranchSide(string branchSide)
+    {
+        return string.Equals(branchSide, RepositorySearchBranchSides.Target, StringComparison.OrdinalIgnoreCase)
+            ? RepositorySearchBranchSides.Target
+            : RepositorySearchBranchSides.Source;
     }
 
     private IReadOnlyList<RepositoryFileEntry> ResolveFilesForBranch(string branch)

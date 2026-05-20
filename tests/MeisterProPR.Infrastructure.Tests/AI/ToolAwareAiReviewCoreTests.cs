@@ -355,6 +355,10 @@ public class ToolAwareAiReviewCoreTests
         Assert.Contains("search_source_changed_files", toolNames);
         Assert.Contains("search_target_repo", toolNames);
         Assert.Contains("search_target_changed_files", toolNames);
+        Assert.Contains("search_code", toolNames);
+        Assert.Contains("search_paths", toolNames);
+        Assert.Contains("get_repository_overview", toolNames);
+        Assert.Contains("get_file_neighborhood", toolNames);
         Assert.DoesNotContain("ask_procursor_knowledge", toolNames);
         Assert.DoesNotContain("get_procursor_symbol_info", toolNames);
     }
@@ -770,6 +774,143 @@ public class ToolAwareAiReviewCoreTests
             payload.RootElement.TryGetProperty("path_scope", out var pathScope)
                 ? pathScope.GetString()
                 : payload.RootElement.GetProperty("pathScope").GetString());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithCodeSearchToolCall_PassesStructuredResultToNextTurn()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.SearchCodeAsync(Arg.Any<CodeSearchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new CodeSearchResult(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    CodeSearchModes.ExactIdentifier,
+                    new CodeSearchFilterSet("csharp"),
+                    [new CodeSearchMatch("src/Foo.cs", 7, "needle", "csharp", 1, false)],
+                    [],
+                    false));
+
+        var capturedMessages = new List<List<ChatMessage>>();
+        var toolCallResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent(
+                        "call-1",
+                        "search_code",
+                        new Dictionary<string, object?>
+                        {
+                            ["queryText"] = "needle",
+                            ["searchMode"] = "exact_identifier",
+                            ["branchSide"] = "source",
+                            ["pathScope"] = "repository",
+                            ["language"] = "csharp",
+                            ["fileGlob"] = null,
+                            ["pathPrefix"] = null,
+                            ["excludeGenerated"] = false,
+                            ["excludeTests"] = false,
+                        }),
+                ]));
+        var finalResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"summary":"Done.","comments":[]}"""));
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(toolCallResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        var toolMessage = Assert.Single(capturedMessages[1], message => message.Role == ChatRole.Tool);
+        var toolResult = Assert.Single(toolMessage.Contents.OfType<FunctionResultContent>());
+        var toolResultJson = Assert.IsType<string>(toolResult.Result);
+        Assert.Contains("\"searchMode\":\"exact_identifier\"", toolResultJson, StringComparison.Ordinal);
+        Assert.Contains("\"filePath\":\"src/Foo.cs\"", toolResultJson, StringComparison.Ordinal);
+        await mockTools.Received(1).SearchCodeAsync(
+            Arg.Is<CodeSearchRequest>(request => request.SearchMode == CodeSearchModes.ExactIdentifier &&
+                                                 request.Filters != null &&
+                                                 request.Filters.Language == "csharp"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithOverviewAndNeighborhoodTools_RecordsStructuredResults()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetRepositoryOverviewAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(RepositoryOverview.CreateBlocked(RepositorySearchBranchSides.Source, RepositorySearchStatuses.NoMatch));
+        mockTools.GetFileNeighborhoodAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new FileNeighborhood(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    "feature/x",
+                    "src/Foo.cs",
+                    "src/App/App.csproj",
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    false));
+
+        var finalJson = """{"summary":"Done.","comments":[]}""";
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [
+                            new FunctionCallContent("call-1", "get_repository_overview", new Dictionary<string, object?> { ["branchSide"] = "source" }),
+                            new FunctionCallContent(
+                                "call-2", "get_file_neighborhood", new Dictionary<string, object?> { ["filePath"] = "src/Foo.cs", ["branchSide"] = "source" }),
+                        ])),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, finalJson)));
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "get_repository_overview",
+                Arg.Any<string>(),
+                Arg.Is<string>(result => result.Contains("\"status\":\"no_match\"", StringComparison.Ordinal)),
+                1,
+                Arg.Any<CancellationToken>());
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "get_file_neighborhood",
+                Arg.Any<string>(),
+                Arg.Is<string>(result => result.Contains("\"filePath\":\"src/Foo.cs\"", StringComparison.Ordinal)),
+                1,
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1482,6 +1623,44 @@ public class ToolAwareAiReviewCoreTests
                     [],
                     [],
                     false));
+        }
+
+        public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new CodeSearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    request.BranchSide,
+                    request.PathScope,
+                    request.SearchMode,
+                    request.Filters,
+                    [],
+                    [],
+                    false));
+        }
+
+        public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new PathSearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    request.BranchSide,
+                    request.PathScope,
+                    request.MatchMode,
+                    request.Filters,
+                    [],
+                    [],
+                    false));
+        }
+
+        public Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+        {
+            return Task.FromResult(RepositoryOverview.CreateBlocked(branchSide, RepositorySearchStatuses.NoMatch));
+        }
+
+        public Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+        {
+            return Task.FromResult(FileNeighborhood.CreateBlocked(branchSide, filePath, RepositorySearchStatuses.NoMatch));
         }
 
         public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)

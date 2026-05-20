@@ -907,6 +907,68 @@ internal sealed partial class AgenticFileReviewer(
                     Name = BoundedReviewContextTools.GetFileContentToolName,
                     Description = "Get file content for a bounded line range from the PR source branch.",
                 }),
+            AIFunctionFactory.Create(
+                (
+                        string queryText,
+                        string searchMode,
+                        string branchSide,
+                        string pathScope,
+                        string? language,
+                        string? fileGlob,
+                        string? pathPrefix,
+                        bool excludeGenerated,
+                        bool excludeTests) =>
+                    reviewTools.SearchCodeAsync(
+                        new CodeSearchRequest(
+                            queryText,
+                            searchMode,
+                            branchSide,
+                            pathScope,
+                            new CodeSearchFilterSet(language, fileGlob, pathPrefix, excludeGenerated, excludeTests)),
+                        cancellationToken),
+                new AIFunctionFactoryOptions
+                {
+                    Name = BoundedReviewContextTools.SearchCodeToolName,
+                    Description = "Search code content with explicit branch, scope, mode, and filters.",
+                }),
+            AIFunctionFactory.Create(
+                (
+                        string queryText,
+                        string matchMode,
+                        string branchSide,
+                        string pathScope,
+                        string? language,
+                        string? fileGlob,
+                        string? pathPrefix,
+                        bool excludeGenerated,
+                        bool excludeTests) =>
+                    reviewTools.SearchPathsAsync(
+                        new PathSearchRequest(
+                            queryText,
+                            matchMode,
+                            branchSide,
+                            pathScope,
+                            new CodeSearchFilterSet(language, fileGlob, pathPrefix, excludeGenerated, excludeTests)),
+                        cancellationToken),
+                new AIFunctionFactoryOptions
+                {
+                    Name = BoundedReviewContextTools.SearchPathsToolName,
+                    Description = "Search repository-relative paths without reading file content.",
+                }),
+            AIFunctionFactory.Create(
+                (string branchSide) => reviewTools.GetRepositoryOverviewAsync(branchSide, cancellationToken),
+                new AIFunctionFactoryOptions
+                {
+                    Name = BoundedReviewContextTools.GetRepositoryOverviewToolName,
+                    Description = "Get a structured repository overview for source or target branch side.",
+                }),
+            AIFunctionFactory.Create(
+                (string filePath, string branchSide) => reviewTools.GetFileNeighborhoodAsync(filePath, branchSide, cancellationToken),
+                new AIFunctionFactoryOptions
+                {
+                    Name = BoundedReviewContextTools.GetFileNeighborhoodToolName,
+                    Description = "Get focused ownership and nearby-context signals for one file.",
+                }),
         };
 
         if (supportsProCursorTools)

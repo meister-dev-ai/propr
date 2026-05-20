@@ -198,6 +198,82 @@ public sealed class FixtureReviewContextToolsTests
     }
 
     [Fact]
+    public async Task FixtureReviewContextTools_DiscoveryTools_MatchLiveProviderShapes()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = "test-review-eval-jwt-secret-32!",
+                })
+            .Build();
+
+        services.AddLogging();
+        services.AddReviewEvalHarness(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var fixture = CreateFixture() with
+        {
+            RepositorySnapshot = CreateFixture().RepositorySnapshot with
+            {
+                Files =
+                [
+                    new RepositoryFileEntry("src/Example.cs", "public class Example { public string Greet() => BuildGreeting(); }"),
+                    new RepositoryFileEntry("src/App/App.csproj", "<Project />"),
+                    new RepositoryFileEntry("tests/ExampleTests.cs", "public class ExampleTests"),
+                    new RepositoryFileEntry("docs/architecture.md", "Architecture"),
+                ],
+            },
+        };
+        var accessor = scope.ServiceProvider.GetRequiredService<IReviewEvaluationFixtureAccessor>();
+        accessor.Fixture = fixture;
+
+        var toolsFactory = scope.ServiceProvider.GetRequiredService<IReviewContextToolsFactory>();
+        var tools = toolsFactory.Create(
+            new ReviewContextToolsRequest(
+                fixture.PullRequestSnapshot.CodeReview,
+                fixture.PullRequestSnapshot.SourceBranch,
+                1,
+                null,
+                TargetBranch: fixture.PullRequestSnapshot.TargetBranch,
+                ChangedPathSnapshots: fixture.PullRequestSnapshot.ChangedFiles
+                    .Select(ChangedPathSnapshot.FromFixtureChangedFile)
+                    .ToList()
+                    .AsReadOnly()));
+
+        var codeSearch = await tools.SearchCodeAsync(
+            new CodeSearchRequest(
+                "BuildGreeting",
+                CodeSearchModes.ExactIdentifier,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.Repository,
+                new CodeSearchFilterSet("csharp")),
+            CancellationToken.None);
+        var pathSearch = await tools.SearchPathsAsync(
+            new PathSearchRequest(
+                "Example",
+                PathSearchModes.Contains,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.Repository,
+                new CodeSearchFilterSet("csharp", ExcludeTests: true)),
+            CancellationToken.None);
+        var overview = await tools.GetRepositoryOverviewAsync(RepositorySearchBranchSides.Source, CancellationToken.None);
+        var neighborhood = await tools.GetFileNeighborhoodAsync("src/Example.cs", RepositorySearchBranchSides.Source, CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Partial, codeSearch.Status);
+        Assert.Contains(codeSearch.Matches, match => match.FilePath == "src/Example.cs");
+        Assert.Equal(RepositorySearchStatuses.Partial, pathSearch.Status);
+        Assert.Contains(pathSearch.Paths, match => match.FilePath == "src/Example.cs");
+        Assert.Equal(RepositorySearchStatuses.Success, overview.Status);
+        Assert.Contains("src/App/App.csproj", overview.Projects.Paths);
+        Assert.Equal(RepositorySearchStatuses.Success, neighborhood.Status);
+        Assert.Equal("src/App/App.csproj", neighborhood.OwningProjectOrModule);
+    }
+
+    [Fact]
     public void AddReviewEvalHarness_RegistersSharedDispatcherSeamForOfflineExecution()
     {
         var services = new ServiceCollection();

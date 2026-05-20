@@ -32,6 +32,7 @@ internal abstract class ProviderReviewContextToolsBase(
     private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots = changedPathSnapshots ?? [];
     private readonly Guid? _clientId = clientId;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
     private readonly int _iterationId = iterationId;
 
     private readonly IReadOnlyList<Guid>? _knowledgeSourceIds = knowledgeSourceIds?.Count > 0
@@ -49,6 +50,7 @@ internal abstract class ProviderReviewContextToolsBase(
 
     private readonly int _pullRequestNumber = review.Number;
     private readonly RepositoryRef _repository = review.Repository;
+    private readonly Dictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
     private readonly string _sourceBranch = sourceBranch;
     private readonly string? _targetBranch = targetBranch;
 
@@ -152,6 +154,88 @@ internal abstract class ProviderReviewContextToolsBase(
         return this.SearchAsync(
             new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
             ct);
+    }
+
+    public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryCodeSearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.LoadFileTreeAsync,
+            this.FetchRawFileContentAsync,
+            this.NormalizeBranch,
+            this.NormalizePath,
+            this._options.MaxFileSizeBytes,
+            ct);
+    }
+
+    public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryPathSearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.LoadFileTreeAsync,
+            this.NormalizeBranch,
+            this.NormalizePath,
+            ct);
+    }
+
+    public async Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        if (this._repositoryOverviewCache.TryGetValue(normalizedBranchSide, out var cached))
+        {
+            return cached;
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            this._sourceBranch,
+            this._targetBranch,
+            this.NormalizeBranch);
+        if (branch is null)
+        {
+            return RepositoryOverview.CreateBlocked(normalizedBranchSide, RepositorySearchStatuses.InvalidRequest);
+        }
+
+        var paths = await this.LoadFileTreeAsync(branch, ct);
+        var overview = RepositoryOverviewBuilder.Build(normalizedBranchSide, branch, paths.Select(this.NormalizePath).ToList().AsReadOnly());
+        this._repositoryOverviewCache[normalizedBranchSide] = overview;
+        return overview;
+    }
+
+    public async Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        var normalizedPath = this.NormalizePath(filePath).TrimStart('/');
+        var cacheKey = $"{normalizedBranchSide}:{normalizedPath}";
+        if (this._fileNeighborhoodCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            this._sourceBranch,
+            this._targetBranch,
+            this.NormalizeBranch);
+        if (branch is null)
+        {
+            return FileNeighborhood.CreateBlocked(normalizedBranchSide, normalizedPath, RepositorySearchStatuses.InvalidRequest);
+        }
+
+        var paths = await this.LoadFileTreeAsync(branch, ct);
+        var neighborhood = FileNeighborhoodBuilder.Build(
+            normalizedBranchSide,
+            branch,
+            normalizedPath,
+            paths.Select(this.NormalizePath).ToList().AsReadOnly());
+        this._fileNeighborhoodCache[cacheKey] = neighborhood;
+        return neighborhood;
     }
 
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
@@ -291,5 +375,12 @@ internal abstract class ProviderReviewContextToolsBase(
     protected virtual string NormalizePath(string path)
     {
         return path.Trim();
+    }
+
+    private static string NormalizeBranchSide(string branchSide)
+    {
+        return string.Equals(branchSide, RepositorySearchBranchSides.Target, StringComparison.OrdinalIgnoreCase)
+            ? RepositorySearchBranchSides.Target
+            : RepositorySearchBranchSides.Source;
     }
 }

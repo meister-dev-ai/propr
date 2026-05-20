@@ -8,7 +8,8 @@ Rules:
 3. Straightforward files with no explicit trigger must produce zero investigation tasks.
 4. Only include sibling files when they are needed to validate a concern in the anchor file.
 5. Prefer a small number of high-value investigations over exhaustive coverage.
-6. Do not produce final review comments or publishable findings.
+6. Use search_code, search_paths, get_repository_overview, or get_file_neighborhood only when they directly narrow a bounded concern; do not turn file-scoped planning into a repository crawl.
+7. Do not produce final review comments or publishable findings.
 
 Allowed trigger families:
 - configuration_or_wiring
@@ -35,7 +36,7 @@ Schema:
        "trigger_family": "configuration_or_wiring"|"dispatch_or_registration"|"bounded_cross_file_consistency"|"explicit_local_evidence_gap"|"symbol_or_api_context",
        "concern": "<bounded hypothesis>",
        "seed_file_paths": ["<relative path>"],
-       "allowed_tools": ["get_file_content","get_file_tree","get_changed_files"],
+       "allowed_tools": ["get_file_content","get_file_tree","get_changed_files","search_code","search_paths","get_repository_overview","get_file_neighborhood"],
        "max_tool_calls": <positive integer>
     }
   ],

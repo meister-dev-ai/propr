@@ -14,4 +14,5 @@ public sealed record ReviewContextToolsRequest(
     IReadOnlyList<Guid>? KnowledgeSourceIds = null,
     string? ProviderScopePath = null,
     string? TargetBranch = null,
-    IReadOnlyList<ChangedPathSnapshot>? ChangedPathSnapshots = null);
+    IReadOnlyList<ChangedPathSnapshot>? ChangedPathSnapshots = null,
+    bool EnableRepositoryDiscoveryCache = true);

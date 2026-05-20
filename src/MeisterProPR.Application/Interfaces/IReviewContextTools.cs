@@ -66,6 +66,35 @@ public interface IReviewContextTools
     Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct);
 
     /// <summary>
+    ///     Searches code content in the active review repository using an explicit search mode and filters.
+    /// </summary>
+    /// <param name="request">Branch-aware code-search request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct);
+
+    /// <summary>
+    ///     Searches repository-relative path names in the active review repository.
+    /// </summary>
+    /// <param name="request">Branch-aware path-search request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct);
+
+    /// <summary>
+    ///     Returns a structured branch-specific repository overview for review navigation.
+    /// </summary>
+    /// <param name="branchSide">Logical branch side: source or target.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct);
+
+    /// <summary>
+    ///     Returns focused ownership and nearby-context signals for one repository-relative file.
+    /// </summary>
+    /// <param name="filePath">Repository-relative file path.</param>
+    /// <param name="branchSide">Logical branch side: source or target.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct);
+
+    /// <summary>
     ///     Asks ProCursor a reviewer-facing knowledge question using the current review repository context.
     /// </summary>
     /// <param name="question">Natural-language question to ask against configured knowledge sources.</param>

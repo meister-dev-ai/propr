@@ -21,6 +21,10 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
     public const string SearchSourceChangedFilesToolName = "search_source_changed_files";
     public const string SearchTargetRepoToolName = "search_target_repo";
     public const string SearchTargetChangedFilesToolName = "search_target_changed_files";
+    public const string SearchCodeToolName = "search_code";
+    public const string SearchPathsToolName = "search_paths";
+    public const string GetRepositoryOverviewToolName = "get_repository_overview";
+    public const string GetFileNeighborhoodToolName = "get_file_neighborhood";
     public const string AskProCursorKnowledgeToolName = "ask_procursor_knowledge";
     public const string GetProCursorSymbolInfoToolName = "get_procursor_symbol_info";
 
@@ -120,6 +124,52 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
             () => this._inner.SearchTargetChangedFilesAsync(searchTerm, fileMask, ct));
     }
 
+    public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(SearchCodeToolName, request.QueryText, out var blockedResult))
+        {
+            return Task.FromResult((CodeSearchResult)blockedResult!);
+        }
+
+        return this.ExecuteAsync(SearchCodeToolName, request.QueryText, () => this._inner.SearchCodeAsync(request, ct));
+    }
+
+    public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(SearchPathsToolName, request.QueryText, out var blockedResult))
+        {
+            return Task.FromResult((PathSearchResult)blockedResult!);
+        }
+
+        return this.ExecuteAsync(SearchPathsToolName, request.QueryText, () => this._inner.SearchPathsAsync(request, ct));
+    }
+
+    public Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(GetRepositoryOverviewToolName, branchSide, out var blockedResult))
+        {
+            return Task.FromResult((RepositoryOverview)blockedResult!);
+        }
+
+        return this.ExecuteAsync(GetRepositoryOverviewToolName, branchSide, () => this._inner.GetRepositoryOverviewAsync(branchSide, ct));
+    }
+
+    public Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+    {
+        if (this._scopedFilePaths.Count > 0 && !this._scopedFilePaths.Contains(filePath))
+        {
+            this.Attempts.Add(new PrWideToolUsage(GetFileNeighborhoodToolName, BlockedScopeViolationStatus, filePath));
+            return Task.FromResult(FileNeighborhood.CreateBlocked(branchSide, filePath, RepositorySearchStatuses.BlockedScopeViolation));
+        }
+
+        if (!this.TryEnterCall(GetFileNeighborhoodToolName, filePath, out var blockedResult))
+        {
+            return Task.FromResult((FileNeighborhood)blockedResult!);
+        }
+
+        return this.ExecuteAsync(GetFileNeighborhoodToolName, filePath, () => this._inner.GetFileNeighborhoodAsync(filePath, branchSide, ct));
+    }
+
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
     {
         if (!this.TryEnterCall(AskProCursorKnowledgeToolName, question, out var blockedResult))
@@ -215,6 +265,14 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
             SearchTargetChangedFilesToolName => RepositorySearchResult.CreateBlocked(
                 new RepositorySearchRequest(string.Empty, null, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
                 status),
+            SearchCodeToolName => CodeSearchResult.CreateBlocked(
+                new CodeSearchRequest(string.Empty, CodeSearchModes.Regex, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+                status),
+            SearchPathsToolName => PathSearchResult.CreateBlocked(
+                new PathSearchRequest(string.Empty, PathSearchModes.Contains, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+                status),
+            GetRepositoryOverviewToolName => RepositoryOverview.CreateBlocked(RepositorySearchBranchSides.Source, status),
+            GetFileNeighborhoodToolName => FileNeighborhood.CreateBlocked(RepositorySearchBranchSides.Source, string.Empty, status),
             AskProCursorKnowledgeToolName => new ProCursorKnowledgeAnswerDto(status, [], $"Tool call blocked: {status}."),
             GetProCursorSymbolInfoToolName => new ProCursorSymbolInsightDto(status, null, false, false, null, []),
             _ => string.Empty,

@@ -167,13 +167,15 @@ flowchart TD
    changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
    runtime as a fallback.
 3. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
-   `get_changed_files`, `get_file_tree`, `get_file_content`, `search_source_repo`,
-   `search_source_changed_files`, `search_target_repo`, `search_target_changed_files`,
-   `ask_procursor_knowledge`, and `get_procursor_symbol_info` while investigating a finding.
-   Repository-search tools return structured result objects that distinguish success, no-match,
-   partial, invalid-request, and bounded-tool blocked outcomes, and they reuse one shared search
-   executor for regex validation, file-mask filtering, deterministic ordering, truncation, and
-   limitation reporting across live providers and offline fixtures.
+    `get_changed_files`, `get_file_tree`, `get_file_content`, the legacy scoped regex tools
+    (`search_source_repo`, `search_source_changed_files`, `search_target_repo`,
+    `search_target_changed_files`), the structured discovery tools (`search_code`,
+    `search_paths`, `get_repository_overview`, `get_file_neighborhood`),
+    `ask_procursor_knowledge`, and `get_procursor_symbol_info` while investigating a finding.
+    Code and path search return structured result objects that distinguish success, no-match,
+    partial, invalid-request, and bounded-tool blocked outcomes, and they reuse shared branch/scope
+    resolution for exact identifier, exact phrase, regex, related-code, path-name, filter,
+    deterministic ordering, truncation, and limitation reporting across live providers and offline fixtures.
 4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
    thread-memory reconsideration before extracting structured claims and running local verification.
@@ -209,11 +211,13 @@ states in the evidence bundle.
     `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
     `review_finding_gate_decision`.
 
-Repository search stays bounded by the same review-tool policy surface as the existing file tools.
-When a search tool is not allowed or the tool budget is exhausted, `BoundedReviewContextTools`
-returns a structured blocked result instead of throwing. Changed-files-only target searches skip
-paths missing on the target branch and report those paths as limitations rather than failing the
-whole request.
+Repository discovery stays bounded by the same review-tool policy surface as the existing file tools.
+When a search, overview, or neighborhood tool is not allowed or the tool budget is exhausted,
+`BoundedReviewContextTools` returns a structured blocked result instead of throwing.
+Changed-files-only target searches skip paths missing on the target branch and report those paths
+as limitations rather than failing the whole request. Repository overview and file neighborhood
+results are branch-specific, structured, and cacheable within one review-context instance; missing
+neighborhood files produce explicit not-found limitations.
 
 For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The baseline and experimental profiles differ by ordered stage composition rather than by introducing a new top-level orchestrator.
 

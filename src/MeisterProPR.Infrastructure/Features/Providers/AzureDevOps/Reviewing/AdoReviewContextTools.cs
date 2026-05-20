@@ -33,6 +33,7 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     private readonly VssConnectionFactory _connectionFactory;
     private readonly IClientScmConnectionRepository _connectionRepository;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
     private readonly int _iterationId;
     private readonly IReadOnlyList<Guid>? _knowledgeSourceIds;
     private readonly ILogger<AdoReviewContextTools> _logger;
@@ -42,6 +43,7 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     private readonly string _projectId;
     private readonly int _pullRequestId;
     private readonly string _repositoryId;
+    private readonly Dictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
     private readonly string _sourceBranch;
     private readonly string? _targetBranch;
 
@@ -212,6 +214,84 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         return this.SearchAsync(
             new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
             ct);
+    }
+
+    public Task<CodeSearchResult> SearchCodeAsync(CodeSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryCodeSearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.FetchFileTreePathsAsync,
+            this.FetchRawFileContentAsync,
+            NormalizeBranchName,
+            NormalizeRepositoryPath,
+            this._options.MaxFileSizeBytes,
+            ct);
+    }
+
+    public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
+    {
+        return RepositoryPathSearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.FetchFileTreePathsAsync,
+            NormalizeBranchName,
+            NormalizeRepositoryPath,
+            ct);
+    }
+
+    public async Task<RepositoryOverview> GetRepositoryOverviewAsync(string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        if (this._repositoryOverviewCache.TryGetValue(normalizedBranchSide, out var cached))
+        {
+            return cached;
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            this._sourceBranch,
+            this._targetBranch,
+            NormalizeBranchName);
+        if (branch is null)
+        {
+            return RepositoryOverview.CreateBlocked(normalizedBranchSide, RepositorySearchStatuses.InvalidRequest);
+        }
+
+        var paths = await this.FetchFileTreePathsAsync(branch, ct);
+        var overview = RepositoryOverviewBuilder.Build(normalizedBranchSide, branch, paths);
+        this._repositoryOverviewCache[normalizedBranchSide] = overview;
+        return overview;
+    }
+
+    public async Task<FileNeighborhood> GetFileNeighborhoodAsync(string filePath, string branchSide, CancellationToken ct)
+    {
+        var normalizedBranchSide = NormalizeBranchSide(branchSide);
+        var normalizedPath = NormalizeRepositoryPath(filePath);
+        var cacheKey = $"{normalizedBranchSide}:{normalizedPath}";
+        if (this._fileNeighborhoodCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
+        var branch = RepositoryDiscoveryHelpers.ResolveBranch(
+            normalizedBranchSide,
+            this._sourceBranch,
+            this._targetBranch,
+            NormalizeBranchName);
+        if (branch is null)
+        {
+            return FileNeighborhood.CreateBlocked(normalizedBranchSide, normalizedPath, RepositorySearchStatuses.InvalidRequest);
+        }
+
+        var paths = await this.FetchFileTreePathsAsync(branch, ct);
+        var neighborhood = FileNeighborhoodBuilder.Build(normalizedBranchSide, branch, normalizedPath, paths);
+        this._fileNeighborhoodCache[cacheKey] = neighborhood;
+        return neighborhood;
     }
 
     /// <inheritdoc />
@@ -404,6 +484,13 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     private static string NormalizeRepositoryPath(string path)
     {
         return path.TrimStart('/');
+    }
+
+    private static string NormalizeBranchSide(string branchSide)
+    {
+        return string.Equals(branchSide, RepositorySearchBranchSides.Target, StringComparison.OrdinalIgnoreCase)
+            ? RepositorySearchBranchSides.Target
+            : RepositorySearchBranchSides.Source;
     }
 
     private async Task<GitHttpClient> GetGitClientAsync(CancellationToken ct)

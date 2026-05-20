@@ -113,6 +113,21 @@ public static class RepositorySearchLimitationReasons
     ///     The search result was truncated.
     /// </summary>
     public const string ResultTruncated = "result_truncated";
+
+    /// <summary>
+    ///     The request used an unsupported search mode.
+    /// </summary>
+    public const string UnsupportedSearchMode = "unsupported_search_mode";
+
+    /// <summary>
+    ///     A filter excluded a candidate path.
+    /// </summary>
+    public const string FilterExcluded = "filter_excluded";
+
+    /// <summary>
+    ///     The requested file was not found.
+    /// </summary>
+    public const string FileNotFound = "file_not_found";
 }
 
 /// <summary>

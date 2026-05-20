@@ -410,6 +410,76 @@ public sealed partial class ToolAwareAiReviewCore(
                     "Search only the PR changed paths on the target branch using a regex search_term and an optional glob file_mask. Use this to compare changed files against their target-branch baseline.",
             });
 
+        var searchCode = AIFunctionFactory.Create(
+            (
+                    string queryText,
+                    string searchMode,
+                    string branchSide,
+                    string pathScope,
+                    string? language,
+                    string? fileGlob,
+                    string? pathPrefix,
+                    bool excludeGenerated,
+                    bool excludeTests) =>
+                reviewTools.SearchCodeAsync(
+                    new CodeSearchRequest(
+                        queryText,
+                        searchMode,
+                        branchSide,
+                        pathScope,
+                        new CodeSearchFilterSet(language, fileGlob, pathPrefix, excludeGenerated, excludeTests)),
+                    cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchCodeToolName,
+                Description =
+                    "Search code content with explicit branch_side (source|target), path_scope (repository|changed_files), search_mode (exact_identifier|exact_phrase|regex|related_symbol|related_config_key|related_route|related_dependency_registration|related_exception_or_log), and optional filters: language, file_glob, path_prefix, exclude_generated, exclude_tests. Returns ranked structured matches and limitations.",
+            });
+
+        var searchPaths = AIFunctionFactory.Create(
+            (
+                    string queryText,
+                    string matchMode,
+                    string branchSide,
+                    string pathScope,
+                    string? language,
+                    string? fileGlob,
+                    string? pathPrefix,
+                    bool excludeGenerated,
+                    bool excludeTests) =>
+                reviewTools.SearchPathsAsync(
+                    new PathSearchRequest(
+                        queryText,
+                        matchMode,
+                        branchSide,
+                        pathScope,
+                        new CodeSearchFilterSet(language, fileGlob, pathPrefix, excludeGenerated, excludeTests)),
+                    cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchPathsToolName,
+                Description =
+                    "Search repository-relative paths without reading file content. Use match_mode contains, exact_name, or exact_path_prefix with branch_side, path_scope, and optional language/file_glob/path_prefix/exclude_generated/exclude_tests filters. Returns ranked paths and limitations.",
+            });
+
+        var getRepositoryOverview = AIFunctionFactory.Create(
+            (string branchSide) => reviewTools.GetRepositoryOverviewAsync(branchSide, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.GetRepositoryOverviewToolName,
+                Description =
+                    "Get a concise structured repository overview for branch_side source or target, including projects, entry points, module boundaries, tests, config, persistence, registration, docs/specs, and limitations.",
+            });
+
+        var getFileNeighborhood = AIFunctionFactory.Create(
+            (string filePath, string branchSide) => reviewTools.GetFileNeighborhoodAsync(filePath, branchSide, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.GetFileNeighborhoodToolName,
+                Description =
+                    "Get focused branch-specific context around one repository-relative file: owning project/module, nearby tests, config, registration/entry seams, docs/specs, and not-found limitations.",
+            });
+
         var tools = new List<AIFunction>
         {
             getChangedFiles,
@@ -419,6 +489,10 @@ public sealed partial class ToolAwareAiReviewCore(
             searchSourceChangedFiles,
             searchTargetRepo,
             searchTargetChangedFiles,
+            searchCode,
+            searchPaths,
+            getRepositoryOverview,
+            getFileNeighborhood,
         };
 
         if (supportsProCursorTools)
