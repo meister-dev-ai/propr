@@ -13,6 +13,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -373,11 +374,51 @@ public sealed partial class ToolAwareAiReviewCore(
                     "Get the content of a file at a specific line range (1-based, inclusive). Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
             });
 
+        var searchSourceRepo = AIFunctionFactory.Create(
+            (string searchTerm, string? fileMask) => reviewTools.SearchSourceRepoAsync(searchTerm, fileMask, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchSourceRepoToolName,
+                Description =
+                    "Search the PR source branch across the whole repository using a regex search_term and an optional glob file_mask. Returns structured matches, limitations, and truncation metadata.",
+            });
+
+        var searchSourceChangedFiles = AIFunctionFactory.Create(
+            (string searchTerm, string? fileMask) => reviewTools.SearchSourceChangedFilesAsync(searchTerm, fileMask, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchSourceChangedFilesToolName,
+                Description =
+                    "Search only the PR changed files on the source branch using a regex search_term and an optional glob file_mask. Returns structured matches, limitations, and truncation metadata.",
+            });
+
+        var searchTargetRepo = AIFunctionFactory.Create(
+            (string searchTerm, string? fileMask) => reviewTools.SearchTargetRepoAsync(searchTerm, fileMask, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchTargetRepoToolName,
+                Description =
+                    "Search the PR target branch across the whole repository using a regex search_term and an optional glob file_mask. Use this when you need baseline behavior from the merge target.",
+            });
+
+        var searchTargetChangedFiles = AIFunctionFactory.Create(
+            (string searchTerm, string? fileMask) => reviewTools.SearchTargetChangedFilesAsync(searchTerm, fileMask, cancellationToken),
+            new AIFunctionFactoryOptions
+            {
+                Name = BoundedReviewContextTools.SearchTargetChangedFilesToolName,
+                Description =
+                    "Search only the PR changed paths on the target branch using a regex search_term and an optional glob file_mask. Use this to compare changed files against their target-branch baseline.",
+            });
+
         var tools = new List<AIFunction>
         {
             getChangedFiles,
             getFileTree,
             getFileContent,
+            searchSourceRepo,
+            searchSourceChangedFiles,
+            searchTargetRepo,
+            searchTargetChangedFiles,
         };
 
         if (supportsProCursorTools)

@@ -32,7 +32,9 @@ internal sealed class GitLabReviewContextTools(
         request.ClientId,
         request.KnowledgeSourceIds,
         logger,
-        request.ProviderScopePath)
+        request.ProviderScopePath,
+        request.TargetBranch,
+        request.ChangedPathSnapshots)
 {
     private readonly Guid? _clientId = request.ClientId;
     private readonly GitLabConnectionVerifier _connectionVerifier = connectionVerifier;

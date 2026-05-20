@@ -46,6 +46,9 @@ public sealed class ReviewPromptSharedPartialTests
         var perFileUser = provider.ReadStageTemplate(PromptStageKeys.PerFileUser);
 
         Assert.Contains("{{> system-prompt", globalSystem, StringComparison.Ordinal);
+        Assert.Contains("{{> client-instructions", globalSystem, StringComparison.Ordinal);
+        Assert.Contains("{{> repository-instructions", globalSystem, StringComparison.Ordinal);
+        Assert.Contains("{{> dismissed-patterns", globalSystem, StringComparison.Ordinal);
         Assert.Contains("{{> output-key-reminder", perFileContext, StringComparison.Ordinal);
         Assert.Contains("{{> existing-threads", perFileUser, StringComparison.Ordinal);
     }

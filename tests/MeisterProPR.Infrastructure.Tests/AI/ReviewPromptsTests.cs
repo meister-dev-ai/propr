@@ -477,7 +477,7 @@ public class ReviewPromptsTests
         var prompt = ReviewPrompts.BuildPerFileContextPrompt(null, "src/Foo.cs", 1, 3);
 
         Assert.Contains("CRITICAL OUTPUT RULE", prompt);
-        Assert.Contains(ReviewPrompts.OutputKeyReminder, prompt);
+        Assert.Contains(ReviewPrompts.OutputKeyReminder.Trim(), prompt);
         Assert.Contains("\"comments\" (array)", prompt);
         Assert.Contains("\"summary\" (string)", prompt);
         Assert.Contains("\"confidence_evaluations\" (array)", prompt);
@@ -539,6 +539,28 @@ public class ReviewPromptsTests
             guidance.Contains("vite.config", StringComparison.OrdinalIgnoreCase) ||
             guidance.Contains("docker-compose", StringComparison.OrdinalIgnoreCase),
             "AgenticLoopGuidance must list canonical config file types for get_file_tree instruction.");
+    }
+
+    [Fact]
+    public void AgenticLoopGuidance_ContainsRepositorySearchToolGuidance()
+    {
+        var guidance = ReviewPrompts.AgenticLoopGuidance;
+
+        Assert.Contains("search_source_repo", guidance, StringComparison.Ordinal);
+        Assert.Contains("search_source_changed_files", guidance, StringComparison.Ordinal);
+        Assert.Contains("search_target_repo", guidance, StringComparison.Ordinal);
+        Assert.Contains("search_target_changed_files", guidance, StringComparison.Ordinal);
+        Assert.Contains("Use repository search before broad file reads", guidance, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AgenticLoopGuidance_ExplainsTargetBranchBaselineSearch()
+    {
+        var guidance = ReviewPrompts.AgenticLoopGuidance;
+
+        Assert.Contains("baseline", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("target branch", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("search_target_changed_files", guidance, StringComparison.Ordinal);
     }
 
     // T012(c) — US2: BuildPerFileContextPrompt strengthened
@@ -716,7 +738,7 @@ public class ReviewPromptsTests
         var prompt = ReviewPrompts.BuildSystemPrompt(context);
 
         Assert.Contains("Overridden system persona", prompt);
-        Assert.DoesNotContain(ReviewPrompts.SystemPrompt, prompt);
+        Assert.DoesNotContain("expert code reviewer specialising in general software engineering best practices", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     // PromptOverrides — BuildSystemPrompt applies AgenticLoopGuidance override from context
@@ -729,7 +751,7 @@ public class ReviewPromptsTests
         var prompt = ReviewPrompts.BuildSystemPrompt(context);
 
         Assert.Contains("Overridden agentic guidance", prompt);
-        Assert.DoesNotContain(ReviewPrompts.AgenticLoopGuidance, prompt);
+        Assert.DoesNotContain("CERTAINTY GATE", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     // PromptOverrides — BuildPerFileContextPrompt uses override when present in context

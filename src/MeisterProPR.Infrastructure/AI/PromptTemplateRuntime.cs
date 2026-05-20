@@ -28,4 +28,16 @@ internal static class PromptTemplateRuntime
             throw new InvalidOperationException($"Failed to render prompt stage '{stageKey}': {ex.Message}", ex);
         }
     }
+
+    internal static string ReadSharedPartial(string partialName)
+    {
+        try
+        {
+            return FileProvider.Value.ReadSharedPartial(partialName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to read prompt shared partial '{partialName}': {ex.Message}", ex);
+        }
+    }
 }

@@ -54,6 +54,62 @@ internal sealed class NullReviewContextTools : IReviewContextTools, IProCursorAv
     }
 
     /// <inheritdoc />
+    public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new RepositorySearchResult(
+                RepositorySearchStatuses.NoMatch,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.Repository,
+                fileMask,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
+    public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new RepositorySearchResult(
+                RepositorySearchStatuses.NoMatch,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.ChangedFiles,
+                fileMask,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
+    public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new RepositorySearchResult(
+                RepositorySearchStatuses.NoMatch,
+                RepositorySearchBranchSides.Target,
+                RepositorySearchPathScopes.Repository,
+                fileMask,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
+    public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return Task.FromResult(
+            new RepositorySearchResult(
+                RepositorySearchStatuses.NoMatch,
+                RepositorySearchBranchSides.Target,
+                RepositorySearchPathScopes.ChangedFiles,
+                fileMask,
+                [],
+                [],
+                false));
+    }
+
+    /// <inheritdoc />
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
     {
         return Task.FromResult(

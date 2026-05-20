@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using Azure.Core;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
@@ -178,7 +179,7 @@ public class AdoReviewContextToolsTests
         const string sourceBranch = "feature/my-pr";
         var logger = Substitute.For<ILogger<AdoReviewContextTools>>();
         logger.IsEnabled(LogLevel.Warning).Returns(true);
-        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch, logger);
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), sourceBranch, logger: logger);
         // File not registered → FetchRawFileContentAsync returns null
 
         // Act
@@ -210,6 +211,119 @@ public class AdoReviewContextToolsTests
         Assert.Equal(string.Empty, result);
     }
 
+    [Fact]
+    public async Task SearchSourceRepoAsync_SourceScope_ReturnsRepositoryMatches()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Foo.cs", "src/Other.cs");
+        sut.SetFile("src/Foo.cs", "public class Foo\n{\n    private const string Marker = \"needle\";\n}");
+        sut.SetFile("src/Other.cs", "public class Other {}", "feature/my-pr");
+
+        var result = await sut.SearchSourceRepoAsync("needle", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, result.Status);
+        Assert.Single(result.Matches);
+        Assert.Equal("src/Foo.cs", result.Matches[0].FilePath);
+    }
+
+    [Fact]
+    public async Task SearchSourceChangedFilesAsync_UsesChangedPathScopeOnly()
+    {
+        var sut = new TestableAdoReviewContextTools(
+            DefaultOptions(),
+            "feature/my-pr",
+            "main",
+            [
+                new ChangedPathSnapshot("src/Foo.cs", ChangeType.Edit, true, true),
+            ]);
+        sut.SetTree("src/Foo.cs", "src/Other.cs");
+        sut.SetFile("src/Foo.cs", "private const string Marker = \"needle\";", "feature/my-pr");
+        sut.SetFile("src/Other.cs", "private const string Marker = \"needle\";", "feature/my-pr");
+
+        var result = await sut.SearchSourceChangedFilesAsync("needle", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, result.Status);
+        Assert.Single(result.Matches);
+        Assert.All(result.Matches, match => Assert.Equal("src/Foo.cs", match.FilePath));
+    }
+
+    [Fact]
+    public async Task SearchTargetRepoAsync_TargetBranchUsesBaselineBranch()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Foo.cs");
+        sut.SetFile("src/Foo.cs", "private const string Marker = \"baseline\";", "main");
+
+        var result = await sut.SearchTargetRepoAsync("baseline", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, result.Status);
+        Assert.Equal("main", sut.LastFetchedBranch);
+    }
+
+    [Fact]
+    public async Task SearchTargetChangedFilesAsync_MissingTargetPath_ReturnsPartialWithLimitation()
+    {
+        var sut = new TestableAdoReviewContextTools(
+            DefaultOptions(),
+            "feature/my-pr",
+            "main",
+            [
+                new ChangedPathSnapshot("src/NewFile.cs", ChangeType.Add, true, false),
+            ]);
+
+        var result = await sut.SearchTargetChangedFilesAsync("needle", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Partial, result.Status);
+        Assert.Empty(result.Matches);
+        Assert.Single(result.Limitations);
+        Assert.Equal(RepositorySearchLimitationReasons.MissingOnBranch, result.Limitations[0].Reason);
+    }
+
+    [Fact]
+    public async Task SearchSourceRepoAsync_InvalidRegex_ReturnsInvalidRequest()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+
+        var result = await sut.SearchSourceRepoAsync("(", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.InvalidRequest, result.Status);
+        Assert.Single(result.Limitations);
+        Assert.Equal(RepositorySearchLimitationReasons.InvalidRegex, result.Limitations[0].Reason);
+    }
+
+    [Fact]
+    public async Task SearchSourceRepoAsync_NoMatches_ReturnsNoMatch()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Foo.cs");
+        sut.SetFile("src/Foo.cs", "public class Foo {}", "feature/my-pr");
+
+        var result = await sut.SearchSourceRepoAsync("needle", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.NoMatch, result.Status);
+        Assert.Empty(result.Matches);
+    }
+
+    [Fact]
+    public async Task SearchSourceRepoAsync_TruncatesLargeResultSetsDeterministically()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions(), "feature/my-pr");
+        sut.SetTree("src/Foo.cs");
+        sut.SetFile(
+            "src/Foo.cs",
+            string.Join("\n", Enumerable.Range(1, 60).Select(index => $"needle {index:D2}")),
+            "feature/my-pr");
+
+        var result = await sut.SearchSourceRepoAsync("needle", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Partial, result.Status);
+        Assert.True(result.Truncated);
+        Assert.Equal(50, result.Matches.Count);
+        Assert.Equal(1, result.Matches[0].LineNumber);
+        Assert.Equal(50, result.Matches[^1].LineNumber);
+        Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.ResultTruncated);
+    }
+
     /// <summary>
     ///     Testable subclass of <see cref="AdoReviewContextTools" /> that replaces
     ///     <see cref="AdoReviewContextTools.FetchRawFileContentAsync" /> with a controlled
@@ -218,11 +332,15 @@ public class AdoReviewContextToolsTests
     private sealed class TestableAdoReviewContextTools : AdoReviewContextTools
     {
         private readonly Dictionary<string, string?> _files = new(StringComparer.Ordinal);
+        private readonly string _sourceBranch;
+        private readonly string? _targetBranch;
         private IReadOnlyList<string> _tree = [];
 
         public TestableAdoReviewContextTools(
             IOptions<AiReviewOptions> options,
             string sourceBranch = "feature/test",
+            string? targetBranch = "main",
+            IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null,
             ILogger<AdoReviewContextTools>? logger = null)
             : base(
                 new VssConnectionFactory(Substitute.For<TokenCredential>()),
@@ -236,8 +354,13 @@ public class AdoReviewContextToolsTests
                 1,
                 1,
                 null,
-                logger: logger)
+                null,
+                targetBranch,
+                changedPathSnapshots,
+                logger)
         {
+            this._sourceBranch = sourceBranch;
+            this._targetBranch = targetBranch;
         }
 
         /// <summary>Gets the total number of calls made to the underlying fetch method.</summary>
@@ -250,9 +373,10 @@ public class AdoReviewContextToolsTests
         public string? LastFetchedTreeBranch { get; private set; }
 
         /// <summary>Registers a file path with its content for retrieval.</summary>
-        public void SetFile(string path, string? content)
+        public void SetFile(string path, string? content, string? branch = null)
         {
-            this._files[path] = content;
+            var effectiveBranch = NormalizeBranch(branch ?? this._sourceBranch);
+            this._files[$"{effectiveBranch}:{path}"] = content;
         }
 
         /// <summary>Registers a repository tree returned by <see cref="GetFileTreeAsync" />.</summary>
@@ -276,8 +400,15 @@ public class AdoReviewContextToolsTests
         {
             this.FetchCallCount++;
             this.LastFetchedBranch = branch;
-            this._files.TryGetValue(path, out var content);
+            this._files.TryGetValue($"{NormalizeBranch(branch)}:{path}", out var content);
             return Task.FromResult(content);
+        }
+
+        private static string NormalizeBranch(string branch)
+        {
+            return branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+                ? branch["refs/heads/".Length..]
+                : branch;
         }
     }
 }

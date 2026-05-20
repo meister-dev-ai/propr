@@ -15,6 +15,7 @@ public sealed class ReviewPromptsTemplateBackedSharedTests
         var prompt = ReviewPrompts.BuildGlobalSystemPrompt(null);
 
         Assert.Contains("expert code reviewer specialising in general software engineering best practices", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CERTAINTY GATE", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("The very first character must be '{'", prompt, StringComparison.Ordinal);
         Assert.Contains("confidence_evaluations", prompt, StringComparison.Ordinal);
     }
@@ -62,5 +63,14 @@ public sealed class ReviewPromptsTemplateBackedSharedTests
 
         Assert.Contains("cross_cutting_concerns", prompt, StringComparison.Ordinal);
         Assert.Contains("The very first character must be '{'", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildQualityFilterSystemPrompt_UsesTemplateBackedDefault()
+    {
+        var prompt = ReviewPrompts.BuildQualityFilterSystemPrompt(null);
+
+        Assert.Contains("senior code review editor", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DISCARD", prompt, StringComparison.OrdinalIgnoreCase);
     }
 }

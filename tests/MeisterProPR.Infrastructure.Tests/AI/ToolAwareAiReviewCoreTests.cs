@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -350,6 +351,10 @@ public class ToolAwareAiReviewCoreTests
         Assert.Contains("get_changed_files", toolNames);
         Assert.Contains("get_file_tree", toolNames);
         Assert.Contains("get_file_content", toolNames);
+        Assert.Contains("search_source_repo", toolNames);
+        Assert.Contains("search_source_changed_files", toolNames);
+        Assert.Contains("search_target_repo", toolNames);
+        Assert.Contains("search_target_changed_files", toolNames);
         Assert.DoesNotContain("ask_procursor_knowledge", toolNames);
         Assert.DoesNotContain("get_procursor_symbol_info", toolNames);
     }
@@ -633,6 +638,138 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 1,
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithSearchToolCallAndProtocolRecorder_RecordsStructuredSearchResult()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.SearchSourceRepoAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new RepositorySearchResult(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    "**/*.cs",
+                    [new RepositorySearchMatch("src/Foo.cs", 7, "needle")],
+                    [],
+                    false));
+
+        var finalJson = """{"summary":"Done.","comments":[]}""";
+        var toolCallResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent(
+                        "call-1",
+                        "search_source_repo",
+                        new Dictionary<string, object?>
+                        {
+                            ["searchTerm"] = "needle",
+                            ["fileMask"] = "**/*.cs",
+                        }),
+                ]));
+        var finalResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, finalJson));
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(toolCallResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "search_source_repo",
+                Arg.Any<string>(),
+                Arg.Is<string>(result => result.Contains("\"status\":\"success\"", StringComparison.Ordinal) &&
+                                         result.Contains("\"filePath\":\"src/Foo.cs\"", StringComparison.Ordinal)),
+                1,
+                Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(RepositorySearchStatuses.BlockedNotAllowed)]
+    [InlineData(RepositorySearchStatuses.BlockedBudgetExhausted)]
+    public async Task ReviewAsync_WithBlockedSearchToolCall_PassesStructuredResultToNextTurn(string status)
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.SearchTargetChangedFilesAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new RepositorySearchResult(
+                    status,
+                    RepositorySearchBranchSides.Target,
+                    RepositorySearchPathScopes.ChangedFiles,
+                    "**/*.cs",
+                    [],
+                    [],
+                    false));
+
+        var capturedMessages = new List<List<ChatMessage>>();
+        var toolCallResponse = new ChatResponse(
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent(
+                        "call-1",
+                        "search_target_changed_files",
+                        new Dictionary<string, object?>
+                        {
+                            ["searchTerm"] = "needle",
+                            ["fileMask"] = "**/*.cs",
+                        }),
+                ]));
+        var finalResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"summary":"Done.","comments":[]}"""));
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(toolCallResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        Assert.True(capturedMessages.Count >= 2);
+        var toolMessage = Assert.Single(capturedMessages[1], message => message.Role == ChatRole.Tool);
+        var toolResult = Assert.Single(toolMessage.Contents.OfType<FunctionResultContent>());
+        var toolResultJson = Assert.IsType<string>(toolResult.Result);
+        using var payload = JsonDocument.Parse(toolResultJson);
+
+        Assert.Equal(status, payload.RootElement.GetProperty("status").GetString());
+        Assert.Equal(
+            "target",
+            payload.RootElement.TryGetProperty("branch_side", out var branchSide)
+                ? branchSide.GetString()
+                : payload.RootElement.GetProperty("branchSide").GetString());
+        Assert.Equal(
+            "changed_files",
+            payload.RootElement.TryGetProperty("path_scope", out var pathScope)
+                ? pathScope.GetString()
+                : payload.RootElement.GetProperty("pathScope").GetString());
     }
 
     [Fact]
@@ -1293,6 +1430,58 @@ public class ToolAwareAiReviewCoreTests
         public Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct)
         {
             return Task.FromResult(string.Empty);
+        }
+
+        public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new RepositorySearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    fileMask,
+                    [],
+                    [],
+                    false));
+        }
+
+        public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new RepositorySearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.ChangedFiles,
+                    fileMask,
+                    [],
+                    [],
+                    false));
+        }
+
+        public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new RepositorySearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    RepositorySearchBranchSides.Target,
+                    RepositorySearchPathScopes.Repository,
+                    fileMask,
+                    [],
+                    [],
+                    false));
+        }
+
+        public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+        {
+            return Task.FromResult(
+                new RepositorySearchResult(
+                    RepositorySearchStatuses.NoMatch,
+                    RepositorySearchBranchSides.Target,
+                    RepositorySearchPathScopes.ChangedFiles,
+                    fileMask,
+                    [],
+                    [],
+                    false));
         }
 
         public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)

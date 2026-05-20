@@ -4,12 +4,14 @@
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -26,6 +28,7 @@ namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 /// </summary>
 public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvailabilityAware
 {
+    private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots;
     private readonly Guid? _clientId;
     private readonly VssConnectionFactory _connectionFactory;
     private readonly IClientScmConnectionRepository _connectionRepository;
@@ -40,6 +43,7 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     private readonly int _pullRequestId;
     private readonly string _repositoryId;
     private readonly string _sourceBranch;
+    private readonly string? _targetBranch;
 
     /// <summary>
     ///     Initializes a new <see cref="AdoReviewContextTools" /> scoped to the given pull request.
@@ -69,6 +73,8 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         int iterationId,
         Guid? clientId,
         IReadOnlyList<Guid>? knowledgeSourceIds = null,
+        string? targetBranch = null,
+        IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null,
         ILogger<AdoReviewContextTools>? logger = null)
     {
         this._connectionFactory = connectionFactory;
@@ -79,6 +85,8 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         this._projectId = projectId;
         this._repositoryId = repositoryId;
         this._sourceBranch = sourceBranch;
+        this._targetBranch = targetBranch;
+        this._changedPathSnapshots = changedPathSnapshots ?? [];
         this._pullRequestId = pullRequestId;
         this._iterationId = iterationId;
         this._clientId = clientId;
@@ -176,6 +184,34 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         var clampedEnd = Math.Min(lines.Length, endLine);
 
         return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+    }
+
+    public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.ChangedFiles),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
+            ct);
     }
 
     /// <inheritdoc />
@@ -328,6 +364,21 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             ct);
 
         return item?.Content;
+    }
+
+    private Task<RepositorySearchResult> SearchAsync(RepositorySearchRequest request, CancellationToken ct)
+    {
+        return RepositorySearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.FetchFileTreePathsAsync,
+            this.FetchRawFileContentAsync,
+            NormalizeBranchName,
+            NormalizeRepositoryPath,
+            this._options.MaxFileSizeBytes,
+            ct);
     }
 
     /// <summary>Maps a <see cref="VersionControlChangeType" /> to the domain <see cref="ChangeType" />.</summary>

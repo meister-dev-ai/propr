@@ -1,0 +1,26 @@
+{{#if hasChangedFiles}}
+Pull Request: {{prTitle}}
+{{sourceBranch}} → {{targetBranch}}
+{{#if description}}
+Description: {{description}}
+{{/if}}
+
+Changed Files ({{changedFileCount}}):
+{{#each changedFiles}}
+
+{{#if isBinary}}
+=== {{path}} [{{changeType}}] === [binary file — content omitted]
+{{else}}
+=== {{path}} [{{changeType}}] ===
+======================================= FULL CONTENT =======================================
+{{{fullContent}}}
+======================================= END FULL CONTENT =======================================
+======================================= DIFF =======================================
+{{{unifiedDiff}}}
+======================================= END DIFF =======================================
+{{/if}}
+{{/each}}
+{{else}}
+No files changed. Return summary stating no changes found; empty comments array.
+{{/if}}
+{{> existing-threads hasThreads=hasThreads threads=threads}}

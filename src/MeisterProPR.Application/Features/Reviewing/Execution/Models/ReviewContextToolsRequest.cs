@@ -12,4 +12,6 @@ public sealed record ReviewContextToolsRequest(
     int IterationId,
     Guid? ClientId,
     IReadOnlyList<Guid>? KnowledgeSourceIds = null,
-    string? ProviderScopePath = null);
+    string? ProviderScopePath = null,
+    string? TargetBranch = null,
+    IReadOnlyList<ChangedPathSnapshot>? ChangedPathSnapshots = null);

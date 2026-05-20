@@ -1,1 +1,5 @@
-{{{outputKeyReminder}}}
+CRITICAL OUTPUT RULE — REMINDER: Your final JSON response MUST use exactly these keys: "summary" (string), "comments" (array), "confidence_evaluations" (array), "investigation_complete" (bool),
+"loop_complete" (bool). All review findings MUST go into the "comments" array as {"file_path": "...", "line_number": <int|null>, "severity": "info"|"warning"|"error"|"suggestion", "message": "..."}.
+Do NOT use key_issues, verdict, issues, review, suggested_changes, suggested_fixes, key_findings, or any other structure. "summary" must be a plain string, NOT an array or object.
+CRITICAL: Your response message strings MUST NOT contain any HTML tags (e.g., no <style>, <script>, <div>, <!DOCTYPE>, or any < or > characters).
+If you need to show code with angle brackets, wrap it in markdown code fences (triple backticks) or escape it. Never output raw HTML tags in comment messages.

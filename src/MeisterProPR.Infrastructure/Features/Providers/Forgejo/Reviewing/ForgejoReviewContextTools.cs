@@ -33,7 +33,9 @@ internal sealed class ForgejoReviewContextTools(
         request.ClientId,
         request.KnowledgeSourceIds,
         logger,
-        request.ProviderScopePath)
+        request.ProviderScopePath,
+        request.TargetBranch,
+        request.ChangedPathSnapshots)
 {
     private readonly Guid? _clientId = request.ClientId;
     private readonly ForgejoConnectionVerifier _connectionVerifier = connectionVerifier;

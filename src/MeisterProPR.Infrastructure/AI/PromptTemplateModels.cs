@@ -5,6 +5,36 @@ namespace MeisterProPR.Infrastructure.AI;
 
 internal static class PromptTemplateModels
 {
+    internal sealed record GlobalSystemModel(
+        string agenticLoopGuidance,
+        bool hasClientInstructions,
+        string? clientSystemMessage,
+        bool hasRepositoryInstructions,
+        IReadOnlyList<PromptRepositoryInstructionModel> repositoryInstructions,
+        bool hasDismissedPatterns,
+        IReadOnlyList<string> dismissedPatterns);
+
+    internal sealed record LegacyPrReviewUserModel(
+        bool hasChangedFiles,
+        string prTitle,
+        string sourceBranch,
+        string targetBranch,
+        string? description,
+        int changedFileCount,
+        IReadOnlyList<PromptLegacyChangedFileModel> changedFiles,
+        bool hasThreads,
+        IReadOnlyList<PromptThreadModel> threads);
+
+    internal sealed record QualityFilterSystemModel;
+
+    internal sealed record QualityFilterUserModel(IReadOnlyList<PromptQualityFilterCommentModel> comments);
+
+    internal sealed record MemoryReconsiderationSystemModel(string reviewerIdentity);
+
+    internal sealed record MemoryReconsiderationUserModel(
+        string draftFindingsJson,
+        IReadOnlyList<PromptMemoryMatchModel> matches);
+
     internal sealed record SynthesisSystemModel(bool jsonMode);
 
     internal sealed record AgenticFilePlanningSystemModel(string? focusedReviewGuidanceSection);
@@ -113,11 +143,19 @@ internal static class PromptTemplateModels
 
     internal sealed record PromptFileManifestItem(string path, string changeType, bool isCurrentFile, bool isAnchorFile);
 
+    internal sealed record PromptLegacyChangedFileModel(string path, string changeType, bool isBinary, string? fullContent, string? unifiedDiff);
+
     internal sealed record PromptDiffExcerptItem(string path, string diffText);
+
+    internal sealed record PromptRepositoryInstructionModel(string fileName, string whenToUse, string body);
 
     internal sealed record PromptThreadModel(string location, IReadOnlyList<PromptThreadCommentModel> comments);
 
     internal sealed record PromptThreadCommentModel(string authorName, string content);
+
+    internal sealed record PromptQualityFilterCommentModel(int index, string filePath, string line, string severity, string message);
+
+    internal sealed record PromptMemoryMatchModel(int index, string similarityScore, string memoryRecordId, string? filePath, string resolutionSummary);
 
     internal sealed record PromptSummaryItem(string filePath, string summary);
 

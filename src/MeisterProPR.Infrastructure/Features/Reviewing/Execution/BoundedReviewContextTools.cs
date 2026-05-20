@@ -17,6 +17,10 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
     public const string GetChangedFilesToolName = "get_changed_files";
     public const string GetFileTreeToolName = "get_file_tree";
     public const string GetFileContentToolName = "get_file_content";
+    public const string SearchSourceRepoToolName = "search_source_repo";
+    public const string SearchSourceChangedFilesToolName = "search_source_changed_files";
+    public const string SearchTargetRepoToolName = "search_target_repo";
+    public const string SearchTargetChangedFilesToolName = "search_target_changed_files";
     public const string AskProCursorKnowledgeToolName = "ask_procursor_knowledge";
     public const string GetProCursorSymbolInfoToolName = "get_procursor_symbol_info";
 
@@ -24,11 +28,11 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
     public const string BlockedNotAllowedStatus = "blocked_not_allowed";
     public const string BlockedBudgetExhaustedStatus = "blocked_budget_exhausted";
     public const string BlockedScopeViolationStatus = "blocked_scope_violation";
+    private readonly HashSet<string> _allowedTools;
 
     private readonly IReviewContextTools _inner;
-    private readonly HashSet<string> _allowedTools;
-    private readonly HashSet<string> _scopedFilePaths;
     private readonly int _maxToolCalls;
+    private readonly HashSet<string> _scopedFilePaths;
     private int _toolCallsUsed;
 
     public BoundedReviewContextTools(
@@ -82,6 +86,38 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
         }
 
         return this.ExecuteAsync(GetFileContentToolName, path, () => this._inner.GetFileContentAsync(path, branch, startLine, endLine, ct));
+    }
+
+    public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.ExecuteSearchAsync(
+            SearchSourceRepoToolName,
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+            () => this._inner.SearchSourceRepoAsync(searchTerm, fileMask, ct));
+    }
+
+    public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.ExecuteSearchAsync(
+            SearchSourceChangedFilesToolName,
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.ChangedFiles),
+            () => this._inner.SearchSourceChangedFilesAsync(searchTerm, fileMask, ct));
+    }
+
+    public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.ExecuteSearchAsync(
+            SearchTargetRepoToolName,
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.Repository),
+            () => this._inner.SearchTargetRepoAsync(searchTerm, fileMask, ct));
+    }
+
+    public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.ExecuteSearchAsync(
+            SearchTargetChangedFilesToolName,
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
+            () => this._inner.SearchTargetChangedFilesAsync(searchTerm, fileMask, ct));
     }
 
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
@@ -147,6 +183,19 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
         }
     }
 
+    private Task<RepositorySearchResult> ExecuteSearchAsync(
+        string toolName,
+        RepositorySearchRequest request,
+        Func<Task<RepositorySearchResult>> operation)
+    {
+        if (!this.TryEnterCall(toolName, request.SearchTerm, out var blockedResult))
+        {
+            return Task.FromResult((RepositorySearchResult)blockedResult!);
+        }
+
+        return this.ExecuteAsync(toolName, request.SearchTerm, operation);
+    }
+
     private static object CreateBlockedResult(string toolName, string status)
     {
         return toolName switch
@@ -154,6 +203,18 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
             GetChangedFilesToolName => Array.Empty<ChangedFileSummary>(),
             GetFileTreeToolName => Array.Empty<string>(),
             GetFileContentToolName => string.Empty,
+            SearchSourceRepoToolName => RepositorySearchResult.CreateBlocked(
+                new RepositorySearchRequest(string.Empty, null, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+                status),
+            SearchSourceChangedFilesToolName => RepositorySearchResult.CreateBlocked(
+                new RepositorySearchRequest(string.Empty, null, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.ChangedFiles),
+                status),
+            SearchTargetRepoToolName => RepositorySearchResult.CreateBlocked(
+                new RepositorySearchRequest(string.Empty, null, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.Repository),
+                status),
+            SearchTargetChangedFilesToolName => RepositorySearchResult.CreateBlocked(
+                new RepositorySearchRequest(string.Empty, null, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
+                status),
             AskProCursorKnowledgeToolName => new ProCursorKnowledgeAnswerDto(status, [], $"Tool call blocked: {status}."),
             GetProCursorSymbolInfoToolName => new ProCursorSymbolInsightDto(status, null, false, false, null, []),
             _ => string.Empty,

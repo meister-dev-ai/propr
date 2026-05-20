@@ -176,8 +176,15 @@ public sealed record RepositorySnapshot(
     string SourceBranch,
     string TargetBranch,
     IReadOnlyList<RepositoryFileEntry> Files,
-    string? RepositoryName = null)
+    string? RepositoryName = null,
+    IReadOnlyList<RepositoryFileEntry>? TargetFiles = null)
 {
+    /// <summary>Source-branch repository files.</summary>
+    public IReadOnlyList<RepositoryFileEntry> SourceFiles => this.Files;
+
+    /// <summary>Target-branch repository files. Falls back to source files when no separate baseline is supplied.</summary>
+    public IReadOnlyList<RepositoryFileEntry> TargetFilesOrSource => this.TargetFiles ?? this.Files;
+
     /// <summary>Returns a copy of the snapshot with overlay files replacing or adding to the base file list.</summary>
     public RepositorySnapshot ApplyOverlay(FixtureRepositoryOverlay? overlay)
     {

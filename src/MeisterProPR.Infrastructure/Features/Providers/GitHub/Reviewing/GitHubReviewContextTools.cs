@@ -33,7 +33,9 @@ internal sealed class GitHubReviewContextTools(
         request.ClientId,
         request.KnowledgeSourceIds,
         logger,
-        request.ProviderScopePath)
+        request.ProviderScopePath,
+        request.TargetBranch,
+        request.ChangedPathSnapshots)
 {
     private readonly Guid? _clientId = request.ClientId;
     private readonly GitHubConnectionVerifier _connectionVerifier = connectionVerifier;

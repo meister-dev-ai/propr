@@ -172,8 +172,13 @@ flowchart TD
    changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
    runtime as a fallback.
 3. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
-   `get_changed_files`, `get_file_tree`, `get_file_content`, `ask_procursor_knowledge`, and
-   `get_procursor_symbol_info` while investigating a finding.
+   `get_changed_files`, `get_file_tree`, `get_file_content`, `search_source_repo`,
+   `search_source_changed_files`, `search_target_repo`, `search_target_changed_files`,
+   `ask_procursor_knowledge`, and `get_procursor_symbol_info` while investigating a finding.
+   Repository-search tools return structured result objects that distinguish success, no-match,
+   partial, invalid-request, and bounded-tool blocked outcomes, and they reuse one shared search
+   executor for regex validation, file-mask filtering, deterministic ordering, truncation, and
+   limitation reporting across live providers and offline fixtures.
 4. When the job strategy is `AgenticFileByFile`, `FileReviewer` first runs a file-scoped planning
     step (`agentic_file_planning`) and then executes bounded investigation tasks before emitting the
     same per-file result shape used by the baseline pipeline. Protocol events record
@@ -214,6 +219,12 @@ flowchart TD
     `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
     `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
     `review_finding_gate_decision`.
+
+Repository search stays bounded by the same review-tool policy surface as the existing file tools.
+When a search tool is not allowed or the tool budget is exhausted, `BoundedReviewContextTools`
+returns a structured blocked result instead of throwing. Changed-files-only target searches skip
+paths missing on the target branch and report those paths as limitations rather than failing the
+whole request.
 
 For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The baseline and experimental profiles differ by ordered stage composition rather than by introducing a new top-level orchestrator.
 

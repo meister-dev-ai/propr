@@ -112,4 +112,14 @@ public class ReviewPromptsExistingThreadsTests
 
         Assert.DoesNotContain("Existing Review Threads", message);
     }
+
+    [Fact]
+    public void BuildUserMessage_WithNoChangedFiles_UsesTemplateBackedDefault()
+    {
+        var pr = CreatePullRequest([]);
+
+        var message = ReviewPrompts.BuildUserMessage(pr);
+
+        Assert.Contains("No files changed. Return summary stating no changes found", message, StringComparison.Ordinal);
+    }
 }

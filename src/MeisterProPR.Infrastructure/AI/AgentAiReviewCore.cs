@@ -28,7 +28,7 @@ public sealed class AgentAiReviewCore(IChatClient chatClient, IOptions<AiReviewO
     {
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, ReviewPrompts.SystemPrompt),
+            new(ChatRole.System, ReviewPrompts.BuildGlobalSystemPrompt(systemContext)),
             new(ChatRole.User, ReviewPrompts.BuildUserMessage(pullRequest)),
         };
 

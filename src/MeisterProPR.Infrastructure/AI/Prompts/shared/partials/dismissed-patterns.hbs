@@ -1,0 +1,8 @@
+{{#if hasDismissedPatterns}}
+
+## Dismissed Patterns — Do Not Report
+The following patterns have been dismissed by the client administrator. Do NOT post any comment that matches or closely resembles these patterns. Omit them entirely from the "comments" array:
+{{#each dismissedPatterns}}
+- {{this}}
+{{/each}}
+{{/if}}

@@ -40,6 +40,8 @@ public sealed class AdoReviewContextToolsFactory(
             request.IterationId,
             request.ClientId,
             request.KnowledgeSourceIds,
+            request.TargetBranch,
+            request.ChangedPathSnapshots,
             loggerFactory.CreateLogger<AdoReviewContextTools>());
     }
 }

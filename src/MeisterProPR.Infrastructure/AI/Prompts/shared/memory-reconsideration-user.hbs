@@ -1,0 +1,13 @@
+## Draft Findings from Initial Review
+{{draftFindingsJson}}
+
+## Historical Memory — Past Resolved Threads
+{{#each matches}}
+### Match {{index}} (Similarity: {{similarityScore}}, Memory ID: {{memoryRecordId}})
+{{#if filePath}}
+- **File**: {{filePath}}
+{{/if}}
+- **How it was resolved**: {{resolutionSummary}}
+
+{{/each}}
+Reconsider the draft findings above using the historical context. Return your reconsidered findings as a JSON object.

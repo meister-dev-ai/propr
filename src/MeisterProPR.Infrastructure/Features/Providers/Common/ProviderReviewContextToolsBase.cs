@@ -4,11 +4,13 @@
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -23,8 +25,11 @@ internal abstract class ProviderReviewContextToolsBase(
     Guid? clientId,
     IReadOnlyList<Guid>? knowledgeSourceIds,
     ILogger logger,
-    string? providerScopePath = null) : IReviewContextTools, IProCursorAvailabilityAware
+    string? providerScopePath = null,
+    string? targetBranch = null,
+    IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
+    private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots = changedPathSnapshots ?? [];
     private readonly Guid? _clientId = clientId;
     private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
     private readonly int _iterationId = iterationId;
@@ -45,6 +50,7 @@ internal abstract class ProviderReviewContextToolsBase(
     private readonly int _pullRequestNumber = review.Number;
     private readonly RepositoryRef _repository = review.Repository;
     private readonly string _sourceBranch = sourceBranch;
+    private readonly string? _targetBranch = targetBranch;
 
     public bool SupportsProCursorTools => this._proCursorGateway is not DisabledProCursorGateway;
 
@@ -118,6 +124,34 @@ internal abstract class ProviderReviewContextToolsBase(
         var clampedStart = Math.Max(1, startLine);
         var clampedEnd = Math.Min(lines.Length, endLine);
         return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+    }
+
+    public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.ChangedFiles),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
+            ct);
     }
 
     public Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
@@ -231,6 +265,21 @@ internal abstract class ProviderReviewContextToolsBase(
         string normalizedPath,
         string normalizedBranch,
         CancellationToken ct);
+
+    private Task<RepositorySearchResult> SearchAsync(RepositorySearchRequest request, CancellationToken ct)
+    {
+        return RepositorySearchExecutor.ExecuteAsync(
+            request,
+            this._sourceBranch,
+            this._targetBranch,
+            this._changedPathSnapshots,
+            this.LoadFileTreeAsync,
+            this.FetchRawFileContentAsync,
+            this.NormalizeBranch,
+            this.NormalizePath,
+            this._options.MaxFileSizeBytes,
+            ct);
+    }
 
     protected virtual string NormalizeBranch(string branch)
     {

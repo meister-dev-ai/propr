@@ -46,6 +46,19 @@ internal sealed class PromptTemplateFileProvider
         return partials;
     }
 
+    internal string ReadSharedPartial(string partialName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(partialName);
+
+        var partialPath = this.GetAbsolutePath($"shared/partials/{partialName}.hbs");
+        if (!File.Exists(partialPath))
+        {
+            throw new InvalidOperationException($"Prompt shared partial '{partialName}' was not found at 'shared/partials/{partialName}.hbs'.");
+        }
+
+        return File.ReadAllText(partialPath);
+    }
+
     private string GetAbsolutePath(string relativePath)
     {
         return Path.Combine(this.PromptRootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));

@@ -10,6 +10,7 @@ using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
@@ -41,7 +42,7 @@ public sealed class FixtureReviewContextTools(
     public Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct)
     {
         return Task.FromResult<IReadOnlyList<string>>(
-            fixture.RepositorySnapshot.Files
+            this.ResolveFilesForBranch(branch)
                 .Select(file => file.Path)
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .ToList()
@@ -58,7 +59,13 @@ public sealed class FixtureReviewContextTools(
 
         if (!this._fileCache.TryGetValue(normalizedPath, out var content))
         {
-            var entry = fixture.RepositorySnapshot.Files.FirstOrDefault(file => string.Equals(file.Path, normalizedPath, StringComparison.Ordinal));
+            var cacheKey = $"{NormalizeBranch(branch)}:{normalizedPath}";
+            if (this._fileCache.TryGetValue(cacheKey, out content))
+            {
+                return SliceContent(content, startLine, endLine);
+            }
+
+            var entry = this.ResolveFilesForBranch(branch).FirstOrDefault(file => string.Equals(file.Path, normalizedPath, StringComparison.Ordinal));
             if (entry is null || entry.IsBinary)
             {
                 return Task.FromResult(string.Empty);
@@ -71,18 +78,38 @@ public sealed class FixtureReviewContextTools(
             }
 
             content = entry.Content;
-            this._fileCache[normalizedPath] = content;
+            this._fileCache[cacheKey] = content;
         }
 
-        if (string.IsNullOrEmpty(content))
-        {
-            return Task.FromResult(string.Empty);
-        }
+        return SliceContent(content, startLine, endLine);
+    }
 
-        var lines = content.Split('\n');
-        var clampedStart = Math.Max(1, startLine);
-        var clampedEnd = Math.Min(lines.Length, endLine);
-        return Task.FromResult(clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]));
+    public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Source, RepositorySearchPathScopes.ChangedFiles),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.Repository),
+            ct);
+    }
+
+    public Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct)
+    {
+        return this.SearchAsync(
+            new RepositorySearchRequest(searchTerm, fileMask, RepositorySearchBranchSides.Target, RepositorySearchPathScopes.ChangedFiles),
+            ct);
     }
 
     public async Task<ProCursorKnowledgeAnswerDto> AskProCursorKnowledgeAsync(string question, CancellationToken ct)
@@ -152,5 +179,59 @@ public sealed class FixtureReviewContextTools(
         {
             return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
+    }
+
+    private Task<RepositorySearchResult> SearchAsync(RepositorySearchRequest request, CancellationToken ct)
+    {
+        return RepositorySearchExecutor.ExecuteAsync(
+            request,
+            fixture.PullRequestSnapshot.SourceBranch,
+            fixture.PullRequestSnapshot.TargetBranch,
+            fixture.PullRequestSnapshot.ChangedFiles.Select(ChangedPathSnapshot.FromFixtureChangedFile).ToList().AsReadOnly(),
+            (branch, _) => Task.FromResult<IReadOnlyList<string>>(
+                this.ResolveFilesForBranch(branch)
+                    .Select(file => file.Path)
+                    .OrderBy(path => path, StringComparer.Ordinal)
+                    .ToList()
+                    .AsReadOnly()),
+            (path, branch, _) => Task.FromResult<string?>(
+                this.ResolveFilesForBranch(branch)
+                    .FirstOrDefault(file => string.Equals(file.Path, path.Trim(), StringComparison.Ordinal))?
+                    .Content),
+            NormalizeBranch,
+            path => path.Trim(),
+            this._options.MaxFileSizeBytes,
+            ct);
+    }
+
+    private static string NormalizeBranch(string branch)
+    {
+        return branch.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
+            ? branch["refs/heads/".Length..]
+            : branch.Trim();
+    }
+
+    private IReadOnlyList<RepositoryFileEntry> ResolveFilesForBranch(string branch)
+    {
+        var normalized = NormalizeBranch(branch);
+        var sourceBranch = NormalizeBranch(fixture.RepositorySnapshot.SourceBranch);
+        var targetBranch = NormalizeBranch(fixture.RepositorySnapshot.TargetBranch);
+
+        return string.Equals(normalized, targetBranch, StringComparison.OrdinalIgnoreCase)
+            ? fixture.RepositorySnapshot.TargetFilesOrSource
+            : fixture.RepositorySnapshot.SourceFiles;
+    }
+
+    private static Task<string> SliceContent(string? content, int startLine, int endLine)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        var lines = content.Split('\n');
+        var clampedStart = Math.Max(1, startLine);
+        var clampedEnd = Math.Min(lines.Length, endLine);
+        return Task.FromResult(clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]));
     }
 }

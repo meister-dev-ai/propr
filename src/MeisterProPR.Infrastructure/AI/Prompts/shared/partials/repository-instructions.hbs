@@ -1,0 +1,11 @@
+{{#if hasRepositoryInstructions}}
+
+## Repository Instructions
+The following repository-specific instructions apply to this review:
+{{#each repositoryInstructions}}
+
+### {{fileName}}
+**When to use:** {{whenToUse}}
+{{body}}
+{{/each}}
+{{/if}}

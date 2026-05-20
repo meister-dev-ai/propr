@@ -536,7 +536,9 @@ public sealed partial class ReviewOrchestrationService(
                 job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources
                     ? job.ProCursorSourceIds
                     : null,
-                job.OrganizationUrl));
+                job.OrganizationUrl,
+                pr.TargetBranch,
+                pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()));
         IReadOnlyList<RepositoryInstruction> relevantInstructions = [];
         var exclusionRules = ReviewExclusionRules.Default;
 

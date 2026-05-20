@@ -117,6 +117,87 @@ public sealed class FixtureReviewContextToolsTests
     }
 
     [Fact]
+    public async Task FixtureReviewContextTools_SearchTools_CanSearchSourceAndTargetScopes()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = "test-review-eval-jwt-secret-32!",
+                })
+            .Build();
+
+        services.AddLogging();
+        services.AddReviewEvalHarness(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var fixture = CreateFixture() with
+        {
+            RepositorySnapshot = CreateFixture().RepositorySnapshot with
+            {
+                Files =
+                [
+                    new RepositoryFileEntry(
+                        "src/Example.cs",
+                        "public class Example\n{\n    public string Greet(string name)\n    {\n        return BuildGreeting(name);\n    }\n\n    private static string BuildGreeting(string name) => $\"Hello, {name}!\";\n}"),
+                    new RepositoryFileEntry("src/Shared.cs", "public static class Shared\n{\n    public const string GreetingPrefix = \"Hello\";\n}"),
+                ],
+                TargetFiles =
+                [
+                    new RepositoryFileEntry(
+                        "src/Example.cs",
+                        "public class Example\n{\n    public string Greet(string name)\n    {\n        return Shared.GreetingPrefix + name;\n    }\n}"),
+                    new RepositoryFileEntry("src/Shared.cs", "public static class Shared\n{\n    public const string GreetingPrefix = \"Hi \";\n}"),
+                ],
+            },
+            PullRequestSnapshot = CreateFixture().PullRequestSnapshot with
+            {
+                ChangedFiles =
+                [
+                    new FixtureChangedFile(
+                        "src/Example.cs",
+                        ChangeType.Edit,
+                        "@@ -1,6 +1,8 @@",
+                        "public class Example\n{\n    public string Greet(string name)\n    {\n        return BuildGreeting(name);\n    }\n\n    private static string BuildGreeting(string name) => $\"Hello, {name}!\";\n}"),
+                ],
+            },
+        };
+
+        var accessor = scope.ServiceProvider.GetRequiredService<IReviewEvaluationFixtureAccessor>();
+        accessor.Fixture = fixture;
+
+        var toolsFactory = scope.ServiceProvider.GetRequiredService<IReviewContextToolsFactory>();
+        var tools = toolsFactory.Create(
+            new ReviewContextToolsRequest(
+                fixture.PullRequestSnapshot.CodeReview,
+                fixture.PullRequestSnapshot.SourceBranch,
+                1,
+                null,
+                TargetBranch: fixture.PullRequestSnapshot.TargetBranch,
+                ChangedPathSnapshots: fixture.PullRequestSnapshot.ChangedFiles
+                    .Select(ChangedPathSnapshot.FromFixtureChangedFile)
+                    .ToList()
+                    .AsReadOnly()));
+
+        var sourceRepo = await tools.SearchSourceRepoAsync("BuildGreeting", "**/*.cs", CancellationToken.None);
+        var sourceChanged = await tools.SearchSourceChangedFilesAsync("BuildGreeting", "**/*.cs", CancellationToken.None);
+        var targetRepo = await tools.SearchTargetRepoAsync("GreetingPrefix", "**/*.cs", CancellationToken.None);
+        var targetChanged = await tools.SearchTargetChangedFilesAsync("GreetingPrefix", "**/*.cs", CancellationToken.None);
+
+        Assert.Equal(RepositorySearchStatuses.Success, sourceRepo.Status);
+        Assert.Contains(sourceRepo.Matches, match => match.FilePath == "src/Example.cs");
+        Assert.Equal(RepositorySearchStatuses.Success, sourceChanged.Status);
+        Assert.All(sourceChanged.Matches, match => Assert.Equal("src/Example.cs", match.FilePath));
+        Assert.Equal(RepositorySearchStatuses.Success, targetRepo.Status);
+        Assert.Contains(targetRepo.Matches, match => match.FilePath == "src/Example.cs");
+        Assert.Equal(RepositorySearchStatuses.Success, targetChanged.Status);
+        Assert.All(targetChanged.Matches, match => Assert.Equal("src/Example.cs", match.FilePath));
+    }
+
+    [Fact]
     public void AddReviewEvalHarness_RegistersSharedDispatcherSeamForOfflineExecution()
     {
         var services = new ServiceCollection();

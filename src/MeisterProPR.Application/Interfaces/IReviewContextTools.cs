@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -31,6 +32,38 @@ public interface IReviewContextTools
     /// <param name="endLine">One-based line number to stop reading at (inclusive).</param>
     /// <param name="ct">Cancellation token.</param>
     Task<string> GetFileContentAsync(string path, string branch, int startLine, int endLine, CancellationToken ct);
+
+    /// <summary>
+    ///     Searches the source branch across the full repository and returns a structured result.
+    /// </summary>
+    /// <param name="searchTerm">Regex text to evaluate against searchable text files.</param>
+    /// <param name="fileMask">Optional glob mask to limit candidate paths before search.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct);
+
+    /// <summary>
+    ///     Searches only changed-file paths on the source branch and returns a structured result.
+    /// </summary>
+    /// <param name="searchTerm">Regex text to evaluate against searchable text files.</param>
+    /// <param name="fileMask">Optional glob mask to limit candidate paths before search.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RepositorySearchResult> SearchSourceChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct);
+
+    /// <summary>
+    ///     Searches the target branch across the full repository and returns a structured result.
+    /// </summary>
+    /// <param name="searchTerm">Regex text to evaluate against searchable text files.</param>
+    /// <param name="fileMask">Optional glob mask to limit candidate paths before search.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RepositorySearchResult> SearchTargetRepoAsync(string searchTerm, string? fileMask, CancellationToken ct);
+
+    /// <summary>
+    ///     Searches only changed-file paths on the target branch and returns a structured result.
+    /// </summary>
+    /// <param name="searchTerm">Regex text to evaluate against searchable text files.</param>
+    /// <param name="fileMask">Optional glob mask to limit candidate paths before search.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RepositorySearchResult> SearchTargetChangedFilesAsync(string searchTerm, string? fileMask, CancellationToken ct);
 
     /// <summary>
     ///     Asks ProCursor a reviewer-facing knowledge question using the current review repository context.
