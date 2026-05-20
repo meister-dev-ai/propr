@@ -288,4 +288,59 @@ public sealed class SubmitReviewJobHandlerTests
             .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
         await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData(ReviewStrategy.PrWideAgentic)]
+    [InlineData(ReviewStrategy.AgenticFileByFile)]
+    public async Task HandleAsync_DisabledReviewStrategyOverride_ThrowsInvalidOperationException(ReviewStrategy strategy)
+    {
+        var request = CreateRequest() with { ReviewStrategy = strategy };
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
+            .Returns((ReviewJob?)null);
+
+        var sut = new SubmitReviewJobHandler(store, queue, NullLogger<SubmitReviewJobHandler>.Instance);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request)));
+
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await store.DidNotReceive()
+            .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
+        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ReviewStrategy.PrWideAgentic)]
+    [InlineData(ReviewStrategy.AgenticFileByFile)]
+    public async Task HandleAsync_DisabledClientDefaultReviewStrategy_ThrowsInvalidOperationException(ReviewStrategy strategy)
+    {
+        var request = CreateRequest();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
+            .Returns((ReviewJob?)null);
+        clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(strategy);
+
+        var sut = new SubmitReviewJobHandler(
+            store,
+            queue,
+            NullLogger<SubmitReviewJobHandler>.Instance,
+            null,
+            null,
+            clientRegistry);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request)));
+
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await store.DidNotReceive()
+            .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
+        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
 }

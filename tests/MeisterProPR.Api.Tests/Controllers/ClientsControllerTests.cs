@@ -341,6 +341,39 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(tenantId, createdClient.TenantId);
     }
 
+    [Theory]
+    [InlineData("prWideAgentic")]
+    [InlineData("agenticFileByFile")]
+    public async Task PostClients_WithDisabledDefaultReviewStrategy_Returns400(string strategy)
+    {
+        var tenantId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Tenants.Add(
+                new TenantRecord
+                {
+                    Id = tenantId,
+                    Slug = $"tenant-{tenantId:N}",
+                    DisplayName = "Test Tenant",
+                    IsActive = true,
+                    LocalLoginEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Test Client", tenantId, defaultReviewStrategy = strategy });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // T036 — PATCH /clients/{id} customSystemMessage (admin)
 
     [Fact]
@@ -580,6 +613,22 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("prWideAgentic")]
+    [InlineData("agenticFileByFile")]
+    public async Task PatchClient_WithDisabledDefaultReviewStrategy_Returns400(string strategy)
+    {
+        var clientId = factory.ClientId;
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { defaultReviewStrategy = strategy });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     private static TenantRecord CreateTenantRecord(Guid tenantId, string slug, string displayName)

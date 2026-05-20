@@ -72,7 +72,6 @@ public class ReviewPromptsTests
         var allFiles = AsSummaries(file);
 
         var fooThread = CreateThread("src/Foo.cs");
-        var barThread = CreateThread("src/Bar.cs");
         var prThread = CreateThread(null);
 
         // Only fooThread and prThread should be in the message (barThread was pre-filtered out)

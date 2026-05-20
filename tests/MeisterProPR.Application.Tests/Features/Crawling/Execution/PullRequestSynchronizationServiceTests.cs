@@ -300,7 +300,7 @@ public sealed class PullRequestSynchronizationServiceTests
     }
 
     [Fact]
-    public async Task SynchronizeAsync_WhenClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    public async Task SynchronizeAsync_WhenDisabledClientDefaultStrategyExists_ThrowsInvalidOperationException()
     {
         var jobs = Substitute.For<IJobRepository>();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -319,25 +319,19 @@ public sealed class PullRequestSynchronizationServiceTests
             NullLogger<PullRequestSynchronizationService>.Instance,
             clientRegistry: clientRegistry);
 
-        var outcome = await sut.SynchronizeAsync(
-            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
-            {
-                CandidateIterationId = 7,
-            });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.SynchronizeAsync(
+                CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+                {
+                    CandidateIterationId = 7,
+                }));
 
-        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
-        await jobs.Received(1)
-            .TryAddIfNoActiveDuplicateAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.ReviewStrategy == ReviewStrategy.PrWideAgentic &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.Publish),
-                Arg.Any<CancellationToken>());
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SynchronizeAsync_WhenExplicitStrategyOverrideExists_PrefersOverrideOverClientDefault()
+    public async Task SynchronizeAsync_WhenDisabledPrWideOverrideExists_ThrowsInvalidOperationException()
     {
         var jobs = Substitute.For<IJobRepository>();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -356,28 +350,22 @@ public sealed class PullRequestSynchronizationServiceTests
             NullLogger<PullRequestSynchronizationService>.Instance,
             clientRegistry: clientRegistry);
 
-        var outcome = await sut.SynchronizeAsync(
-            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
-            {
-                CandidateIterationId = 7,
-                ReviewStrategy = ReviewStrategy.PrWideAgentic,
-                ComparisonMode = ReviewComparisonMode.Shadow,
-                PublicationMode = ReviewPublicationMode.DryRun,
-            });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.SynchronizeAsync(
+                CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+                {
+                    CandidateIterationId = 7,
+                    ReviewStrategy = ReviewStrategy.PrWideAgentic,
+                    ComparisonMode = ReviewComparisonMode.Shadow,
+                    PublicationMode = ReviewPublicationMode.DryRun,
+                }));
 
-        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
-        await jobs.Received(1)
-            .TryAddIfNoActiveDuplicateAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.ReviewStrategy == ReviewStrategy.PrWideAgentic &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.JobOverride &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Shadow &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.DryRun),
-                Arg.Any<CancellationToken>());
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SynchronizeAsync_WhenAgenticFileByFileClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    public async Task SynchronizeAsync_WhenDisabledAgenticClientDefaultStrategyExists_ThrowsInvalidOperationException()
     {
         var jobs = Substitute.For<IJobRepository>();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -396,25 +384,19 @@ public sealed class PullRequestSynchronizationServiceTests
             NullLogger<PullRequestSynchronizationService>.Instance,
             clientRegistry: clientRegistry);
 
-        var outcome = await sut.SynchronizeAsync(
-            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
-            {
-                CandidateIterationId = 7,
-            });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.SynchronizeAsync(
+                CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+                {
+                    CandidateIterationId = 7,
+                }));
 
-        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
-        await jobs.Received(1)
-            .TryAddIfNoActiveDuplicateAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.ReviewStrategy == ReviewStrategy.AgenticFileByFile &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.Publish),
-                Arg.Any<CancellationToken>());
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SynchronizeAsync_WhenAgenticFileByFileOverrideExists_PrefersOverrideOverClientDefault()
+    public async Task SynchronizeAsync_WhenDisabledAgenticOverrideExists_ThrowsInvalidOperationException()
     {
         var jobs = Substitute.For<IJobRepository>();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -433,24 +415,18 @@ public sealed class PullRequestSynchronizationServiceTests
             NullLogger<PullRequestSynchronizationService>.Instance,
             clientRegistry: clientRegistry);
 
-        var outcome = await sut.SynchronizeAsync(
-            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
-            {
-                CandidateIterationId = 7,
-                ReviewStrategy = ReviewStrategy.AgenticFileByFile,
-                ComparisonMode = ReviewComparisonMode.Single,
-                PublicationMode = ReviewPublicationMode.Publish,
-            });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.SynchronizeAsync(
+                CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+                {
+                    CandidateIterationId = 7,
+                    ReviewStrategy = ReviewStrategy.AgenticFileByFile,
+                    ComparisonMode = ReviewComparisonMode.Single,
+                    PublicationMode = ReviewPublicationMode.Publish,
+                }));
 
-        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
-        await jobs.Received(1)
-            .TryAddIfNoActiveDuplicateAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.ReviewStrategy == ReviewStrategy.AgenticFileByFile &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.JobOverride &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.Publish),
-                Arg.Any<CancellationToken>());
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
     private static PullRequestSynchronizationRequest CreateRequest(

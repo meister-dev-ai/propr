@@ -428,6 +428,7 @@ public sealed partial class PrCrawlService(
             var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, ct);
             if (clientDefault.HasValue)
             {
+                EnsureStrategySelectable(clientDefault.Value, "client default");
                 return new ReviewStrategySelection(
                     clientDefault.Value,
                     ReviewStrategySelectionSource.ClientDefault,
@@ -438,6 +439,14 @@ public sealed partial class PrCrawlService(
         }
 
         return ReviewStrategySelection.Default;
+    }
+
+    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
+    {
+        if (!ReviewStrategyPolicy.IsSelectable(strategy))
+        {
+            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
+        }
     }
 
     private static Guid? ResolveReviewerId(ReviewerIdentity? reviewer)

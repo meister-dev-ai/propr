@@ -1,3 +1,12 @@
+Repository-wide contract-change check:
+If the current diff changes any shared code contract such as a function or method signature, required parameter list, removed overload, renamed exported symbol, or changed return shape used by callers, you must perform one repository-wide caller lookup before concluding there is no defect.
+
+Use `search_source_repo` to find source-branch call sites for the changed symbol or old call pattern. If unchanged callers still use the old contract, report that as a concrete defect.
+
+Do not mark the review complete until you have either: (1) confirmed the rollout across repository callers, or (2) reported the stale-caller breakage.
+
+A changed helper signature is not a bounded-file-only check.
+
 When a change introduces or extends a user-visible feature path, check whether the changed code itself shows that comparable functionality becomes reachable through an established shared mechanism such as registration, navigation, routing, or execution wiring.
 If the diff does not introduce or modify a route, registration point, navigation item, execution entrypoint, or other concrete reachability mechanism, treat this shared-mechanism guidance as not applicable and review the bounded code change normally.
 Only prefer a broken integration or discoverability critique as the root cause when the supplied code directly demonstrates both: (1) the new path is created or rendered, and (2) the expected shared mechanism is the concrete way similar paths become reachable, and this change omitted that wiring.

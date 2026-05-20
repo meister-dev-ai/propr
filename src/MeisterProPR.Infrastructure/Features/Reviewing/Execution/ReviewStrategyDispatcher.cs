@@ -27,6 +27,11 @@ public sealed class ReviewStrategyDispatcher(
         IChatClient? overrideClient = null,
         string? pipelineProfileId = null)
     {
+        if (!ReviewStrategyPolicy.IsSelectable(job.ReviewStrategy))
+        {
+            throw new InvalidOperationException(ReviewStrategyPolicy.GetDisabledExecutionMessage(job.ReviewStrategy));
+        }
+
         if (!string.IsNullOrWhiteSpace(pipelineProfileId) && pipelineProfileProvider is not null)
         {
             var hasMatchingProfile = pipelineProfileProvider
@@ -39,13 +44,6 @@ public sealed class ReviewStrategyDispatcher(
             }
         }
 
-        return job.ReviewStrategy switch
-        {
-            ReviewStrategy.AgenticFileByFile when agenticFileByFileReviewOrchestrator is not null =>
-                agenticFileByFileReviewOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),
-            ReviewStrategy.PrWideAgentic when prWideAgenticReviewOrchestrator is not null =>
-                prWideAgenticReviewOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),
-            _ => fileByFileOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient),
-        };
+        return fileByFileOrchestrator.ReviewAsync(job, pr, baseContext, ct, overrideClient);
     }
 }

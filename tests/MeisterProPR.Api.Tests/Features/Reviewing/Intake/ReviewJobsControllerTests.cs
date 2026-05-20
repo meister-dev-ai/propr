@@ -126,7 +126,7 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
-    public async Task SubmitReview_WithStrategyOverride_ReturnsResolvedStrategyFields()
+    public async Task SubmitReview_WithDisabledPrWideStrategyOverride_ReturnsBadRequest()
     {
         var clientId = Guid.NewGuid();
         var store = Substitute.For<IReviewJobIntakeStore>();
@@ -138,31 +138,16 @@ public sealed class ReviewJobsControllerTests
             PublicationMode = ReviewPublicationMode.DryRun,
         };
 
-        store.FindActiveJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
-            .Returns((ReviewJob?)null);
-        store.CreatePendingJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var dto = call.Arg<SubmitReviewJobRequestDto>();
-                var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
-                job.SelectReviewStrategy(dto.ResolvedReviewStrategySelection!);
-                return job;
-            });
-
         var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
 
         var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
 
-        var accepted = Assert.IsType<AcceptedResult>(result);
-        var payload = Assert.IsType<ReviewJobAcceptedResponse>(accepted.Value);
-        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.JobOverride, payload.StrategySelectionSource);
-        Assert.Equal(ReviewComparisonMode.Single, payload.ComparisonMode);
-        Assert.Equal(ReviewPublicationMode.DryRun, payload.PublicationMode);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
     }
 
     [Fact]
-    public async Task SubmitReview_WithAgenticFileByFileOverride_ReturnsResolvedStrategyFields()
+    public async Task SubmitReview_WithDisabledAgenticFileByFileOverride_ReturnsBadRequest()
     {
         var clientId = Guid.NewGuid();
         var store = Substitute.For<IReviewJobIntakeStore>();
@@ -174,27 +159,12 @@ public sealed class ReviewJobsControllerTests
             PublicationMode = ReviewPublicationMode.Publish,
         };
 
-        store.FindActiveJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
-            .Returns((ReviewJob?)null);
-        store.CreatePendingJobAsync(clientId, Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var dto = call.Arg<SubmitReviewJobRequestDto>();
-                var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
-                job.SelectReviewStrategy(dto.ResolvedReviewStrategySelection!);
-                return job;
-            });
-
         var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
 
         var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
 
-        var accepted = Assert.IsType<AcceptedResult>(result);
-        var payload = Assert.IsType<ReviewJobAcceptedResponse>(accepted.Value);
-        Assert.Equal(ReviewStrategy.AgenticFileByFile, payload.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.JobOverride, payload.StrategySelectionSource);
-        Assert.Equal(ReviewComparisonMode.Single, payload.ComparisonMode);
-        Assert.Equal(ReviewPublicationMode.Publish, payload.PublicationMode);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
     }
 
     [Fact]

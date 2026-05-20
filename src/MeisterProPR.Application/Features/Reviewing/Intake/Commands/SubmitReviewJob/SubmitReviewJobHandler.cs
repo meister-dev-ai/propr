@@ -106,6 +106,7 @@ public sealed partial class SubmitReviewJobHandler(
     {
         if (request.ReviewStrategy.HasValue)
         {
+            EnsureStrategySelectable(request.ReviewStrategy.Value, "job override");
             return new ReviewStrategySelection(
                 request.ReviewStrategy.Value,
                 ReviewStrategySelectionSource.JobOverride,
@@ -119,6 +120,7 @@ public sealed partial class SubmitReviewJobHandler(
             var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, cancellationToken);
             if (clientDefault.HasValue)
             {
+                EnsureStrategySelectable(clientDefault.Value, "client default");
                 return new ReviewStrategySelection(
                     clientDefault.Value,
                     ReviewStrategySelectionSource.ClientDefault,
@@ -134,6 +136,14 @@ public sealed partial class SubmitReviewJobHandler(
             request.ComparisonMode,
             request.PublicationMode,
             null);
+    }
+
+    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
+    {
+        if (!ReviewStrategyPolicy.IsSelectable(strategy))
+        {
+            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
+        }
     }
 
     private static SubmitReviewJobResult ToResult(ReviewJob job, bool isDuplicate)

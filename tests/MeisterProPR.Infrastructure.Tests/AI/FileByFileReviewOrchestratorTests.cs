@@ -181,8 +181,6 @@ public class FileByFileReviewOrchestratorTests
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
             .Returns(job);
 
-        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, Substitute.For<IChatClient>());
-
         // Setup synthesis chatclient to return something
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(
@@ -218,11 +216,11 @@ public class FileByFileReviewOrchestratorTests
         var storedResults = new List<ReviewFileResult>();
         var repo = Substitute.For<IJobRepository>();
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
         repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(callInfo =>
             {
-                storedResults.Add(ci.Arg<ReviewFileResult>());
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
                 return Task.CompletedTask;
             });
         repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
@@ -251,7 +249,7 @@ public class FileByFileReviewOrchestratorTests
         var callCount = 0;
 
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(_ =>
             {
                 var count = Interlocked.Increment(ref callCount);
                 // Second call (index 1) fails
@@ -306,7 +304,6 @@ public class FileByFileReviewOrchestratorTests
         var completedResult = new ReviewFileResult(job.Id, "a.cs");
         completedResult.MarkCompleted("a done", new List<ReviewComment>().AsReadOnly());
 
-        var jobWithResults = CreateJob();
         // Must return the same job id
         var repo = Substitute.For<IJobRepository>();
         // Return job with one completed file result
@@ -315,7 +312,7 @@ public class FileByFileReviewOrchestratorTests
         // We need a ReviewJob whose FileReviewResults contains completedResult
         // Use a sub that supports FileReviewResults collection inspection
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(_ =>
             {
                 var mockJob = new ReviewJob(
                     job.Id,
@@ -374,11 +371,11 @@ public class FileByFileReviewOrchestratorTests
         var storedResults = new List<ReviewFileResult>();
         var repo = Substitute.For<IJobRepository>();
         repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
         repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(callInfo =>
             {
-                storedResults.Add(ci.Arg<ReviewFileResult>());
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
                 return Task.CompletedTask;
             });
         repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())

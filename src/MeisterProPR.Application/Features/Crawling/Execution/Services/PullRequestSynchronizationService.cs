@@ -749,6 +749,7 @@ public sealed class PullRequestSynchronizationService(
     {
         if (request.ReviewStrategy.HasValue)
         {
+            EnsureStrategySelectable(request.ReviewStrategy.Value, "job override");
             return new ReviewStrategySelection(
                 request.ReviewStrategy.Value,
                 ReviewStrategySelectionSource.JobOverride,
@@ -762,6 +763,7 @@ public sealed class PullRequestSynchronizationService(
             var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(request.ClientId, ct);
             if (clientDefault.HasValue)
             {
+                EnsureStrategySelectable(clientDefault.Value, "client default");
                 return new ReviewStrategySelection(
                     clientDefault.Value,
                     ReviewStrategySelectionSource.ClientDefault,
@@ -777,6 +779,14 @@ public sealed class PullRequestSynchronizationService(
             request.ComparisonMode,
             request.PublicationMode,
             null);
+    }
+
+    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
+    {
+        if (!ReviewStrategyPolicy.IsSelectable(strategy))
+        {
+            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
+        }
     }
 
     private sealed record ActiveJobReconciliationResult(

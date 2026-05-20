@@ -488,7 +488,7 @@ public class ReviewOrchestrationServiceTests
     {
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, instructionEvaluator, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -834,7 +834,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_CallsAddOptionalReviewerBeforePostAsync()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -900,7 +900,7 @@ public class ReviewOrchestrationServiceTests
     {
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
         var protocolRecorder = Substitute.For<IProtocolRecorder>();
         var protocolId = Guid.NewGuid();
@@ -1091,7 +1091,7 @@ public class ReviewOrchestrationServiceTests
     {
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1131,7 +1131,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_NullReviewerId_SkipsAssignmentAndPublishesUsingAuthorizedIdentity()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var clientId = Guid.NewGuid();
@@ -1192,7 +1192,7 @@ public class ReviewOrchestrationServiceTests
     {
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1601,7 +1601,7 @@ public class ReviewOrchestrationServiceTests
     {
         // T019 renames: Completed PR still calls SetFailedAsync (only Abandoned triggers SetCancelledAsync)
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1648,7 +1648,7 @@ public class ReviewOrchestrationServiceTests
     public async Task ProcessAsync_ReviewerAddThrows_PostAsyncNotCalledAndJobFails()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();
@@ -1693,7 +1693,7 @@ public class ReviewOrchestrationServiceTests
     {
         // Arrange
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
+                _, _, logger) =
             CreateDeps();
 
         var job = CreateJob();

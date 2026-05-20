@@ -268,7 +268,6 @@ try
 
     var proCursorGatewayMode = GetEffectiveProCursorMode(builder.Configuration);
     var useRemoteProCursor = IsRemoteProCursorMode(proCursorGatewayMode);
-    var disableProCursor = IsDisabledProCursorMode(proCursorGatewayMode);
 
     builder.Services.AddScoped<IProCursorGateway>(sp =>
         useRemoteProCursor

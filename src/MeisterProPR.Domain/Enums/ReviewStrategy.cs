@@ -9,9 +9,9 @@ public enum ReviewStrategy
     /// <summary>Current per-file review pipeline.</summary>
     FileByFile,
 
-    /// <summary>Planned PR-wide staged agentic review pipeline.</summary>
+    /// <summary>Persisted historical PR-wide staged agentic review pipeline. New selection is disabled.</summary>
     PrWideAgentic,
 
-    /// <summary>Plan-driven per-file review pipeline with bounded file-scoped investigation.</summary>
+    /// <summary>Persisted historical plan-driven per-file review pipeline. New selection is disabled.</summary>
     AgenticFileByFile,
 }

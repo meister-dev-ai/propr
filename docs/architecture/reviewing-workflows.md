@@ -6,16 +6,11 @@ token-control mechanics that keep the review loop safe and efficient.
 
 ## Review Strategies
 
-The Reviewing module exposes three persisted `ReviewStrategy` values:
+The Reviewing module currently allows new review jobs to select only `FileByFile`, the baseline
+per-file review path.
 
-- `FileByFile`: the baseline per-file review path.
-- `AgenticFileByFile`: the per-file mode that adds a bounded planning and investigation stage
-  ahead of the existing trust-preserving file pipeline.
-- `PrWideAgentic`: the PR-wide planning and investigation mode.
-
-`AgenticFileByFile` reuses the existing file-result ownership, local verification, PR-level
-verification, final finding gate, summary reconciliation, and publication flow. It does not replace
-the baseline `FileByFile` mode.
+Historical persisted jobs may still report `AgenticFileByFile` or `PrWideAgentic` in diagnostics,
+but those strategies are disabled for new selection and for runtime execution.
 
 ## Review Submission And Execution
 
@@ -59,7 +54,7 @@ GitLab, and Forgejo-family reviews. The worker claims the job, resolves the prov
 and publication adapters through the shared provider registry, runs the AI review, and posts
 comment threads back to the originating provider.
 
-Production execution enters through `ReviewOrchestrationService`, and offline evaluation enters through `ReviewWorkflowRunner`. Both flows resolve strategy and profile routing through `IReviewStrategyDispatcher`.
+Production execution enters through `ReviewOrchestrationService`, and offline evaluation enters through `ReviewWorkflowRunner`. Both flows resolve strategy and profile routing through `IReviewStrategyDispatcher`, which now permits only `FileByFile` execution.
 
 ## Offline Prompt Experiment Harness
 
@@ -130,7 +125,7 @@ file path, diff, and optional language hints. The ranked items become focused gu
 downstream file review rather than standalone findings.
 
 1. `ProRVFocusedReviewGuidanceResolver.TryResolveAsync(...)` runs before the main file prompt for
-   both `FileByFile` and `AgenticFileByFile`.
+   `FileByFile`.
 2. The stage is skipped when ProRV is not configured, the file is binary, the file was deleted, or
    the diff is empty.
 3. Runtime selection prefers a dedicated `proRvPrefilter` AI purpose binding. If that binding is not
@@ -179,43 +174,37 @@ flowchart TD
    partial, invalid-request, and bounded-tool blocked outcomes, and they reuse one shared search
    executor for regex validation, file-mask filtering, deterministic ordering, truncation, and
    limitation reporting across live providers and offline fixtures.
-4. When the job strategy is `AgenticFileByFile`, `FileReviewer` first runs a file-scoped planning
-    step (`agentic_file_planning`) and then executes bounded investigation tasks before emitting the
-    same per-file result shape used by the baseline pipeline. Protocol events record
-    `review_strategy_selected`, `agentic_file_plan_created`, `agentic_file_investigation_launched`,
-    `agentic_file_investigation_result`, `agentic_file_evidence_collected`, and
-    `agentic_file_degraded` when investigation falls back.
-5. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
+4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
    thread-memory reconsideration before extracting structured claims and running local verification.
    Deterministic contradiction checks use curated invariant facts, while evidence-needing local
    generic claims are withheld conservatively until a bounded verifier can support them.
-6. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
+5. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
    Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
    stored comment set, and the per-file summary is rewritten from the surviving verified findings so
    synthesis input does not repeat unsupported local assertions.
-7. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
-   runtime, and asks the model for both a PR narrative summary and structured synthesized
-   cross-cutting findings.
-8. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
+6. `SynthesizeResultsAsync(...)` excludes carried-forward rows, resolves the high-effort review
+runtime, and asks the model for both a PR narrative summary and structured synthesized
+cross-cutting findings.
+7. Synthesized cross-cutting findings carry `EvidenceReference` metadata from the synthesis payload:
    `supportingFindingIds`, `supportingFiles`, `evidenceResolutionState`, and `evidenceSource`.
    These fields are retrieval hints only; fetched files or support metadata do not prove a claim.
-9. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
-   instances. PR-level findings then route through targeted verification work items, evidence
-   retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
-   Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
-   states in the evidence bundle.
-10. Eligible unresolved deeper-follow-up findings may enter one repeated-judgment pass. That pass
-    reuses the same bounded evidence set and claim identity from the prior PR-level verification path;
-    it does not widen search, re-run Stage B planning, or fetch broader repository context.
-11. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
-    and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
-12. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
-    surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
-13. The protocol records machine-readable ProRV, verification, and final-gate events, including
-    `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
-    `prorv_prefilter_failed`, `prorv_focused_guidance_applied`,
-    `verification_claims_extracted`, `verification_local_decision`,
+8. Deduplicated per-file comments and synthesized findings are merged into `CandidateReviewFinding`
+instances. PR-level findings then route through targeted verification work items, evidence
+retrieval through `IReviewContextTools`, and bounded AI micro-verification for unresolved claims.
+Evidence collection records source attempts and ProCursor empty, unavailable, or successful result
+states in the evidence bundle.
+9. Eligible unresolved deeper-follow-up findings may enter one repeated-judgment pass. That pass
+     reuses the same bounded evidence set and claim identity from the prior PR-level verification path;
+     it does not widen search, re-run Stage B planning, or fetch broader repository context.
+10. `DeterministicReviewFindingGate` consumes invariant facts plus any attached `VerificationOutcome`
+     and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
+11. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
+     surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
+12. The protocol records machine-readable ProRV, verification, and final-gate events, including
+     `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
+     `prorv_prefilter_failed`, `prorv_focused_guidance_applied`,
+     `verification_claims_extracted`, `verification_local_decision`,
     `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
     `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
     `review_finding_gate_decision`.
@@ -303,7 +292,7 @@ diagnostics without creating new provider-native comments.
 
 | Concern | Runtime handling |
 |---------|------------------|
-| Candidate generation | Parallel per-file agentic review plus one synthesis pass |
+| Candidate generation | Parallel per-file review plus one synthesis pass |
 | Local truth checks | Structured claim extraction plus deterministic contradiction verification before persistence |
 | Cross-file evidence gathering | Review tools and ProCursor are reused through targeted verification work items |
 | Publication decision | `DeterministicReviewFindingGate` decides `Publish`, `SummaryOnly`, or `Drop` |

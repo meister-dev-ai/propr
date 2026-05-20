@@ -257,7 +257,7 @@ public sealed class PrCrawlServiceTests
     }
 
     [Fact]
-    public async Task CrawlAsync_WhenClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    public async Task CrawlAsync_WhenDisabledPrWideClientDefaultStrategyExists_ThrowsInvalidOperationException()
     {
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         var pr = MakePr(142);
@@ -272,20 +272,14 @@ public sealed class PrCrawlServiceTests
         this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
             .Returns(ReviewStrategy.PrWideAgentic);
 
-        await this._sut.CrawlAsync();
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this._sut.CrawlAsync());
 
-        await this._jobs.Received(1)
-            .AddAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.PullRequestId == pr.CodeReview.Number &&
-                    job.ReviewStrategy == ReviewStrategy.PrWideAgentic &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.Publish));
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]
-    public async Task CrawlAsync_WhenAgenticFileByFileClientDefaultStrategyExists_SnapshotsItOnQueuedJob()
+    public async Task CrawlAsync_WhenDisabledAgenticClientDefaultStrategyExists_ThrowsInvalidOperationException()
     {
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         var pr = MakePr(143);
@@ -300,16 +294,10 @@ public sealed class PrCrawlServiceTests
         this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
             .Returns(ReviewStrategy.AgenticFileByFile);
 
-        await this._sut.CrawlAsync();
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this._sut.CrawlAsync());
 
-        await this._jobs.Received(1)
-            .AddAsync(
-                Arg.Is<ReviewJob>(job =>
-                    job.PullRequestId == pr.CodeReview.Number &&
-                    job.ReviewStrategy == ReviewStrategy.AgenticFileByFile &&
-                    job.ReviewStrategySelectionSource == ReviewStrategySelectionSource.ClientDefault &&
-                    job.ReviewComparisonMode == ReviewComparisonMode.Single &&
-                    job.ReviewPublicationMode == ReviewPublicationMode.Publish));
+        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]

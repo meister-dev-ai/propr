@@ -18215,12 +18215,10 @@
       },
       "ReviewStrategy": {
         "enum": [
-          "fileByFile",
-          "prWideAgentic",
-          "agenticFileByFile"
+          "fileByFile"
         ],
         "type": "string",
-        "description": "Selectable strategy used to generate review findings for a job."
+        "description": "Selectable strategy used to generate review findings for a new job. Historical jobs may still report disabled legacy strategies in resolvedReviewStrategy fields."
       },
       "ReviewStrategySelectionSource": {
         "enum": [

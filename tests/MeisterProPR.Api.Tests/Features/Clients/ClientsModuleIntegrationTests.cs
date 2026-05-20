@@ -76,7 +76,7 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
     }
 
     [Fact]
-    public async Task CreateClient_WithAgenticFileByFileDefaultStrategy_PersistsAndReturnsIt()
+    public async Task CreateClient_WithExplicitFileByFileDefaultStrategy_PersistsAndReturnsIt()
     {
         var http = factory.CreateClient();
         var tenantId = Guid.NewGuid();
@@ -105,14 +105,14 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
             {
                 displayName = $"Agentic Client {Guid.NewGuid():N}",
                 tenantId,
-                defaultReviewStrategy = "agenticFileByFile",
+                defaultReviewStrategy = "fileByFile",
             });
 
         var createResponse = await http.SendAsync(createRequest);
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("agenticFileByFile", created.GetProperty("defaultReviewStrategy").GetString());
+        Assert.Equal("fileByFile", created.GetProperty("defaultReviewStrategy").GetString());
 
         var clientId = created.GetProperty("id").GetGuid();
         using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/clients/{clientId}");
@@ -122,7 +122,7 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
 
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         var body = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("agenticFileByFile", body.GetProperty("defaultReviewStrategy").GetString());
+        Assert.Equal("fileByFile", body.GetProperty("defaultReviewStrategy").GetString());
     }
 }
 

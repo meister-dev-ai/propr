@@ -94,6 +94,10 @@ public sealed partial class ReviewJobsController(
         {
             result = await submitReviewJobHandler.HandleAsync(new SubmitReviewJobCommand(clientId, intakeRequest), ct);
         }
+        catch (InvalidOperationException ex)
+        {
+            return this.BadRequest(new { error = ex.Message });
+        }
         catch (PremiumFeatureUnavailableException ex)
         {
             return new PremiumFeatureUnavailableResult(ex.Capability);
@@ -224,6 +228,12 @@ public sealed partial class ReviewJobsController(
         if (request.CodeReview is null)
         {
             validationError = "Code review details are required.";
+            return false;
+        }
+
+        if (request.ReviewStrategy.HasValue && !ReviewStrategyPolicy.IsSelectable(request.ReviewStrategy.Value))
+        {
+            validationError = ReviewStrategyPolicy.GetDisabledSelectionMessage(request.ReviewStrategy.Value);
             return false;
         }
 

@@ -42,6 +42,21 @@ public sealed class ClientsValidatorTests
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.TenantId));
     }
 
+    [Theory]
+    [InlineData(ReviewStrategy.PrWideAgentic)]
+    [InlineData(ReviewStrategy.AgenticFileByFile)]
+    public void CreateClient_DisabledDefaultReviewStrategy_Fails(ReviewStrategy strategy)
+    {
+        var result = CreateClientValidator.Validate(
+            new CreateClientRequest("My Client", Guid.NewGuid())
+            {
+                DefaultReviewStrategy = strategy,
+            });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.DefaultReviewStrategy));
+    }
+
     [Fact]
     public void CreateProviderConnection_GitHubPatRequest_Passes()
     {
@@ -186,5 +201,16 @@ public sealed class ClientsValidatorTests
         var result = PatchClientValidator.Validate(new PatchClientRequest(EnableProRV: value));
 
         Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(ReviewStrategy.PrWideAgentic)]
+    [InlineData(ReviewStrategy.AgenticFileByFile)]
+    public void PatchClient_DisabledDefaultReviewStrategy_Fails(ReviewStrategy strategy)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(DefaultReviewStrategy: strategy));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.DefaultReviewStrategy));
     }
 }

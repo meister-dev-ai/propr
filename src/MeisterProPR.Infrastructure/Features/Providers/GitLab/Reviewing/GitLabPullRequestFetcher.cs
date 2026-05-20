@@ -473,14 +473,6 @@ internal sealed class GitLabPullRequestFetcher(
         [property: JsonPropertyName("references")]
         GitLabMergeRequestReferencesResponse? References);
 
-    private sealed record GitLabDiffRefsResponse(
-        [property: JsonPropertyName("base_sha")]
-        string? BaseSha,
-        [property: JsonPropertyName("head_sha")]
-        string? HeadSha,
-        [property: JsonPropertyName("start_sha")]
-        string? StartSha);
-
     private sealed record GitLabMergeRequestReferencesResponse(
         [property: JsonPropertyName("short")] string? Short,
         [property: JsonPropertyName("full")] string? Full);
