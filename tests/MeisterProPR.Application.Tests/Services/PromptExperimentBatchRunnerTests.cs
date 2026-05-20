@@ -51,7 +51,8 @@ public sealed class PromptExperimentBatchRunnerTests
                     new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["comparisonGroup"] = "fixture-001",
-                    }),
+                    },
+                    [FileByFileReviewStepIds.PrVerification]),
             ]);
 
         var chatClient = Substitute.For<IChatClient>();
@@ -95,6 +96,9 @@ public sealed class PromptExperimentBatchRunnerTests
 
         await validator.Received(1).ValidateAsync(batch, CancellationToken.None);
         await workflowRunner.Received(2).RunAsync(Arg.Any<ReviewWorkflowRequest>(), Arg.Any<CancellationToken>());
+        await workflowRunner.Received(1).RunAsync(
+            Arg.Is<ReviewWorkflowRequest>(request => request.EffectiveSkippedSteps.Contains(FileByFileReviewStepIds.PrVerification)),
+            Arg.Any<CancellationToken>());
         await artifactWriter.Received(1).WriteAsync(
             Arg.Is<EvaluationArtifact>(artifact =>
                 artifact.Run.RunId == "run-baseline" &&

@@ -224,6 +224,7 @@ internal sealed partial class FileReviewer(
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
+            SkippedSteps = baseContext.SkippedSteps,
             // Tier-specific client wins; fall back to per-client active connection so the
             // global default chatClient is never used when a per-client connection is configured.
             TierChatClient = tierClient ?? effectiveClient,
@@ -329,6 +330,7 @@ internal sealed partial class FileReviewer(
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
             PromptExperiment = baseContext.PromptExperiment,
+            SkippedSteps = baseContext.SkippedSteps,
         };
     }
 
@@ -370,6 +372,27 @@ internal sealed partial class FileReviewer(
         result = await this.ApplyMemoryReconsiderationStageAsync(state, result, ct);
         result = NormalizeCommentAnchors(result);
         return await this.ApplyLocalVerificationStageAsync(state, result, ct);
+    }
+
+    private async Task<bool> TryRecordSkippedStepAsync(ReviewResultPipelineState state, string stepId, CancellationToken ct)
+    {
+        if (!state.FileContext.SkippedSteps.Contains(stepId))
+        {
+            return false;
+        }
+
+        if (state.ProtocolId.HasValue)
+        {
+            await protocolRecorder.RecordReviewStrategyEventAsync(
+                state.ProtocolId.Value,
+                ReviewProtocolEventNames.ReviewStepSkipped,
+                JsonSerializer.Serialize(new { stepId, scope = "file", filePath = state.File.Path }),
+                JsonSerializer.Serialize(new { skipped = true }),
+                null,
+                ct);
+        }
+
+        return true;
     }
 
     private async Task<ReviewSystemContext> RunDispatchPipelineAsync(
@@ -488,6 +511,11 @@ internal sealed partial class FileReviewer(
         ReviewResult result,
         CancellationToken ct)
     {
+        if (await this.TryRecordSkippedStepAsync(state, FileByFileReviewStepIds.CommentRelevanceFilter, ct))
+        {
+            return result;
+        }
+
         if (commentRelevanceFilterExecutor is null)
         {
             return result;
@@ -516,6 +544,11 @@ internal sealed partial class FileReviewer(
         ReviewResult result,
         CancellationToken ct)
     {
+        if (await this.TryRecordSkippedStepAsync(state, FileByFileReviewStepIds.MemoryReconsideration, ct))
+        {
+            return result;
+        }
+
         if (memoryService is null)
         {
             return result;
@@ -537,6 +570,11 @@ internal sealed partial class FileReviewer(
         ReviewResult result,
         CancellationToken ct)
     {
+        if (await this.TryRecordSkippedStepAsync(state, FileByFileReviewStepIds.LocalVerification, ct))
+        {
+            return result;
+        }
+
         return localReviewVerificationExecutor is null
             ? result
             : await localReviewVerificationExecutor.ApplyAsync(

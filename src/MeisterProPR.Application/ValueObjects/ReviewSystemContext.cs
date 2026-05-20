@@ -146,4 +146,9 @@ public sealed class ReviewSystemContext
     ///     Offline-only prompt experiment context applied to this workflow execution.
     /// </summary>
     public PromptExperimentContext? PromptExperiment { get; init; }
+
+    /// <summary>
+    ///     Offline-only explicit step skips applied to this workflow execution.
+    /// </summary>
+    public ReviewStepSkips SkippedSteps { get; init; } = new();
 }

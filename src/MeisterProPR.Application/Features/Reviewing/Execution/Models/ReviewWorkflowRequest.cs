@@ -17,7 +17,8 @@ public sealed record ReviewWorkflowRequest(
     EvaluationConfiguration? Configuration = null,
     string? PipelineProfileId = null,
     ReviewAugmentationMode? AugmentationMode = null,
-    PromptExperimentContext? PromptExperiment = null)
+    PromptExperimentContext? PromptExperiment = null,
+    ReviewStepSkips? SkippedSteps = null)
 {
     /// <summary>
     ///     Effective augmentation mode for this review workflow request. Explicit mode wins; otherwise preserve existing.
@@ -25,4 +26,11 @@ public sealed record ReviewWorkflowRequest(
     public ReviewAugmentationMode EffectiveAugmentationMode => this.AugmentationMode
                                                                ?? this.Configuration?.EffectiveAugmentationMode
                                                                ?? ReviewAugmentationMode.EarlySteering;
+
+    /// <summary>
+    ///     Effective offline-only skipped steps for this workflow request.
+    /// </summary>
+    public ReviewStepSkips EffectiveSkippedSteps => this.SkippedSteps
+                                                    ?? this.PromptExperiment?.SkippedSteps
+                                                    ?? new ReviewStepSkips();
 }

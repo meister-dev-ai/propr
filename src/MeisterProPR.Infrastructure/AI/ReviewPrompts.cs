@@ -267,10 +267,15 @@ internal static class ReviewPrompts
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine(
-            $"You are reviewing **{filePath}** ({fileIndex} of {totalFiles}). " +
-            "The other changed files are listed in the manifest below — their content is not provided. " +
-            "Call `get_file_content` on any sibling file when its content is needed for an accurate analysis of the file under review.");
+        sb.Append(
+            $"""
+             When a change introduces or extends a user-visible feature path, check whether the changed code itself shows that comparable functionality becomes reachable through an established shared mechanism such as registration, navigation, routing, or execution wiring.
+             If the diff does not introduce or modify a route, registration point, navigation item, execution entrypoint, or other concrete reachability mechanism, treat this shared-mechanism guidance as not applicable and review the bounded code change normally.
+             Only prefer a broken integration or discoverability critique as the root cause when the supplied code directly demonstrates both: (1) the new path is created or rendered, and (2) the expected shared mechanism is the concrete way similar paths become reachable, and this change omitted that wiring.
+             Do not broaden a concrete bounded defect into a higher-level architecture or registration complaint just because the code looks similar to existing patterns. If the broader claim depends on assumptions about other files, missing conventions, or intended product structure, keep the finding bounded.
+             If a single-file defect fully explains the user-visible failure, prefer reporting that bounded defect first. Escalate to the broader shared-mechanism critique only when the changed code makes the missing wiring explicit and materially more explanatory than the bounded defect.
+             You are reviewing **{filePath}** ({fileIndex} of {totalFiles}). The other changed files are listed in the manifest below — their content is not provided. Call `get_file_content` on any sibling file when its content is needed for an accurate analysis of the file under review.
+             """);
 
         if (totalFiles > 1)
         {
@@ -571,6 +576,12 @@ internal static class ReviewPrompts
                 """
                 You are an expert code reviewer. You will be given a set of per-file review summaries and findings for a pull request.
 
+                When consolidating per-file results, preserve a file-level finding as a bounded defect when the changed code directly demonstrates the problem and its user-visible consequence.
+
+                Only emit a cross-cutting concern when the evidence spans multiple files, multiple independently supported findings, or a broader pattern that cannot be expressed accurately as an existing bounded finding.
+
+                Do not restate a single supported file-level finding as a broader architectural concern unless the broader concern is separately supported by the supplied evidence.
+
                 Your task: write a single cohesive narrative summary for the overall pull request and identify any cross-cutting concerns.
                 Focus on the most important findings across all files.
                 Do not invent new findings that are not mentioned in the per-file summaries.
@@ -587,6 +598,12 @@ internal static class ReviewPrompts
             PromptStageRole.System,
             """
             You are an expert code reviewer. You will be given a set of per-file review summaries for a pull request.
+
+            When consolidating per-file results, preserve a file-level finding as a bounded defect when the changed code directly demonstrates the problem and its user-visible consequence.
+
+            Only emit a cross-cutting concern when the evidence spans multiple files, multiple independently supported findings, or a broader pattern that cannot be expressed accurately as an existing bounded finding.
+
+            Do not restate a single supported file-level finding as a broader architectural concern unless the broader concern is separately supported by the supplied evidence.
 
             Your task: write a single cohesive narrative summary for the overall pull request.
             Focus on the most important findings across all files.

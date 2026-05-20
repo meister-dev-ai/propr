@@ -9,6 +9,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
@@ -39,7 +40,6 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
         var storedResults = new List<ReviewFileResult>();
         var jobRepo = CreateJobRepository(job, storedResults);
         var chatClient = CreateSynthesisClient();
-
         var sut = new FileByFileReviewOrchestrator(
             aiCore,
             protocolRecorder,
@@ -106,6 +106,7 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
         var storedResults = new List<ReviewFileResult>();
         var jobRepo = CreateJobRepository(job, storedResults);
         var chatClient = CreateSynthesisClient();
+        var filterRegistry = new CommentRelevanceFilterRegistry([new PassThroughCommentRelevanceFilter()], new CommentRelevanceFilterSelection("pass-through"));
 
         var sut = new FileByFileReviewOrchestrator(
             aiCore,
@@ -120,6 +121,7 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 new DomainReviewInvariantFactProvider(),
                 new PersistenceReviewInvariantFactProvider(),
             ],
+            commentRelevanceFilterRegistry: filterRegistry,
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
             reviewFindingVerifier: new DeterministicLocalReviewVerifier());
 
@@ -164,6 +166,56 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
         var storedResults = new List<ReviewFileResult>();
         var jobRepo = CreateJobRepository(job, storedResults);
         var chatClient = CreateSynthesisClient();
+        var filterRegistry = new CommentRelevanceFilterRegistry([new PassThroughCommentRelevanceFilter()], new CommentRelevanceFilterSelection("pass-through"));
+
+        var sut = new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, ModelId = "test-model" }),
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
+            deterministicReviewFindingGate: new DeterministicReviewFindingGate(),
+            reviewInvariantFactProviders:
+            [
+                new DomainReviewInvariantFactProvider(),
+                new PersistenceReviewInvariantFactProvider(),
+            ],
+            commentRelevanceFilterRegistry: filterRegistry,
+            reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
+            reviewFindingVerifier: new DeterministicLocalReviewVerifier());
+
+        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+
+        var storedResult = Assert.Single(storedResults);
+        var storedComment = Assert.Single(storedResult.Comments!);
+        Assert.Null(storedComment.LineNumber);
+
+        var finalComment = Assert.Single(result.Comments);
+        Assert.Null(finalComment.LineNumber);
+        Assert.Equal("Confirmed null dereference in ExecuteAsync.", finalComment.Message);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhenLocalVerificationSkipped_PreservesOtherwiseBlockedComment()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "summary",
+                    [
+                        new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, "ReviewComment.Message may be null when the model omits a message."),
+                        new ReviewComment("src/Foo.cs", 18, CommentSeverity.Warning, "Confirmed null dereference in ExecuteAsync."),
+                    ]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff");
+        var pr = CreatePr(file);
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepository(job, storedResults);
+        var chatClient = CreateSynthesisClient();
 
         var sut = new FileByFileReviewOrchestrator(
             aiCore,
@@ -181,15 +233,25 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
             reviewClaimExtractor: new DeterministicReviewClaimExtractor(),
             reviewFindingVerifier: new DeterministicLocalReviewVerifier());
 
-        var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            SkippedSteps = new ReviewStepSkips([FileByFileReviewStepIds.LocalVerification]),
+        };
 
-        var storedResult = Assert.Single(storedResults);
-        var storedComment = Assert.Single(storedResult.Comments!);
-        Assert.Null(storedComment.LineNumber);
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
-        var finalComment = Assert.Single(result.Comments);
-        Assert.Null(finalComment.LineNumber);
-        Assert.Equal("Confirmed null dereference in ExecuteAsync.", finalComment.Message);
+        Assert.Equal(2, storedResults[0].Comments!.Count);
+        Assert.Contains(storedResults[0].Comments!, comment => comment.Message.Contains("ReviewComment.Message may be null", StringComparison.Ordinal));
+        Assert.NotNull(result);
+
+        await protocolRecorder.DidNotReceive()
+            .RecordVerificationEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.VerificationLocalDecision,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
     }
 
     private static ReviewJob CreateJob()
@@ -291,6 +353,14 @@ public sealed class FileByFileReviewOrchestratorLocalVerificationTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         recorder.RecordVerificationEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        recorder.RecordReviewStrategyEventAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),

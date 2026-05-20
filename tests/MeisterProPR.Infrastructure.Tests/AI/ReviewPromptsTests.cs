@@ -100,6 +100,8 @@ public class ReviewPromptsTests
     {
         var prompt = ReviewPrompts.BuildPerFileSystemPrompt(null, "src/Foo.cs", 2, 5);
 
+        Assert.Contains("shared mechanism", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bounded defect", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("src/Foo.cs", prompt);
         Assert.Contains("2 of 5", prompt);
         Assert.Contains("get_file_content", prompt);
@@ -111,6 +113,8 @@ public class ReviewPromptsTests
     {
         var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null);
 
+        Assert.Contains("preserve a file-level finding as a bounded defect", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cross-cutting concern", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not call any tools", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("plain text", prompt, StringComparison.OrdinalIgnoreCase);
     }
@@ -598,6 +602,7 @@ public class ReviewPromptsTests
     {
         var prompt = ReviewPrompts.BuildSynthesisSystemPrompt(null, true);
 
+        Assert.Contains("preserve a file-level finding as a bounded defect", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not call any tools", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("plain text", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("cross_cutting_concerns", prompt);

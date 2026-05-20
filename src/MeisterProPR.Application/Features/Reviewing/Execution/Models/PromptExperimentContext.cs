@@ -15,12 +15,17 @@ public sealed class PromptExperimentContext
     /// </summary>
     /// <param name="variantName">The name of the variant.</param>
     /// <param name="stageVariants">The list of stage variants.</param>
-    public PromptExperimentContext(string variantName, IReadOnlyList<StagePromptVariant>? stageVariants = null)
+    /// <param name="skippedSteps">The offline-only hard step skips to apply alongside prompt variants.</param>
+    public PromptExperimentContext(
+        string variantName,
+        IReadOnlyList<StagePromptVariant>? stageVariants = null,
+        ReviewStepSkips? skippedSteps = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(variantName);
 
         this.VariantName = variantName;
         this.StageVariants = stageVariants ?? Array.Empty<StagePromptVariant>();
+        this.SkippedSteps = skippedSteps ?? new ReviewStepSkips();
         this.ActiveStageKeys = this.StageVariants.Select(variant => variant.StageKey).Distinct(StringComparer.Ordinal).ToArray();
         this._variants = this.StageVariants.ToDictionary(
             variant => (variant.StageKey, variant.PromptRole),
@@ -41,6 +46,11 @@ public sealed class PromptExperimentContext
     ///     in which case the default prompt from the fixture will be used for those stages.
     /// </summary>
     public IReadOnlyList<StagePromptVariant> StageVariants { get; }
+
+    /// <summary>
+    ///     Offline-only hard step skips to apply alongside prompt variants.
+    /// </summary>
+    public ReviewStepSkips SkippedSteps { get; }
 
     /// <summary>
     ///     The list of active stage keys for this prompt experiment context. These are the stage keys that have variants defined.

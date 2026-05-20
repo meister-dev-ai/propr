@@ -529,6 +529,100 @@ public sealed class ReviewWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_ForwardsSkippedStepsIntoReviewSystemContext()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+
+        var fixture = CreateFixture();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+        var request = new ReviewWorkflowRequest(
+            job,
+            Substitute.For<IChatClient>(),
+            "gpt-4o",
+            fixture,
+            SkippedSteps: new ReviewStepSkips([FileByFileReviewStepIds.PrVerification]));
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        reviewStrategyDispatcher.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(new ReviewResult("strategy-dispatched", []));
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            reviewStrategyDispatcher);
+
+        await sut.RunAsync(request, CancellationToken.None);
+
+        await reviewStrategyDispatcher.Received(1).ReviewAsync(
+            job,
+            pullRequest,
+            Arg.Is<ReviewSystemContext>(context => context.SkippedSteps.Contains(FileByFileReviewStepIds.PrVerification)),
+            Arg.Any<CancellationToken>(),
+            request.ChatClient);
+    }
+
+    [Fact]
     public async Task RunAsync_CarriesBoundaryIssuesIntoWorkflowResult()
     {
         var jobRepository = Substitute.For<IJobRepository>();

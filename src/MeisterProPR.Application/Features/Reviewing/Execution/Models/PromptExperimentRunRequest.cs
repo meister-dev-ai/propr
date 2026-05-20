@@ -11,13 +11,19 @@ public sealed record PromptExperimentRunRequest(
     string VariantName,
     string ArtifactPath,
     IReadOnlyList<StagePromptVariant>? StageVariants = null,
-    IReadOnlyDictionary<string, string>? RunMetadata = null)
+    IReadOnlyDictionary<string, string>? RunMetadata = null,
+    IReadOnlyList<string>? SkippedStepIds = null)
 {
     /// <summary>
     ///     The list of stage variants defined for this prompt experiment run. Each stage variant defines the prompt role (e.g. system, user, assistant) and the
     ///     content for one stage in the workflow execution.
     /// </summary>
     public IReadOnlyList<StagePromptVariant> StageVariantsOrEmpty => this.StageVariants ?? [];
+
+    /// <summary>
+    ///     Offline-only step ids to omit for this run.
+    /// </summary>
+    public IReadOnlyList<string> SkippedStepIdsOrEmpty => this.SkippedStepIds ?? [];
 
     /// <summary>
     ///     The run metadata for this prompt experiment run, which can include any additional information about the run that should be recorded and stored with the

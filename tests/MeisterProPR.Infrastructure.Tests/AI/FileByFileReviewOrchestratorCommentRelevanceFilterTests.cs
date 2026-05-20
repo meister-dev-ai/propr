@@ -247,6 +247,52 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_WhenCommentRelevanceFilterSkipped_DoesNotInvokeFilterAndRecordsSkip()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "summary",
+                    [new ReviewComment("src/Foo.cs", 8, CommentSeverity.Warning, "Confirmed null dereference at line 8 in `ExecuteAsync`.")]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var job = CreateJob();
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10", "@@ -1,10 +1,10 @@");
+        var pr = CreatePr(file);
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepository(job, storedResults);
+        var chatClient = CreateSynthesisClient();
+        var filterRegistry = new CommentRelevanceFilterRegistry([], new CommentRelevanceFilterSelection("missing-filter"));
+
+        var sut = new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
+            commentRelevanceFilterRegistry: filterRegistry);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            SkippedSteps = new ReviewStepSkips([FileByFileReviewStepIds.CommentRelevanceFilter]),
+        };
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Single(result.Comments);
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.ReviewStepSkipped,
+                Arg.Is<string?>(details => details != null && details.Contains(FileByFileReviewStepIds.CommentRelevanceFilter, StringComparison.Ordinal)),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+    }
+
     private static ReviewJob CreateJob()
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
@@ -354,6 +400,14 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         recorder.RecordReviewFindingGateEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        recorder.RecordReviewStrategyEventAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),

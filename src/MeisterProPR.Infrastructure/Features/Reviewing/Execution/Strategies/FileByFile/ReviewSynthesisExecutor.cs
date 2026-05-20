@@ -90,7 +90,8 @@ internal sealed class ReviewSynthesisExecutor(
             ct);
 
         var deduped = FindingDeduplicator.Deduplicate(allComments).ToList();
-        if (deduped.Count >= options.QualityFilterThreshold)
+        if (deduped.Count >= options.QualityFilterThreshold
+            && !await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))
         {
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
         }
@@ -121,7 +122,8 @@ internal sealed class ReviewSynthesisExecutor(
         }
 
         var assignedSynthesisFindings = CandidateFindingFactory.AssignSynthesisFindingIds(synthesisOutcome.SynthesizedFindings);
-        var prLevelFindings = prLevelReviewVerificationExecutor is null
+        var skipPrVerification = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.PrVerification, ct);
+        var prLevelFindings = prLevelReviewVerificationExecutor is null || skipPrVerification
             ? assignedSynthesisFindings
             : await prLevelReviewVerificationExecutor.ApplyAsync(
                 assignedSynthesisFindings,
@@ -139,28 +141,43 @@ internal sealed class ReviewSynthesisExecutor(
                                  .SelectMany(provider => provider.GetFacts())
                                  .ToList()
                              ?? [];
-        var gateDecisions = await gate.EvaluateAsync(candidateFindings, invariantFacts, ct);
+        var skipFinalGate = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.FinalGate, ct);
+        var gateDecisions = skipFinalGate
+            ? candidateFindings.Select(CreatePublishDecision).ToArray()
+            : await gate.EvaluateAsync(candidateFindings, invariantFacts, ct);
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();
-        var reconciliation = GroundSummaryToFinalGateOutcomes(
-            reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
-            gateDecisions);
+        var skipSummaryReconciliation = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.SummaryReconciliation, ct);
+        var reconciliation = skipSummaryReconciliation
+            ? new SummaryReconciliationResult(
+                synthesisOutcome.FinalSummary,
+                synthesisOutcome.FinalSummary,
+                [],
+                [],
+                false,
+                "skipped")
+            : GroundSummaryToFinalGateOutcomes(
+                reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
+                gateDecisions);
 
         if (protocolId.HasValue)
         {
             await this.RecordFinalGateProtocolAsync(protocolId.Value, candidateFindings, gateDecisions, reconciliation, ct);
-            await protocolRecorder.RecordVerificationEventAsync(
-                protocolId.Value,
-                ReviewProtocolEventNames.SummaryReconciliation,
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        rewritePerformed = reconciliation.RewritePerformed,
-                        droppedCount = reconciliation.DroppedFindingIds.Count,
-                        summaryOnlyCount = reconciliation.SummaryOnlyFindingIds.Count,
-                    }),
-                JsonSerializer.Serialize(reconciliation, FinalGateJsonOptions),
-                null,
-                ct);
+            if (!skipSummaryReconciliation)
+            {
+                await protocolRecorder.RecordVerificationEventAsync(
+                    protocolId.Value,
+                    ReviewProtocolEventNames.SummaryReconciliation,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            rewritePerformed = reconciliation.RewritePerformed,
+                            droppedCount = reconciliation.DroppedFindingIds.Count,
+                            summaryOnlyCount = reconciliation.SummaryOnlyFindingIds.Count,
+                        }),
+                    JsonSerializer.Serialize(reconciliation, FinalGateJsonOptions),
+                    null,
+                    ct);
+            }
         }
 
         var publishedComments = MaterializePublishedComments(candidateFindings, gateDecisions);
@@ -608,6 +625,43 @@ internal sealed class ReviewSynthesisExecutor(
                               && string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
             .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
             .ToList();
+    }
+
+    private async Task<bool> TryRecordSkippedStepAsync(
+        Guid? protocolId,
+        ReviewSystemContext baseContext,
+        string stepId,
+        CancellationToken ct)
+    {
+        if (!baseContext.SkippedSteps.Contains(stepId))
+        {
+            return false;
+        }
+
+        if (protocolId.HasValue)
+        {
+            await protocolRecorder.RecordReviewStrategyEventAsync(
+                protocolId.Value,
+                ReviewProtocolEventNames.ReviewStepSkipped,
+                JsonSerializer.Serialize(new { stepId, scope = "synthesis" }),
+                JsonSerializer.Serialize(new { skipped = true }),
+                null,
+                ct);
+        }
+
+        return true;
+    }
+
+    private static FinalGateDecision CreatePublishDecision(CandidateReviewFinding finding)
+    {
+        return new FinalGateDecision(
+            finding.FindingId,
+            FinalGateDecision.PublishDisposition,
+            [ReviewFindingGateReasonCodes.DefaultPublish],
+            "offline_skip",
+            [],
+            finding.Evidence,
+            null);
     }
 
     private static ReviewComment NormalizeCommentAnchor(ReviewComment comment)

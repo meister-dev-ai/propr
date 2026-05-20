@@ -227,6 +227,74 @@ public sealed class FileByFileReviewOrchestratorFinalGateTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_WhenFinalGateSkipped_PublishesAllCandidateFindings()
+    {
+        const string synthesisJson =
+            """
+            {
+              "summary": "Base summary.",
+              "cross_cutting_concerns": [
+                {
+                  "message": "Architecture concerns span the PR and should be revisited.",
+                  "severity": "warning",
+                  "category": "architecture",
+                  "candidateSummaryText": "Potential architecture concern noted.",
+                  "supportingFindingIds": [],
+                  "supportingFiles": [],
+                  "evidenceResolutionState": "missing",
+                  "evidenceSource": "synthesis_payload"
+                }
+              ]
+            }
+            """;
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "file summary",
+                    [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Confirmed null dereference in ExecuteAsync.")]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        protocolRecorder.RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var jobRepo = CreateJobRepository(job, storedResults);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, synthesisJson)));
+
+        var sut = new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" }),
+            Substitute.For<ILogger<FileByFileReviewOrchestrator>>(),
+            deterministicReviewFindingGate: new DeterministicReviewFindingGate(),
+            reviewInvariantFactProviders: [new StubInvariantFactProvider([])]);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            SkippedSteps = new ReviewStepSkips([FileByFileReviewStepIds.FinalGate]),
+        };
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Contains(result.Comments, comment => comment.Message == "Confirmed null dereference in ExecuteAsync.");
+        Assert.Contains(result.Comments, comment => comment.Message == "Architecture concerns span the PR and should be revisited.");
+    }
+
     private static ReviewJob CreateJob()
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);

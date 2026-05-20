@@ -52,4 +52,5 @@ public static class ReviewProtocolEventNames
     public const string VerificationDegraded = "verification_degraded";
     public const string RepeatedJudgmentDecision = "repeated_judgment_decision";
     public const string PromptStageEvidenceRecorded = "prompt_stage_evidence_recorded";
+    public const string ReviewStepSkipped = "review_step_skipped";
 }

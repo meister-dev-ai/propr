@@ -45,7 +45,8 @@ public sealed class PromptExperimentBatchRunner(
 
         foreach (var run in batch.VariantRunsOrEmpty)
         {
-            var promptExperimentContext = new PromptExperimentContext(run.VariantName, run.StageVariantsOrEmpty);
+            var skippedSteps = new ReviewStepSkips(run.SkippedStepIdsOrEmpty);
+            var promptExperimentContext = new PromptExperimentContext(run.VariantName, run.StageVariantsOrEmpty, skippedSteps);
             var job = CloneJob(jobTemplate);
             var requestConfiguration = configuration with
             {
@@ -59,7 +60,8 @@ public sealed class PromptExperimentBatchRunner(
                 fixture,
                 requestConfiguration,
                 AugmentationMode: requestConfiguration.AugmentationMode,
-                PromptExperiment: promptExperimentContext);
+                PromptExperiment: promptExperimentContext,
+                SkippedSteps: skippedSteps);
 
             var workflowResult = await reviewWorkflowRunner.RunAsync(request, cancellationToken);
             var artifact = CreateArtifact(run, fixture, requestConfiguration, workflowResult, promptExperimentContext);

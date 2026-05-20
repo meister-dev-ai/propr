@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -35,7 +36,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
 
         var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "- old\n+ new");
         var pr = CreatePullRequest([file]);
-        var draftResult = new ReviewResult("draft", []);
+        var draftResult = new ReviewResult("draft", Array.Empty<ReviewComment>());
         var reconsidered = new ReviewResult("reconsidered", []);
 
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -121,7 +122,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
 
         var file = new ChangedFile("src/Bar.cs", ChangeType.Edit, "content", "- old\n+ new");
         var pr = CreatePullRequest([file]);
-        var draftResult = new ReviewResult("draft", []);
+        var draftResult = new ReviewResult("draft", Array.Empty<ReviewComment>());
 
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(draftResult);
@@ -136,6 +137,14 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
+        protocolRecorder.RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
         chatClient.GetResponseAsync(
                 Arg.Any<IList<ChatMessage>>(),
                 Arg.Any<ChatOptions?>(),
@@ -219,6 +228,71 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
         var result = await orchestrator.ReviewAsync(job, pr, context, CancellationToken.None);
 
         Assert.Contains(result.Comments, reviewComment => reviewComment.Message == "fresh issue");
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhenMemoryReconsiderationSkipped_DoesNotCallMemoryService()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var jobRepository = Substitute.For<IJobRepository>();
+        var chatClient = Substitute.For<IChatClient>();
+        var opts = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions());
+        var logger = Substitute.For<ILogger<FileByFileReviewOrchestrator>>();
+        var memoryService = Substitute.For<IThreadMemoryService>();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.Status = JobStatus.Processing;
+
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "- old\n+ new");
+        var pr = CreatePullRequest([file]);
+        var draftResult = new ReviewResult("draft", Array.Empty<ReviewComment>());
+
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(draftResult);
+        jobRepository.GetByIdWithFileResultsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
+
+        var orchestrator = new FileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepository,
+            chatClient,
+            opts,
+            logger,
+            memoryService: memoryService);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            SkippedSteps = new ReviewStepSkips([FileByFileReviewStepIds.MemoryReconsideration]),
+        };
+
+        await orchestrator.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await memoryService.DidNotReceive()
+            .RetrieveAndReconsiderAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<ReviewJob>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<float?>());
     }
 
     private static ReviewJob BuildJobWithResults(ReviewJob original, IEnumerable<ReviewFileResult> results)

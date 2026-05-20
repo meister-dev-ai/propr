@@ -103,4 +103,30 @@ public sealed class ReviewPromptExperimentValidatorTests
 
         await sut.ValidateAsync(batch, CancellationToken.None);
     }
+
+    [Fact]
+    public async Task ValidateAsync_WhenRunContainsDuplicateSkippedStep_ThrowsInvalidOperationException()
+    {
+        var batch = new PromptExperimentBatch(
+            "batch-001",
+            "fixture-001",
+            null,
+            "config-a",
+            [
+                new PromptExperimentRunRequest(
+                    "run-variant",
+                    "variant-a",
+                    "artifacts/variant-a.json",
+                    null,
+                    null,
+                    [FileByFileReviewStepIds.PrVerification, FileByFileReviewStepIds.PrVerification]),
+            ]);
+
+        var sut = new ReviewPromptExperimentValidator();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.ValidateAsync(batch, CancellationToken.None));
+
+        Assert.Contains(FileByFileReviewStepIds.PrVerification, ex.Message);
+        Assert.Contains("duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

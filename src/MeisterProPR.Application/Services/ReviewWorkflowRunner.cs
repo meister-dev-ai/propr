@@ -114,6 +114,8 @@ public sealed class ReviewWorkflowRunner(
                 job.ClientId,
                 cancellationToken);
 
+            var promptExperimentContext = request.PromptExperiment ?? new PromptExperimentContext("baseline", skippedSteps: request.EffectiveSkippedSteps);
+
             var context = new ReviewSystemContext(null, relevantInstructions, reviewTools)
             {
                 ExclusionRules = exclusionRules,
@@ -121,7 +123,8 @@ public sealed class ReviewWorkflowRunner(
                 Temperature = request.Configuration?.Temperature,
                 EnableProRV = request.Configuration?.EnableProRV ?? true,
                 AugmentationMode = request.EffectiveAugmentationMode,
-                PromptExperiment = request.PromptExperiment,
+                PromptExperiment = promptExperimentContext,
+                SkippedSteps = request.EffectiveSkippedSteps,
             };
 
             var result = await reviewStrategyDispatcher.ReviewAsync(

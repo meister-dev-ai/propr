@@ -60,6 +60,15 @@ public sealed class ReviewPromptExperimentValidator : IReviewPromptExperimentVal
                         $"Prompt experiment run '{run.RunId}' contains a duplicate stage/role combination for '{variant.StageKey}'.");
                 }
             }
+
+            var skippedStepIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var skippedStepId in run.SkippedStepIdsOrEmpty)
+            {
+                if (!skippedStepIds.Add(skippedStepId))
+                {
+                    throw new InvalidOperationException($"Prompt experiment run '{run.RunId}' contains duplicate skipped step '{skippedStepId}'.");
+                }
+            }
         }
 
         return Task.CompletedTask;
