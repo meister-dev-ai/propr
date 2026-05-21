@@ -17,12 +17,12 @@ internal interface IProRVKnowledgeCatalog
 
 internal sealed class EmbeddedProRVKnowledgeCatalog : IProRVKnowledgeCatalog
 {
+    private const string ResourceRoot = "MeisterProPR.ProRV.Assets.";
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
-
-    private const string ResourceRoot = "MeisterProPR.ProRV.Assets.";
 
     private readonly Assembly assembly = typeof(EmbeddedProRVKnowledgeCatalog).Assembly;
     private readonly ConcurrentDictionary<string, ProRVIndexDocument> indexCache = new(StringComparer.OrdinalIgnoreCase);
@@ -54,15 +54,14 @@ internal sealed class EmbeddedProRVKnowledgeCatalog : IProRVKnowledgeCatalog
     {
         var resourceName = BuildResourceName(language, "index.json");
         using var stream = this.assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded ProRV resource '{resourceName}' was not found.");
+                           ?? throw new InvalidOperationException($"Embedded ProRV resource '{resourceName}' was not found.");
 
         var document = JsonSerializer.Deserialize<ProRVIndexDocument>(stream, SerializerOptions)
-            ?? throw new InvalidOperationException($"Embedded ProRV index '{resourceName}' could not be deserialized.");
+                       ?? throw new InvalidOperationException($"Embedded ProRV index '{resourceName}' could not be deserialized.");
 
         if (!string.Equals(document.Language, language, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"Embedded ProRV index '{resourceName}' declared language '{document.Language}', expected '{language}'.");
+            throw new InvalidOperationException($"Embedded ProRV index '{resourceName}' declared language '{document.Language}', expected '{language}'.");
         }
 
         return document;
@@ -70,7 +69,7 @@ internal sealed class EmbeddedProRVKnowledgeCatalog : IProRVKnowledgeCatalog
 
     private string LoadTextResource(string language, string relativePath)
     {
-        var stream = OpenResourceStream(language, relativePath, out var resourceName);
+        var stream = this.OpenResourceStream(language, relativePath, out var resourceName);
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }

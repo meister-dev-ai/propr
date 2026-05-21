@@ -10,28 +10,28 @@ namespace MeisterProPR.ProRV.Prompting;
 internal static class ProRVPrompts
 {
     internal const string ApplicabilitySystemPrompt = """
-                                                     You are triaging which static review checks could matter for one changed file.
-                                                     You are not deciding whether a bug exists yet.
+                                                      You are triaging which static review checks could matter for one changed file.
+                                                      You are not deciding whether a bug exists yet.
 
-                                                     Goal:
-                                                     - Read the diff.
-                                                     - Compare it against a compact check index.
-                                                     - Keep only checks that are plausibly touched by the changed code.
+                                                      Goal:
+                                                      - Read the diff.
+                                                      - Compare it against a compact check index.
+                                                      - Keep only checks that are plausibly touched by the changed code.
 
-                                                     Rules:
-                                                     1. Prefer omission to weak matches.
-                                                     2. Do not select a check only because the file is in a broad area like security, API usage, or configuration.
-                                                     3. Select a check only when the diff appears to touch the risky operation, guard, contract, or data-flow shape described by that check.
-                                                     4. Return a small focused set, not exhaustive speculation.
+                                                      Rules:
+                                                      1. Prefer omission to weak matches.
+                                                      2. Do not select a check only because the file is in a broad area like security, API usage, or configuration.
+                                                      3. Select a check only when the diff appears to touch the risky operation, guard, contract, or data-flow shape described by that check.
+                                                      4. Return a small focused set, not exhaustive speculation.
 
-                                                     Respond with a single raw JSON object only.
-                                                     Schema:
-                                                     {
-                                                       "ranked_checks": [
-                                                         { "id": "<check id>", "score": 0-100, "reason": "<very short reason>" }
-                                                       ]
-                                                     }
-                                                     """;
+                                                      Respond with a single raw JSON object only.
+                                                      Schema:
+                                                      {
+                                                        "ranked_checks": [
+                                                          { "id": "<check id>", "score": 0-100, "reason": "<very short reason>" }
+                                                        ]
+                                                      }
+                                                      """;
 
     internal const string RefinementSystemPrompt = """
                                                    You are refining a small set of candidate static review checks for one changed file.
