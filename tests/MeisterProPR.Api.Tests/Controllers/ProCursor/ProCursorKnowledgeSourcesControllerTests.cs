@@ -12,9 +12,6 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
-using MeisterProPR.Application.Features.Licensing.Dtos;
-using MeisterProPR.Application.Features.Licensing.Models;
-using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -42,7 +39,6 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
 {
     public Task InitializeAsync()
     {
-        factory.SetProCursorCapabilityAvailability(true);
         return factory.ResetAsync();
     }
 
@@ -367,25 +363,6 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
     }
 
     [Fact]
-    public async Task ListSources_WhenCapabilityUnavailable_Returns409PremiumUnavailable()
-    {
-        factory.SetProCursorCapabilityAvailability(false, "ProCursor requires a premium license.");
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/admin/clients/{factory.ClientId}/procursor/sources");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
-
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
-        Assert.Equal(PremiumCapabilityKey.ProCursor, body.GetProperty("feature").GetString());
-    }
-
-    [Fact]
     public async Task QueueRefresh_ClientAdministrator_Returns202AndCreatesPendingJob()
     {
         var sourceId = await factory.SeedSourceAsync();
@@ -604,43 +581,9 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
         public IProviderAdminDiscoveryService AdoDiscoveryService { get; } =
             Substitute.For<IProviderAdminDiscoveryService>();
 
-        public ILicensingCapabilityService LicensingCapabilityService { get; } =
-            Substitute.For<ILicensingCapabilityService>();
-
         public IProCursorScmBroker ScmBroker { get; } = Substitute.For<IProCursorScmBroker>();
 
         public IProCursorEmbeddingBroker EmbeddingBroker { get; } = Substitute.For<IProCursorEmbeddingBroker>();
-
-        public void SetProCursorCapabilityAvailability(bool isAvailable, string? message = null)
-        {
-            this.LicensingCapabilityService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-                .Returns(
-                    Task.FromResult(
-                        new CapabilitySnapshot(
-                            PremiumCapabilityKey.ProCursor,
-                            PremiumCapabilityKey.ProCursor,
-                            true,
-                            true,
-                            PremiumCapabilityOverrideState.Default,
-                            isAvailable,
-                            message)));
-            this.LicensingCapabilityService.GetSummaryAsync(Arg.Any<CancellationToken>())
-                .Returns(
-                    Task.FromResult(
-                        new LicensingSummaryDto(
-                            InstallationEdition.Commercial,
-                            DateTimeOffset.UtcNow,
-                            [
-                                new PremiumCapabilityDto(
-                                    PremiumCapabilityKey.ProCursor,
-                                    PremiumCapabilityKey.ProCursor,
-                                    true,
-                                    true,
-                                    PremiumCapabilityOverrideState.Default,
-                                    isAvailable,
-                                    message),
-                            ])));
-        }
 
         public string GenerateClientAdministratorToken()
         {
@@ -882,9 +825,6 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
                 services.AddSingleton(Substitute.For<IMemoryActivityLog>());
                 services.AddSingleton(Substitute.For<IThreadMemoryRepository>());
                 services.AddSingleton(Substitute.For<IProCursorTokenUsageRebuildService>());
-                this.SetProCursorCapabilityAvailability(true);
-                services.AddSingleton(this.LicensingCapabilityService);
-
                 services.AddSingleton(Substitute.For<IJobRepository>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 

@@ -38,7 +38,6 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
     private static bool InitializeCapabilityDefaults(AdoDiscoveryApiFactory factory)
     {
         factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, true);
-        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
         return true;
     }
 
@@ -82,7 +81,6 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
     public async Task GetProjects_WithWebhookPurpose_AllowsDiscoveryWhenPremiumCapabilitiesAreUnavailable()
     {
         factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
-        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, false, "ProCursor requires a premium license.");
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -287,9 +285,9 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
     }
 
     [Fact]
-    public async Task GetSources_WhenProCursorCapabilityUnavailable_Returns409PremiumUnavailable()
+    public async Task GetSources_Returns200WhenCrawlCapabilityIsUnavailable()
     {
-        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, false, "ProCursor requires a premium license.");
+        factory.SetCapabilityAvailability(PremiumCapabilityKey.CrawlConfigs, false, "Crawl configs requires a premium license.");
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -301,12 +299,7 @@ public sealed class AdoDiscoveryControllerTests(AdoDiscoveryControllerTests.AdoD
 
         var response = await httpClient.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
-        Assert.Equal(PremiumCapabilityKey.ProCursor, body.GetProperty("feature").GetString());
-
-        factory.SetCapabilityAvailability(PremiumCapabilityKey.ProCursor, true);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     public sealed class AdoDiscoveryApiFactory : WebApplicationFactory<Program>

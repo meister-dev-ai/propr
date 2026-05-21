@@ -6,7 +6,7 @@ using MeisterProPR.Application.Features.Licensing.Ports;
 
 namespace MeisterProPR.Infrastructure.Features.Licensing.Support;
 
-/// <summary>Static catalog for the initial commercial premium capability set.</summary>
+/// <summary>Static catalog for installation-wide capability policy.</summary>
 public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
 {
     private static readonly IReadOnlyList<PremiumCapabilityDefinition> Capabilities =
@@ -31,11 +31,6 @@ public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
             "Crawl configurations",
             "A commercial license is required to manage guided crawl configurations and discovery, including in self-hosted deployments.",
             "Crawl configurations are currently disabled for this installation."),
-        new(
-            PremiumCapabilityKey.ProCursor,
-            "ProCursor",
-            "A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments.",
-            "ProCursor is currently disabled for this installation."),
     ];
 
     private static readonly IReadOnlyDictionary<string, PremiumCapabilityDefinition> CapabilityMap =

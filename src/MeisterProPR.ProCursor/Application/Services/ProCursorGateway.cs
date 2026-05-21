@@ -26,8 +26,6 @@ public sealed partial class ProCursorGateway(
         Guid clientId,
         CancellationToken ct = default)
     {
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
-
         var sources = await knowledgeSourceRepository.ListByClientAsync(clientId, ct);
         var sourceDtos = new List<ProCursorKnowledgeSourceDto>(sources.Count);
 
@@ -52,8 +50,6 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
 
         if (request.TrackedBranches.Count == 0)
         {
@@ -120,8 +116,6 @@ public sealed partial class ProCursorGateway(
         Guid sourceId,
         CancellationToken ct = default)
     {
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
-
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -148,8 +142,6 @@ public sealed partial class ProCursorGateway(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
-
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -175,8 +167,6 @@ public sealed partial class ProCursorGateway(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
 
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
@@ -207,8 +197,6 @@ public sealed partial class ProCursorGateway(
         Guid trackedBranchId,
         CancellationToken ct = default)
     {
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
-
         var source = await knowledgeSourceRepository.GetByIdAsync(clientId, sourceId, ct);
         if (source is null)
         {
@@ -241,18 +229,12 @@ public sealed partial class ProCursorGateway(
         return this.GetSymbolInsightInternalAsync(request, ct);
     }
 
-    private async Task EnsureCapabilityEnabledAsync(Guid clientId, CancellationToken ct)
-    {
-        await Task.CompletedTask;
-    }
-
     private async Task<ProCursorIndexJobDto> QueueRefreshInternalAsync(
         Guid clientId,
         Guid sourceId,
         ProCursorRefreshRequest request,
         CancellationToken ct)
     {
-        await this.EnsureCapabilityEnabledAsync(clientId, ct);
         return await indexCoordinator.QueueRefreshAsync(clientId, sourceId, request, ct);
     }
 
@@ -381,9 +363,4 @@ public sealed partial class ProCursorGateway(
 
         return response;
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Skipped ProCursor operation for client {ClientId} because capability {CapabilityKey} is unavailable")]
-    private static partial void LogCapabilityUnavailable(ILogger logger, Guid clientId, string capabilityKey);
 }

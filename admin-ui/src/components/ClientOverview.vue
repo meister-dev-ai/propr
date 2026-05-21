@@ -75,7 +75,7 @@ type JobListItem = components['schemas']['JobListItem']
 
 const props = defineProps<{ clientId: string }>()
 const emit = defineEmits<{ (e: 'navigate', tab: string): void }>()
-const { getAccessToken, getCapability } = useSession()
+const { getAccessToken } = useSession()
 
 const loading = ref(true)
 const scmCount = ref<number>(0)
@@ -83,13 +83,7 @@ const aiCount = ref<number>(0)
 const reviewCount = ref<number | null>(null)
 const latestReviewDate = ref<string | null>(null)
 const tokenSummary = ref<string>('—')
-const isUsageCardAvailable = computed(() => {
-  if (import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING === 'false') {
-    return false
-  }
-
-  return getCapability('procursor')?.isAvailable === true
-})
+const isUsageCardAvailable = computed(() => import.meta.env.VITE_FEATURE_PROCURSOR_TOKEN_USAGE_REPORTING !== 'false')
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function daysAgoStr(n: number) {

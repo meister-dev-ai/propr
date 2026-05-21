@@ -9525,6 +9525,7 @@ export interface components {
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
+            enableProRV?: boolean;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -10079,6 +10080,7 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
+            enableProRV?: boolean | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */
@@ -11023,10 +11025,10 @@ export interface components {
             comparisonGroupId?: string | null;
         };
         /**
-         * @description Selectable strategy used to generate review findings for a job.
+         * @description Selectable strategy used to generate review findings for a new job. Historical jobs may still report disabled legacy strategies in resolvedReviewStrategy fields.
          * @enum {string}
          */
-        ReviewStrategy: "fileByFile" | "prWideAgentic" | "agenticFileByFile";
+        ReviewStrategy: "fileByFile";
         /**
          * @description Explains why a review job selected its final review strategy.
          * @enum {string}

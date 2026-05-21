@@ -16,7 +16,6 @@ const listOrganizationScopesMock = vi.fn()
 const listProjectsMock = vi.fn()
 const listCrawlFiltersMock = vi.fn()
 const listProCursorSourcesMock = vi.fn()
-let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message?: string | null }> = []
 
 vi.mock('@/services/api', () => ({
   createAdminClient: vi.fn(() => ({ POST: mockPost, PATCH: mockPatch })),
@@ -47,22 +46,8 @@ vi.mock('@/services/promptOverridesService', () => ({
 }))
 
 vi.mock('@/composables/useSession', () => ({
-  useSession: () => ({
-    getCapability: (key: string) => capabilityState.find((capability) => capability.key === key) ?? null,
-  }),
+  useSession: () => ({}),
 }))
-
-function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
-  capabilityState = capabilities.map((capability) => ({
-    key: capability.key,
-    displayName: capability.key,
-    requiresCommercial: true,
-    defaultWhenCommercial: true,
-    overrideState: 'default',
-    isAvailable: capability.isAvailable,
-    message: capability.message ?? null,
-  }))
-}
 
 async function mountForm() {
   const { default: CrawlConfigForm } = await import('@/components/CrawlConfigForm.vue')
@@ -104,8 +89,6 @@ function findButtonByText(wrapper: Awaited<ReturnType<typeof mountForm>>, text: 
 describe('CrawlConfigForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    capabilityState = []
-    setCapabilities([{ key: 'procursor', isAvailable: true }])
 
     listOrganizationScopesMock.mockResolvedValue([
       {
@@ -404,8 +387,6 @@ describe('CrawlConfigForm', () => {
   })
 
   it('shows repair messaging and removes stale source associations before saving edits', async () => {
-    setCapabilities([{ key: 'procursor', isAvailable: true }])
-
     const wrapper = await mountEditForm({
       id: 'config-1',
       clientId: CLIENT_ID,
@@ -487,14 +468,14 @@ describe('CrawlConfigForm', () => {
     )
   })
 
-  it('hides selected-source controls and skips loading ProCursor sources when unavailable', async () => {
-    setCapabilities([{ key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' }])
+  it('shows ProCursor source load errors while keeping selected-source controls available', async () => {
+    listProCursorSourcesMock.mockRejectedValue(new Error('Failed to load ProCursor sources.'))
 
     const wrapper = await mountForm()
     await flushPromises()
 
-    expect(listProCursorSourcesMock).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('ProCursor requires commercial.')
-    expect(wrapper.find('#crawlSourceScopeSelected').exists()).toBe(false)
+    expect(listProCursorSourcesMock).toHaveBeenCalledWith(CLIENT_ID)
+    expect(wrapper.text()).toContain('Failed to load ProCursor sources.')
+    expect(wrapper.find('#crawlSourceScopeSelected').exists()).toBe(true)
   })
 })

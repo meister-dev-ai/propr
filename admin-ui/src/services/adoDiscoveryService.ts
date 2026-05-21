@@ -12,7 +12,7 @@ export type AdoBranchOptionDto = components['schemas']['AdoBranchOptionDto']
 export type AdoCrawlFilterOptionDto = components['schemas']['AdoCrawlFilterOptionDto']
 
 export type AdoSourceKind = 'repository' | 'adoWiki'
-export type AdoDiscoveryPurpose = 'crawl' | 'procursor' | 'webhook'
+export type AdoDiscoveryPurpose = 'crawl' | 'webhook'
 
 export interface ClientAdoOrganizationScopeDto {
   id: string

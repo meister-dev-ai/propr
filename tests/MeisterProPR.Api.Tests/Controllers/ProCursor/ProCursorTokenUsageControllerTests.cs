@@ -6,7 +6,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -23,7 +22,6 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
 {
     public Task InitializeAsync()
     {
-        factory.SetProCursorCapabilityAvailability(true);
         return factory.ResetAsync();
     }
 
@@ -112,27 +110,6 @@ public sealed class ProCursorTokenUsageControllerTests(ProCursorKnowledgeSources
         var response = await client.GetAsync($"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetClientUsage_WhenCapabilityUnavailable_Returns409PremiumUnavailable()
-    {
-        factory.SetProCursorCapabilityAvailability(false, "ProCursor requires a premium license.");
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/admin/clients/{factory.ClientId}/procursor/token-usage?from=2026-04-04&to=2026-04-04");
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            factory.GenerateClientAdministratorToken());
-
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
-        Assert.Equal(PremiumCapabilityKey.ProCursor, body.GetProperty("feature").GetString());
     }
 
     [Fact]

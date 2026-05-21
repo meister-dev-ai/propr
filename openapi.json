@@ -1729,7 +1729,7 @@
           {
             "name": "purpose",
             "in": "query",
-            "description": "Optional discovery purpose. Use `crawl` or `procursor` to enforce premium capability checks.",
+            "description": "Optional discovery purpose. Use `crawl` to enforce premium capability checks.",
             "schema": {
               "type": "string"
             }
@@ -17317,6 +17317,20 @@
           },
           "aiCallRecorded": {
             "type": "boolean"
+          },
+          "guidanceApplied": {
+            "type": "boolean"
+          },
+          "appliedPromptKind": {
+            "type": "string",
+            "nullable": true
+          },
+          "appliedGuidanceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -18215,10 +18229,12 @@
       },
       "ReviewStrategy": {
         "enum": [
-          "fileByFile"
+          "fileByFile",
+          "prWideAgentic",
+          "agenticFileByFile"
         ],
         "type": "string",
-        "description": "Selectable strategy used to generate review findings for a new job. Historical jobs may still report disabled legacy strategies in resolvedReviewStrategy fields."
+        "description": "Selectable strategy used to generate review findings for a job."
       },
       "ReviewStrategySelectionSource": {
         "enum": [

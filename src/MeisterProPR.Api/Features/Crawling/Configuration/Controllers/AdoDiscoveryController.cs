@@ -21,7 +21,6 @@ public sealed partial class AdoDiscoveryController(
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private const string DiscoveryPurposeCrawl = "crawl";
-    private const string DiscoveryPurposeProCursor = "procursor";
     private const string DiscoveryNotFoundMessage = "The requested discovery resource was not found.";
     private const string DiscoveryRequestRejectedMessage = "The discovery request could not be completed.";
 
@@ -55,7 +54,7 @@ public sealed partial class AdoDiscoveryController(
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="organizationScopeId">Organization-scope identifier.</param>
-    /// <param name="purpose">Optional discovery purpose. Use <c>crawl</c> or <c>procursor</c> to enforce premium capability checks.</param>
+    /// <param name="purpose">Optional discovery purpose. Use <c>crawl</c> to enforce premium capability checks.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Projects found.</response>
     /// <response code="400">The query is invalid.</response>
@@ -85,14 +84,6 @@ public sealed partial class AdoDiscoveryController(
         if (string.Equals(purpose, DiscoveryPurposeCrawl, StringComparison.OrdinalIgnoreCase))
         {
             var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.CrawlConfigs, ct);
-            if (capability is not null)
-            {
-                return capability;
-            }
-        }
-        else if (string.Equals(purpose, DiscoveryPurposeProCursor, StringComparison.OrdinalIgnoreCase))
-        {
-            var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
             if (capability is not null)
             {
                 return capability;
@@ -154,12 +145,6 @@ public sealed partial class AdoDiscoveryController(
         if (auth is not null)
         {
             return auth;
-        }
-
-        var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         if (this.ValidateDiscoveryQuery(organizationScopeId, projectId) is IActionResult validation)
@@ -230,12 +215,6 @@ public sealed partial class AdoDiscoveryController(
         if (auth is not null)
         {
             return auth;
-        }
-
-        var capability = await this.RequireDiscoveryCapabilityAsync(PremiumCapabilityKey.ProCursor, ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         if (this.ValidateDiscoveryQuery(organizationScopeId, projectId) is IActionResult validation)

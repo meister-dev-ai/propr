@@ -217,7 +217,6 @@ commercial-only capabilities requires a commercial license even for self-hosted 
 - Parallel review execution (`parallel-review-execution`)
 - Multiple SCM providers (`multiple-scm-providers`)
 - Crawl configurations (`crawl-configs`)
-- ProCursor (`procursor`)
 
 The admin API and UI expose the installation's configured product edition through `Settings -> Licensing`,
 `GET /api/admin/licensing`, and `PATCH /api/admin/licensing`.

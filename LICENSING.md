@@ -24,7 +24,6 @@ The current commercial-only capability keys are defined in `src/MeisterProPR.App
 - `parallel-review-execution`
 - `multiple-scm-providers`
 - `crawl-configs`
-- `procursor`
 
 These capability keys describe product rights, not separate source-code licenses.
 

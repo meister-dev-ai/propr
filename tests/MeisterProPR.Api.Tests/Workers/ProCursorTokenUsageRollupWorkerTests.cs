@@ -2,8 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Licensing.Models;
-using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.ProCursor.Contracts.ProCursor;
 using MeisterProPR.ProCursor.Workers;
@@ -87,71 +85,17 @@ public sealed class ProCursorTokenUsageRollupWorkerTests
 
     private static IServiceScopeFactory CreateScopeFactory(
         IProCursorTokenUsageAggregationService aggregationService,
-        IProCursorTokenUsageRetentionService retentionService,
-        ILicensingCapabilityService? licensingCapabilityService = null)
+        IProCursorTokenUsageRetentionService retentionService)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
         var serviceProvider = Substitute.For<IServiceProvider>();
-        var resolvedLicensingService = licensingCapabilityService ?? CreateLicensingService(true);
 
         scopeFactory.CreateScope().Returns(scope);
         scope.ServiceProvider.Returns(serviceProvider);
         serviceProvider.GetService(typeof(IProCursorTokenUsageAggregationService)).Returns(aggregationService);
         serviceProvider.GetService(typeof(IProCursorTokenUsageRetentionService)).Returns(retentionService);
-        serviceProvider.GetService(typeof(ILicensingCapabilityService)).Returns(resolvedLicensingService);
 
         return scopeFactory;
-    }
-
-    private static ILicensingCapabilityService CreateLicensingService(bool isAvailable)
-    {
-        var licensingService = Substitute.For<ILicensingCapabilityService>();
-        licensingService.GetCapabilityAsync(PremiumCapabilityKey.ProCursor, Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult(
-                    new CapabilitySnapshot(
-                        PremiumCapabilityKey.ProCursor,
-                        PremiumCapabilityKey.ProCursor,
-                        true,
-                        true,
-                        PremiumCapabilityOverrideState.Default,
-                        isAvailable,
-                        isAvailable ? null : "ProCursor requires a premium license.")));
-        return licensingService;
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenCapabilityUnavailable_StillMaintainsOperationalRollups()
-    {
-        var aggregationService = Substitute.For<IProCursorTokenUsageAggregationService>();
-        var refreshInvoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        aggregationService.RefreshRecentAsync(Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                refreshInvoked.TrySetResult();
-                return Task.FromResult(1);
-            });
-
-        var retentionService = Substitute.For<IProCursorTokenUsageRetentionService>();
-        retentionService.PurgeExpiredAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProCursorTokenUsageRetentionResult(0, 0, DateTimeOffset.UtcNow)));
-
-        var scopeFactory = CreateScopeFactory(
-            aggregationService,
-            retentionService,
-            CreateLicensingService(false));
-        var worker = BuildWorker(scopeFactory);
-
-        using var cts = new CancellationTokenSource();
-        await worker.StartAsync(cts.Token);
-        await refreshInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1));
-
-        await aggregationService.Received(1).RefreshRecentAsync(Arg.Any<CancellationToken>());
-        await retentionService.Received(1).PurgeExpiredAsync(Arg.Any<CancellationToken>());
-        Assert.NotNull(worker.LastCycleCompletedAt);
-
-        cts.Cancel();
-        await worker.StopAsync(CancellationToken.None);
     }
 }

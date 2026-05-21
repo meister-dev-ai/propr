@@ -5,9 +5,6 @@ using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs.AzureDevOps;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
-using MeisterProPR.Application.Features.Licensing.Models;
-using MeisterProPR.Application.Features.Licensing.Ports;
-using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -22,25 +19,8 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     IClientAdminService clientAdminService,
     IScmProviderRegistry providerRegistry,
     IProCursorGateway proCursorGateway,
-    ILogger<ProCursorKnowledgeSourcesController> logger,
-    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
+    ILogger<ProCursorKnowledgeSourcesController> logger) : ControllerBase
 {
-    private async Task<IActionResult?> RequireProCursorCapabilityAsync(CancellationToken ct)
-    {
-        var capability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
-            licensingCapabilityService,
-            PremiumCapabilityKey.ProCursor,
-            ct);
-
-        return capability is null
-            ? null
-            : this.Conflict(
-                new PremiumFeatureUnavailablePayload(
-                    "premium_feature_unavailable",
-                    capability.Key,
-                    capability.Message ?? $"Capability '{capability.Key}' is unavailable."));
-    }
-
     /// <summary>
     ///     Returns the ProCursor knowledge sources configured for the given client.
     /// </summary>
@@ -56,12 +36,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
-        }
-
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         try
@@ -110,12 +84,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (validation is not null)
         {
             return validation;
-        }
-
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         try
@@ -170,12 +138,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
-        }
-
         try
         {
             var job = await proCursorGateway.QueueRefreshAsync(
@@ -214,12 +176,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
-        }
-
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         try
@@ -268,12 +224,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             }
 
             return this.ValidationProblem();
-        }
-
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         try
@@ -325,12 +275,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return auth;
         }
 
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
-        }
-
         try
         {
             var branch = await proCursorGateway.UpdateTrackedBranchAsync(
@@ -375,12 +319,6 @@ public sealed partial class ProCursorKnowledgeSourcesController(
         if (auth is not null)
         {
             return auth;
-        }
-
-        var capability = await this.RequireProCursorCapabilityAsync(ct);
-        if (capability is not null)
-        {
-            return capability;
         }
 
         try

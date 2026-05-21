@@ -1,6 +1,5 @@
 <!-- Copyright (c) Andreas Rain. -->
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
-<!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
 
 <template>
   <div class="page-view">
@@ -14,16 +13,7 @@
       <p class="view-subtitle" style="margin-top: 0.25rem;">Recent ProCursor capture events, filtered organically.</p>
     </div>
 
-    <div v-if="!isProCursorAvailable" class="section-card">
-      <div class="section-card-header">
-        <h3>Usage Log</h3>
-      </div>
-      <div class="section-card-body">
-        <p class="premium-unavailable-copy">{{ unavailableMessage }}</p>
-      </div>
-    </div>
-
-    <div v-else class="section-card">
+    <div class="section-card">
       <div class="section-card-header">
         <h3>Usage Log</h3>
         <div class="section-card-header-actions">
@@ -58,13 +48,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useSession } from '@/composables/useSession'
-import { getProCursorRecentEvents, PremiumFeatureUnavailableError } from '@/services/proCursorService'
+import { getProCursorRecentEvents } from '@/services/proCursorService'
 import ProCursorUsageRecentEventsTable from '@/components/ProCursorUsageRecentEventsTable.vue'
 import type { ProCursorTokenUsageEventDto } from '@/types/proCursorTokenUsage'
 
 const route = useRoute()
-const { getCapability } = useSession()
 const clientId = route.params.id as string
 const sourceId = route.params.sourceId as string
 
@@ -74,12 +62,6 @@ const events = ref<ProCursorTokenUsageEventDto[]>([])
 
 const filterText = ref('')
 const filterTime = ref('all')
-const proCursorCapability = computed(() => getCapability('procursor'))
-const isProCursorAvailable = computed(() => proCursorCapability.value?.isAvailable === true)
-const unavailableMessage = computed(() =>
-  proCursorCapability.value?.message
-    ?? 'A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments.',
-)
 
 const filteredEvents = computed(() => {
   let result = events.value
@@ -116,24 +98,12 @@ const filteredEvents = computed(() => {
 })
 
 async function loadEvents() {
-  if (!isProCursorAvailable.value) {
-    events.value = []
-    error.value = ''
-    loading.value = false
-    return
-  }
-
   loading.value = true
   error.value = ''
   try {
     const response = await getProCursorRecentEvents(clientId, sourceId, 250)
     events.value = response.items ?? []
   } catch (err) {
-    if (err instanceof PremiumFeatureUnavailableError) {
-      error.value = ''
-      return
-    }
-
     error.value = err instanceof Error ? err.message : 'Unknown error'
   } finally {
     loading.value = false
@@ -180,8 +150,4 @@ onMounted(() => {
   color: var(--color-text);
 }
 
-.premium-unavailable-copy {
-  margin: 0;
-  color: var(--color-text-muted);
-}
 </style>

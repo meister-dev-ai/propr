@@ -168,7 +168,6 @@ describe('ClientDetailView', () => {
     capabilityState = []
     setCapabilities([
       { key: 'crawl-configs', isAvailable: true },
-      { key: 'procursor', isAvailable: true },
       { key: 'multiple-scm-providers', isAvailable: true },
     ])
   })
@@ -405,10 +404,9 @@ describe('ClientDetailView', () => {
     expect(wrapper.text()).toContain('procursor usage dashboard')
   })
 
-  it('hides Crawl Configs and ProCursor navigation when those capabilities are unavailable', async () => {
+  it('hides Crawl Configs navigation when that capability is unavailable', async () => {
     setCapabilities([
       { key: 'crawl-configs', isAvailable: false, message: 'Crawl configs require commercial.' },
-      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
       { key: 'multiple-scm-providers', isAvailable: true },
     ])
     mockGet.mockResolvedValue({ data: sampleClient })
@@ -419,34 +417,11 @@ describe('ClientDetailView', () => {
 
     const navTexts = wrapper.findAll('button.sidebar-nav-link').map((button) => button.text())
     expect(navTexts.some((text) => text.includes('Crawl Configs'))).toBe(false)
-    expect(navTexts.some((text) => text.includes('ProCursor'))).toBe(false)
-    expect(navTexts.some((text) => text.includes('Tokens & Usage'))).toBe(false)
+    expect(navTexts.some((text) => text.includes('ProCursor'))).toBe(true)
+    expect(navTexts.some((text) => text.includes('Tokens & Usage'))).toBe(true)
   })
 
-  it('shows a non-actionable unavailable state for direct ProCursor usage navigation', async () => {
-    setCapabilities([
-      { key: 'crawl-configs', isAvailable: true },
-      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
-      { key: 'multiple-scm-providers', isAvailable: true },
-    ])
-    mockRoute.query = { tab: 'usage' }
-    mockGet.mockResolvedValue({ data: sampleClient })
-
-    const { default: ClientDetailView } = await import('@/views/ClientDetailView.vue')
-    const wrapper = mount(ClientDetailView)
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Tokens & Usage')
-    expect(wrapper.text()).toContain('ProCursor requires commercial.')
-    expect(wrapper.find('.usage-dashboard-stub').exists()).toBe(false)
-  })
-
-  it('shows a non-actionable unavailable state for direct ProCursor tab navigation', async () => {
-    setCapabilities([
-      { key: 'crawl-configs', isAvailable: true },
-      { key: 'procursor', isAvailable: false, message: 'ProCursor requires commercial.' },
-      { key: 'multiple-scm-providers', isAvailable: true },
-    ])
+  it('keeps direct ProCursor tab navigation available without a ProCursor capability entry', async () => {
     mockRoute.query = { tab: 'procursor' }
     mockGet.mockResolvedValue({ data: sampleClient })
 

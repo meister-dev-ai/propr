@@ -1,6 +1,5 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
-// This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/types'
@@ -28,39 +27,8 @@ export type ProCursorTrackedBranchDto = components['schemas']['ProCursorTrackedB
 export type ProCursorTrackedBranchPatchRequest = components['schemas']['ProCursorTrackedBranchPatchRequest']
 export type ProCursorTrackedBranchRequest = components['schemas']['ProCursorTrackedBranchRequest']
 
-export class PremiumFeatureUnavailableError extends Error {
-  feature: string | null
-
-  constructor(message: string, feature?: string | null) {
-    super(message)
-    this.name = 'PremiumFeatureUnavailableError'
-    this.feature = feature ?? null
-  }
-}
-
-function toPremiumFeatureUnavailableError(error: unknown): PremiumFeatureUnavailableError | null {
-  if (!error || typeof error !== 'object') {
-    return null
-  }
-
-  const apiError = error as {
-    error?: string
-    feature?: string | null
-    message?: string
-  }
-
-  if (apiError.error !== 'premium_feature_unavailable') {
-    return null
-  }
-
-  return new PremiumFeatureUnavailableError(
-    getErrorMessage(error, 'This premium feature is unavailable for the current installation.'),
-    apiError.feature,
-  )
-}
-
 function createRequestError(error: unknown, fallback: string): Error {
-  return toPremiumFeatureUnavailableError(error) ?? new Error(getErrorMessage(error, fallback))
+  return new Error(getErrorMessage(error, fallback))
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {

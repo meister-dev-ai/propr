@@ -77,9 +77,7 @@ behavior.
 - `GetAuthOptionsAsync()` builds the pre-login auth bootstrap payload.
 - `UpdateAsync()` validates requested overrides and persists the new policy.
 
-The service supports both Commercial-only features and non-Commercial toggles. The shipped catalog
-entries are Commercial-only, and the resolver also supports features with
-`RequiresCommercial = false`.
+The service currently resolves the shipped Commercial-only capability set.
 
 ### Feature Management Integration
 

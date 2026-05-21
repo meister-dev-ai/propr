@@ -45,6 +45,7 @@ commercial license, not from self-hosting and not from the presence of the code 
 | Single sign-on | Upgrade required | Available |
 | One active review at a time | Enforced | Not enforced |
 | One active SCM provider connection | Enforced | Not enforced |
+| ProCursor core knowledge functionality | Available | Available |
 | Premium capability toggles per installation | Not available | Available |
 
 The admin UI surfaces the current product edition in the header, the login screen, and `Settings -> Licensing`.

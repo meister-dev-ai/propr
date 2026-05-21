@@ -36,7 +36,7 @@
                             @click="activeTab = 'providers'">
                             <i class="fi fi-rr-plug-connection"></i> SCM Providers
                         </button>
-                        <button v-if="isProCursorAvailable" class="sidebar-nav-link"
+                        <button class="sidebar-nav-link"
                             :class="{ active: activeTab === 'procursor' }" @click="activeTab = 'procursor'">
                             <i class="fi fi-rr-books"></i> ProCursor
                         </button>
@@ -235,17 +235,6 @@
                 <!-- Tab: Usage -->
                 <div v-if="isUsageTabAvailable" v-show="activeTab === 'usage'">
                     <UsageDashboard :clientId="client.id" />
-                </div>
-
-                <div v-else-if="activeTab === 'usage'" class="section-card premium-unavailable-card">
-                    <div class="section-card-header">
-                        <h3>Tokens & Usage</h3>
-                    </div>
-                    <div class="section-card-body">
-                        <p class="premium-unavailable-copy">
-                            {{ usageUnavailableMessage }}
-                        </p>
-                    </div>
                 </div>
 
                 <!-- Tab: Review History -->
@@ -505,26 +494,10 @@ const providerUpgradeMessage = computed(
     () => getCapability("multiple-scm-providers")?.message ?? ""
 );
 const crawlConfigsCapability = computed(() => getCapability("crawl-configs"));
-const proCursorCapability = computed(() => getCapability("procursor"));
 const isCrawlConfigsAvailable = computed(
     () => crawlConfigsCapability.value?.isAvailable === true
 );
-const isProCursorAvailable = computed(
-    () => proCursorCapability.value?.isAvailable === true
-);
-const isUsageTabAvailable = computed(
-    () => isProCursorTokenUsageReportingEnabled && isProCursorAvailable.value
-);
-const usageUnavailableMessage = computed(() => {
-    if (!isProCursorTokenUsageReportingEnabled) {
-        return "ProCursor usage reporting is disabled in this environment.";
-    }
-
-    return (
-        proCursorCapability.value?.message ??
-        "A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments."
-    );
-});
+const isUsageTabAvailable = computed(() => isProCursorTokenUsageReportingEnabled);
 
 // Text Viewer Modal
 const isTextViewerOpen = ref(false);
