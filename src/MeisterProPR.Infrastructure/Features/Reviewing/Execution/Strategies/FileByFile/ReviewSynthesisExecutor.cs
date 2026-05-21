@@ -53,10 +53,13 @@ internal sealed class ReviewSynthesisExecutor(
         CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
+
         var allResults = jobWithResults!.FileReviewResults;
+
         var freshResults = allResults
             .Where(r => !r.IsCarriedForward)
             .ToList();
+
         var carriedForwardCandidatesSkipped = allResults
             .Where(r => r.IsComplete && r.IsCarriedForward && r.Comments is not null)
             .Sum(r => r.Comments!.Count);
@@ -73,11 +76,13 @@ internal sealed class ReviewSynthesisExecutor(
             .ToList();
 
         var synthesisRuntime = await this.ResolveSynthesisRuntimeAsync(job, baseContext, effectiveClient, ct);
+
         effectiveClient = synthesisRuntime.ChatClient;
 
         logger.LogInformation("Starting synthesis for job {JobId}", job.Id);
 
         var protocolId = await this.BeginSynthesisProtocolAsync(job, synthesisRuntime.ModelId, ct);
+
         var synthesisOutcome = await this.RunSynthesisCoreAsync(
             job,
             pr,
@@ -247,6 +252,7 @@ internal sealed class ReviewSynthesisExecutor(
 
         var publishCount = gateDecisions.Count(decision =>
             string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal));
+
         var summaryOnlyItems = gateDecisions
             .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
             .Select(decision => decision.SummaryText)
