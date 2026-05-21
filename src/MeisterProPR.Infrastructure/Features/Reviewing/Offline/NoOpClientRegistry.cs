@@ -45,7 +45,7 @@ public sealed class NoOpClientRegistry : IClientRegistry
 
     public Task<bool> GetProRvEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
-        return Task.FromResult(true);
+        return Task.FromResult(false);
     }
 
     public Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)

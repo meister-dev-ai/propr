@@ -36,7 +36,7 @@ public sealed record EvaluationConfiguration(
     IReadOnlyDictionary<string, string>? RunMetadata = null,
     EvaluationAiConnection? AiConnection = null,
     float? Temperature = null,
-    bool EnableProRV = true,
+    bool EnableProRV = false,
     ReviewAugmentationMode? AugmentationMode = null,
     EvaluationProCursorContext? ProCursor = null)
 {

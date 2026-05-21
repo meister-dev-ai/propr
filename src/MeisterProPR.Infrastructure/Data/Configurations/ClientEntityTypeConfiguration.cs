@@ -55,7 +55,7 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
 
         builder.Property(c => c.EnableProRV)
             .HasColumnName("enable_prorv")
-            .HasDefaultValue(true);
+            .HasDefaultValue(false);
 
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");

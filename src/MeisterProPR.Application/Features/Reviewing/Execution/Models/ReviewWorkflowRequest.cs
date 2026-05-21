@@ -25,7 +25,7 @@ public sealed record ReviewWorkflowRequest(
     /// </summary>
     public ReviewAugmentationMode EffectiveAugmentationMode => this.AugmentationMode
                                                                ?? this.Configuration?.EffectiveAugmentationMode
-                                                               ?? ReviewAugmentationMode.EarlySteering;
+                                                               ?? ReviewAugmentationMode.Disabled;
 
     /// <summary>
     ///     Effective offline-only skipped steps for this workflow request.

@@ -34,9 +34,9 @@ public sealed class ClientRecord
 
     /// <summary>
     ///     Controls whether ProRV executes during review generation for this client.
-    ///     Defaults to <see langword="true" /> so existing clients keep current verification behavior.
+    ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
     /// </summary>
-    public bool EnableProRV { get; set; } = true;
+    public bool EnableProRV { get; set; } = false;
 
     public TenantRecord? Tenant { get; set; }
 

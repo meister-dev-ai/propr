@@ -243,10 +243,10 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({
-        params: { path: { clientId: 'client-1' } },
-        body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false },
-      })
+        expect.objectContaining({
+          params: { path: { clientId: 'client-1' } },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableProRV: false },
+        })
     )
   })
 
@@ -267,10 +267,10 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({
-        params: { path: { clientId: 'client-1' } },
-        body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true },
-      })
+        expect.objectContaining({
+          params: { path: { clientId: 'client-1' } },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableProRV: false },
+        })
     )
   })
 
@@ -292,10 +292,10 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({
-        params: { path: { clientId: 'client-1' } },
-        body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true },
-      })
+        expect.objectContaining({
+          params: { path: { clientId: 'client-1' } },
+          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableProRV: false },
+        })
     )
   })
 
@@ -316,10 +316,10 @@ describe('ClientDetailView', () => {
 
     expect(mockPatch).toHaveBeenCalledWith(
       '/clients/{clientId}',
-      expect.objectContaining({
-        params: { path: { clientId: 'client-1' } },
-        body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true },
-      })
+        expect.objectContaining({
+          params: { path: { clientId: 'client-1' } },
+          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableProRV: false },
+        })
     )
   })
 

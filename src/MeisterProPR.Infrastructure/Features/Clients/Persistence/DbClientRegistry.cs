@@ -130,7 +130,7 @@ public sealed class DbClientRegistry(
                    .Where(c => c.Id == clientId)
                    .Select(c => (bool?)c.EnableProRV)
                    .FirstOrDefaultAsync(ct)
-               ?? true;
+               ?? false;
     }
 
     /// <inheritdoc />

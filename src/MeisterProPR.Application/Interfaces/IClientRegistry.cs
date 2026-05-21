@@ -61,7 +61,7 @@ public interface IClientRegistry
 
     /// <summary>
     ///     Returns whether ProRV should execute for the given client.
-    ///     Defaults to <see langword="true" /> if the client does not exist.
+    ///     Defaults to <see langword="false" /> if the client does not exist.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>

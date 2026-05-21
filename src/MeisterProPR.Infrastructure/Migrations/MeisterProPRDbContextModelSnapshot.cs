@@ -1568,7 +1568,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<bool>("EnableProRV")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("enable_prorv");
 
                     b.Property<string>("DisplayName")

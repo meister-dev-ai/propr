@@ -72,6 +72,36 @@ public sealed class ReviewEvaluationModelsTests
     }
 
     [Fact]
+    public void ReviewWorkflowRequest_OmittedAugmentationDefaultsToDisabled()
+    {
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/example",
+            "sample-project",
+            "sample-repository",
+            42,
+            1);
+        var chatClient = Substitute.For<IChatClient>();
+
+        var request = new ReviewWorkflowRequest(job, chatClient, "gpt-4o");
+
+        Assert.Equal(ReviewAugmentationMode.Disabled, request.EffectiveAugmentationMode);
+    }
+
+    [Fact]
+    public void EvaluationConfiguration_OmittedProRvDefaultsToDisabled()
+    {
+        var configuration = new EvaluationConfiguration(
+            "baseline",
+            new EvaluationModelSelection(["gpt-4o"]),
+            new EvaluationOutputOptions("artifacts/run.json", "full"));
+
+        Assert.False(configuration.EnableProRV);
+        Assert.Equal(ReviewAugmentationMode.Disabled, configuration.EffectiveAugmentationMode);
+    }
+
+    [Fact]
     public void EvaluationConfiguration_ExplicitAugmentationModeOverridesLegacyBoolean()
     {
         var configuration = new EvaluationConfiguration(

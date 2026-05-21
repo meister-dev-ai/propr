@@ -479,7 +479,7 @@ const showDeleteDialog = ref(false);
 const editedDisplayName = ref("");
 const editedDefaultReviewStrategy = ref<ReviewStrategy>("fileByFile");
 const editedScmCommentPostingEnabled = ref(true);
-const editedEnableProRV = ref(true);
+const editedEnableProRV = ref(false);
 const canManageClient = computed(() => hasClientRole(clientId, 1));
 const canViewClient = computed(() => hasClientRole(clientId, 0));
 const availableTabs = computed<DetailTab[]>(() => {

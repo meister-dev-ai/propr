@@ -334,11 +334,13 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.False(body.RootElement.TryGetProperty("key", out _), "Raw key must never be returned.");
         Assert.Equal("Test Client", body.RootElement.GetProperty("displayName").GetString());
         Assert.True(body.RootElement.GetProperty("isActive").GetBoolean());
+        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
 
         using var verificationScope = factory.Services.CreateScope();
         var verificationDb = verificationScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
         var createdClient = await verificationDb.Clients.SingleAsync(record => record.Id == createdClientId);
         Assert.Equal(tenantId, createdClient.TenantId);
+        Assert.False(createdClient.EnableProRV);
     }
 
     [Theory]

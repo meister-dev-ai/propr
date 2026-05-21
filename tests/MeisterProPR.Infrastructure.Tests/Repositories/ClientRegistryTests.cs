@@ -344,11 +344,11 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
-    public async Task GetProRvEnabledAsync_UnknownClient_DefaultsToTrue()
+    public async Task GetProRvEnabledAsync_UnknownClient_DefaultsToFalse()
     {
         var result = await this._registry.GetProRvEnabledAsync(Guid.NewGuid(), CancellationToken.None);
 
-        Assert.True(result);
+        Assert.False(result);
     }
 
     private async Task<ClientRecord> SeedClientAsync()
