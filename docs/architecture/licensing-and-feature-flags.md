@@ -3,11 +3,15 @@
 This document explains how ProPR processes installation licensing, premium capabilities, and
 runtime feature flags, and what needs to happen when a new feature must respect licensing.
 
+It describes runtime product-edition resolution and feature enforcement, not the complete legal explanation
+of when commercial-only features may be used. The authoritative licensing guidance lives in `LICENSE`,
+`LICENSING.md`, and `COMMERCIAL.md`.
+
 ## Overview
 
-Licensing is installation-wide and database-backed.
+Product-edition state is installation-wide and database-backed.
 
-- The current edition is persisted as a singleton row in `installation_edition`.
+- The current configured product edition is persisted as a singleton row in `installation_edition`.
 - Per-capability overrides are persisted in `premium_capability_overrides`.
 - A fresh installation seeds itself into `Community` edition on first access.
 - Effective capability state is calculated from:
@@ -213,4 +217,4 @@ For each new licensed feature, add focused coverage for:
 - `GET /api/auth/options` is a generic pre-login bootstrap endpoint, not an SSO-only endpoint. New
   sign-in methods can extend it later without replacing the route.
 - If a feature is both provider-sensitive and license-sensitive, keep provider activation and
-  licensing checks separate. Provider enablement and licensing are different policy layers.
+  licensing checks separate. Provider enablement, runtime edition checks, and source-license boundaries are different policy layers.

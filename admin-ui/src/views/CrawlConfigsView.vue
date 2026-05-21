@@ -140,7 +140,7 @@ const crawlConfigsCapability = computed(() => getCapability('crawl-configs'))
 const isCrawlConfigsAvailable = computed(() => crawlConfigsCapability.value?.isAvailable === true)
 const unavailableMessage = computed(() =>
   crawlConfigsCapability.value?.message
-    ?? 'Commercial edition is required to manage guided crawl configurations and discovery.',
+    ?? 'A commercial license is required to manage guided crawl configurations and discovery, including in self-hosted deployments.',
 )
 
 onMounted(() => loadConfigs())

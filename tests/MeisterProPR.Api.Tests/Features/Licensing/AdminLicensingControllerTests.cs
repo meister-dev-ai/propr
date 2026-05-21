@@ -137,7 +137,7 @@ public sealed class AdminLicensingControllerTests
                     true,
                     PremiumCapabilityOverrideState.Default,
                     edition == InstallationEdition.Commercial,
-                    edition == InstallationEdition.Commercial ? null : "Commercial edition is required."),
+                    edition == InstallationEdition.Commercial ? null : "A commercial license is required, including in self-hosted deployments."),
             ]);
     }
 }

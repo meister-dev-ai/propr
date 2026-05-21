@@ -350,7 +350,7 @@ const providerLimitReached = computed(
 )
 const multipleProviderUpgradeMessage = computed(() =>
   providerLimitReached.value
-    ? multipleProvidersCapability.value?.message ?? 'Commercial edition is required to configure more than one SCM provider connection.'
+    ? multipleProvidersCapability.value?.message ?? 'A commercial license is required to configure more than one SCM provider connection, including in self-hosted deployments.'
     : '',
 )
 const canCreateConnection = computed(() => hasEnabledProviderOptions.value && !providerLimitReached.value)

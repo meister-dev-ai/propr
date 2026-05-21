@@ -95,7 +95,7 @@ describe('TenantLoginView', () => {
       capabilities: [
         {
           key: 'sso-authentication',
-          message: 'Commercial edition is required to use single sign-on.',
+          message: 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
         },
       ],
     })
@@ -103,7 +103,7 @@ describe('TenantLoginView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Commercial edition is required to use single sign-on.')
+    expect(wrapper.text()).toContain('A commercial license is required to use single sign-on, including in self-hosted deployments.')
   })
 
   it('does not show tenant-local login even when the tenant still reports it as enabled', async () => {

@@ -522,7 +522,7 @@ const usageUnavailableMessage = computed(() => {
 
     return (
         proCursorCapability.value?.message ??
-        "Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting."
+        "A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments."
     );
 });
 

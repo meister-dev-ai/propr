@@ -194,7 +194,14 @@ Tenant administrators manage those settings and memberships under `/api/admin/te
 
 ---
 
-## Editions and Premium Capabilities
+## Licensing And Editions
+
+ProPR uses one ELv2-licensed source tree.
+
+- Some files in the source tree implement commercial-only functionality.
+- Those files may be present in the public source tree and may ship in community or self-hosted artifacts.
+- Their presence does not grant the right to activate or use commercial-only features.
+- Self-hosting does not grant the right to use commercial-only features without a commercial license.
 
 Every installation starts in `Community` edition by default. Community mode is intended to be safe for
 fresh deployments and small self-hosted setups:
@@ -203,14 +210,20 @@ fresh deployments and small self-hosted setups:
 - Only one active PR review job may be pending or processing at a time.
 - Only one active SCM provider connection may be configured at a time.
 
-Commercial edition keeps all Community behavior and unlocks the current premium capability set:
+Commercial edition keeps all Community behavior and unlocks the current premium capability set, but using those
+commercial-only capabilities requires a commercial license even for self-hosted deployments:
 
 - Single sign-on (`sso-authentication`)
 - Parallel review execution (`parallel-review-execution`)
 - Multiple SCM providers (`multiple-scm-providers`)
+- Crawl configurations (`crawl-configs`)
+- ProCursor (`procursor`)
 
-Admins can inspect and change the current edition from `Settings -> Licensing` in the admin UI, or
-via `GET /api/admin/licensing` and `PATCH /api/admin/licensing` for automation.
+The admin API and UI expose the installation's configured product edition through `Settings -> Licensing`,
+`GET /api/admin/licensing`, and `PATCH /api/admin/licensing`.
+
+That product setting is not, by itself, a commercial license grant. The authoritative licensing guidance is
+defined in `LICENSE`, `LICENSING.md`, and `COMMERCIAL.md`.
 
 Before sign-in, the login screen calls `GET /api/auth/options` for generic auth bootstrap data.
 Today that means edition plus password sign-in availability; future sign-in methods such as SSO can
@@ -273,8 +286,7 @@ runtime uses a different socket, set `DOCKER_HOST` explicitly before running `do
 
 ## License · Security · Contributing
 
-- [Elastic License 2.0](LICENSE) — free for self-hosting, internal use, and community contributions; offering ProPR as a
-  hosted or managed service requires commercial terms
-- [Commercial License](COMMERCIAL.md) — for businesses that need managed-service rights, negotiated commercial terms, or professional
-  support
+- [Elastic License 2.0 and commercial capability notice](LICENSE) — repository-wide source license and commercial capability notice
+- [Licensing Map](LICENSING.md) — path-by-path capability classification and activation/use guidance
+- [Commercial Terms](COMMERCIAL.md) — when a commercial license is required, including self-hosted commercial-only use
 - [Security Policy](SECURITY.md) — report vulnerabilities privately

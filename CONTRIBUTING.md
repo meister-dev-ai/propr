@@ -23,6 +23,15 @@ Use the `-s` flag when committing:
 3. Make sure to use the style and conventions used in the existing codebase. We recommend running `jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code"` after installing `JetBrains.ReSharper.GlobalTools` with `dotnet tool install --global JetBrains.ReSharper.GlobalTools`.
 4. Push your changes to your fork and submit a pull request to the main repository.
 
+## Licensing Boundaries
+
+This repository uses one ELv2 source tree with explicit commercial-capability classification.
+
+- Before adding new files, check `LICENSE` and `LICENSING.md` to determine whether the file primarily implements community/shared behavior or commercial-only functionality.
+- ELv2 files should keep the standard ELv2 header.
+- Files that primarily implement commercial-only functionality may add a short notice saying that a commercial license is required to activate or use that functionality.
+- Do not claim a different source-code license for a file unless the repo's licensing model actually changes.
+
 Note: We recommend using the pre-commit hook we provide via `scripts/setup-hooks.[ps1|sh]`.
 
 # Size of pull requests

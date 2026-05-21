@@ -271,7 +271,7 @@ public sealed class SubmitReviewJobHandlerTests
                     true,
                     PremiumCapabilityOverrideState.Default,
                     false,
-                    "Commercial edition is required to run more than one active PR review at a time."));
+                    "A commercial license is required to run more than one active PR review at a time, including in self-hosted deployments."));
 
         var sut = new SubmitReviewJobHandler(
             store,

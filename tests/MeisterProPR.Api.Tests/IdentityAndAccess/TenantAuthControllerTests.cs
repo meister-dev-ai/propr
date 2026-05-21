@@ -83,7 +83,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
     public async Task LocalLogin_WithTenantMembershipAndPassword_ReturnsSession()
     {
         factory.ResetLicensing();
-        factory.SetSsoCapabilityAvailability(false, "Commercial edition is required to use single sign-on.");
+        factory.SetSsoCapabilityAvailability(false, "A commercial license is required to use single sign-on, including in self-hosted deployments.");
 
         var tenantSlug = $"acme-{Guid.NewGuid():N}";
         var username = $"tenant.user.{Guid.NewGuid():N}";

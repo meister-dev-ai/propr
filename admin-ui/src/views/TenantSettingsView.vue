@@ -1,3 +1,7 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+<!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
+
 <template>
   <div class="page-view tenant-settings-view">
     <section class="section-card">
@@ -95,7 +99,7 @@ const ssoUnavailableMessage = computed(() => {
     return ''
   }
 
-  return ssoUnavailableOverrideMessage.value || ssoCapability.value?.message || 'Commercial edition is required to use single sign-on.'
+  return ssoUnavailableOverrideMessage.value || ssoCapability.value?.message || 'A commercial license is required to use single sign-on, including in self-hosted deployments.'
 })
 
 const providerRedirectUri = computed(() => {

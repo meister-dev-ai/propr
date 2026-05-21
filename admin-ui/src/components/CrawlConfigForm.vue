@@ -582,7 +582,7 @@ const proCursorCapability = computed(() => getCapability('procursor'))
 const isProCursorAvailable = computed(() => proCursorCapability.value?.isAvailable === true)
 const proCursorUnavailableMessage = computed(() =>
   proCursorCapability.value?.message
-    ?? 'Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting.',
+    ?? 'A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments.',
 )
 const usesSelectedProCursorSources = computed(() => proCursorSourceScopeMode.value === 'selectedSources')
 const selectableProCursorSources = computed(() =>

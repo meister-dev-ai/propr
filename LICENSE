@@ -1,7 +1,15 @@
 Meister DEV's ProPR
 Copyright (c) Andreas Rain
 
-This repository is licensed under the Elastic License 2.0.
+Unless otherwise noted, this repository is licensed under the Elastic License 2.0.
+
+Commercial capability notice:
+
+- Some files in this repository implement commercial-only functionality and may be included in the public source tree and in community/self-hosted artifacts.
+- Access to those files, source code, or shipped artifacts does not by itself grant the right to activate or use the commercial-only functionality they implement.
+- A separate commercial license is required to activate or use commercial-only features, including in self-hosted deployments.
+- The path and capability map is documented in `LICENSING.md` and `COMMERCIAL.md`.
+
 For purposes of Elastic License 2.0, the licensor is Andreas Rain and the software is Meister DEV's ProPR.
 
 Elastic License 2.0

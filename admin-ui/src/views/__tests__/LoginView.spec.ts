@@ -82,7 +82,7 @@ describe('LoginView', () => {
         {
           key: 'sso-authentication',
           isAvailable: false,
-          message: 'Commercial edition is required to use single sign-on.',
+          message: 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
         },
       ],
     })

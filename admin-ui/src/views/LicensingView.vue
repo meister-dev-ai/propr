@@ -5,16 +5,16 @@
   <div class="page-view licensing-view">
     <div class="licensing-page-header">
       <h2 class="view-title">Licensing</h2>
-      <p class="licensing-description">
-        Manage the installation edition and review which premium capabilities are currently available.
-      </p>
+        <p class="licensing-description">
+          Review the configured product edition and the premium capabilities that require a commercial license.
+        </p>
     </div>
 
     <section class="section-card licensing-card">
       <div class="section-card-header licensing-card-header">
         <div>
           <h3>Edition</h3>
-          <p class="licensing-subtitle">Switch between Community and Commercial without rebuilding the installation.</p>
+          <p class="licensing-subtitle">The configured product edition does not replace the source-license boundaries documented in LICENSE and LICENSING.md.</p>
         </div>
         <span :class="['chip', currentEdition === 'commercial' ? 'chip-success' : 'chip-muted']">
           {{ currentEdition === 'commercial' ? 'Commercial active' : 'Community active' }}
@@ -32,7 +32,7 @@
               @click="selectedEdition = 'community'"
             >
               <strong>Community</strong>
-              <span>Password sign-in and a single active review/provider workflow.</span>
+              <span>Password sign-in and a single active review or provider workflow.</span>
             </button>
             <button
               type="button"
@@ -41,7 +41,7 @@
               @click="selectedEdition = 'commercial'"
             >
               <strong>Commercial</strong>
-              <span>Unlock SSO, parallel review execution, and multiple SCM providers.</span>
+              <span>Commercial-only capabilities require a commercial license, including in self-hosted deployments.</span>
             </button>
           </div>
 
@@ -64,10 +64,10 @@
               <div class="licensing-capability-header">
                 <h4>{{ capability.displayName }}</h4>
                 <span :class="['chip', capability.isAvailable ? 'chip-success' : 'chip-muted']">
-                  {{ capability.isAvailable ? 'Available' : 'Upgrade required' }}
+                  {{ capability.isAvailable ? 'Available' : 'Commercial license required' }}
                 </span>
               </div>
-              <p>{{ capability.message ?? 'Available for the current installation edition.' }}</p>
+              <p>{{ capability.message ?? 'Available for the current configured product edition.' }}</p>
             </article>
           </div>
         </template>
@@ -93,7 +93,7 @@ const currentEdition = computed(() => edition.value)
 const displayedCapabilities = computed(() => capabilities.value)
 const hasEditionChange = computed(() => selectedEdition.value !== currentEdition.value)
 const applyActionLabel = computed(() =>
-  selectedEdition.value === 'commercial' ? 'Activate Commercial' : 'Switch to Community',
+  selectedEdition.value === 'commercial' ? 'Set Commercial Edition' : 'Set Community Edition',
 )
 
 onMounted(async () => {
@@ -124,8 +124,8 @@ async function applyLicensingChange() {
     setLicensingState(summary.edition, summary.capabilities)
     selectedEdition.value = summary.edition
     successMessage.value = summary.edition === 'commercial'
-      ? 'Commercial edition activated.'
-      : 'Installation switched to Community edition.'
+      ? 'Configured product edition set to Commercial.'
+      : 'Configured product edition set to Community.'
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Failed to update licensing settings.'
   } finally {

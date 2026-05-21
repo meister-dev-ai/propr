@@ -176,7 +176,7 @@ describe('TenantSettingsView', () => {
   it('keeps tenant policy editing available while hiding provider management when SSO is unavailable', async () => {
     ssoCapabilityRef.value = {
       isAvailable: false,
-      message: 'Commercial edition is required to use single sign-on.',
+      message: 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
     }
 
     const wrapper = await mountView()
@@ -184,7 +184,7 @@ describe('TenantSettingsView', () => {
 
     expect(getTenantMock).toHaveBeenCalledWith('tenant-1')
     expect(listTenantSsoProvidersMock).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Commercial edition is required to use single sign-on.')
+    expect(wrapper.text()).toContain('A commercial license is required to use single sign-on, including in self-hosted deployments.')
     expect(wrapper.find('[data-testid="provider-submit"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Tenant memberships are created when someone signs in through an enabled provider')
   })

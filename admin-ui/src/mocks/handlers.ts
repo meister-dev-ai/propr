@@ -56,7 +56,7 @@ function getMockSsoCapability() {
     defaultWhenCommercial: true,
     overrideState: 'default',
     isAvailable: mockSsoCapabilityAvailable,
-    message: mockSsoCapabilityAvailable ? null : 'Commercial edition is required to use single sign-on.',
+    message: mockSsoCapabilityAvailable ? null : 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
   }
 }
 
@@ -73,7 +73,7 @@ function createPremiumFeatureUnavailableResponse() {
     {
       error: 'premium_feature_unavailable',
       feature: tenantSsoCapabilityKey,
-      message: 'Commercial edition is required to use single sign-on.',
+      message: 'A commercial license is required to use single sign-on, including in self-hosted deployments.',
     },
     { status: 409 },
   )

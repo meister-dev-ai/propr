@@ -14,27 +14,27 @@ public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
         new(
             PremiumCapabilityKey.SsoAuthentication,
             "Single sign-on",
-            "Commercial edition is required to use single sign-on.",
+            "A commercial license is required to use single sign-on, including in self-hosted deployments.",
             "Single sign-on is currently disabled for this installation."),
         new(
             PremiumCapabilityKey.ParallelReviewExecution,
             "Parallel review execution",
-            "Commercial edition is required to run more than one active PR review at a time.",
+            "A commercial license is required to run more than one active PR review at a time, including in self-hosted deployments.",
             "Parallel review execution is currently disabled for this installation."),
         new(
             PremiumCapabilityKey.MultipleScmProviders,
             "Multiple SCM providers",
-            "Commercial edition is required to configure more than one SCM provider.",
+            "A commercial license is required to configure more than one SCM provider, including in self-hosted deployments.",
             "Multiple SCM providers are currently disabled for this installation."),
         new(
             PremiumCapabilityKey.CrawlConfigs,
             "Crawl configurations",
-            "Commercial edition is required to manage guided crawl configurations and discovery.",
+            "A commercial license is required to manage guided crawl configurations and discovery, including in self-hosted deployments.",
             "Crawl configurations are currently disabled for this installation."),
         new(
             PremiumCapabilityKey.ProCursor,
             "ProCursor",
-            "Commercial edition is required to use ProCursor knowledge sources, indexing, and usage reporting.",
+            "A commercial license is required to use ProCursor knowledge sources, indexing, and usage reporting, including in self-hosted deployments.",
             "ProCursor is currently disabled for this installation."),
     ];
 
