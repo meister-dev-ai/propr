@@ -682,6 +682,73 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(blocks[1].text()).toBe(fullOutput)
   })
 
+  it('renders escaped raw protocol text as readable code in the trace modal', async () => {
+    const escapedOutput = 'name=\\"inputTextSample\\"\\n/// &lt;param name=\\"outputTextSample\\"&gt;Truncated AI response text (&lt;= 50,000 characters), or &lt;see langword=\\"null\\" /&gt;.&lt;/param&gt;'
+
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            events: [makeProtocolEvent({
+              kind: 'toolCall',
+              name: 'get_file_content',
+              inputTextSample: 'args={"path":"src/foo.ts"}',
+              outputSummary: escapedOutput,
+            })],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    await openTraceEventModal(wrapper)
+
+    const blocks = wrapper.findAll('pre.content-block')
+    const outputText = blocks[blocks.length - 1].text()
+
+    expect(outputText).toBe('name="inputTextSample"\n/// <param name="outputTextSample">Truncated AI response text (<= 50,000 characters), or <see langword="null" />.</param>')
+    expect(outputText).not.toContain('\\n')
+    expect(outputText).not.toContain('\\"')
+    expect(outputText).not.toContain('&lt;')
+  })
+
+  it('renders JSON string protocol output without re-escaping quotes and line breaks', async () => {
+    const readableOutput = 'name="inputTextSample"\nTask RecordAiCallAsync(Guid protocolId)'
+
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            events: [makeProtocolEvent({
+              kind: 'toolCall',
+              name: 'get_file_content',
+              inputTextSample: 'args={"path":"src/foo.ts"}',
+              outputSummary: JSON.stringify(readableOutput),
+            })],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    await openTraceEventModal(wrapper)
+
+    const blocks = wrapper.findAll('pre.content-block')
+    const outputText = blocks[blocks.length - 1].text()
+
+    expect(outputText).toBe(readableOutput)
+    expect(outputText).not.toContain('\\n')
+    expect(outputText).not.toContain('\\"')
+  })
+
   it('does not show executing for completed posting diagnostics that have no output payload', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/protocol')) {

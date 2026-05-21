@@ -744,6 +744,8 @@
                                         <pre class="json-content">This degraded Stage B result was a non-validated intermediate outcome. It only affected the final review if later verification and final gate kept supporting findings.</pre>
                                     </div>
                                 </template>
+                                <pre v-else-if="typeof parsedOutputResult === 'string'" class="content-block">{{ decodeHtmlEntities(parsedOutputResult) }}</pre>
+
                                 <template v-else>
                                     <div v-if="parsedOutputResult.summary" class="json-field">
                                         <span class="json-key">Summary:</span>
@@ -764,7 +766,7 @@
                                     </template>
                                 </template>
                             </div>
-                            <pre v-else-if="selectedMergedEvent.resultDetails.outputSummary !== null" class="content-block">{{ selectedMergedEvent.resultDetails.outputSummary }}</pre>
+                            <pre v-else-if="selectedMergedEvent.resultDetails.outputSummary !== null" class="content-block">{{ renderMergedEventText(selectedMergedEvent.resultDetails.outputSummary) }}</pre>
 
                             <template v-else-if="selectedMergedEvent.resultDetails.error !== null">
                                 <pre class="content-block error-block">{{ selectedMergedEvent.resultDetails.error }}</pre>
@@ -1731,6 +1733,51 @@ function isAgenticDegradedEvent(name: string | null | undefined): boolean {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function decodeHtmlEntities(value: string): string {
+    if (!value.includes('&') || typeof document === 'undefined') {
+        return value
+    }
+
+    const textarea = document.createElement('textarea')
+    textarea.innerHTML = value
+    return textarea.value
+}
+
+function decodeMergedEventEscapes(value: string): string {
+    return value
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\\x([0-9a-fA-F]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\\r\\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\f/g, '\f')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\//g, '/')
+        .replace(/\\\\/g, '\\')
+}
+
+function renderMergedEventText(value: string | null | undefined): string {
+    if (!value) {
+        return ''
+    }
+
+    const trimmed = value.trim()
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+        try {
+            const parsed = JSON.parse(trimmed)
+            if (typeof parsed === 'string') {
+                return decodeHtmlEntities(parsed)
+            }
+        } catch {
+            // Fall through to escape decoding for non-JSON raw strings.
+        }
+    }
+
+    return decodeHtmlEntities(decodeMergedEventEscapes(value))
 }
 
 function formatCommentRelevanceImplementation(details: CommentRelevanceEventDetails): string {
