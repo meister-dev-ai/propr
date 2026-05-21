@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.Concurrent;
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
@@ -31,8 +32,8 @@ internal abstract class ProviderReviewContextToolsBase(
 {
     private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots = changedPathSnapshots ?? [];
     private readonly Guid? _clientId = clientId;
-    private readonly Dictionary<string, string> _fileCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _fileCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
     private readonly int _iterationId = iterationId;
 
     private readonly IReadOnlyList<Guid>? _knowledgeSourceIds = knowledgeSourceIds?.Count > 0
@@ -50,7 +51,7 @@ internal abstract class ProviderReviewContextToolsBase(
 
     private readonly int _pullRequestNumber = review.Number;
     private readonly RepositoryRef _repository = review.Repository;
-    private readonly Dictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
     private readonly string _sourceBranch = sourceBranch;
     private readonly string? _targetBranch = targetBranch;
 

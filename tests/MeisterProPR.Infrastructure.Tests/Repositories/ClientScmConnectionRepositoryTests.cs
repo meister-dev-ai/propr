@@ -1,16 +1,21 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Clients.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.Clients.Support;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using MeisterProPR.Infrastructure.Tests.GitHub;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
@@ -164,7 +169,63 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         Assert.Equal(ScmAuthenticationKind.PersonalAccessToken, record.AuthenticationKind);
     }
 
+    [Fact]
+    public async Task GetOperationalConnectionAsync_WithDbContextFactory_SupportsParallelReads()
+    {
+        var dbRoot = new InMemoryDatabaseRoot();
+        var dbName = $"ClientScmConnectionRepositoryParallel-{Guid.NewGuid():N}";
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase(dbName, dbRoot)
+            .Options;
+
+        await using var db = new MeisterProPRDbContext(options);
+        var factory = new PooledDbContextFactory<MeisterProPRDbContext>(options);
+        var providerActivationService = CreateProviderActivationService(options);
+        var repository = new ClientScmConnectionRepository(db, CreateCodec(), providerActivationService, factory);
+
+        var client = await SeedClientAsync(db);
+        db.ProviderActivations.Add(
+            new ProviderActivationRecord
+            {
+                Provider = ScmProvider.GitHub,
+                IsEnabled = true,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        var hostBaseUrl = "https://github.enterprise.example.com";
+        var host = new ProviderHostRef(ScmProvider.GitHub, hostBaseUrl);
+        await repository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            hostBaseUrl,
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "GitHub PAT",
+            "ghp_parallel_secret",
+            true,
+            ct: CancellationToken.None);
+
+        var tasks = Enumerable.Range(0, 4)
+            .Select(_ => repository.GetOperationalConnectionAsync(client.Id, host, CancellationToken.None));
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(
+            results, credential =>
+            {
+                Assert.NotNull(credential);
+                Assert.Equal(ScmProvider.GitHub, credential!.ProviderFamily);
+                Assert.Equal(hostBaseUrl, credential.HostBaseUrl);
+            });
+    }
+
     private async Task<ClientRecord> SeedClientAsync()
+    {
+        return await SeedClientAsync(this._dbContext);
+    }
+
+    private static async Task<ClientRecord> SeedClientAsync(MeisterProPRDbContext dbContext)
     {
         var client = new ClientRecord
         {
@@ -175,9 +236,23 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        this._dbContext.Clients.Add(client);
-        await this._dbContext.SaveChangesAsync();
+        dbContext.Clients.Add(client);
+        await dbContext.SaveChangesAsync();
         return client;
+    }
+
+    private static ProviderActivationService CreateProviderActivationService(DbContextOptions<MeisterProPRDbContext> options)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDbContextFactory<MeisterProPRDbContext>>(_ => new PooledDbContextFactory<MeisterProPRDbContext>(options));
+        services.AddSingleton<IScmProviderRegistry, TestScmProviderRegistry>();
+
+        var provider = services.BuildServiceProvider();
+        return new ProviderActivationService(
+            new MeisterProPRDbContext(options),
+            provider.GetRequiredService<IDbContextFactory<MeisterProPRDbContext>>(),
+            provider,
+            new StaticProviderReadinessProfileCatalog());
     }
 
     private static ISecretProtectionCodec CreateCodec()
@@ -192,5 +267,68 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
 
         var provider = services.BuildServiceProvider();
         return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+    }
+
+    private sealed class TestScmProviderRegistry : IScmProviderRegistry
+    {
+        public bool IsRegistered(ScmProvider provider)
+        {
+            return true;
+        }
+
+        public IReadOnlyList<string> GetRegisteredCapabilities(ScmProvider provider)
+        {
+            return [];
+        }
+
+        public IRepositoryDiscoveryProvider GetRepositoryDiscoveryProvider(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ICodeReviewQueryService GetCodeReviewQueryService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ICodeReviewPublicationService GetCodeReviewPublicationService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewDiscoveryProvider GetReviewDiscoveryProvider(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewerIdentityService GetReviewerIdentityService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewAssignmentService GetReviewAssignmentService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewThreadStatusWriter GetReviewThreadStatusWriter(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IReviewThreadReplyPublisher GetReviewThreadReplyPublisher(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IProviderAdminDiscoveryService GetProviderAdminDiscoveryService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
+
+        public IWebhookIngressService GetWebhookIngressService(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

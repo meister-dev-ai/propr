@@ -15,15 +15,16 @@ namespace MeisterProPR.Infrastructure.Features.Clients.Support;
 /// <summary>Database-backed installation-wide provider activation policy service.</summary>
 public sealed class ProviderActivationService(
     MeisterProPRDbContext dbContext,
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory,
     IServiceProvider serviceProvider,
     IProviderReadinessProfileCatalog readinessProfileCatalog) : IProviderActivationService
 {
     public async Task<IReadOnlyList<ProviderActivationStatusDto>> ListAsync(CancellationToken ct = default)
     {
-        var records = await this.EnsureDefaultsAsync(ct);
+        var records = await this.EnsureDefaultsAsync(ct, false);
 
         return Enum.GetValues<ScmProvider>()
-            .Select(provider => this.BuildStatus(records[provider]))
+            .Select(provider => this.BuildStatus(GetExistingOrDefaultRecord(records, provider)))
             .ToList()
             .AsReadOnly();
     }
@@ -33,7 +34,7 @@ public sealed class ProviderActivationService(
         bool isEnabled,
         CancellationToken ct = default)
     {
-        var records = await this.EnsureDefaultsAsync(ct);
+        var records = await this.EnsureDefaultsAsync(ct, true);
         var record = records[provider];
 
         if (record.IsEnabled != isEnabled)
@@ -48,22 +49,44 @@ public sealed class ProviderActivationService(
 
     public async Task<bool> IsEnabledAsync(ScmProvider provider, CancellationToken ct = default)
     {
-        var records = await this.EnsureDefaultsAsync(ct);
-        return records[provider].IsEnabled;
+        var records = await this.EnsureDefaultsAsync(ct, false);
+        return records.TryGetValue(provider, out var record)
+            ? record.IsEnabled
+            : GetDefaultEnabled(provider);
     }
 
     public async Task<IReadOnlySet<ScmProvider>> GetEnabledProvidersAsync(CancellationToken ct = default)
     {
-        var records = await this.EnsureDefaultsAsync(ct);
-
-        return records
-            .Where(entry => entry.Value.IsEnabled)
-            .Select(entry => entry.Key)
+        var records = await this.EnsureDefaultsAsync(ct, false);
+        var enabledProviders = Enum.GetValues<ScmProvider>()
+            .Where(provider => records.TryGetValue(provider, out var record)
+                ? record.IsEnabled
+                : GetDefaultEnabled(provider))
             .ToHashSet();
+
+        return enabledProviders;
     }
 
-    private async Task<Dictionary<ScmProvider, ProviderActivationRecord>> EnsureDefaultsAsync(CancellationToken ct)
+    private async Task<Dictionary<ScmProvider, ProviderActivationRecord>> EnsureDefaultsAsync(CancellationToken ct, bool allowWrites)
     {
+        if (!allowWrites && contextFactory is not null)
+        {
+            await using var readDb = await contextFactory.CreateDbContextAsync(ct);
+            var readRecords = await readDb.ProviderActivations
+                .AsNoTracking()
+                .ToDictionaryAsync(record => record.Provider, ct);
+
+            foreach (var provider in Enum.GetValues<ScmProvider>())
+            {
+                if (!readRecords.ContainsKey(provider))
+                {
+                    readRecords.Add(provider, CreateDefaultRecord(provider));
+                }
+            }
+
+            return readRecords;
+        }
+
         var records = await dbContext.ProviderActivations
             .ToDictionaryAsync(record => record.Provider, ct);
 
@@ -112,6 +135,25 @@ public sealed class ProviderActivationService(
     private static bool GetDefaultEnabled(ScmProvider provider)
     {
         return provider is ScmProvider.AzureDevOps or ScmProvider.GitLab;
+    }
+
+    private static ProviderActivationRecord GetExistingOrDefaultRecord(
+        IReadOnlyDictionary<ScmProvider, ProviderActivationRecord> records,
+        ScmProvider provider)
+    {
+        return records.TryGetValue(provider, out var record)
+            ? record
+            : CreateDefaultRecord(provider);
+    }
+
+    private static ProviderActivationRecord CreateDefaultRecord(ScmProvider provider)
+    {
+        return new ProviderActivationRecord
+        {
+            Provider = provider,
+            IsEnabled = GetDefaultEnabled(provider),
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
     }
 
     private static ProviderConnectionReadinessLevel ResolveSupportClaimReadiness(IReadOnlyList<ProviderReadinessProfile> profiles)

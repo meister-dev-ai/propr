@@ -274,6 +274,53 @@ public sealed class FixtureReviewContextToolsTests
     }
 
     [Fact]
+    public async Task FixtureReviewContextTools_ParallelDiscoveryCalls_UseThreadSafeCaches()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["MEISTER_JWT_SECRET"] = "test-review-eval-jwt-secret-32!",
+                })
+            .Build();
+
+        services.AddLogging();
+        services.AddReviewEvalHarness(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var fixture = CreateFixture();
+        var accessor = scope.ServiceProvider.GetRequiredService<IReviewEvaluationFixtureAccessor>();
+        accessor.Fixture = fixture;
+
+        var toolsFactory = scope.ServiceProvider.GetRequiredService<IReviewContextToolsFactory>();
+        var tools = toolsFactory.Create(
+            new ReviewContextToolsRequest(
+                fixture.PullRequestSnapshot.CodeReview,
+                fixture.PullRequestSnapshot.SourceBranch,
+                1,
+                null,
+                TargetBranch: fixture.PullRequestSnapshot.TargetBranch,
+                ChangedPathSnapshots: fixture.PullRequestSnapshot.ChangedFiles
+                    .Select(ChangedPathSnapshot.FromFixtureChangedFile)
+                    .ToList()
+                    .AsReadOnly()));
+
+        var overviewTasks = Enumerable.Range(0, 8)
+            .Select(_ => tools.GetRepositoryOverviewAsync(RepositorySearchBranchSides.Source, CancellationToken.None));
+        var neighborhoodTasks = Enumerable.Range(0, 8)
+            .Select(_ => tools.GetFileNeighborhoodAsync("src/Example.cs", RepositorySearchBranchSides.Source, CancellationToken.None));
+
+        var overviews = await Task.WhenAll(overviewTasks);
+        var neighborhoods = await Task.WhenAll(neighborhoodTasks);
+
+        Assert.All(overviews, overview => Assert.Equal(RepositorySearchStatuses.Success, overview.Status));
+        Assert.All(neighborhoods, neighborhood => Assert.Equal(RepositorySearchStatuses.Success, neighborhood.Status));
+    }
+
+    [Fact]
     public void AddReviewEvalHarness_RegistersSharedDispatcherSeamForOfflineExecution()
     {
         var services = new ServiceCollection();

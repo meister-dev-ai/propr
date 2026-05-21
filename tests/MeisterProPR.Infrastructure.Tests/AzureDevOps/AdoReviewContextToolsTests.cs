@@ -129,6 +129,21 @@ public class AdoReviewContextToolsTests
     }
 
     [Fact]
+    public async Task GetFileContentAsync_ParallelCalls_ReuseThreadSafeCache()
+    {
+        var sut = new TestableAdoReviewContextTools(DefaultOptions());
+        sut.SetFile("/src/Foo.cs", "line1\nline2\nline3");
+
+        var tasks = Enumerable.Range(0, 8)
+            .Select(_ => sut.GetFileContentAsync("/src/Foo.cs", "main", 1, 2, CancellationToken.None));
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, result => Assert.Equal("line1\nline2", result));
+        Assert.True(sut.FetchCallCount >= 1);
+    }
+
+    [Fact]
     public async Task GetFileTreeAsync_AlwaysUsesStoredSourceBranch_IgnoresAiSuppliedBranch()
     {
         // Arrange

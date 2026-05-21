@@ -16,7 +16,8 @@ namespace MeisterProPR.Infrastructure.Repositories;
 public sealed class ClientScmConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
-    IProviderActivationService? providerActivationService = null) : IClientScmConnectionRepository
+    IProviderActivationService? providerActivationService = null,
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IClientScmConnectionRepository
 {
     private const string SecretPurpose = "ClientScmConnectionSecret";
 
@@ -24,11 +25,13 @@ public sealed class ClientScmConnectionRepository(
         Guid clientId,
         CancellationToken ct = default)
     {
-        var records = await dbContext.ClientScmConnections
-            .AsNoTracking()
-            .Where(connection => connection.ClientId == clientId)
-            .OrderBy(connection => connection.DisplayName)
-            .ToListAsync(ct);
+        var records = await this.WithReadDbAsync(
+            db => db.ClientScmConnections
+                .AsNoTracking()
+                .Where(connection => connection.ClientId == clientId)
+                .OrderBy(connection => connection.DisplayName)
+                .ToListAsync(ct),
+            ct);
 
         if (providerActivationService is not null)
         {
@@ -48,9 +51,11 @@ public sealed class ClientScmConnectionRepository(
         Guid connectionId,
         CancellationToken ct = default)
     {
-        var record = await dbContext.ClientScmConnections
-            .AsNoTracking()
-            .FirstOrDefaultAsync(connection => connection.ClientId == clientId && connection.Id == connectionId, ct);
+        var record = await this.WithReadDbAsync(
+            db => db.ClientScmConnections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(connection => connection.ClientId == clientId && connection.Id == connectionId, ct),
+            ct);
 
         if (record is not null && providerActivationService is not null)
         {
@@ -76,15 +81,17 @@ public sealed class ClientScmConnectionRepository(
             return null;
         }
 
-        var record = await dbContext.ClientScmConnections
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                connection =>
-                    connection.ClientId == clientId
-                    && connection.Provider == host.Provider
-                    && connection.HostBaseUrl == host.HostBaseUrl
-                    && connection.IsActive,
-                ct);
+        var record = await this.WithReadDbAsync(
+            db => db.ClientScmConnections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    connection =>
+                        connection.ClientId == clientId
+                        && connection.Provider == host.Provider
+                        && connection.HostBaseUrl == host.HostBaseUrl
+                        && connection.IsActive,
+                    ct),
+            ct);
 
         return record is null ? null : this.ToCredentialDto(record);
     }
@@ -320,6 +327,19 @@ public sealed class ClientScmConnectionRepository(
         dbContext.ClientScmConnections.Remove(record);
         await dbContext.SaveChangesAsync(ct);
         return true;
+    }
+
+    private async Task<T> WithReadDbAsync<T>(Func<MeisterProPRDbContext, Task<T>> operation, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        if (contextFactory is null)
+        {
+            return await operation(dbContext);
+        }
+
+        await using var readDb = await contextFactory.CreateDbContextAsync(ct);
+        return await operation(readDb);
     }
 
     private static ClientScmConnectionDto ToDto(ClientScmConnectionRecord record)
