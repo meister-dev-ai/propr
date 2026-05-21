@@ -89,9 +89,12 @@ public sealed class ReviewWorkflowRunner(
                     pullRequest.SourceBranch,
                     job.IterationId,
                     job.ClientId,
-                    ProviderScopePath: job.OrganizationUrl,
-                    TargetBranch: pullRequest.TargetBranch,
-                    ChangedPathSnapshots: pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()));
+                    job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources
+                        ? job.ProCursorSourceIds
+                        : null,
+                    job.OrganizationUrl,
+                    pullRequest.TargetBranch,
+                    pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()));
 
             var changedFilePaths = pullRequest.ChangedFiles.Select(file => file.Path).ToList();
             var fetchedInstructions = await instructionFetcher.FetchAsync(

@@ -228,6 +228,63 @@ public sealed class PromptExperimentBatchRunnerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task RunAsync_PreservesProCursorScopeWhenCloningJobTemplate()
+    {
+        var workflowRunner = Substitute.For<IReviewWorkflowRunner>();
+        var validator = Substitute.For<IReviewPromptExperimentValidator>();
+        var artifactWriter = Substitute.For<IEvaluationArtifactWriter>();
+        var chatClientFactory = Substitute.For<IAiChatClientFactory>();
+        var protectedValueResolver = Substitute.For<IProtectedValueResolver>();
+
+        var fixture = CreateFixture();
+        var configuration = new EvaluationConfiguration(
+            "config-a",
+            new EvaluationModelSelection(["gpt-5.4"]),
+            new EvaluationOutputOptions("artifacts/original.json", "full"));
+        var batch = new PromptExperimentBatch(
+            "batch-001",
+            fixture.FixtureId,
+            fixture.ActiveScenarioIdOrNull,
+            configuration.ConfigurationId,
+            [new PromptExperimentRunRequest("run-baseline", "baseline", "artifacts/baseline.json")]);
+        var selectedSourceId = Guid.NewGuid();
+        var jobTemplate = CreateJobTemplate(fixture);
+        jobTemplate.SetProCursorSourceScope(ProCursorSourceScopeMode.SelectedSources, [selectedSourceId]);
+
+        workflowRunner.RunAsync(Arg.Any<ReviewWorkflowRequest>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var request = callInfo.Arg<ReviewWorkflowRequest>();
+                return new ReviewWorkflowResult(
+                    request.Job,
+                    new ReviewResult("summary", []),
+                    [CreateProtocol(request.Job.Id, "synthesis", "ai_call_iter_1", "system-default", "user-default")],
+                    AugmentationMode: request.EffectiveAugmentationMode);
+            });
+        artifactWriter.WriteAsync(Arg.Any<EvaluationArtifact>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
+
+        var sut = new PromptExperimentBatchRunner(
+            workflowRunner,
+            validator,
+            artifactWriter,
+            chatClientFactory,
+            protectedValueResolver);
+
+        await sut.RunAsync(batch, fixture, configuration, jobTemplate, CancellationToken.None);
+
+        await workflowRunner.Received(1).RunAsync(
+            Arg.Is<ReviewWorkflowRequest>(request => HasSelectedKnowledgeSourceScope(request, selectedSourceId)),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static bool HasSelectedKnowledgeSourceScope(ReviewWorkflowRequest request, Guid sourceId)
+    {
+        return request.Job.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources
+               && request.Job.ProCursorSourceIds.SequenceEqual(new[] { sourceId });
+    }
+
     private static bool VariantArtifactMatches(EvaluationArtifact artifact)
     {
         var stage = Assert.Single(artifact.Stages);

@@ -119,6 +119,8 @@ public sealed class PromptExperimentBatchRunner(
             template.ReviewPipelineProfileId);
         clone.SetPrContext(template.PrTitle, template.PrRepositoryName, template.PrSourceBranch, template.PrTargetBranch);
         clone.SetReviewRevision(template.ReviewRevisionReference);
+        clone.SetProviderReviewContext(template.CodeReviewReference);
+        clone.SetProCursorSourceScope(template.ProCursorSourceScopeMode, template.ProCursorSourceIds);
 
         return clone;
     }

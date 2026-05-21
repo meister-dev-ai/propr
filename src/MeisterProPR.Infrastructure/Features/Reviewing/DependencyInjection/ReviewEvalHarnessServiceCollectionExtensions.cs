@@ -3,12 +3,15 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing;
 
@@ -25,6 +28,7 @@ public static class ReviewEvalHarnessServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.AddInfrastructureSupport(configuration);
+        services.AddProCursorRemoteMode(configuration);
         services.AddSingleton<IClientRegistry, NoOpClientRegistry>();
         services.AddSingleton<IClientScmConnectionRepository, NoOpClientScmConnectionRepository>();
         services.AddSingleton<IClientScmScopeRepository, NoOpClientScmScopeRepository>();
@@ -37,6 +41,15 @@ public static class ReviewEvalHarnessServiceCollectionExtensions
         services.AddScoped<IReviewContextToolsFactory, FixtureReviewContextToolsFactory>();
         services.AddScoped<IRepositoryInstructionFetcher, FixtureRepositoryInstructionFetcher>();
         services.AddScoped<IRepositoryExclusionFetcher, FixtureRepositoryExclusionFetcher>();
+        services.TryAddScoped<NoOpProCursorGateway>();
+        services.RemoveAll<IProCursorGateway>();
+        services.AddScoped<IProCursorGateway>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<ProCursorRemoteOptions>>().Value;
+            return options.IsRemoteEnabled
+                ? sp.GetRequiredService<HttpProCursorGateway>()
+                : sp.GetRequiredService<NoOpProCursorGateway>();
+        });
 
         return services;
     }

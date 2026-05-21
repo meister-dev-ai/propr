@@ -37,7 +37,8 @@ public sealed record EvaluationConfiguration(
     EvaluationAiConnection? AiConnection = null,
     float? Temperature = null,
     bool EnableProRV = true,
-    ReviewAugmentationMode? AugmentationMode = null)
+    ReviewAugmentationMode? AugmentationMode = null,
+    EvaluationProCursorContext? ProCursor = null)
 {
     /// <summary>Protected values that must be resolved before execution begins.</summary>
     public IReadOnlyList<ProtectedValueReference> ProtectedValueReferencesOrEmpty => this.ProtectedValueReferences ?? [];
@@ -51,6 +52,17 @@ public sealed record EvaluationConfiguration(
     /// </summary>
     public ReviewAugmentationMode EffectiveAugmentationMode => this.AugmentationMode
                                                                ?? (this.EnableProRV ? ReviewAugmentationMode.EarlySteering : ReviewAugmentationMode.Disabled);
+}
+
+/// <summary>
+///     Optional ProCursor context used by offline evaluation runs.
+/// </summary>
+public sealed record EvaluationProCursorContext(
+    Guid? ClientId = null,
+    IReadOnlyList<Guid>? KnowledgeSourceIds = null)
+{
+    /// <summary>Selected ProCursor source identifiers to scope offline review queries.</summary>
+    public IReadOnlyList<Guid> KnowledgeSourceIdsOrEmpty => this.KnowledgeSourceIds ?? [];
 }
 
 /// <summary>
