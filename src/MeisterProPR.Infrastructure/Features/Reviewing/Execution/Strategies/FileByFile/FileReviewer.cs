@@ -64,7 +64,7 @@ internal sealed partial class FileReviewer(
 
         var tierPurpose = GetTierPurpose(tier);
 
-        var (tierClient, tierModelId) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
         var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
 
@@ -99,6 +99,7 @@ internal sealed partial class FileReviewer(
                 tier,
                 tierModelId,
                 tierClient,
+                tierCapabilities,
                 effectiveClient,
                 []);
 
@@ -174,6 +175,7 @@ internal sealed partial class FileReviewer(
         FileComplexityTier tier,
         string? tierModelId,
         IChatClient? tierClient,
+        AgentReviewRuntimeCapabilities? tierCapabilities,
         IChatClient effectiveClient,
         IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
@@ -210,6 +212,7 @@ internal sealed partial class FileReviewer(
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
             ProtocolRecorder = protocolId.HasValue ? protocolRecorder : null,
+            PromptOverrides = baseContext.PromptOverrides,
             PerFileHint = new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries)
             {
                 ComplexityTier = tier,
@@ -219,6 +222,8 @@ internal sealed partial class FileReviewer(
             ExclusionRules = baseContext.ExclusionRules,
             DismissedPatterns = baseContext.DismissedPatterns,
             ModelId = tierModelId ?? baseContext.ModelId,
+            RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
+            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = enableProRvForCurrentPass,
             AugmentationMode = baseContext.AugmentationMode,
@@ -253,7 +258,7 @@ internal sealed partial class FileReviewer(
             _ => AiConnectionModelCategory.MediumEffort,
         };
         var tierPurpose = GetTierPurpose(tier);
-        var (tierClient, tierModelId) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
         var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
         var filePr = new PullRequest(
@@ -284,6 +289,7 @@ internal sealed partial class FileReviewer(
             tier,
             tierModelId,
             tierClient,
+            tierCapabilities,
             effectiveClient,
             []);
 
@@ -324,6 +330,8 @@ internal sealed partial class FileReviewer(
             ModelId = baseContext.ModelId,
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
+            RuntimeCapabilities = baseContext.RuntimeCapabilities,
+            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = true,
             AugmentationMode = baseContext.AugmentationMode,
@@ -727,7 +735,7 @@ internal sealed partial class FileReviewer(
         };
     }
 
-    private async Task<(IChatClient? tierClient, string? tierModelId)> ResolveTierClientAsync(
+    private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities)> ResolveTierClientAsync(
         ReviewJob job,
         AiConnectionModelCategory tierCategory,
         AiPurpose tierPurpose,
@@ -735,6 +743,7 @@ internal sealed partial class FileReviewer(
     {
         IChatClient? tierClient = null;
         string? tierModelId = null;
+        AgentReviewRuntimeCapabilities? tierCapabilities = null;
 
         if (aiRuntimeResolver is not null)
         {
@@ -743,11 +752,13 @@ internal sealed partial class FileReviewer(
                 var tierRuntime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, tierPurpose, ct);
                 tierClient = tierRuntime.ChatClient;
                 tierModelId = tierRuntime.Model.RemoteModelId;
+                tierCapabilities = tierRuntime.Capabilities;
             }
             catch
             {
                 tierClient = null;
                 tierModelId = null;
+                tierCapabilities = null;
             }
         }
         else if (aiConnectionRepository is not null && aiClientFactory is not null)
@@ -761,7 +772,7 @@ internal sealed partial class FileReviewer(
             }
         }
 
-        return (tierClient, tierModelId);
+        return (tierClient, tierModelId, tierCapabilities);
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(

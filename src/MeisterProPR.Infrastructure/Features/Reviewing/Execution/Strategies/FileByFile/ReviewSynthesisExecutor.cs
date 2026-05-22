@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -280,88 +281,44 @@ internal sealed class ReviewSynthesisExecutor(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reconciledSummary);
 
+        var sb = new StringBuilder(reconciledSummary.Trim());
+
         if (publishCount == 0 && summaryOnlyItems.Count == 0)
         {
-            return "No publishable or summary-only findings remained after verification.";
-        }
+            sb.AppendLine()
+                .AppendLine()
+                .AppendLine("**No publishable or summary-only findings remained after verification.**");
 
-        var lines = new List<string>();
-        var overview = ExtractGroundedOverview(reconciledSummary);
-        if (!string.IsNullOrWhiteSpace(overview))
-        {
-            lines.Add(overview);
-            lines.Add(string.Empty);
+            return sb.ToString();
         }
 
         if (publishCount > 0)
         {
-            lines.Add($"Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.");
+            sb.AppendLine()
+                .AppendLine()
+                .AppendLine($"**Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.**");
         }
 
         if (summaryOnlyItems.Count > 0)
         {
             if (publishCount == 0)
             {
-                lines.Add("No publishable findings remained after verification.");
+                sb.AppendLine()
+                    .AppendLine()
+                    .AppendLine("**No publishable findings remained after verification.**");
             }
 
-            lines.Add(string.Empty);
-            lines.Add("Summary-only findings:");
-            lines.AddRange(summaryOnlyItems.Select(item => $"- {item}"));
+            sb.AppendLine()
+                .AppendLine()
+                .AppendLine("**Summary-only findings:**");
+
+            foreach (var item in summaryOnlyItems)
+            {
+                sb.AppendLine($"- {item}");
+            }
         }
 
-        return string.Join(
-            Environment.NewLine,
-            lines.Where((line, index) => index == 0 || !(string.IsNullOrEmpty(line) && string.IsNullOrEmpty(lines[index - 1]))));
-    }
-
-    private static string? ExtractGroundedOverview(string summary)
-    {
-        var trimmed = summary.Trim();
-        if (trimmed.Length == 0)
-        {
-            return null;
-        }
-
-        var summaryOnlyIndex = trimmed.IndexOf("Summary-only findings:", StringComparison.Ordinal);
-        if (summaryOnlyIndex >= 0)
-        {
-            trimmed = trimmed[..summaryOnlyIndex].TrimEnd();
-        }
-
-        if (!trimmed.StartsWith("This PR ", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        string[] safeLeadVerbs =
-        [
-            "This PR makes ",
-            "This PR advances ",
-            "This PR moves ",
-            "This PR updates ",
-            "This PR introduces ",
-            "This PR adds ",
-            "This PR broadens ",
-            "This PR expands ",
-            "This PR improves ",
-            "This PR refactors ",
-            "This PR reorganizes ",
-            "This PR changes ",
-        ];
-
-        if (!safeLeadVerbs.Any(verb => trimmed.StartsWith(verb, StringComparison.OrdinalIgnoreCase)))
-        {
-            return null;
-        }
-
-        var contrastIndex = trimmed.IndexOf(", but ", StringComparison.OrdinalIgnoreCase);
-        if (contrastIndex > 0)
-        {
-            return trimmed[..contrastIndex].TrimEnd().TrimEnd('.', ';', ',') + ".";
-        }
-
-        return null;
+        return sb.ToString();
     }
 
     private async Task<Guid?> BeginSynthesisProtocolAsync(

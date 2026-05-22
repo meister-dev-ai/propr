@@ -111,6 +111,50 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
     }
 
     [Fact]
+    public async Task GetJobProtocolAsync_WhenJobContainsSessionFallbackEvent_ReturnsFallbackPayloadUnchanged()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 3, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewAgentSessionFallback,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample =
+                    "{\"fromMode\":\"ProviderManagedSession\",\"toMode\":\"LocalManagedSession\",\"reason\":\"provider_session_continue_failed\",\"turnNumber\":2,\"preservedState\":\"preserved durable system prompts and latest turn transcript\"}",
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+
+        var returnedProtocol = Assert.Single(result!.Protocols);
+        var fallbackEvent = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionFallback);
+        Assert.Contains("provider_session_continue_failed", fallbackEvent.InputTextSample ?? string.Empty);
+        Assert.Contains("LocalManagedSession", fallbackEvent.InputTextSample ?? string.Empty);
+        Assert.Null(fallbackEvent.OutputSummary);
+    }
+
+    [Fact]
     public async Task GetJobProtocolAsync_WhenFollowUpDependencyExistsWithoutCompletedResult_StillProjectsDependencyAndIncompleteCompletion()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 13, 1);

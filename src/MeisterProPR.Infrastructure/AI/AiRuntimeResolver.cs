@@ -29,7 +29,8 @@ public sealed class AiRuntimeResolver(
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
         var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
-        return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, client);
+        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding);
+        return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, client, capabilities);
     }
 
     public async Task<IResolvedAiEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(

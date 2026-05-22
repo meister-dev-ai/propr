@@ -11,6 +11,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -517,6 +518,233 @@ public class ToolAwareAiReviewCoreTests
         Assert.NotNull(context.LoopMetrics);
         Assert.Equal(0, context.LoopMetrics!.ToolCallCount); // no tool calls
         Assert.NotNull(context.LoopMetrics.ConfidenceEvaluationsJson); // confidence was recorded
+        Assert.Equal(AgentReviewSessionMode.StatelessReplay, context.LoopMetrics.SessionMode);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithProviderManagedSession_UsesConversationIdAndRecordsSessionMetrics()
+    {
+        var capturedMessages = new List<List<ChatMessage>>();
+        var capturedConversationIds = new List<string?>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Do<ChatOptions?>(options => capturedConversationIds.Add(options?.ConversationId)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new ChatResponse(CreateFunctionCallResponse("call-1", "get_changed_files", "{}").Messages)
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-1",
+                },
+                _ => new ChatResponse(CreateFinalReviewResponse("Done.").Messages)
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-2",
+                });
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var context = CreateContext(mockTools);
+        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, false, true);
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        Assert.Equal(2, capturedConversationIds.Count);
+        Assert.Null(capturedConversationIds[0]);
+        Assert.Equal("conv-1", capturedConversationIds[1]);
+        Assert.Equal(2, capturedMessages.Count);
+        var continuationMessages = capturedMessages[1];
+        var toolMessage = Assert.Single(continuationMessages);
+        Assert.Equal(ChatRole.Tool, toolMessage.Role);
+        Assert.Single(toolMessage.Contents.OfType<FunctionResultContent>());
+        Assert.NotNull(context.ReviewSession);
+        Assert.Equal(AgentReviewSessionMode.ProviderManagedSession, context.ReviewSession!.Mode);
+        Assert.Equal("conv-1", context.ReviewSession.ContinuationHandle?.ProviderSessionId);
+        Assert.Equal("resp-2", context.ReviewSession.ContinuationHandle?.ProviderResponseId);
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(AgentReviewSessionMode.ProviderManagedSession, context.LoopMetrics!.SessionMode);
+        Assert.NotNull(context.LoopMetrics.TurnsJson);
+        Assert.Equal("conv-1", context.LoopMetrics.ProviderConversationId);
+        Assert.Equal("resp-2", context.LoopMetrics.ProviderResponseId);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_PerFileSession_CompactsReplayAndUsesWorkingMemorySummary()
+    {
+        var capturedMessages = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns([new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]);
+
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "code", "+code");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
+            [file]);
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, pr.AllPrFileSummaries),
+        };
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(pr, context);
+
+        Assert.Equal(2, capturedMessages.Count);
+        var secondTurnMessages = capturedMessages[1];
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.System &&
+                       (message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false));
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.Tool);
+        Assert.NotNull(context.ReviewSession);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession!.Mode);
+        Assert.NotEmpty(context.ReviewSession.WorkingMemory);
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.LoopMetrics!.SessionMode);
+        Assert.Contains("DeltaContext", context.LoopMetrics.TurnsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ProviderManagedFailure_DowngradesAndRecordsFallback()
+    {
+        var capturedConversationIds = new List<string?>();
+        var capturedMessages = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Do<ChatOptions?>(options => capturedConversationIds.Add(options?.ConversationId)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new ChatResponse(CreateFunctionCallResponse("call-1", "get_changed_files", "{}").Messages)
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-1",
+                },
+                _ => throw new InvalidOperationException("provider continuation failed"),
+                _ => new ChatResponse(CreateFinalReviewResponse("Done after downgrade.").Messages));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+            RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, false, true),
+        };
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        Assert.True(capturedConversationIds.Count >= 3);
+        Assert.Equal("conv-1", capturedConversationIds[1]);
+        Assert.Null(capturedConversationIds[2]);
+        Assert.Contains(capturedMessages[2], message => message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Contains(capturedMessages[2], message => message.Role == ChatRole.Tool);
+        Assert.NotNull(context.ReviewSession);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession!.Mode);
+        Assert.Single(context.ReviewSession.Fallbacks);
+        Assert.Equal(AgentReviewSessionMode.ProviderManagedSession, context.ReviewSession.Fallbacks[0].FromMode);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession.Fallbacks[0].ToMode);
+        Assert.NotNull(context.LoopMetrics);
+        Assert.NotNull(context.LoopMetrics!.FallbacksJson);
+        Assert.Contains("provider_session_continue_failed", context.LoopMetrics.FallbacksJson, StringComparison.Ordinal);
+        await recorder.Received()
+            .RecordReviewStrategyEventAsync(
+                protocolId,
+                ReviewProtocolEventNames.ReviewAgentSessionFallback,
+                Arg.Is<string?>(json => json != null && json.Contains("provider_session_continue_failed", StringComparison.Ordinal)),
+                Arg.Is<string?>(value => value == null),
+                Arg.Is<string?>(value => value == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ProviderManagedRepeatedToolOnlyTurn_DowngradesBeforeForcedFinal()
+    {
+        var capturedConversationIds = new List<string?>();
+        var capturedMessages = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Do<ChatOptions?>(options => capturedConversationIds.Add(options?.ConversationId)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new ChatResponse(CreateFunctionCallResponse("call-1", "get_changed_files", "{}").Messages)
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-1",
+                },
+                _ => new ChatResponse(CreateFunctionCallResponse("call-1", "get_changed_files", "{}").Messages)
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-2",
+                },
+                _ => CreateFinalReviewResponse("Done after forced final."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var context = CreateContext(mockTools);
+        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, false, true);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(2),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        Assert.Equal(3, capturedConversationIds.Count);
+        Assert.Null(capturedConversationIds[2]);
+        Assert.DoesNotContain(capturedMessages[2], message => message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession!.Mode);
+        Assert.Contains(
+            context.ReviewSession.Fallbacks,
+            fallback => fallback.Reason == "provider_session_forced_final_after_unhandled_tool_call");
     }
 
     [Fact]
@@ -592,6 +820,50 @@ public class ToolAwareAiReviewCoreTests
     }
 
     [Fact]
+    public async Task ReviewAsync_WithToolOnlyResponseAndEmptyText_RecordsFunctionCallSummary()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var toolOnlyResponse = CreateMixedTextAndFunctionCallResponse("", "call-1", "get_changed_files", "{}");
+        var finalResponse = CreateFinalReviewResponse("Done.");
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(toolOnlyResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received()
+            .RecordAiCallAsync(
+                protocolId,
+                1,
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                "[tool calls: get_changed_files]",
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReviewAsync_WithToolCallAndProtocolRecorder_RecordsToolCallEvent()
     {
         // Arrange
@@ -641,6 +913,45 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 1,
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ForcedFinalMalformedJson_RequestsRepairAndReturnsParsedResult()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var toolCallResponse = CreateFunctionCallResponse("call-1", "get_changed_files", "{}");
+        const string malformedFinal = "{\"summary\":\"Broken \"json\"\",\"comments\":[]";
+        const string repairedFinal =
+            """
+            {"summary":"Broken \"json\"","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}
+            """;
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                toolCallResponse,
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, malformedFinal)),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, repairedFinal)));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(1),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        Assert.Equal("Broken \"json\"", result.Summary);
+        await mockClient.Received(3)
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
     }
 
@@ -1004,9 +1315,10 @@ public class ToolAwareAiReviewCoreTests
         // On iteration 2+, only one System message (per-file context; global dropped)
         var iter2Messages = capturedCallArgs[1];
         var iter2SystemMsgs = iter2Messages.Where(m => m.Role == ChatRole.System).ToList();
-        Assert.Single(iter2SystemMsgs);
+        Assert.Equal(2, iter2SystemMsgs.Count);
         Assert.DoesNotContain(expectedGlobalSystemPrompt, iter2SystemMsgs[0].Text ?? "");
         Assert.Contains("src/Foo.cs", iter2SystemMsgs[0].Text ?? "");
+        Assert.Contains("Working memory summary for prior bulky context:", iter2SystemMsgs[1].Text ?? "", StringComparison.Ordinal);
     }
 
     // T017 — RecordToolCallAsync receives iteration equal to current loop count

@@ -561,6 +561,10 @@
                             <h4>Output</h4>
                             <span v-if="selectedMergedEvent.callDetails.kind === 'aiCall'" class="ai-disclaimer"><i class="fi fi-rr-magic-wand"></i> AI-generated content</span>
                         </div>
+                        <div v-if="selectedAiCallProviderManagedNote" class="provider-managed-note">
+                            <i class="fi fi-rr-info"></i>
+                            <span>{{ selectedAiCallProviderManagedNote }}</span>
+                        </div>
                         <template v-if="selectedMergedEvent.resultDetails">
                             <div v-if="parsedOutputResult" class="parsed-json-block">
                                 <template v-if="selectedCommentRelevanceOutput">
@@ -1593,6 +1597,52 @@ const parsedOutputResult = computed(() => {
         return null;
     }
 });
+
+const selectedAiCallSessionTurn = computed(() => {
+    if (!activePass.value?.events?.length || !selectedMergedEvent.value) {
+        return null
+    }
+
+    const selectedIndex = activePass.value.events.findIndex(event => event.id === selectedMergedEvent.value?.callDetails.id)
+    if (selectedIndex < 0) {
+        return null
+    }
+
+    for (let i = selectedIndex + 1; i < activePass.value.events.length; i++) {
+        const event = activePass.value.events[i]
+        if (event.name === 'review_agent_session_turn') {
+            return event
+        }
+
+        if (event.kind === 'AiCall') {
+            break
+        }
+    }
+
+    return null
+})
+
+const selectedAiCallProviderManagedNote = computed(() => {
+    if ((selectedMergedEvent.value?.callDetails.kind ?? '').toLowerCase() !== 'aicall') {
+        return null
+    }
+
+    const sessionTurn = selectedAiCallSessionTurn.value
+    if (!sessionTurn?.inputTextSample) {
+        return null
+    }
+
+    try {
+        const parsed = JSON.parse(sessionTurn.inputTextSample)
+        if (parsed?.sessionMode !== 'ProviderManagedSession') {
+            return null
+        }
+
+        return 'Provider-managed session: this input/output panel shows only the local delta sent for this turn. Token counts may be higher because the provider accounts for the full continued conversation it retained server-side.'
+    } catch {
+        return null
+    }
+})
 
 const commentRelevanceEventNames = new Set([
     'comment_relevance_filter_output',
@@ -3551,6 +3601,24 @@ function formatConfidence(val: number | string | null | undefined): string {
     font-size: 0.75rem;
     color: var(--color-accent);
     font-weight: 500;
+}
+.provider-managed-note {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.22);
+    background: rgba(59, 130, 246, 0.08);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+.provider-managed-note i {
+    color: #60a5fa;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
 }
 .error-block {
     color: var(--color-danger);

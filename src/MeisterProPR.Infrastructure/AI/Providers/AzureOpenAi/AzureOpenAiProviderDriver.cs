@@ -5,6 +5,7 @@ using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
@@ -87,6 +88,21 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         return binding.ProtocolMode == AiProtocolMode.ChatCompletions
             ? client.GetChatClient(model.RemoteModelId).AsIChatClient()
             : client.GetResponsesClient().AsIChatClient();
+    }
+
+    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding)
+    {
+        _ = connection;
+        _ = model;
+
+        var usesResponses = binding.ProtocolMode != AiProtocolMode.ChatCompletions;
+        return new AgentReviewRuntimeCapabilities(
+            usesResponses,
+            usesResponses,
+            usesResponses);
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(

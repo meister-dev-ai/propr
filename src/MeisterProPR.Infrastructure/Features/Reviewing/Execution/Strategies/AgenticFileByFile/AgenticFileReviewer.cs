@@ -65,7 +65,7 @@ internal sealed partial class AgenticFileReviewer(
 
         var tierPurpose = GetTierPurpose(tier);
 
-        var (tierClient, tierModelId) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
         var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
 
@@ -100,6 +100,7 @@ internal sealed partial class AgenticFileReviewer(
                 tier,
                 tierModelId,
                 tierClient,
+                tierCapabilities,
                 effectiveClient,
                 []);
 
@@ -179,6 +180,7 @@ internal sealed partial class AgenticFileReviewer(
         FileComplexityTier tier,
         string? tierModelId,
         IChatClient? tierClient,
+        AgentReviewRuntimeCapabilities? tierCapabilities,
         IChatClient effectiveClient,
         IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
@@ -225,11 +227,14 @@ internal sealed partial class AgenticFileReviewer(
             DismissedPatterns = baseContext.DismissedPatterns,
             PromptOverrides = baseContext.PromptOverrides,
             ModelId = tierModelId ?? baseContext.ModelId,
+            RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
+            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = enableProRvForCurrentPass,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
+            SkippedSteps = baseContext.SkippedSteps,
             TierChatClient = tierClient ?? effectiveClient,
         };
 
@@ -270,12 +275,15 @@ internal sealed partial class AgenticFileReviewer(
             ModelId = fileContext.ModelId,
             DefaultReviewChatClient = fileContext.DefaultReviewChatClient,
             DefaultReviewModelId = fileContext.DefaultReviewModelId,
+            RuntimeCapabilities = fileContext.RuntimeCapabilities,
+            ReviewSession = fileContext.ReviewSession,
             Temperature = fileContext.Temperature,
             EnableProRV = fileContext.EnableProRV,
             AugmentationMode = fileContext.AugmentationMode,
             PassKind = fileContext.PassKind,
             PerFileHint = hint is null ? null : hint with { AgenticPlan = plan, AgenticInvestigations = investigations },
             PromptExperiment = fileContext.PromptExperiment,
+            SkippedSteps = fileContext.SkippedSteps,
         };
     }
 
@@ -298,7 +306,7 @@ internal sealed partial class AgenticFileReviewer(
             _ => AiConnectionModelCategory.MediumEffort,
         };
         var tierPurpose = GetTierPurpose(tier);
-        var (tierClient, tierModelId) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
         var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
         var filePr = new PullRequest(
@@ -329,6 +337,7 @@ internal sealed partial class AgenticFileReviewer(
             tier,
             tierModelId,
             tierClient,
+            tierCapabilities,
             effectiveClient,
             []);
 
@@ -372,12 +381,15 @@ internal sealed partial class AgenticFileReviewer(
             ModelId = baseContext.ModelId,
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
+            RuntimeCapabilities = baseContext.RuntimeCapabilities,
+            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = true,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
             PromptExperiment = baseContext.PromptExperiment,
+            SkippedSteps = baseContext.SkippedSteps,
         };
     }
 
@@ -1608,7 +1620,7 @@ internal sealed partial class AgenticFileReviewer(
         };
     }
 
-    private async Task<(IChatClient? tierClient, string? tierModelId)> ResolveTierClientAsync(
+    private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities)> ResolveTierClientAsync(
         ReviewJob job,
         AiConnectionModelCategory tierCategory,
         AiPurpose tierPurpose,
@@ -1616,6 +1628,7 @@ internal sealed partial class AgenticFileReviewer(
     {
         IChatClient? tierClient = null;
         string? tierModelId = null;
+        AgentReviewRuntimeCapabilities? tierCapabilities = null;
 
         if (aiRuntimeResolver is not null)
         {
@@ -1624,11 +1637,13 @@ internal sealed partial class AgenticFileReviewer(
                 var tierRuntime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, tierPurpose, ct);
                 tierClient = tierRuntime.ChatClient;
                 tierModelId = tierRuntime.Model.RemoteModelId;
+                tierCapabilities = tierRuntime.Capabilities;
             }
             catch
             {
                 tierClient = null;
                 tierModelId = null;
+                tierCapabilities = null;
             }
         }
         else if (aiConnectionRepository is not null && aiClientFactory is not null)
@@ -1642,7 +1657,7 @@ internal sealed partial class AgenticFileReviewer(
             }
         }
 
-        return (tierClient, tierModelId);
+        return (tierClient, tierModelId, tierCapabilities);
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(

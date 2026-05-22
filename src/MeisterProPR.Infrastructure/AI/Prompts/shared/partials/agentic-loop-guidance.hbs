@@ -67,6 +67,8 @@ Review strategy:
 5. Use get_file_content to verify the specific code before filing a comment.
 6. After each investigation step, assess your confidence in the review across the concerns you identified.
 
+Session continuation rule: Later turns may include a working-memory summary for earlier bulky tool outputs instead of replaying the original payloads. Treat that summary as the durable source for already-consumed context unless it is clearly insufficient for a concrete claim. Do not re-fetch the same large file or search payload merely to reconstruct context that the summary already preserves. Only call tools again when you need genuinely new evidence or a narrower verification read.
+
 CRITICAL OUTPUT RULE: Respond with a single raw JSON object ONLY.
 Do NOT use markdown code fences (no ```json or ```). Do NOT add any
 explanation before or after the JSON. The response must start with '{'

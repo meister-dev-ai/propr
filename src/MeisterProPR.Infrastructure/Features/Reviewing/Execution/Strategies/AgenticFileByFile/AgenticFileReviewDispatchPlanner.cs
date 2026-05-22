@@ -129,12 +129,15 @@ internal sealed class AgenticFileReviewDispatchPlanner(
             ModelId = baseContext.ModelId,
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
+            RuntimeCapabilities = baseContext.RuntimeCapabilities,
+            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = false,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PerFileHint = baseContext.PerFileHint,
             PromptExperiment = baseContext.PromptExperiment,
+            SkippedSteps = baseContext.SkippedSteps,
         };
     }
 

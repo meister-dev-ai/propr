@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 
@@ -27,6 +28,12 @@ public interface IAiProviderDriver
 
     /// <summary>Creates a chat client for one resolved model binding.</summary>
     IChatClient CreateChatClient(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding);
+
+    /// <summary>Gets session-related chat runtime capabilities for one resolved model binding.</summary>
+    AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding);

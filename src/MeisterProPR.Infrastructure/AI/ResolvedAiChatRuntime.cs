@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.Extensions.AI;
 
@@ -14,4 +15,5 @@ public sealed record ResolvedAiChatRuntime(
     AiConnectionDto Connection,
     AiConfiguredModelDto Model,
     AiPurposeBindingDto Binding,
-    IChatClient ChatClient) : IResolvedAiChatRuntime;
+    IChatClient ChatClient,
+    AgentReviewRuntimeCapabilities Capabilities) : IResolvedAiChatRuntime;

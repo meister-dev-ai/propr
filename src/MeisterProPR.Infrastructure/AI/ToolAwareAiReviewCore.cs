@@ -75,12 +75,15 @@ public sealed partial class ToolAwareAiReviewCore(
                     pullRequest.TargetBranch,
                     systemContext)
                 : ReviewPrompts.BuildUserMessage(pullRequest);
+
+            state.SetPersistentMessages(state.Messages);
         }
         else
         {
             // Whole-PR review path (default)
             state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildSystemPrompt(systemContext)));
             userMessage = ReviewPrompts.BuildUserMessage(pullRequest);
+            state.SetPersistentMessages(state.Messages);
         }
 
         state.Messages.Add(new ChatMessage(ChatRole.User, userMessage));
@@ -117,6 +120,9 @@ public sealed partial class ToolAwareAiReviewCore(
             Tools = registeredTools.Count > 0 ? [.. registeredTools] : null,
         };
 
+        state.InitializeSession(ResolveInitialSessionMode(systemContext));
+        systemContext.ReviewSession = state.Session;
+
         var lastTextResponse = "";
         var seenAssistantTurns = new HashSet<string>(StringComparer.Ordinal);
 
@@ -147,30 +153,48 @@ public sealed partial class ToolAwareAiReviewCore(
             {
                 LogIterationStarted(logger, state.Iteration, effectiveMaxIterations);
 
-                // On iterations 2+, exclude the global persona system message (index 0) from the per-file
-                // review path to avoid retransmitting the large static prompt on every loop turn.
-                var messagesToSend = state.Iteration > 1 && systemContext.PerFileHint is not null
-                    ? (IList<ChatMessage>)state.Messages.Skip(1).ToList()
-                    : state.Messages;
+                ApplySessionModeToOptions(chatOptions, state);
+                var messagesToSend = BuildMessagesForCurrentTurn(state, systemContext);
 
                 // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
                 // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
                 var inputSample = GetInputSample(messagesToSend);
                 var systemPrompt = GetSystemPrompt(messagesToSend);
 
-                var response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
-                state.Messages.AddRange(response.Messages);
+                ChatResponse response;
+                try
+                {
+                    response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
+                }
+                catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
+                {
+                    ApplySessionModeToOptions(chatOptions, state);
+                    messagesToSend = BuildMessagesForCurrentTurn(state, systemContext);
+                    inputSample = GetInputSample(messagesToSend);
+                    systemPrompt = GetSystemPrompt(messagesToSend);
+                    response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
+                }
+
+                AppendResponseToState(state, response);
                 var responseMessage = response.Messages.Last();
 
                 var inputTokens = response.Usage?.InputTokenCount;
                 var outputTokens = response.Usage?.OutputTokenCount;
                 state.AccumulateTokens(inputTokens, outputTokens);
+                state.UpdateContinuationHandle(CreateContinuationHandle(response, state), response.ContinuationToken);
+                state.RecordTurn(
+                    state.Session.Mode == AgentReviewSessionMode.StatelessReplay
+                        ? ReviewTurnContextStrategy.FullContext
+                        : ReviewTurnContextStrategy.DeltaContext,
+                    inputSample,
+                    inputTokens,
+                    outputTokens);
+                systemContext.ReviewSession = state.Session;
 
                 if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
                 {
-                    // When the response is function calls only, .Text is null; summarise the calls instead.
-                    var outputSample = responseMessage.Text
-                                       ?? GetFunctionCallSummary(responseMessage);
+                    // Function-call-only turns can surface as null or empty text depending on provider/client.
+                    var outputSample = GetOutputSample(responseMessage);
                     await systemContext.ProtocolRecorder.RecordAiCallAsync(
                         systemContext.ActiveProtocolId.Value,
                         state.Iteration,
@@ -180,6 +204,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         systemPrompt,
                         outputSample,
                         cancellationToken);
+                    await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
                 }
 
                 var functionCalls = responseMessage.Contents.OfType<FunctionCallContent>().ToList();
@@ -221,6 +246,12 @@ public sealed partial class ToolAwareAiReviewCore(
                     }
 
                     state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
+                    if (state.Session.Mode == AgentReviewSessionMode.LocalManagedSession)
+                    {
+                        state.CompactReplayHistory();
+                        systemContext.ReviewSession = state.Session;
+                    }
+
                     state.Iteration++;
                     continue;
                 }
@@ -261,6 +292,8 @@ public sealed partial class ToolAwareAiReviewCore(
             if (string.IsNullOrWhiteSpace(lastTextResponse))
             {
                 LogForcingFinalReview(logger, pullRequest.PullRequestId, state.Iteration);
+                PrepareForForcedFinalTurn(state);
+                systemContext.ReviewSession = state.Session;
                 state.Messages.Add(
                     new ChatMessage(
                         ChatRole.User,
@@ -272,10 +305,11 @@ public sealed partial class ToolAwareAiReviewCore(
                 var finalOptions = new ChatOptions
                     { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
                 var finalResponse = await effectiveClient.GetResponseAsync(
-                    state.Messages,
+                    BuildMessagesForForcedFinalTurn(state),
                     finalOptions,
                     cancellationToken);
                 state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
+                state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
                 lastTextResponse = finalResponse.Text ?? "";
 
                 if (string.IsNullOrWhiteSpace(lastTextResponse))
@@ -286,47 +320,23 @@ public sealed partial class ToolAwareAiReviewCore(
                 }
             }
 
-            // Schema-correction pass: if the model responded with content but omitted the
-            // 'comments' key entirely (null = key absent = wrong schema invented by the model),
-            // inject one corrective prompt so it reformats into the required structure.
-            // 'Comments == null' distinguishes wrong-schema from a legitimate empty array,
-            // but only fire for non-trivial responses (> 200 chars) to avoid false positives.
-            if (ResponseNeedsSchemaCorrection(lastTextResponse))
-            {
-                LogForcingSchemaCorrection(logger, pullRequest.PullRequestId, state.Iteration);
-                state.Messages.Add(new ChatMessage(ChatRole.Assistant, lastTextResponse));
-                state.Messages.Add(
-                    new ChatMessage(
-                        ChatRole.User,
-                        "Your previous response used the wrong output schema. You MUST reformat it now. " +
-                        "Output a single raw JSON object with EXACTLY these keys: " +
-                        "\"summary\" (plain string), " +
-                        "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}), " +
-                        "\"confidence_evaluations\" (array), " +
-                        "\"investigation_complete\": true, " +
-                        "\"loop_complete\": true. " +
-                        "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
-                var correctionOptions = new ChatOptions
-                    { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
-                var correctionResponse = await effectiveClient.GetResponseAsync(
-                    state.Messages,
-                    correctionOptions,
-                    cancellationToken);
-                state.AccumulateTokens(
-                    correctionResponse.Usage?.InputTokenCount,
-                    correctionResponse.Usage?.OutputTokenCount);
-                var corrected = correctionResponse.Text ?? "";
-                if (!string.IsNullOrWhiteSpace(corrected))
-                {
-                    lastTextResponse = corrected;
-                }
-            }
+            lastTextResponse = await this.RepairFinalResponseIfNeededAsync(
+                effectiveClient,
+                state,
+                chatOptions,
+                effectiveModelId,
+                systemContext,
+                pullRequest.PullRequestId,
+                lastTextResponse,
+                cancellationToken);
 
             activity?.SetTag("loop.iterations", state.Iteration);
             activity?.SetTag("loop.tool_calls", state.ToolCallCount);
 
             LogReviewLoopFinished(logger, pullRequest.PullRequestId, state.Iteration, state.ToolCallCount);
 
+            state.MarkCompleted();
+            systemContext.ReviewSession = state.Session;
             systemContext.LoopMetrics = BuildLoopMetrics(state);
 
             return ParseReviewResult(lastTextResponse);
@@ -334,8 +344,339 @@ public sealed partial class ToolAwareAiReviewCore(
         finally
         {
             // Ensure metrics are always captured so callers can record accurate stats even on failure.
+            if (systemContext.ReviewSession is not { Status: AgentReviewSessionStatus.Completed })
+            {
+                state.MarkFailed();
+                systemContext.ReviewSession = state.Session;
+            }
+
             systemContext.LoopMetrics ??= BuildLoopMetrics(state);
         }
+    }
+
+    private async Task<string> RepairFinalResponseIfNeededAsync(
+        IChatClient effectiveClient,
+        ReviewLoopState state,
+        ChatOptions chatOptions,
+        string effectiveModelId,
+        ReviewSystemContext systemContext,
+        int pullRequestId,
+        string lastTextResponse,
+        CancellationToken cancellationToken)
+    {
+        if (!NeedsFinalResponseRepair(lastTextResponse))
+        {
+            return lastTextResponse;
+        }
+
+        LogForcingSchemaCorrection(logger, pullRequestId, state.Iteration);
+        state.Messages.Add(new ChatMessage(ChatRole.Assistant, lastTextResponse));
+        state.Messages.Add(
+            new ChatMessage(
+                ChatRole.User,
+                "Your previous response was invalid for the required final review output. You MUST reformat it now. " +
+                "Output a single raw JSON object with EXACTLY these keys: " +
+                "\"summary\" (plain string), " +
+                "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}), " +
+                "\"confidence_evaluations\" (array), " +
+                "\"investigation_complete\": true, " +
+                "\"loop_complete\": true. " +
+                "The response must start with '{' and end with '}'. No markdown fences. No other keys."));
+
+        var correctionOptions = new ChatOptions
+            { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
+        var correctionResponse = await effectiveClient.GetResponseAsync(
+            state.Messages,
+            correctionOptions,
+            cancellationToken);
+        state.AccumulateTokens(
+            correctionResponse.Usage?.InputTokenCount,
+            correctionResponse.Usage?.OutputTokenCount);
+
+        var corrected = correctionResponse.Text ?? string.Empty;
+        return string.IsNullOrWhiteSpace(corrected)
+            ? lastTextResponse
+            : corrected;
+    }
+
+    private static AgentReviewSessionMode ResolveInitialSessionMode(ReviewSystemContext systemContext)
+    {
+        return systemContext.RuntimeCapabilities.SupportsProviderManagedSessions
+            ? AgentReviewSessionMode.ProviderManagedSession
+            : systemContext.PerFileHint is not null
+                ? AgentReviewSessionMode.LocalManagedSession
+                : AgentReviewSessionMode.StatelessReplay;
+    }
+
+    private static void ApplySessionModeToOptions(ChatOptions chatOptions, ReviewLoopState state)
+    {
+        chatOptions.ConversationId = null;
+        chatOptions.ContinuationToken = null;
+
+        if (state.Session.Mode != AgentReviewSessionMode.ProviderManagedSession)
+        {
+            return;
+        }
+
+        var handle = state.Session.ContinuationHandle;
+        if (!string.IsNullOrWhiteSpace(handle?.ProviderSessionId))
+        {
+            chatOptions.ConversationId = handle.ProviderSessionId;
+        }
+
+        if (state.ProviderContinuationToken is not null)
+        {
+            chatOptions.ContinuationToken = state.ProviderContinuationToken;
+        }
+    }
+
+    private static IList<ChatMessage> BuildMessagesForCurrentTurn(ReviewLoopState state, ReviewSystemContext systemContext)
+    {
+        return state.Session.Mode switch
+        {
+            AgentReviewSessionMode.ProviderManagedSession => BuildProviderManagedMessages(state, systemContext),
+            AgentReviewSessionMode.LocalManagedSession => BuildLocalManagedMessages(state, systemContext),
+            _ => BuildStatelessReplayMessages(state, systemContext),
+        };
+    }
+
+    private static IList<ChatMessage> BuildProviderManagedMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    {
+        if (state.Iteration == 1 || state.Session.ContinuationHandle is null)
+        {
+            return BuildStatelessReplayMessages(state, systemContext);
+        }
+
+        return GetProviderContinuationMessages(state);
+    }
+
+    private static IList<ChatMessage> BuildLocalManagedMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    {
+        if (state.Iteration == 1)
+        {
+            return BuildStatelessReplayMessages(state, systemContext);
+        }
+
+        var messages = state.PersistentMessages.ToList();
+        if (systemContext.PerFileHint is not null && messages.Count > 0)
+        {
+            messages = messages.Skip(1).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(state.CompactedPayloadSummary))
+        {
+            messages.Add(
+                new ChatMessage(
+                    ChatRole.System,
+                    $"Working memory summary for prior bulky context: {state.CompactedPayloadSummary}"));
+        }
+
+        messages.AddRange(GetContinuationMessages(state));
+
+        return messages;
+    }
+
+    private static IList<ChatMessage> BuildStatelessReplayMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    {
+        return state.Iteration > 1 && systemContext.PerFileHint is not null
+            ? (IList<ChatMessage>)state.Messages.Skip(1).ToList()
+            : state.Messages;
+    }
+
+    private static IList<ChatMessage> BuildMessagesForForcedFinalTurn(ReviewLoopState state)
+    {
+        return state.Session.Mode == AgentReviewSessionMode.ProviderManagedSession && state.Messages.Count > 0
+            ? [state.Messages[^1]]
+            : state.Messages;
+    }
+
+    private static void PrepareForForcedFinalTurn(ReviewLoopState state)
+    {
+        if (!HasDanglingFunctionCall(state.Messages))
+        {
+            return;
+        }
+
+        state.Messages.RemoveAt(state.Messages.Count - 1);
+        if (state.Session.Mode == AgentReviewSessionMode.ProviderManagedSession)
+        {
+            state.RecordFallback(
+                AgentReviewSessionMode.LocalManagedSession,
+                "provider_session_forced_final_after_unhandled_tool_call",
+                "dropped unresolved provider tool call before forced final response");
+        }
+    }
+
+    private static IList<ChatMessage> GetContinuationMessages(ReviewLoopState state)
+    {
+        if (state.Messages.Count == 0)
+        {
+            return [];
+        }
+
+        var transientStartIndex = Math.Min(state.PersistentMessages.Count, state.Messages.Count);
+        var transientMessages = state.Messages.Skip(transientStartIndex).ToList();
+        if (transientMessages.Count > 0)
+        {
+            return transientMessages;
+        }
+
+        return [state.Messages[^1]];
+    }
+
+    private static IList<ChatMessage> GetProviderContinuationMessages(ReviewLoopState state)
+    {
+        if (state.Messages.Count == 0)
+        {
+            return [];
+        }
+
+        // Provider-managed sessions already retain earlier user/assistant turns server-side.
+        // Follow-up requests should submit only the newly produced local continuation message,
+        // typically the tool result that answers the provider's last function call.
+        var latestMessage = state.Messages[^1];
+        return latestMessage.Role == ChatRole.System
+            ? []
+            : [latestMessage];
+    }
+
+    private static bool HasDanglingFunctionCall(IReadOnlyList<ChatMessage> messages)
+    {
+        if (messages.Count == 0)
+        {
+            return false;
+        }
+
+        var latestMessage = messages[^1];
+        return latestMessage.Role == ChatRole.Assistant &&
+               latestMessage.Contents.OfType<FunctionCallContent>().Any() &&
+               !latestMessage.Contents.OfType<FunctionResultContent>().Any();
+    }
+
+    private static void AppendResponseToState(ReviewLoopState state, ChatResponse response)
+    {
+        if (state.Session.Mode == AgentReviewSessionMode.ProviderManagedSession &&
+            state.Iteration > 1 &&
+            state.Session.ContinuationHandle is not null)
+        {
+            state.Messages.Clear();
+            state.Messages.AddRange(state.PersistentMessages);
+        }
+
+        state.Messages.AddRange(response.Messages);
+    }
+
+    private static SessionContinuationHandle? CreateContinuationHandle(ChatResponse response, ReviewLoopState state)
+    {
+        if (state.Session.Mode != AgentReviewSessionMode.ProviderManagedSession)
+        {
+            return null;
+        }
+
+        var previousHandle = state.Session.ContinuationHandle;
+        var conversationId = response.ConversationId;
+        var responseId = response.ResponseId;
+        var providerSessionId = conversationId ?? previousHandle?.ProviderSessionId;
+        var providerResponseId = responseId ?? previousHandle?.ProviderResponseId;
+
+        if (string.IsNullOrWhiteSpace(providerSessionId) && string.IsNullOrWhiteSpace(providerResponseId))
+        {
+            return previousHandle;
+        }
+
+        return new SessionContinuationHandle(
+            !string.IsNullOrWhiteSpace(providerSessionId)
+                ? SessionContinuationHandleType.ProviderSession
+                : SessionContinuationHandleType.ProviderResponseChain,
+            providerSessionId ?? providerResponseId,
+            providerSessionId,
+            providerResponseId,
+            DateTimeOffset.UtcNow);
+    }
+
+    private bool TryDowngradeProviderManagedSession(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        Exception ex)
+    {
+        if (state.Session.Mode != AgentReviewSessionMode.ProviderManagedSession)
+        {
+            return false;
+        }
+
+        state.RecordFallback(
+            AgentReviewSessionMode.LocalManagedSession,
+            state.Iteration == 1 ? "provider_session_create_failed" : "provider_session_continue_failed",
+            "preserved durable system prompts and latest turn transcript");
+        state.SetPersistentMessages(state.PersistentMessages.Count > 0 ? state.PersistentMessages : state.Messages);
+        systemContext.ReviewSession = state.Session;
+        LogProviderManagedSessionDowngraded(logger, state.Iteration, ex.Message);
+        return true;
+    }
+
+    private static async Task RecordSessionTurnEventAsync(
+        ReviewSystemContext systemContext,
+        ReviewLoopState state,
+        string? inputSample,
+        string? outputSample,
+        CancellationToken cancellationToken)
+    {
+        if (!systemContext.ActiveProtocolId.HasValue || systemContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        var latestTurn = state.TurnHistory.Count > 0 ? state.TurnHistory[^1] : null;
+        await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            systemContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ReviewAgentSessionTurn,
+            JsonSerializer.Serialize(
+                new
+                {
+                    turnNumber = latestTurn?.TurnNumber ?? state.Iteration,
+                    sessionMode = state.Session.Mode,
+                    contextStrategy = latestTurn?.ContextStrategy,
+                    newInputSummary = latestTurn?.NewInputSummary ?? inputSample,
+                    replayedPayloadSummary = latestTurn?.ReplayedPayloadSummary,
+                    compactedPayloadSummary = latestTurn?.CompactedPayloadSummary,
+                    providerSessionId = latestTurn?.ProviderSessionId,
+                    providerResponseId = latestTurn?.ProviderResponseId,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    outputSample,
+                    continuationHandle = latestTurn?.ContinuationHandle,
+                }),
+            null,
+            cancellationToken);
+
+        if (state.Session.Fallbacks.Count == 0)
+        {
+            return;
+        }
+
+        var fallback = state.Session.Fallbacks[^1];
+        if (fallback.TurnNumber != state.Iteration)
+        {
+            return;
+        }
+
+        await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            systemContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ReviewAgentSessionFallback,
+            JsonSerializer.Serialize(
+                new
+                {
+                    fromMode = fallback.FromMode,
+                    toMode = fallback.ToMode,
+                    fallback.Reason,
+                    fallback.TurnNumber,
+                    fallback.PreservedState,
+                }),
+            null,
+            null,
+            cancellationToken);
     }
 
     private static List<AIFunction> BuildTools(IReviewContextTools? reviewTools, CancellationToken cancellationToken)
@@ -598,6 +939,13 @@ public sealed partial class ToolAwareAiReviewCore(
         return "[tool calls: " + string.Join(", ", calls.Select(c => c.Name)) + "]";
     }
 
+    private static string? GetOutputSample(ChatMessage message)
+    {
+        return string.IsNullOrWhiteSpace(message.Text)
+            ? GetFunctionCallSummary(message)
+            : message.Text;
+    }
+
     private static string? BuildAssistantTurnFingerprint(string text, IReadOnlyList<FunctionCallContent> functionCalls)
     {
         var normalizedText = string.IsNullOrWhiteSpace(text)
@@ -663,6 +1011,30 @@ public sealed partial class ToolAwareAiReviewCore(
         {
             // Unparseable — let ParseReviewResult handle/report the error.
             return false;
+        }
+    }
+
+    private static bool NeedsFinalResponseRepair(string json)
+    {
+        var normalized = NormalizeJsonPayload(json);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        if (ResponseNeedsSchemaCorrection(normalized))
+        {
+            return true;
+        }
+
+        try
+        {
+            JsonSerializer.Deserialize<AgenticResponseDto>(normalized, JsonOptions);
+            return false;
+        }
+        catch (JsonException)
+        {
+            return true;
         }
     }
 
@@ -811,6 +1183,13 @@ public sealed partial class ToolAwareAiReviewCore(
             }
         }
 
+        var turnsJson = state.TurnHistory.Count > 0
+            ? JsonSerializer.Serialize(state.TurnHistory, JsonOptions)
+            : null;
+        var fallbacksJson = state.Session.Fallbacks.Count > 0
+            ? JsonSerializer.Serialize(state.Session.Fallbacks, JsonOptions)
+            : null;
+
         return new ReviewLoopMetrics(
             state.ToolCallCount,
             toolCallsJson,
@@ -818,7 +1197,12 @@ public sealed partial class ToolAwareAiReviewCore(
             finalConfidence,
             state.TotalInputTokens,
             state.TotalOutputTokens,
-            state.Iteration);
+            state.Iteration,
+            state.Session.Mode,
+            turnsJson,
+            fallbacksJson,
+            state.Session.ContinuationHandle?.ProviderSessionId,
+            state.Session.ContinuationHandle?.ProviderResponseId);
     }
 
     [LoggerMessage(
@@ -872,6 +1256,11 @@ public sealed partial class ToolAwareAiReviewCore(
         Message =
             "Agentic review for PR#{PrId} at iteration {Iteration} returned wrong schema (comments key absent) — injecting schema-correction call")]
     private static partial void LogForcingSchemaCorrection(ILogger logger, int prId, int iteration);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Provider-managed agent session downgraded at iteration {Iteration}: {Reason}")]
+    private static partial void LogProviderManagedSessionDowngraded(ILogger logger, int iteration, string reason);
 
     [LoggerMessage(
         Level = LogLevel.Debug,

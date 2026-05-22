@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using Microsoft.Extensions.AI;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -22,4 +23,7 @@ public interface IResolvedAiChatRuntime
 
     /// <summary>Gets the chat client ready for execution.</summary>
     IChatClient ChatClient { get; }
+
+    /// <summary>Gets runtime capabilities relevant to session-aware review execution.</summary>
+    AgentReviewRuntimeCapabilities Capabilities { get; }
 }

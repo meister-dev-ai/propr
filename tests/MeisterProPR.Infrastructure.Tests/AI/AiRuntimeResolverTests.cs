@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI;
@@ -30,6 +31,8 @@ public sealed class AiRuntimeResolverTests
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
         driver.CreateChatClient(connection, model, binding).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection, model, binding)
+            .Returns(new AgentReviewRuntimeCapabilities(true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
 
@@ -39,6 +42,7 @@ public sealed class AiRuntimeResolverTests
         Assert.Same(model, runtime.Model);
         Assert.Same(binding, runtime.Binding);
         Assert.Same(chatClient, runtime.ChatClient);
+        Assert.Equal(new AgentReviewRuntimeCapabilities(true, true, true), runtime.Capabilities);
         await repository.DidNotReceive().GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 

@@ -823,7 +823,12 @@ public class FileByFileReviewOrchestratorTests
         var prefilterModel = AiConnectionTestFactory.CreateChatModel("gpt-4.1-nano");
         var prefilterBinding = AiConnectionTestFactory.CreateBinding(AiPurpose.ProRVPrefilter, prefilterModel);
         var prefilterConnection = AiConnectionTestFactory.CreateConnection(job.ClientId, [prefilterModel], [prefilterBinding]);
-        var prefilterRuntime = new ResolvedAiChatRuntime(prefilterConnection, prefilterModel, prefilterBinding, prefilterClient);
+        var prefilterRuntime = new ResolvedAiChatRuntime(
+            prefilterConnection,
+            prefilterModel,
+            prefilterBinding,
+            prefilterClient,
+            new AgentReviewRuntimeCapabilities(false, false, false));
         var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
             .Returns(prefilterRuntime);
@@ -931,7 +936,12 @@ public class FileByFileReviewOrchestratorTests
         var prefilterModel = AiConnectionTestFactory.CreateChatModel("gpt-4.1-nano");
         var prefilterBinding = AiConnectionTestFactory.CreateBinding(AiPurpose.ProRVPrefilter, prefilterModel);
         var prefilterConnection = AiConnectionTestFactory.CreateConnection(job.ClientId, [prefilterModel], [prefilterBinding]);
-        var prefilterRuntime = new ResolvedAiChatRuntime(prefilterConnection, prefilterModel, prefilterBinding, prefilterClient);
+        var prefilterRuntime = new ResolvedAiChatRuntime(
+            prefilterConnection,
+            prefilterModel,
+            prefilterBinding,
+            prefilterClient,
+            new AgentReviewRuntimeCapabilities(false, false, false));
         var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
             .Returns(prefilterRuntime);
@@ -1471,6 +1481,116 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal("This mentions v-for=\"tag in post.tags\" without escaping.", result.Summary);
         await chatClient.Received(2)
             .GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhenProviderManagedContinuationFails_FileReviewFallsBackAndStillCompletes()
+    {
+        var capturedConversationIds = new List<string?>();
+        var protocolId = Guid.NewGuid();
+        ReviewSystemContext? capturedFileContext = null;
+
+        var providerManagedClient = Substitute.For<IChatClient>();
+        providerManagedClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Do<ChatOptions?>(options => capturedConversationIds.Add(options?.ConversationId)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent("call-1", "get_changed_files")]))
+                {
+                    ConversationId = "conv-1",
+                    ResponseId = "resp-1",
+                },
+                _ => throw new InvalidOperationException("provider continuation failed"),
+                _ => new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {"summary":"per-file done","comments":[],"confidence_evaluations":[{"concern":"correctness","confidence":90}],"investigation_complete":true,"loop_complete":true}
+                                            """)),
+                _ => new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Do<ReviewSystemContext>(context => capturedFileContext = context),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var pr = callInfo.Arg<PullRequest>();
+                var context = callInfo.ArgAt<ReviewSystemContext>(1);
+                var runtime = new ToolAwareAiReviewCore(
+                    providerManagedClient,
+                    DefaultOptions(),
+                    Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+                return runtime.ReviewAsync(pr, context, callInfo.Arg<CancellationToken>());
+            });
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var protocolRecorder = CreateProtocolRecorder();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(protocolId);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, providerManagedClient);
+        var context = CreateContext();
+        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, false, true);
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Equal("synthesis summary", result.Summary);
+        Assert.True(capturedConversationIds.Count >= 3);
+        Assert.Equal("conv-1", capturedConversationIds[1]);
+        Assert.Null(capturedConversationIds[2]);
+
+        Assert.NotNull(capturedFileContext);
+        Assert.NotNull(capturedFileContext!.ReviewSession);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, capturedFileContext.ReviewSession!.Mode);
+        Assert.Single(capturedFileContext.ReviewSession.Fallbacks);
+        Assert.NotNull(capturedFileContext.LoopMetrics);
+        Assert.Contains("provider_session_continue_failed", capturedFileContext.LoopMetrics!.FallbacksJson, StringComparison.Ordinal);
+
+        await protocolRecorder.Received()
+            .RecordReviewStrategyEventAsync(
+                protocolId,
+                ReviewProtocolEventNames.ReviewAgentSessionFallback,
+                Arg.Is<string?>(json => json != null && json.Contains("provider_session_continue_failed", StringComparison.Ordinal)),
+                Arg.Is<string?>(value => value == null),
+                Arg.Is<string?>(value => value == null),
+                Arg.Any<CancellationToken>());
+        await protocolRecorder.Received()
+            .SetCompletedAsync(
+                protocolId,
+                "Completed",
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI.OpenAiCompatible;
@@ -32,6 +33,21 @@ public sealed class LiteLlmProviderDriver(OpenAiCompatibleTransport transport) :
     public IChatClient CreateChatClient(AiConnectionDto connection, AiConfiguredModelDto model, AiPurposeBindingDto binding)
     {
         return this._innerDriver.CreateChatClient(connection with { ProviderKind = AiProviderKind.LiteLlm }, model, binding);
+    }
+
+    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding)
+    {
+        _ = connection;
+        _ = model;
+        _ = binding;
+
+        return new AgentReviewRuntimeCapabilities(
+            false,
+            false,
+            false);
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(

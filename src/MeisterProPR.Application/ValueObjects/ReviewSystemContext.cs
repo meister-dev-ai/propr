@@ -123,6 +123,16 @@ public sealed class ReviewSystemContext
     public string? DefaultReviewModelId { get; set; }
 
     /// <summary>
+    ///     Runtime capability flags resolved for the default review binding.
+    /// </summary>
+    public AgentReviewRuntimeCapabilities RuntimeCapabilities { get; set; } = new(false, false, false);
+
+    /// <summary>
+    ///     Optional logical review session carried across per-file multi-turn execution.
+    /// </summary>
+    public AgentReviewSession? ReviewSession { get; set; }
+
+    /// <summary>
     ///     The effective review temperature to pass into chat calls for this job-scoped execution context.
     /// </summary>
     public float? Temperature { get; set; }

@@ -96,7 +96,7 @@ describe('LicensingView', () => {
     await flushPromises()
     await wrapper.findAll('.edition-card')[1].trigger('click')
 
-    expect(wrapper.text()).toContain('Activate Commercial')
+    expect(wrapper.text()).toContain('Set Commercial Edition')
 
     await wrapper.find('.btn-primary').trigger('click')
     await flushPromises()
@@ -106,6 +106,6 @@ describe('LicensingView', () => {
       capabilityOverrides: [],
     })
     expect(mockSetLicensingState).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Commercial edition activated.')
+    expect(wrapper.text()).toContain('Configured product edition set to Commercial.')
   })
 })

@@ -3,6 +3,7 @@
 
 using System.ClientModel;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI.OpenAiCompatible;
@@ -62,8 +63,28 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
     {
         var options = CreateClientOptions(connection.BaseUrl);
         var credential = new ApiKeyCredential(connection.Secret ?? string.Empty);
-        var client = new ChatClient(model.RemoteModelId, credential, options);
-        return client.AsIChatClient();
+
+        if (UsesResponsesApi(binding, model))
+        {
+            var client = new OpenAIClient(credential, options);
+            return client.GetResponsesClient().AsIChatClient(model.RemoteModelId);
+        }
+
+        var chatClient = new ChatClient(model.RemoteModelId, credential, options);
+        return chatClient.AsIChatClient();
+    }
+
+    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding)
+    {
+        _ = connection;
+        var usesResponses = UsesResponsesApi(binding, model);
+        return new AgentReviewRuntimeCapabilities(
+            usesResponses,
+            usesResponses,
+            usesResponses);
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
@@ -87,5 +108,12 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
         {
             Endpoint = new Uri(baseUrl, UriKind.Absolute),
         };
+    }
+
+    private static bool UsesResponsesApi(AiPurposeBindingDto binding, AiConfiguredModelDto model)
+    {
+        return binding.ProtocolMode == AiProtocolMode.Responses
+               || (binding.ProtocolMode == AiProtocolMode.Auto
+                   && model.SupportedProtocolModes.Contains(AiProtocolMode.Responses));
     }
 }

@@ -55,7 +55,7 @@
         <Nullable>enable</Nullable>
         <!-- OPENAI001: OpenAIResponseClient is experimental but intentionally used for
              the Responses API (reasoning + tool use). Revisit when the API stabilises. -->
-        <NoWarn>$(NoWarn);OPENAI001</NoWarn>
+        <NoWarn>$(NoWarn);OPENAI001;MEAI001</NoWarn>
     </PropertyGroup>
 
 </Project>

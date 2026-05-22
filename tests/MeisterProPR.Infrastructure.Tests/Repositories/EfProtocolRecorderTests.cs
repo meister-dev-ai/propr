@@ -242,6 +242,61 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
     }
 
     [Fact]
+    public async Task RecordReviewStrategyEventAsync_SessionTurn_PersistsSessionContextPayloads()
+    {
+        const string details = """
+                               {"turnNumber":2,"sessionMode":"ProviderManagedSession","contextStrategy":"DeltaContext","newInputSummary":"tool result delta only","replayedPayloadSummary":"system+tool transcript","providerSessionId":"conv-1","providerResponseId":"resp-2"}
+                               """;
+        const string output = """
+                              {"outputSample":"Working set refined.","continuationHandle":{"handleType":"ProviderSession","handleId":"conv-1","providerSessionId":"conv-1","providerResponseId":"resp-2"}}
+                              """;
+
+        await this._recorder.RecordReviewStrategyEventAsync(
+            this._protocolId,
+            ReviewProtocolEventNames.ReviewAgentSessionTurn,
+            details,
+            output,
+            null);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == ReviewProtocolEventNames.ReviewAgentSessionTurn)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
+        Assert.Equal(details, stored.InputTextSample);
+        Assert.Equal(output, stored.OutputSummary);
+        Assert.Contains("ProviderManagedSession", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("conv-1", stored.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task RecordReviewStrategyEventAsync_SessionFallback_PersistsFallbackPayloads()
+    {
+        const string details = """
+                               {"fromMode":"ProviderManagedSession","toMode":"LocalManagedSession","reason":"provider_session_continue_failed","turnNumber":2,"preservedState":"preserved durable system prompts and latest turn transcript"}
+                               """;
+
+        await this._recorder.RecordReviewStrategyEventAsync(
+            this._protocolId,
+            ReviewProtocolEventNames.ReviewAgentSessionFallback,
+            details,
+            null,
+            null);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == ReviewProtocolEventNames.ReviewAgentSessionFallback)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
+        Assert.Equal(details, stored.InputTextSample);
+        Assert.Null(stored.OutputSummary);
+        Assert.Contains("provider_session_continue_failed", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("LocalManagedSession", stored.InputTextSample ?? string.Empty);
+    }
+
+    [Fact]
     public async Task RecordAiCallAsync_PersistsFullTextWithoutTruncation_AndStripsNullBytes()
     {
         var inputText = new string('I', 60_000) + "\0TAIL";

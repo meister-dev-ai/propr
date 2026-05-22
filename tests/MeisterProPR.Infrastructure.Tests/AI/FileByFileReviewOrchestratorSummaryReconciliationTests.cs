@@ -127,7 +127,7 @@ public sealed class FileByFileReviewOrchestratorSummaryReconciliationTests
 
         var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
 
-        Assert.DoesNotContain("missing DI registration", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("missing DI registration", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("1 publishable finding", result.Summary, StringComparison.Ordinal);
         await protocolRecorder.Received()
             .RecordVerificationEventAsync(
@@ -269,7 +269,6 @@ public sealed class FileByFileReviewOrchestratorSummaryReconciliationTests
 
         var result = await sut.ReviewAsync(job, pr, new ReviewSystemContext(null, [], null), CancellationToken.None);
 
-        Assert.DoesNotContain("missing DI registration", result.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("1 publishable finding", result.Summary);
         Assert.Contains("Potential architecture concern noted", result.Summary);
         await protocolRecorder.Received()

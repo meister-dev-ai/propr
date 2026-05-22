@@ -117,6 +117,50 @@ The filter uses the review protocol transport instead of introducing a separate 
 `ai_call_comment_relevance_evaluator` are stored on `ReviewJobProtocol` so the Job Protocol UI can
 explain why a comment was discarded or retained.
 
+## Session-Aware File Review Loop
+
+The default `FileByFile` workflow now runs the shared multi-turn review loop with internal
+session-aware continuation. This remains an internal execution concern; no public HTTP contract or
+admin API shape changes are required for the slice.
+
+1. `ToolAwareAiReviewCore` selects one session mode per file review pass from runtime capability and
+   workflow context:
+   `provider_managed_session` when the active chat runtime supports provider-managed continuation,
+   `local_managed_session` for the per-file default path when provider-managed continuation is not
+   available, and `stateless_replay` for paths that cannot safely retain session state.
+2. In provider-managed mode, later turns send only the newest turn input while the runtime carries
+   forward the earlier transcript through `ConversationId`, response-chain identifiers, and any
+   provider continuation token retained in `ReviewLoopState`.
+3. In local-managed mode, the loop keeps durable system framing plus the latest live turn while
+   compacting earlier bulky tool payloads into working-memory summaries. Later turns therefore reuse
+   bounded summaries instead of replaying every earlier large file read or search result in full.
+4. When provider-managed continuation fails after an earlier successful turn, the loop downgrades to
+   local-managed continuation, preserves the durable prompts and latest turn transcript, and
+   continues the review instead of failing the entire file pass solely because the preferred
+   continuation mode became unavailable.
+5. `FileReviewer` owns the per-file protocol lifecycle around that shared loop. It carries the
+   session and loop metrics into the file-scoped `ReviewSystemContext`, completes the protocol with
+   final token and iteration totals, and preserves the existing retry boundary for failed file
+   attempts.
+
+The protocol surface remains event-driven. Each reviewed file pass can emit:
+
+- `review_agent_session_turn` with turn number, selected session mode, context strategy,
+  replay-summary metadata, compacted-payload summary, and any provider session or response-chain
+  identifiers
+- `review_agent_session_fallback` with the downgraded-from mode, downgraded-to mode, fallback
+  reason, turn number, and preserved-state description
+
+Operators should interpret those events together with the normal AI call and tool call events:
+
+- `sessionMode` identifies whether the pass used stateless replay, local managed continuation, or
+  provider-managed continuation.
+- `contextStrategy` distinguishes full-context submission from delta-context continuation on each AI
+  turn.
+- `replayedPayloadSummary` and `compactedPayloadSummary` provide the evidence that later tiny or
+  empty follow-up results did not force the earlier bulky payloads to be retransmitted in full.
+- `providerSessionId` and `providerResponseId` are present only when the runtime exposes them.
+
 ## ProRV Focused Guidance
 
 The Reviewing module can run a ProRV prefilter stage before each file review. ProRV is a bounded

@@ -829,6 +829,56 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).not.toContain('Currently Executing...')
   })
 
+  it('explains provider-managed token accounting when the selected AI call uses provider-managed sessions', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            events: [
+              makeProtocolEvent({
+                id: 'event-ai-1',
+                kind: 'aiCall',
+                name: 'ai_call_iter_2',
+                inputTokens: 5193,
+                outputTokens: 287,
+                inputTextSample: '[call_123]\\n{"status":"partial"}',
+                outputSummary: '{"summary":"ok","comments":[]}',
+              }),
+              makeProtocolEvent({
+                id: 'event-session-1',
+                kind: 'operational',
+                name: 'review_agent_session_turn',
+                inputTextSample: JSON.stringify({
+                  turnNumber: 2,
+                  sessionMode: 'ProviderManagedSession',
+                  contextStrategy: 'DeltaContext',
+                  newInputSummary: '[call_123]\\n{"status":"partial"}',
+                }),
+                outputSummary: JSON.stringify({
+                  outputSample: '{"summary":"ok","comments":[]}',
+                  continuationHandle: 'resp_123',
+                }),
+              }),
+            ],
+            finalSummary: null,
+            finalComments: null,
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    await openTraceEventModal(wrapper)
+
+    expect(wrapper.text()).toContain('Provider-managed session: this input/output panel shows only the local delta sent for this turn.')
+    expect(wrapper.text()).toContain('Token counts may be higher because the provider accounts for the full continued conversation it retained server-side.')
+  })
+
   it('shows final file summary and final comments in the selected file view', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/protocol')) {

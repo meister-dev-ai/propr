@@ -217,6 +217,76 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.Contains("review_comment_message_required", decisionEvent.OutputSummary ?? string.Empty);
     }
 
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenProtocolContainsSessionEvents_PreservesSessionTurnAndFallbackPayloads()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 8, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewAgentSessionTurn,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+                InputTextSample =
+                    "{" +
+                    "\"turnNumber\":2,\"sessionMode\":\"ProviderManagedSession\",\"contextStrategy\":\"DeltaContext\",\"providerSessionId\":\"conv-1\",\"providerResponseId\":\"resp-2\"" +
+                    "}",
+                OutputSummary =
+                    "{" +
+                    "\"outputSample\":\"Working set refined.\",\"continuationHandle\":{\"handleType\":\"ProviderSession\",\"handleId\":\"conv-1\"}" +
+                    "}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewAgentSessionFallback,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                InputTextSample =
+                    "{" +
+                    "\"fromMode\":\"ProviderManagedSession\",\"toMode\":\"LocalManagedSession\",\"reason\":\"provider_session_continue_failed\",\"turnNumber\":2" +
+                    "}",
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+
+        Assert.NotNull(result);
+        var returnedProtocol = Assert.Single(result!.Protocols);
+
+        var sessionTurn = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionTurn);
+        Assert.Contains("ProviderManagedSession", sessionTurn.InputTextSample ?? string.Empty);
+        Assert.Contains("DeltaContext", sessionTurn.InputTextSample ?? string.Empty);
+        Assert.Contains("ProviderSession", sessionTurn.OutputSummary ?? string.Empty);
+
+        var fallback = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionFallback);
+        Assert.Contains("provider_session_continue_failed", fallback.InputTextSample ?? string.Empty);
+        Assert.Contains("LocalManagedSession", fallback.InputTextSample ?? string.Empty);
+        Assert.Null(fallback.OutputSummary);
+    }
+
     [Theory]
     [InlineData("blocked_scope_violation")]
     [InlineData("blocked_budget_exhausted")]

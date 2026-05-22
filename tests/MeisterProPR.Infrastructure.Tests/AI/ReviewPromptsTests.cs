@@ -614,6 +614,16 @@ public class ReviewPromptsTests
         Assert.Contains("multi-file", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void AgenticLoopGuidance_ContainsSessionContinuationWorkingMemoryRule()
+    {
+        var guidance = ReviewPrompts.AgenticLoopGuidance;
+
+        Assert.Contains("working-memory summary", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Later turns", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not re-fetch the same large file", guidance, StringComparison.OrdinalIgnoreCase);
+    }
+
     // PR64-5466/5467 — SystemPrompt schema must declare all five required output keys
     [Fact]
     public void SystemPrompt_SchemaDeclaresFiveRequiredOutputKeys()

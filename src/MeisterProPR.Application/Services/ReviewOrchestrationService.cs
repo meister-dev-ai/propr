@@ -60,8 +60,8 @@ public sealed partial class ReviewOrchestrationService(
 
         var reviewerContext = await this.ResolveReviewerAsync(job, ct);
 
-        var overrideChatClient = await this.ResolveAiConnectionAsync(job, ct);
-        if (overrideChatClient is null)
+        var resolvedReviewRuntime = await this.ResolveAiConnectionAsync(job, ct);
+        if (resolvedReviewRuntime is null)
         {
             return;
         }
@@ -74,7 +74,8 @@ public sealed partial class ReviewOrchestrationService(
                 job,
                 reviewerContext.EffectiveReviewerId,
                 reviewerContext.ConfiguredTriggerReviewer,
-                overrideChatClient,
+                resolvedReviewRuntime.Value.ChatClient,
+                resolvedReviewRuntime.Value.Capabilities,
                 ct);
         }
         catch (PartialReviewFailureException ex)
@@ -106,6 +107,7 @@ public sealed partial class ReviewOrchestrationService(
         Guid? reviewerId,
         ReviewerIdentity? reviewer,
         IChatClient overrideChatClient,
+        AgentReviewRuntimeCapabilities runtimeCapabilities,
         CancellationToken ct)
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
@@ -160,6 +162,7 @@ public sealed partial class ReviewOrchestrationService(
             pr,
             baselineJob,
             overrideChatClient,
+            runtimeCapabilities,
             ct);
 
         if (systemContext is null)
@@ -315,7 +318,7 @@ public sealed partial class ReviewOrchestrationService(
     }
 
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
-    private async Task<IChatClient?> ResolveAiConnectionAsync(ReviewJob job, CancellationToken ct)
+    private async Task<(IChatClient ChatClient, AgentReviewRuntimeCapabilities Capabilities)?> ResolveAiConnectionAsync(ReviewJob job, CancellationToken ct)
     {
         if (aiRuntimeResolver is not null)
         {
@@ -324,7 +327,7 @@ public sealed partial class ReviewOrchestrationService(
                 var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
                 job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId, job.ReviewTemperature);
                 await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct, job.ReviewTemperature);
-                return runtime.ChatClient;
+                return (runtime.ChatClient, runtime.Capabilities);
             }
             catch (Exception ex)
             {
@@ -359,7 +362,7 @@ public sealed partial class ReviewOrchestrationService(
         var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         job.SetAiConfig(activeConnection.Id, effectiveModelId, job.ReviewTemperature);
         await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct, job.ReviewTemperature);
-        return client;
+        return (client, new AgentReviewRuntimeCapabilities(false, false, false));
     }
 
     // T071: Load scan state — returns the scan, whether a new revision exists, and any reusable baseline.
@@ -499,6 +502,7 @@ public sealed partial class ReviewOrchestrationService(
         PullRequest pr,
         ReviewJob? baselineJob,
         IChatClient chatClient,
+        AgentReviewRuntimeCapabilities runtimeCapabilities,
         CancellationToken ct)
     {
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
@@ -575,6 +579,7 @@ public sealed partial class ReviewOrchestrationService(
         {
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
+            RuntimeCapabilities = runtimeCapabilities,
             EnableProRV = enableProRv,
             AugmentationMode = enableProRv ? ReviewAugmentationMode.LateAugmentation : ReviewAugmentationMode.Disabled,
             ExclusionRules = exclusionRules,
