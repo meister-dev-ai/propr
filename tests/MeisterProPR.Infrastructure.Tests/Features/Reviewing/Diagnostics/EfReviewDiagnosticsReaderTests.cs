@@ -5,9 +5,13 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.Infrastructure.Tests.Fixtures;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Diagnostics;
@@ -72,7 +76,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
@@ -139,7 +143,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(job.ClientId, result!.ClientId);
@@ -203,7 +207,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
@@ -238,11 +242,28 @@ public sealed class EfReviewDiagnosticsReaderTests
                 Id = Guid.NewGuid(),
                 ProtocolId = protocol.Id,
                 Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewAgentSessionBinding,
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-3),
+                InputTextSample =
+                    "{" +
+                    "\"sessionOwnerId\":\"session-1\",\"conversationOwnerId\":\"session-1\",\"bindingMethod\":\"created_remote_thread\",\"bindingOutcome\":\"succeeded\",\"promptMode\":\"InitialBind\",\"remoteConversationId\":\"conv-1\",\"sessionMode\":\"ProviderManagedSession\"" +
+                    "}",
+                OutputSummary =
+                    "{" +
+                    "\"providerResponseId\":\"resp-1\"" +
+                    "}",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
                 Name = ReviewProtocolEventNames.ReviewAgentSessionTurn,
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
                 InputTextSample =
                     "{" +
-                    "\"turnNumber\":2,\"sessionMode\":\"ProviderManagedSession\",\"contextStrategy\":\"DeltaContext\",\"providerSessionId\":\"conv-1\",\"providerResponseId\":\"resp-2\"" +
+                    "\"turnNumber\":2,\"sessionMode\":\"ProviderManagedSession\",\"contextStrategy\":\"DeltaContext\",\"promptMode\":\"CurrentPromptOnly\",\"usedRemoteConversation\":true,\"usedLocalReplay\":false,\"remoteConversationId\":\"conv-1\",\"providerSessionId\":\"conv-1\",\"providerResponseId\":\"resp-2\"" +
                     "}",
                 OutputSummary =
                     "{" +
@@ -271,20 +292,84 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
+        Assert.NotNull(returnedProtocol.AgentSession);
+        Assert.True(returnedProtocol.AgentSession!.UsedManagedRemoteConversation);
+        Assert.Equal("conv-1", returnedProtocol.AgentSession.RemoteConversationId);
+        Assert.Equal("created_remote_thread", returnedProtocol.AgentSession.BindingMethod);
+        Assert.Equal("succeeded", returnedProtocol.AgentSession.BindingOutcome);
+        Assert.Equal("InitialBind", returnedProtocol.AgentSession.PromptMode);
+        Assert.True(returnedProtocol.AgentSession.UsedLocalReplay);
+        Assert.Equal("provider_session_continue_failed", returnedProtocol.AgentSession.FallbackReason);
+
+        var binding = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionBinding);
+        Assert.Contains("created_remote_thread", binding.InputTextSample ?? string.Empty);
+        Assert.Contains("resp-1", binding.OutputSummary ?? string.Empty);
 
         var sessionTurn = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionTurn);
         Assert.Contains("ProviderManagedSession", sessionTurn.InputTextSample ?? string.Empty);
         Assert.Contains("DeltaContext", sessionTurn.InputTextSample ?? string.Empty);
+        Assert.Contains("CurrentPromptOnly", sessionTurn.InputTextSample ?? string.Empty);
         Assert.Contains("ProviderSession", sessionTurn.OutputSummary ?? string.Empty);
 
         var fallback = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionFallback);
         Assert.Contains("provider_session_continue_failed", fallback.InputTextSample ?? string.Empty);
         Assert.Contains("LocalManagedSession", fallback.InputTextSample ?? string.Empty);
         Assert.Null(fallback.OutputSummary);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenProtocolContainsOnlyBindingEvent_ProjectsManagedConversationWithoutFallback()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 9, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = ReviewProtocolEventNames.ReviewAgentSessionBinding,
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample =
+                    "{" +
+                    "\"sessionOwnerId\":\"session-1\",\"conversationOwnerId\":\"session-1\",\"bindingMethod\":\"created_remote_thread\",\"bindingOutcome\":\"succeeded\",\"promptMode\":\"InitialBind\",\"remoteConversationId\":\"conv-9\",\"sessionMode\":\"ProviderManagedSession\"" +
+                    "}",
+                OutputSummary = "{\"providerResponseId\":\"resp-9\"}",
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
+
+        var returnedProtocol = Assert.Single(result!.Protocols);
+        Assert.NotNull(returnedProtocol.AgentSession);
+        Assert.True(returnedProtocol.AgentSession!.UsedManagedRemoteConversation);
+        Assert.Equal("conv-9", returnedProtocol.AgentSession.RemoteConversationId);
+        Assert.Equal("created_remote_thread", returnedProtocol.AgentSession.BindingMethod);
+        Assert.Equal("succeeded", returnedProtocol.AgentSession.BindingOutcome);
+        Assert.Equal("InitialBind", returnedProtocol.AgentSession.PromptMode);
+        Assert.False(returnedProtocol.AgentSession.UsedLocalReplay);
+        Assert.Null(returnedProtocol.AgentSession.FallbackReason);
     }
 
     [Theory]
@@ -338,7 +423,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         var degradedEvent = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.AgenticFileDegraded);
@@ -420,7 +505,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
@@ -475,7 +560,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
@@ -586,7 +671,7 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         Assert.NotNull(returnedProtocol.ProRvPrefilter);
@@ -602,5 +687,240 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.True(returnedProtocol.ProRvPrefilter.GuidanceApplied);
         Assert.Equal("agentic_file_planning", returnedProtocol.ProRvPrefilter.AppliedPromptKind);
         Assert.Contains("js/incomplete-sanitization", returnedProtocol.ProRvPrefilter.AppliedGuidanceIds);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenCurrentJobContainsResumedFileResult_IncludesInheritedSourceProtocol()
+    {
+        var sourceJob = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 27, 3);
+        sourceJob.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var sourceFileResult = new ReviewFileResult(sourceJob.Id, "src/Inherited.cs");
+        sourceFileResult.MarkCompleted(
+            "Inherited summary",
+            [new ReviewComment("src/Inherited.cs", 42, CommentSeverity.Warning, "Inherited comment")]);
+        sourceJob.FileReviewResults.Add(sourceFileResult);
+
+        var olderFailedProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = sourceJob.Id,
+            AttemptNumber = 1,
+            Label = "src/Inherited.cs",
+            FileResultId = sourceFileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-9),
+            Outcome = "Failed",
+        };
+        olderFailedProtocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = olderFailedProtocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = "failed_event",
+                OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-9),
+                Error = "boom",
+            });
+
+        var sourceProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = sourceJob.Id,
+            AttemptNumber = 2,
+            Label = "src/Inherited.cs",
+            FileResultId = sourceFileResult.Id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-8),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-7),
+            Outcome = "Completed",
+            TotalInputTokens = 120,
+            TotalOutputTokens = 45,
+            IterationCount = 3,
+            ToolCallCount = 2,
+        };
+        sourceProtocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = sourceProtocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-7),
+                InputTokens = 120,
+                OutputTokens = 45,
+                InputTextSample = "user prompt",
+                SystemPrompt = "system prompt",
+                OutputSummary = "source output",
+            });
+
+        sourceJob.Protocols.Add(olderFailedProtocol);
+        sourceJob.Protocols.Add(sourceProtocol);
+
+        var currentJob = new ReviewJob(Guid.NewGuid(), sourceJob.ClientId, "https://dev.azure.com/org", "proj", "repo", 27, 3);
+        currentJob.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var freshProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = currentJob.Id,
+            AttemptNumber = 3,
+            Label = "synthesis",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            Outcome = "Completed",
+        };
+        currentJob.Protocols.Add(freshProtocol);
+
+        var resumedFileResult = ReviewFileResult.CreateResumed(currentJob.Id, sourceFileResult);
+        currentJob.FileReviewResults.Add(resumedFileResult);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(currentJob.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(currentJob));
+        repository.GetByIdWithProtocolsAsync(sourceJob.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(sourceJob));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(currentJob.Id, ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.Protocols.Count);
+
+        var inherited = Assert.Single(result.Protocols, protocol => protocol.IsInherited);
+        Assert.Equal(currentJob.Id, inherited.JobId);
+        Assert.Equal(resumedFileResult.Id, inherited.FileResultId);
+        Assert.Equal("src/Inherited.cs", inherited.Label);
+        Assert.Equal("Inherited summary", inherited.FinalSummary);
+        Assert.Single(inherited.FinalComments!);
+        Assert.Equal("Inherited comment", inherited.FinalComments![0].Message);
+        Assert.NotNull(inherited.FileOutcome);
+        Assert.True(inherited.FileOutcome!.IsComplete);
+        Assert.False(inherited.FileOutcome.IsCarriedForward);
+        Assert.Equal("src/Inherited.cs", inherited.FileOutcome.FilePath);
+        Assert.NotNull(inherited.Inheritance);
+        Assert.Equal(sourceJob.Id, inherited.Inheritance!.SourceJobId);
+        Assert.Equal(sourceFileResult.Id, inherited.Inheritance.SourceFileResultId);
+        Assert.Equal(sourceProtocol.Id, inherited.Inheritance.SourceProtocolId);
+        Assert.Equal(sourceProtocol.CompletedAt, inherited.Inheritance.SourceCompletedAt);
+        Assert.Single(inherited.Events);
+        Assert.Equal("ai_call_iter_1", inherited.Events[0].Name);
+        Assert.Null(inherited.Events[0].InputTextSample);
+        Assert.Null(inherited.Events[0].SystemPrompt);
+        Assert.Equal(
+            "Inherited event payload omitted from this view to keep large same-revision retry traces responsive. Open the source job protocol to inspect the original captured body.",
+            inherited.Events[0].OutputSummary);
+
+        var current = Assert.Single(result.Protocols, protocol => !protocol.IsInherited);
+        Assert.Equal(currentJob.Id, current.JobId);
+        Assert.Equal("synthesis", current.Label);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenDbContextFactoryIsAvailable_LoadsOnlyLinkedInheritedSourceProtocols()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderTests-{Guid.NewGuid():N}")
+            .Options;
+
+        var sourceJobId = Guid.NewGuid();
+        var sourceFileResultId = Guid.NewGuid();
+        var sourceProtocolId = Guid.NewGuid();
+        var currentJobId = Guid.NewGuid();
+        var currentClientId = Guid.NewGuid();
+        var priorFileResult = new ReviewFileResult(sourceJobId, "src/Inherited.cs");
+        priorFileResult.MarkCompleted(
+            "Inherited summary",
+            [new ReviewComment("src/Inherited.cs", 7, CommentSeverity.Warning, "Inherited comment")]);
+
+        await using (var seedDb = new MeisterProPRDbContext(options))
+        {
+            seedDb.ReviewJobProtocols.Add(
+                new ReviewJobProtocol
+                {
+                    Id = sourceProtocolId,
+                    JobId = sourceJobId,
+                    AttemptNumber = 2,
+                    Label = "src/Inherited.cs",
+                    FileResultId = priorFileResult.Id,
+                    StartedAt = DateTimeOffset.UtcNow.AddMinutes(-3),
+                    CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                    Outcome = "Completed",
+                    TotalInputTokens = 33,
+                    TotalOutputTokens = 11,
+                    IterationCount = 2,
+                    ToolCallCount = 1,
+                });
+            seedDb.ProtocolEvents.Add(
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(),
+                    ProtocolId = sourceProtocolId,
+                    Kind = ProtocolEventKind.AiCall,
+                    Name = "ai_call_iter_1",
+                    OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                    InputTokens = 33,
+                    OutputTokens = 11,
+                    InputTextSample = "very large input",
+                    SystemPrompt = "very large system",
+                    OutputSummary = "very large output",
+                });
+
+            await seedDb.SaveChangesAsync();
+        }
+
+        var currentJob = new ReviewJob(currentJobId, currentClientId, "https://dev.azure.com/org", "proj", "repo", 55, 1);
+        currentJob.SelectReviewStrategy(
+            ReviewStrategy.AgenticFileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var freshProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = currentJob.Id,
+            AttemptNumber = 1,
+            Label = "synthesis",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        currentJob.Protocols.Add(freshProtocol);
+
+        var resumedFileResult = ReviewFileResult.CreateResumed(currentJob.Id, priorFileResult);
+        currentJob.FileReviewResults.Add(resumedFileResult);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(currentJob.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(currentJob));
+
+        var sut = new EfReviewDiagnosticsReader(repository, new TestDbContextFactory(options));
+
+        var result = await sut.GetJobProtocolAsync(currentJob.Id, ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        var inherited = Assert.Single(result!.Protocols, protocol => protocol.IsInherited);
+        Assert.Equal(sourceProtocolId, inherited.Inheritance!.SourceProtocolId);
+        Assert.Single(inherited.Events);
+        Assert.Equal("ai_call_iter_1", inherited.Events[0].Name);
+        Assert.Null(inherited.Events[0].InputTextSample);
+        Assert.Null(inherited.Events[0].SystemPrompt);
+        Assert.Equal(
+            "Inherited event payload omitted from this view to keep large same-revision retry traces responsive. Open the source job protocol to inspect the original captured body.",
+            inherited.Events[0].OutputSummary);
+
+        await repository.DidNotReceive().GetByIdWithProtocolsAsync(sourceJobId, Arg.Any<CancellationToken>());
     }
 }

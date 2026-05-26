@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 
 namespace MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
@@ -13,5 +14,16 @@ public interface IReviewDiagnosticsReader
     /// <summary>
     ///     Returns the full protocol history for a review job, or <see langword="null" /> when the job does not exist.
     /// </summary>
-    Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(Guid jobId, CancellationToken ct = default);
+    Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(
+        Guid jobId,
+        bool includeEvents = true,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns one protocol pass for a review job, or <see langword="null" /> when the job or protocol does not exist.
+    /// </summary>
+    Task<ReviewJobProtocolDto?> GetJobProtocolPassAsync(
+        Guid jobId,
+        Guid protocolId,
+        CancellationToken ct = default);
 }

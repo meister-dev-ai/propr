@@ -112,7 +112,7 @@ public sealed partial class ReviewOrchestrationService(
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
 
-        var (scan, isNewIteration, baselineJob, compareToIterationId, compareToReviewRevision) = await this.LoadScanStateAsync(job, ct);
+        var (scan, isNewIteration, baselineJob, resumeJob, compareToIterationId, compareToReviewRevision) = await this.LoadScanStateAsync(job, ct);
 
         var pr = await this.FetchPullRequestAsync(job, compareToIterationId, compareToReviewRevision, ct);
         if (pr is null)
@@ -161,6 +161,7 @@ public sealed partial class ReviewOrchestrationService(
             job,
             pr,
             baselineJob,
+            resumeJob,
             overrideChatClient,
             runtimeCapabilities,
             ct);
@@ -362,7 +363,7 @@ public sealed partial class ReviewOrchestrationService(
         var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         job.SetAiConfig(activeConnection.Id, effectiveModelId, job.ReviewTemperature);
         await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct, job.ReviewTemperature);
-        return (client, new AgentReviewRuntimeCapabilities(false, false, false));
+        return (client, new AgentReviewRuntimeCapabilities(false, false, false, false));
     }
 
     // T071: Load scan state — returns the scan, whether a new revision exists, and any reusable baseline.
@@ -370,6 +371,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewPrScan? scan,
         bool isNewIteration,
         ReviewJob? baselineJob,
+        ReviewJob? resumeJob,
         int? compareToIterationId,
         ReviewRevision? compareToReviewRevision)> LoadScanStateAsync(
         ReviewJob job,
@@ -380,8 +382,27 @@ public sealed partial class ReviewOrchestrationService(
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 
         ReviewJob? baselineJob = null;
+        ReviewJob? resumeJob = null;
         int? compareToIterationId = null;
         ReviewRevision? compareToReviewRevision = null;
+        var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+
+        if (!string.IsNullOrWhiteSpace(currentRevisionKey))
+        {
+            resumeJob = await jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                currentRevisionKey,
+                ct);
+
+            if (resumeJob?.Id == job.Id)
+            {
+                resumeJob = null;
+            }
+        }
+
         if (isNewIteration && scan is not null && !string.IsNullOrWhiteSpace(scan.LastProcessedCommitId))
         {
             if (job.Provider == ScmProvider.AzureDevOps)
@@ -411,7 +432,7 @@ public sealed partial class ReviewOrchestrationService(
             }
         }
 
-        return (scan, isNewIteration, baselineJob, compareToIterationId, compareToReviewRevision);
+        return (scan, isNewIteration, baselineJob, resumeJob, compareToIterationId, compareToReviewRevision);
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
@@ -494,23 +515,24 @@ public sealed partial class ReviewOrchestrationService(
             ct);
     }
 
-    // T074: Build review context — carry-forward prior results, fetch instructions and exclusions.
+    // T074: Build review context — reuse prior results, fetch instructions and exclusions.
     // Returns (systemContext, carriedForwardPaths); systemContext is null when all files were carried
     // forward with an empty delta (no AI review needed — caller should save scan and delete job).
     private async Task<(ReviewSystemContext? systemContext, List<string> carriedForwardPaths)> BuildReviewContextAsync(
         ReviewJob job,
         PullRequest pr,
         ReviewJob? baselineJob,
+        ReviewJob? resumeJob,
         IChatClient chatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
         CancellationToken ct)
     {
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
         var carriedForwardPaths = new List<string>();
+        var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
 
         if (baselineJob is not null)
         {
-            var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
             foreach (var priorResult in baselineJob.FileReviewResults
                          .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
             {
@@ -521,11 +543,24 @@ public sealed partial class ReviewOrchestrationService(
                     carriedForwardPaths.Add(priorResult.FilePath);
                 }
             }
+        }
 
-            if (changedFilePaths.Count == 0 && carriedForwardPaths.Count > 0)
+        if (resumeJob is not null)
+        {
+            foreach (var priorResult in resumeJob.FileReviewResults
+                         .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
             {
-                return (null, carriedForwardPaths);
+                if (changedPathsSet.Contains(priorResult.FilePath))
+                {
+                    var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
+                    await jobs.AddFileResultAsync(resumed, ct);
+                }
             }
+        }
+
+        if (changedFilePaths.Count == 0 && (carriedForwardPaths.Count > 0 || resumeJob is not null))
+        {
+            return (null, carriedForwardPaths);
         }
 
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);

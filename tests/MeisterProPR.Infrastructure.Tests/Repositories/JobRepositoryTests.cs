@@ -59,6 +59,13 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         return new ReviewJob(Guid.NewGuid(), clientId ?? Guid.NewGuid(), orgUrl, projectId, repoId, prId, iterationId);
     }
 
+    private static ReviewFileResult CreateCompletedFileResult(Guid jobId, string path)
+    {
+        var result = new ReviewFileResult(jobId, path);
+        result.MarkCompleted($"summary for {path}", []);
+        return result;
+    }
+
 
     [Fact]
     public async Task Add_ThenGetById_ReturnsJob()
@@ -219,6 +226,40 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             "base-sha...cancelled-head");
 
         Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task GetBestTerminalJobWithFileResultsByStoredRevisionAsync_PrefersJobWithMoreReusableCompletedFiles()
+    {
+        var olderFailedJob = MakeJob(prId: 702, iterationId: 5);
+        olderFailedJob.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"));
+        await this._repo.AddAsync(olderFailedJob);
+        await this._repo.SetFailedAsync(olderFailedJob.Id, "older boom");
+
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(olderFailedJob.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(olderFailedJob.Id, "src/B.cs"));
+
+        await Task.Delay(10);
+
+        var newerCancelledJob = MakeJob(
+            olderFailedJob.ClientId, olderFailedJob.OrganizationUrl, olderFailedJob.ProjectId, olderFailedJob.RepositoryId, olderFailedJob.PullRequestId, 6);
+        newerCancelledJob.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"));
+        await this._repo.AddAsync(newerCancelledJob);
+        await this._repo.SetCancelledAsync(newerCancelledJob.Id);
+
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(newerCancelledJob.Id, "src/A.cs"));
+
+        var storedRevisionKey = ReviewRevisionKeys.GetStoredKey(olderFailedJob.ReviewRevisionReference, olderFailedJob.IterationId);
+
+        var found = await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            olderFailedJob.OrganizationUrl,
+            olderFailedJob.ProjectId,
+            olderFailedJob.RepositoryId,
+            olderFailedJob.PullRequestId,
+            storedRevisionKey);
+
+        Assert.NotNull(found);
+        Assert.Equal(olderFailedJob.Id, found!.Id);
     }
 
     [Fact]

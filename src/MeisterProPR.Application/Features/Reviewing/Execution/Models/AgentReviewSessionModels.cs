@@ -40,6 +40,17 @@ public enum AgentReviewSessionStatus
 }
 
 /// <summary>
+///     Prompt-submission mode used for one review turn.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum AgentReviewPromptMode
+{
+    FullReplayFallback = 0,
+    InitialBind = 1,
+    CurrentPromptOnly = 2,
+}
+
+/// <summary>
 ///     Kind of continuation handle carried across turns.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -56,6 +67,7 @@ public enum SessionContinuationHandleType
 /// </summary>
 public sealed record AgentReviewRuntimeCapabilities(
     bool SupportsProviderManagedSessions,
+    bool SupportsManagedRemoteConversation,
     bool SupportsBackgroundResponses,
     bool PrefersResponsesApi);
 
@@ -107,7 +119,11 @@ public sealed record TurnContextSubmission(
     string? ContinuationHandle,
     string? ProviderSessionId,
     string? ProviderResponseId,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    AgentReviewPromptMode PromptMode = AgentReviewPromptMode.FullReplayFallback,
+    bool UsedRemoteConversation = false,
+    bool UsedLocalReplay = true,
+    string? RemoteConversationId = null);
 
 /// <summary>
 ///     Logical session state carried across one file review loop.
@@ -120,4 +136,12 @@ public sealed record AgentReviewSession(
     DateTimeOffset LastUpdatedAt,
     SessionContinuationHandle? ContinuationHandle,
     IReadOnlyList<WorkingMemorySummary> WorkingMemory,
-    IReadOnlyList<SessionFallbackRecord> Fallbacks);
+    IReadOnlyList<SessionFallbackRecord> Fallbacks,
+    AgentReviewPromptMode ActivePromptMode = AgentReviewPromptMode.FullReplayFallback,
+    string? RemoteConversationId = null)
+{
+    /// <summary>
+    ///     Stable local identifier for the file review attempt that owns this session.
+    /// </summary>
+    public string ConversationOwnerId => this.LocalSessionId;
+}

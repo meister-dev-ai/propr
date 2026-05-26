@@ -52,6 +52,13 @@ public sealed class InMemoryProtocolRecorderTests
 
         await sut.RecordReviewStrategyEventAsync(
             protocolId,
+            ReviewProtocolEventNames.ReviewAgentSessionBinding,
+            "{\"sessionOwnerId\":\"session-1\",\"conversationOwnerId\":\"session-1\",\"bindingMethod\":\"created_remote_thread\",\"bindingOutcome\":\"succeeded\",\"remoteConversationId\":\"conv-1\"}",
+            "{\"providerResponseId\":\"resp-1\"}",
+            null,
+            CancellationToken.None);
+        await sut.RecordReviewStrategyEventAsync(
+            protocolId,
             ReviewProtocolEventNames.ReviewAgentSessionTurn,
             "{\"turnNumber\":2,\"sessionMode\":\"LocalManagedSession\",\"contextStrategy\":\"CompactedReplay\"}",
             "{\"outputSample\":\"Compacted replay succeeded.\"}",
@@ -66,7 +73,12 @@ public sealed class InMemoryProtocolRecorderTests
             CancellationToken.None);
 
         var protocol = Assert.Single(job.Protocols);
-        Assert.Equal(2, protocol.Events.Count);
+        Assert.Equal(3, protocol.Events.Count);
+
+        var bindingEvent = Assert.Single(protocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionBinding);
+        Assert.Equal(ProtocolEventKind.Operational, bindingEvent.Kind);
+        Assert.Contains("created_remote_thread", bindingEvent.InputTextSample, StringComparison.Ordinal);
+        Assert.Contains("resp-1", bindingEvent.OutputSummary, StringComparison.Ordinal);
 
         var turnEvent = Assert.Single(protocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionTurn);
         Assert.Equal(ProtocolEventKind.Operational, turnEvent.Kind);

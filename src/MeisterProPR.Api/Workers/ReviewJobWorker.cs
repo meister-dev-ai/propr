@@ -21,6 +21,7 @@ public sealed partial class ReviewJobWorker(
     ReviewJobMetrics metrics,
     ILogger<ReviewJobWorker> logger) : BackgroundService
 {
+    private readonly ConcurrentDictionary<Guid, byte> _claimed = new();
     private readonly ConcurrentDictionary<Guid, Task> _inflight = new();
     private DateTimeOffset _lastCleanupAt = DateTimeOffset.MinValue;
     private TaskCompletionSource _startedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -110,10 +111,15 @@ public sealed partial class ReviewJobWorker(
             }
 
             var capturedJob = job;
+            this._claimed[capturedJob.Id] = 0;
             var task = this.ProcessJobSafeAsync(capturedJob, stoppingToken);
             this._inflight[capturedJob.Id] = task;
             _ = task.ContinueWith(
-                t => this._inflight.TryRemove(capturedJob.Id, out _),
+                t =>
+                {
+                    this._inflight.TryRemove(capturedJob.Id, out _);
+                    this._claimed.TryRemove(capturedJob.Id, out _);
+                },
                 TaskScheduler.Default);
         }
     }
@@ -199,6 +205,11 @@ public sealed partial class ReviewJobWorker(
             var stuckJobs = await jobRepository.GetStuckProcessingJobsAsync(timeout, ct);
             foreach (var job in stuckJobs)
             {
+                if (this._claimed.ContainsKey(job.Id))
+                {
+                    continue;
+                }
+
                 LogStuckJobDetected(logger, job.Id, job.ProcessingStartedAt);
                 await jobRepository.SetFailedAsync(
                     job.Id,

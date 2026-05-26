@@ -140,4 +140,21 @@ public class ReviewFileResultTests
         Assert.Throws<InvalidOperationException>(() =>
             carried.MarkCompleted("should throw", new List<ReviewComment>().AsReadOnly()));
     }
+
+    [Fact]
+    public void CreateResumed_CopiesCompletedResultWithoutCarryForwardFlag()
+    {
+        var prior = new ReviewFileResult(Guid.NewGuid(), "src/Resume.cs");
+        var comments = new List<ReviewComment> { new("src/Resume.cs", 12, CommentSeverity.Warning, "resume me") }.AsReadOnly();
+        prior.MarkCompleted("prior summary", comments);
+
+        var resumed = ReviewFileResult.CreateResumed(Guid.NewGuid(), prior);
+
+        Assert.True(resumed.IsComplete);
+        Assert.False(resumed.IsCarriedForward);
+        Assert.Equal("prior summary", resumed.PerFileSummary);
+        Assert.Equal(comments, resumed.Comments);
+        Assert.Equal(prior.JobId, resumed.ResumedFromJobId);
+        Assert.Equal(prior.Id, resumed.ResumedFromFileResultId);
+    }
 }

@@ -95,7 +95,11 @@ internal sealed class ReviewLoopState
             now,
             this.Session.ContinuationHandle,
             this.Session.WorkingMemory,
-            this.Session.Fallbacks);
+            this.Session.Fallbacks,
+            mode == AgentReviewSessionMode.ProviderManagedSession
+                ? AgentReviewPromptMode.InitialBind
+                : AgentReviewPromptMode.FullReplayFallback,
+            this.Session.RemoteConversationId);
     }
 
     /// <summary>Sets the durable replay baseline used for later stateless fallback or compaction.</summary>
@@ -111,9 +115,15 @@ internal sealed class ReviewLoopState
     {
         var now = DateTimeOffset.UtcNow;
         this.ProviderContinuationToken = continuationToken;
+        var remoteConversationId = handle?.ProviderSessionId ?? this.Session.RemoteConversationId;
         this.Session = this.Session with
         {
             ContinuationHandle = handle,
+            RemoteConversationId = remoteConversationId,
+            ActivePromptMode = this.Session.Mode == AgentReviewSessionMode.ProviderManagedSession &&
+                               !string.IsNullOrWhiteSpace(remoteConversationId)
+                ? AgentReviewPromptMode.CurrentPromptOnly
+                : this.Session.ActivePromptMode,
             LastUpdatedAt = now,
         };
     }
@@ -196,6 +206,15 @@ internal sealed class ReviewLoopState
         long? inputTokens,
         long? outputTokens)
     {
+        var usedRemoteConversation = this.Session.Mode == AgentReviewSessionMode.ProviderManagedSession &&
+                                     !string.IsNullOrWhiteSpace(this.Session.RemoteConversationId);
+        var promptMode = usedRemoteConversation
+            ? this.Iteration == 1
+                ? AgentReviewPromptMode.InitialBind
+                : AgentReviewPromptMode.CurrentPromptOnly
+            : this.Session.Mode == AgentReviewSessionMode.StatelessReplay
+                ? AgentReviewPromptMode.FullReplayFallback
+                : this.Session.ActivePromptMode;
         var turn = new TurnContextSubmission(
             this.Iteration,
             strategy,
@@ -208,8 +227,17 @@ internal sealed class ReviewLoopState
             this.Session.ContinuationHandle?.HandleValue,
             this.Session.ContinuationHandle?.ProviderSessionId,
             this.Session.ContinuationHandle?.ProviderResponseId,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            promptMode,
+            usedRemoteConversation,
+            !usedRemoteConversation,
+            this.Session.RemoteConversationId);
         this.TurnHistory.Add(turn);
+        this.Session = this.Session with
+        {
+            ActivePromptMode = promptMode,
+            LastUpdatedAt = DateTimeOffset.UtcNow,
+        };
     }
 
     /// <summary>Downgrades the session to a safer mode and records the fallback.</summary>
@@ -237,6 +265,7 @@ internal sealed class ReviewLoopState
             Status = AgentReviewSessionStatus.Downgraded,
             Fallbacks = fallbacks.AsReadOnly(),
             ContinuationHandle = null,
+            ActivePromptMode = AgentReviewPromptMode.FullReplayFallback,
             LastUpdatedAt = DateTimeOffset.UtcNow,
         };
         this.ProviderContinuationToken = null;

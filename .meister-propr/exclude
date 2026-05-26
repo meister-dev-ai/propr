@@ -16,7 +16,7 @@
 # mechanical contract/client regeneration, even though API behavior changes must
 # still keep the contract aligned.
 openapi.json
-admin-ui/src/services/generated/**
+frontend/src/services/generated/**
 
 # --- ProRV Text Assets ---
 src/MeisterProPR.ProRV/Assets/*.txt

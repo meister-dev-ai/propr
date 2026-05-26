@@ -6911,6 +6911,15 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "includeEvents",
+            "in": "query",
+            "description": "When false, omits heavy per-event bodies from the list response while retaining event rows and metadata.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "responses": {
@@ -7002,6 +7011,15 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "includeEvents",
+            "in": "query",
+            "description": "When false, omits heavy per-event bodies from the list response while retaining event rows and metadata.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "responses": {
@@ -7056,6 +7074,190 @@
           },
           "404": {
             "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewing/jobs/{id}/protocol/{protocolId}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "protocolId",
+            "in": "path",
+            "description": "The protocol-pass identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Protocol pass returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job or protocol pass not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{id}/protocol/{protocolId}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "protocolId",
+            "in": "path",
+            "description": "The protocol-pass identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Protocol pass returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobProtocolDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job or protocol pass not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -17156,6 +17358,39 @@
         "type": "string",
         "description": "Scope of a MeisterProPR.Domain.Entities.PromptOverride."
       },
+      "ProtocolAgentSessionDto": {
+        "type": "object",
+        "properties": {
+          "usedManagedRemoteConversation": {
+            "type": "boolean"
+          },
+          "remoteConversationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "bindingMethod": {
+            "type": "string",
+            "nullable": true
+          },
+          "bindingOutcome": {
+            "type": "string",
+            "nullable": true
+          },
+          "promptMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "usedLocalReplay": {
+            "type": "boolean"
+          },
+          "fallbackReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Managed file-review session visibility metadata for one protocol pass."
+      },
       "ProtocolEventDto": {
         "type": "object",
         "properties": {
@@ -17276,6 +17511,31 @@
         },
         "additionalProperties": false,
         "description": "Follow-up visibility metadata for one file-linked protocol pass."
+      },
+      "ProtocolInheritanceDto": {
+        "type": "object",
+        "properties": {
+          "sourceJobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceFileResultId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceProtocolId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceCompletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Inherited pass metadata projected into the current job protocol view."
       },
       "ProtocolProRvPrefilterDto": {
         "type": "object",
@@ -17952,6 +18212,16 @@
           },
           "proRvPrefilter": {
             "$ref": "#/components/schemas/ProtocolProRvPrefilterDto"
+          },
+          "agentSession": {
+            "$ref": "#/components/schemas/ProtocolAgentSessionDto"
+          },
+          "isInherited": {
+            "type": "boolean",
+            "description": "True when this pass was inherited from a prior same-revision retry source job."
+          },
+          "inheritance": {
+            "$ref": "#/components/schemas/ProtocolInheritanceDto"
           }
         },
         "additionalProperties": false,

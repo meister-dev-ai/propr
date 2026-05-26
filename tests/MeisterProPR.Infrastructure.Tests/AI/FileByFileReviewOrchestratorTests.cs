@@ -828,7 +828,7 @@ public class FileByFileReviewOrchestratorTests
             prefilterModel,
             prefilterBinding,
             prefilterClient,
-            new AgentReviewRuntimeCapabilities(false, false, false));
+            new AgentReviewRuntimeCapabilities(false, false, false, false));
         var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
             .Returns(prefilterRuntime);
@@ -941,7 +941,7 @@ public class FileByFileReviewOrchestratorTests
             prefilterModel,
             prefilterBinding,
             prefilterClient,
-            new AgentReviewRuntimeCapabilities(false, false, false));
+            new AgentReviewRuntimeCapabilities(false, false, false, false));
         var aiRuntimeResolver = Substitute.For<IAiRuntimeResolver>();
         aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, Arg.Any<CancellationToken>())
             .Returns(prefilterRuntime);
@@ -1486,7 +1486,6 @@ public class FileByFileReviewOrchestratorTests
     [Fact]
     public async Task ReviewAsync_WhenProviderManagedContinuationFails_FileReviewFallsBackAndStillCompletes()
     {
-        var capturedConversationIds = new List<string?>();
         var protocolId = Guid.NewGuid();
         ReviewSystemContext? capturedFileContext = null;
 
@@ -1494,13 +1493,18 @@ public class FileByFileReviewOrchestratorTests
         providerManagedClient
             .GetResponseAsync(
                 Arg.Any<IEnumerable<ChatMessage>>(),
-                Arg.Do<ChatOptions?>(options => capturedConversationIds.Add(options?.ConversationId)),
+                Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(
                 _ => new ChatResponse(
+                [
                     new ChatMessage(
                         ChatRole.Assistant,
-                        [new FunctionCallContent("call-1", "get_changed_files")]))
+                        [new FunctionCallContent("call-1", "get_changed_files")]),
+                    new ChatMessage(
+                        ChatRole.Tool,
+                        [new FunctionResultContent("call-1", "[]")]),
+                ])
                 {
                     ConversationId = "conv-1",
                     ResponseId = "resp-1",
@@ -1557,14 +1561,11 @@ public class FileByFileReviewOrchestratorTests
 
         var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, providerManagedClient);
         var context = CreateContext();
-        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, false, true);
+        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, true, false, true);
 
         var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
         Assert.Equal("synthesis summary", result.Summary);
-        Assert.True(capturedConversationIds.Count >= 3);
-        Assert.Equal("conv-1", capturedConversationIds[1]);
-        Assert.Null(capturedConversationIds[2]);
 
         Assert.NotNull(capturedFileContext);
         Assert.NotNull(capturedFileContext!.ReviewSession);
@@ -1591,6 +1592,124 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_TwoFiles_UsesDistinctPerFileManagedConversationOwnership()
+    {
+        var capturedFileContexts = new List<ReviewSystemContext>();
+        var capturedPullRequests = new List<PullRequest>();
+        var providerManagedClient = Substitute.For<IChatClient>();
+        providerManagedClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Do<PullRequest>(prArg => capturedPullRequests.Add(prArg)),
+                Arg.Do<ReviewSystemContext>(context => capturedFileContexts.Add(context)),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var prArg = callInfo.Arg<PullRequest>();
+                var context = callInfo.ArgAt<ReviewSystemContext>(1);
+                var filePath = Assert.Single(prArg.ChangedFiles).Path;
+                var suffix = filePath.EndsWith("Foo.cs", StringComparison.Ordinal) ? "a" : "b";
+                context.ReviewSession = new AgentReviewSession(
+                    $"session-{suffix}",
+                    AgentReviewSessionMode.ProviderManagedSession,
+                    AgentReviewSessionStatus.Completed,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    new SessionContinuationHandle(
+                        SessionContinuationHandleType.ProviderSession,
+                        $"conv-{suffix}",
+                        $"conv-{suffix}",
+                        $"resp-{suffix}",
+                        DateTimeOffset.UtcNow),
+                    [],
+                    [],
+                    AgentReviewPromptMode.CurrentPromptOnly,
+                    $"conv-{suffix}");
+                context.LoopMetrics = new ReviewLoopMetrics(
+                    0,
+                    null,
+                    null,
+                    90,
+                    0,
+                    0,
+                    1,
+                    AgentReviewSessionMode.ProviderManagedSession,
+                    null,
+                    null,
+                    $"conv-{suffix}",
+                    $"resp-{suffix}",
+                    AgentReviewPromptMode.CurrentPromptOnly);
+                return Task.FromResult(new ReviewResult("per-file done", []));
+            });
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"), CreateFile("src/Bar.cs"));
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, providerManagedClient);
+        var context = CreateContext();
+        context.RuntimeCapabilities = new AgentReviewRuntimeCapabilities(true, true, false, true);
+        context.ReviewSession = new AgentReviewSession(
+            "stale-base-session",
+            AgentReviewSessionMode.ProviderManagedSession,
+            AgentReviewSessionStatus.Active,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            null,
+            [],
+            [],
+            AgentReviewPromptMode.CurrentPromptOnly,
+            "stale-base-conversation");
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Equal("synthesis summary", result.Summary);
+        Assert.Equal(2, capturedFileContexts.Count);
+        Assert.All(capturedPullRequests.Take(2), filePr => Assert.Single(filePr.ChangedFiles));
+        var perFileSessions = capturedPullRequests
+            .Take(2)
+            .Select((filePr, index) => new
+            {
+                FilePath = filePr.ChangedFiles[0].Path,
+                Session = Assert.IsType<AgentReviewSession>(capturedFileContexts[index].ReviewSession),
+            })
+            .ToDictionary(entry => entry.FilePath, entry => entry.Session, StringComparer.Ordinal);
+
+        Assert.Equal(2, perFileSessions.Count);
+        Assert.Contains("src/Foo.cs", perFileSessions.Keys);
+        Assert.Contains("src/Bar.cs", perFileSessions.Keys);
+
+        var firstSession = perFileSessions["src/Foo.cs"];
+        var secondSession = perFileSessions["src/Bar.cs"];
+        Assert.NotEqual(firstSession.LocalSessionId, secondSession.LocalSessionId);
+        Assert.Equal(firstSession.LocalSessionId, firstSession.ConversationOwnerId);
+        Assert.Equal(secondSession.LocalSessionId, secondSession.ConversationOwnerId);
+        Assert.True(firstSession.RemoteConversationId is "conv-a" or "conv-b");
+        Assert.True(secondSession.RemoteConversationId is "conv-a" or "conv-b");
+        Assert.NotEqual(firstSession.RemoteConversationId, secondSession.RemoteConversationId);
+        Assert.NotEqual("stale-base-session", firstSession.LocalSessionId);
+        Assert.NotEqual("stale-base-session", secondSession.LocalSessionId);
+        Assert.NotEqual("stale-base-conversation", firstSession.RemoteConversationId);
+        Assert.NotEqual("stale-base-conversation", secondSession.RemoteConversationId);
     }
 
     [Fact]

@@ -271,6 +271,36 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
     }
 
     [Fact]
+    public async Task RecordReviewStrategyEventAsync_SessionBinding_PersistsBindingPayloads()
+    {
+        const string details = """
+                               {"sessionOwnerId":"session-1","conversationOwnerId":"session-1","bindingMethod":"created_remote_thread","bindingOutcome":"succeeded","promptMode":"InitialBind","remoteConversationId":"conv-1","sessionMode":"ProviderManagedSession"}
+                               """;
+        const string output = """
+                              {"providerResponseId":"resp-1"}
+                              """;
+
+        await this._recorder.RecordReviewStrategyEventAsync(
+            this._protocolId,
+            ReviewProtocolEventNames.ReviewAgentSessionBinding,
+            details,
+            output,
+            null);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == ReviewProtocolEventNames.ReviewAgentSessionBinding)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(ProtocolEventKind.Operational, stored.Kind);
+        Assert.Equal(details, stored.InputTextSample);
+        Assert.Equal(output, stored.OutputSummary);
+        Assert.Contains("created_remote_thread", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("InitialBind", stored.InputTextSample ?? string.Empty);
+        Assert.Contains("resp-1", stored.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
     public async Task RecordReviewStrategyEventAsync_SessionFallback_PersistsFallbackPayloads()
     {
         const string details = """

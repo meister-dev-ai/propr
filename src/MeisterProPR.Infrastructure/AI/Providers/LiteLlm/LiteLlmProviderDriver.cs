@@ -47,6 +47,7 @@ public sealed class LiteLlmProviderDriver(OpenAiCompatibleTransport transport) :
         return new AgentReviewRuntimeCapabilities(
             false,
             false,
+            false,
             false);
     }
 

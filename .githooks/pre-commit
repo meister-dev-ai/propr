@@ -20,14 +20,17 @@ if command -v jb > /dev/null 2>&1; then
     if [ -n "$STAGED_CS_FILES" ]; then
         echo "Running 'jb cleanupcode'..."
 
-        # Run cleanup
-        jb cleanupcode "MeisterProPR.slnx" --include="$JB_FILES"
+        # Run cleanup when the local JetBrains toolchain is healthy.
+        # If it is installed but broken, keep build/test enforcement active.
+        if jb cleanupcode "MeisterProPR.slnx" --include="$JB_FILES"; then
+            # 3. Stage ONLY the files that were in our list
+            # xargs passes the list of files to git add
+            printf '%s\n' "$STAGED_CS_FILES" | xargs git add
 
-        # 3. Stage ONLY the files that were in our list
-        # xargs passes the list of files to git add
-        printf '%s\n' "$STAGED_CS_FILES" | xargs git add
-
-        echo "Cleanup complete and specific files staged."
+            echo "Cleanup complete and specific files staged."
+        else
+            echo "JetBrains 'jb cleanupcode' failed. Skipping cleanup and continuing with build/test checks."
+        fi
     fi
 else
     echo "JetBrains 'jb' not found. Skipping cleanup."

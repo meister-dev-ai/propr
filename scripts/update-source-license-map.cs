@@ -11,7 +11,7 @@ const string commercialNotice = "This file implements commercial-only functional
 var scanRoots = new[]
 {
     Path.Combine(repoRoot, "src"),
-    Path.Combine(repoRoot, "admin-ui", "src"),
+    Path.Combine(repoRoot, "frontend", "src"),
 };
 
 var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -232,6 +233,7 @@ public sealed class JobsController(
     ///     Returns the protocol (agentic trace) for a single review job.
     /// </summary>
     /// <param name="id">The review job identifier.</param>
+    /// <param name="includeEvents">When false, omits heavy per-event bodies from the list response while retaining event rows and metadata.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The protocol records with all captured events, or 404 if the job has no protocols.</returns>
     /// <response code="200">Protocols returned.</response>
@@ -242,7 +244,10 @@ public sealed class JobsController(
     [ProducesResponseType(typeof(IReadOnlyList<ReviewJobProtocolDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetJobProtocol(Guid id, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetJobProtocol(
+        Guid id,
+        [FromQuery] bool includeEvents = true,
+        CancellationToken cancellationToken = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is not null)
@@ -251,7 +256,7 @@ public sealed class JobsController(
         }
 
         var protocolResult = await getReviewJobProtocolHandler.HandleAsync(
-            new GetReviewJobProtocolQuery(id),
+            new GetReviewJobProtocolQuery(id, includeEvents),
             cancellationToken);
         if (protocolResult is null)
         {
@@ -270,6 +275,48 @@ public sealed class JobsController(
         }
 
         return this.Ok(protocolResult.Protocols);
+    }
+
+    /// <summary>
+    ///     Returns one full protocol pass (including captured event bodies) for a single review job.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="protocolId">The protocol-pass identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <response code="200">Protocol pass returned.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="404">Job or protocol pass not found.</response>
+    [HttpGet("/reviewing/jobs/{id:guid}/protocol/{protocolId:guid}")]
+    [HttpGet("/jobs/{id:guid}/protocol/{protocolId:guid}")]
+    [ProducesResponseType(typeof(ReviewJobProtocolDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetJobProtocolPass(
+        Guid id,
+        Guid protocolId,
+        [FromServices] IReviewDiagnosticsReader diagnosticsReader,
+        CancellationToken cancellationToken = default)
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var job = jobRepository.GetById(id);
+        if (job is null)
+        {
+            return this.NotFound();
+        }
+
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
+        var protocolPass = await diagnosticsReader.GetJobProtocolPassAsync(id, protocolId, cancellationToken);
+        return protocolPass is null ? this.NotFound() : this.Ok(protocolPass);
     }
 
     /// <summary>

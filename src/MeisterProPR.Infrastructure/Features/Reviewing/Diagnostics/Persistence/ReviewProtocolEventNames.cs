@@ -44,6 +44,7 @@ public static class ReviewProtocolEventNames
     public const string ProRVFocusedGuidanceApplied = "prorv_focused_guidance_applied";
     public const string ReviewFindingGateSummary = "review_finding_gate_summary";
     public const string ReviewFindingGateDecision = "review_finding_gate_decision";
+    public const string ReviewAgentSessionBinding = "review_agent_session_binding";
     public const string ReviewAgentSessionTurn = "review_agent_session_turn";
     public const string ReviewAgentSessionFallback = "review_agent_session_fallback";
     public const string VerificationClaimsExtracted = "verification_claims_extracted";

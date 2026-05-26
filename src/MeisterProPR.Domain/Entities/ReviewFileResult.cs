@@ -32,10 +32,10 @@ public class ReviewFileResult
     }
 
     /// <summary>The unique identifier of this file result row.</summary>
-    public Guid Id { get; private set; }
+    public Guid Id { get; }
 
     /// <summary>The owning review job identifier.</summary>
-    public Guid JobId { get; private set; }
+    public Guid JobId { get; }
 
     /// <summary>The repository-relative file path being reviewed.</summary>
     public string FilePath { get; } = null!;
@@ -54,6 +54,16 @@ public class ReviewFileResult
     ///     rather than freshly computed in the current review pass.
     /// </summary>
     public bool IsCarriedForward { get; private set; }
+
+    /// <summary>
+    ///     The prior review job that supplied this file result during a same-revision retry resume, when applicable.
+    /// </summary>
+    public Guid? ResumedFromJobId { get; private set; }
+
+    /// <summary>
+    ///     The prior file-result row that supplied this file result during a same-revision retry resume, when applicable.
+    /// </summary>
+    public Guid? ResumedFromFileResultId { get; private set; }
 
     /// <summary>The exclusion rule that matched this file, when <see cref="IsExcluded" /> is true.</summary>
     public string? ExclusionReason { get; private set; }
@@ -80,6 +90,22 @@ public class ReviewFileResult
         result.IsCarriedForward = true;
         result.PerFileSummary = prior.PerFileSummary;
         result.Comments = prior.Comments;
+        return result;
+    }
+
+    /// <summary>
+    ///     Creates a completed result for a retried job from a prior terminal attempt of the same revision.
+    ///     Unlike carry-forward, this remains part of the fresh review corpus so synthesis and posting can continue
+    ///     from already-reviewed files.
+    /// </summary>
+    public static ReviewFileResult CreateResumed(Guid jobId, ReviewFileResult prior)
+    {
+        var result = new ReviewFileResult(jobId, prior.FilePath);
+        result.IsComplete = true;
+        result.PerFileSummary = prior.PerFileSummary;
+        result.Comments = prior.Comments;
+        result.ResumedFromJobId = prior.JobId;
+        result.ResumedFromFileResultId = prior.Id;
         return result;
     }
 

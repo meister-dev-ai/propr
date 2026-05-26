@@ -3590,6 +3590,300 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                "new-head",
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NonAdoFailedSameRevision_ResumesFromBestTerminalJob()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "GitHub PR",
+            null,
+            "feature/x",
+            "main",
+            [changedFile]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
+
+        var failedPriorJob = BuildPriorJob(job, 1, "src/Changed.cs");
+        failedPriorJob.Status = JobStatus.Failed;
+        failedPriorJob.CompletedAt = DateTimeOffset.UtcNow;
+        failedPriorJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "base-sha...old-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(null));
+        jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "new-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(failedPriorJob));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => !r.IsCarriedForward && r.IsComplete && r.FilePath == "src/Changed.cs"),
+                Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive()
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.FilePath == "src/Unchanged.cs"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NonAdoFailedSameRevisionWithoutScan_ResumesFromBestTerminalJob()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "GitHub PR",
+            null,
+            "feature/x",
+            "main",
+            [changedFile]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(null));
+
+        var failedPriorJob = BuildPriorJob(job, 1, "src/Changed.cs");
+        failedPriorJob.Status = JobStatus.Failed;
+        failedPriorJob.CompletedAt = DateTimeOffset.UtcNow;
+        failedPriorJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "new-head",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(failedPriorJob));
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                "new-head",
+                Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => !r.IsCarriedForward && r.IsComplete && r.FilePath == "src/Changed.cs"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AdoFailedCurrentRevision_ResumesCompletedChangedFiles()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "ado-revision-2", null));
+        var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "new content", "diff");
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "Test PR",
+            null,
+            "feature/x",
+            "main",
+            [changedFile]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var scan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
+        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewPrScan?>(scan));
+
+        var priorBaseline = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
+        jobs.GetCompletedJobWithFileResultsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                1,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(priorBaseline));
+
+        var failedCurrentJob = BuildPriorJob(job, job.IterationId, "src/Changed.cs");
+        failedCurrentJob.Status = JobStatus.Failed;
+        failedCurrentJob.CompletedAt = DateTimeOffset.UtcNow;
+        failedCurrentJob.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "ado-revision-2", null));
+        jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                "ado-revision-2",
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(failedCurrentJob));
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => !r.IsCarriedForward && r.IsComplete && r.FilePath == "src/Changed.cs"),
+                Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Unchanged.cs"),
+                Arg.Any<CancellationToken>());
     }
 
     [Fact]

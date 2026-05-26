@@ -593,10 +593,24 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("per_file_summary");
 
+                    b.Property<Guid?>("ResumedFromFileResultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resumed_from_file_result_id");
+
+                    b.Property<Guid?>("ResumedFromJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resumed_from_job_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("JobId")
                         .HasDatabaseName("ix_review_file_results_job_id");
+
+                    b.HasIndex("ResumedFromFileResultId")
+                        .HasDatabaseName("ix_review_file_results_resumed_from_file_result_id");
+
+                    b.HasIndex("ResumedFromJobId")
+                        .HasDatabaseName("ix_review_file_results_resumed_from_job_id");
 
                     b.HasIndex("JobId", "FilePath")
                         .IsUnique()
@@ -1565,16 +1579,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("default_review_strategy");
 
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("display_name");
+
                     b.Property<bool>("EnableProRV")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("enable_prorv");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("display_name");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()

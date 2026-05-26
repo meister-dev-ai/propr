@@ -1,6 +1,6 @@
 """
 description: Current backend and frontend test conventions including WebApplicationFactory hosts, JWT-based auth fixtures, in-memory vs PostgreSQL coverage, and Vitest/MSW patterns.
-when-to-use: When test files change in tests/ or admin-ui/, or when production changes need matching automated coverage.
+when-to-use: When test files change in tests/ or frontend/, or when production changes need matching automated coverage.
 """
 
 # Testing Patterns
@@ -9,7 +9,7 @@ when-to-use: When test files change in tests/ or admin-ui/, or when production c
 
 - Backend tests use xUnit with NSubstitute.
 - Frontend unit/component tests use Vitest 3 with `@vue/test-utils`.
-- Browser-level frontend flows use Playwright under `admin-ui/tests/e2e/`.
+- Browser-level frontend flows use Playwright under `frontend/tests/e2e/`.
 
 ## API Host Tests
 

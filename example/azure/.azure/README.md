@@ -35,7 +35,7 @@ example/azure/.azure/
 | Container App: reverse proxy | `{projectName}-reverse-proxy` | External ingress; official nginx image from Docker Hub |
 | Container App: backend | `{projectName}-backend` | Internal ingress; secrets from Key Vault |
 | Container App: procursor | `{projectName}-procursor` | Internal ingress; ProCursor execution host and workers |
-| Container App: admin-ui | `{projectName}-admin-ui` | Internal ingress |
+| Container App: frontend | `{projectName}-frontend` | Internal ingress |
 | Container App: db | `{projectName}-db` | Internal ingress; TCP on 5432; pgvector image from Docker Hub; Azure Files volume |
 | Azure Files share | `data-protection-keys` | Optional shared ASP.NET Core Data Protection key ring for the example deployment |
 
@@ -45,7 +45,7 @@ example/azure/.azure/
 |---|---|---|---|
 | `projectName` | | `meister-propr` | Drives all resource names |
 | `location` | | `switzerlandnorth` | Azure region |
-| `imageTag` | | auto-resolved by `deploy.ps1` | Published tag shared by the backend, admin-ui, and ProCursor images |
+| `imageTag` | | auto-resolved by `deploy.ps1` | Published tag shared by the backend, frontend, and ProCursor images |
 | `deployApps` | | `true` | Set to `false` if you want infrastructure only |
 | `dbConnectionString` | | | Optional PostgreSQL connection string override input for ProPR (**secure**, stored in Key Vault). The effective runtime connection string is always required; if this parameter is omitted, the deployment derives it for the internal database app. |
 | `proCursorDbConnectionString` | | | Optional PostgreSQL connection string override input for ProCursor operational tables (**secure**, stored in Key Vault). The effective runtime connection string is always required; if this parameter is omitted, the deployment reuses the effective ProPR database connection string. |
@@ -70,7 +70,7 @@ Fill in non-secret values in `main.bicepparam`. Pass all `@secure()` parameters 
 
 `deploy.ps1` handles the full lifecycle in one pass: deploy infrastructure and container apps using public images from GHCR and Docker Hub. No local image build or registry push is required.
 
-If you omit `ImageTag`, the script queries GHCR and picks the newest published tag that exists for backend, ProCursor, and admin-ui. If you pass `ImageTag`, the script verifies it exists before deploying.
+If you omit `ImageTag`, the script queries GHCR and picks the newest published tag that exists for backend, ProCursor, and frontend. If you pass `ImageTag`, the script verifies it exists before deploying.
 
 #### Interactive — prompts for anything not supplied
 
@@ -135,12 +135,12 @@ az deployment group show \
 
 Public routes follow the local docker-compose example:
 
-- `/` serves the admin UI
+- `/` serves the frontend
 - `/api/` proxies to the backend and strips the `/api` prefix before forwarding
 
 ### Subsequent deployments
 
-Re-run the deploy script with a published `ImageTag` to roll out updated backend, admin-ui, and ProCursor images, or omit `ImageTag` to use the newest common published tag. The script now validates that the requested tag exists for all three GHCR images before deployment. The nginx and pgvector images stay on their fixed public tags.
+Re-run the deploy script with a published `ImageTag` to roll out updated backend, frontend, and ProCursor images, or omit `ImageTag` to use the newest common published tag. The script now validates that the requested tag exists for all three GHCR images before deployment. The nginx and pgvector images stay on their fixed public tags.
 
 ## Image sources
 
@@ -148,7 +148,7 @@ The deployment pulls these public images directly:
 
 - Backend App: `ghcr.io/meister-dev-ai/propr:<tag>`
 - ProCursor App: `ghcr.io/meister-dev-ai/propr/procursor:<tag>`
-- Admin UI App: `ghcr.io/meister-dev-ai/propr/admin-ui:<tag>`
+- Frontend App: `ghcr.io/meister-dev-ai/propr/frontend:<tag>`
 - Reverse proxy: `nginx:alpine`
 - Database: `pgvector/pgvector:pg17`
 

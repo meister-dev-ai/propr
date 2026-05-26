@@ -9,7 +9,7 @@ It explains:
 - where to obtain the required values, and
 - how provider connections relate to scopes and reviewer identities.
 
-Use this document when configuring providers in the Admin UI or when automating the same setup
+Use this document when configuring providers in the frontend or when automating the same setup
 through the API.
 
 ## Tenant Sign-In Providers vs SCM Provider Connections
@@ -48,7 +48,7 @@ Every provider connection stores the same normalized shape.
 | `oAuthClientId` | OAuth or app client identifier | Only used for Azure DevOps `oauthClientCredentials` |
 | `gitHubAppId` | GitHub App numeric identifier | Only used for GitHub `appInstallation` |
 | `gitHubAppInstallationId` | GitHub App installation numeric identifier | Only used for GitHub `appInstallation` |
-| `displayName` | Friendly label in the Admin UI | Any descriptive name |
+| `displayName` | Friendly label in the frontend | Any descriptive name |
 | `secret` | Protected credential material | Stored encrypted; never returned in API responses |
 | `isActive` | Whether this connection is operational | Review, discovery, and webhook flows use active connections only |
 
@@ -80,7 +80,7 @@ Reviewer identity is configured separately from the provider connection.
 | `isBot` | Whether the identity represents a bot or service account |
 
 For Azure DevOps, `externalUserId` is the VSS identity GUID. The easiest way to obtain it is to use
-the reviewer-identity resolution flow in the Admin UI after the provider connection and scope are in
+the reviewer-identity resolution flow in the frontend after the provider connection and scope are in
 place.
 
 ## Azure DevOps
@@ -122,7 +122,7 @@ That means the provider connection is backed by a Microsoft Entra application an
 
 After the connection and at least one enabled organization scope are configured:
 
-1. Use the Admin UI reviewer-identity resolve action.
+1. Use the frontend reviewer-identity resolve action.
 2. Search for the display name of the user or service principal you want ProPR to act as.
 3. Save the returned identity.
 
@@ -240,7 +240,7 @@ Check these first:
 2. `oAuthTenantId` and `oAuthClientId` must both be present for Azure DevOps.
 3. Azure DevOps does not accept `appInstallation`.
 4. `hostBaseUrl` must stay `https://dev.azure.com`; the organization belongs in the scope.
-5. If you rebuilt the code locally but not the containers, restart the stack so the Admin UI and API
+5. If you rebuilt the code locally but not the containers, restart the stack so the frontend and API
    use the updated code.
 
 ### HTTP 400 when switching GitHub authentication modes
@@ -338,7 +338,7 @@ provider ProPR uses for review, memory, and embedding workloads for a client.
 
 | Field | Meaning | Notes |
 |---|---|---|
-| `displayName` | Friendly profile label | Shown in the Admin UI profile list |
+| `displayName` | Friendly profile label | Shown in the frontend profile list |
 | `providerKind` | AI provider family | Supported values include `azureOpenAi`, `openAi`, and `liteLlm` |
 | `baseUrl` | Exact provider endpoint or gateway URL | Preserved exactly as entered |
 | `auth.mode` | Authentication mode | Usually `apiKey`; Azure-hosted profiles can also use `azureIdentity` |

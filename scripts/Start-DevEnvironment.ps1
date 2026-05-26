@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Starts the ProPR dev environment (backend, admin-ui, nginx) without Docker.
+    Starts the ProPR dev environment (backend, frontend, nginx) without Docker.
 
 .DESCRIPTION
-    Builds the admin-ui, then runs nginx as a Podman container that proxies requests
+    Builds the frontend, then runs nginx as a Podman container that proxies requests
     to the host. Optionally starts the .NET backend. Use -SkipBackend to launch the
     backend from your IDE (VS Code, Rider, Visual Studio) with a debugger attached.
 
@@ -14,7 +14,7 @@
       - .NET 10 SDK in PATH  (only needed without -SkipBackend)
 
     nginx container listens on http://localhost:5080 and routes:
-      /admin/*  →  admin-ui/dist/  (static SPA files, volume-mounted)
+      /admin/*  →  frontend/dist/  (static SPA files, volume-mounted)
       /*        →  http://host.containers.internal:8080  (ASP.NET Core backend)
 
     NOTE: env vars from .env are passed only to the backend child process.
@@ -26,7 +26,7 @@
     The backend must listen on http://localhost:<BackendPort> (default 8080).
 
 .PARAMETER SkipBuild
-    Skip 'npm run build'. Use the existing admin-ui/dist/ directory.
+    Skip 'npm run build'. Use the existing frontend/dist/ directory.
 
 .PARAMETER BackendPort
     Port the backend listens on on the host. Default: 8080.
@@ -65,8 +65,8 @@ $ContainerName = 'meisterpropr-nginx-dev'
 # ---------------------------------------------------------------------------
 $RepoRoot    = Split-Path $PSScriptRoot -Parent
 $ApiProject  = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
-$AdminUiDir  = Join-Path $RepoRoot 'admin-ui'
-$AdminUiDist = Join-Path $AdminUiDir 'dist'
+$FrontendDir  = Join-Path $RepoRoot 'frontend'
+$FrontendDist = Join-Path $FrontendDir 'dist'
 $TempDir     = Join-Path $RepoRoot '.dev-env'
 $NginxConf   = Join-Path $TempDir 'nginx.conf'
 $EnvFile     = Join-Path $RepoRoot '.env'
@@ -104,17 +104,17 @@ if (-not $SkipBackend) { Write-Ok "dotnet : $((Get-Command dotnet).Source)" }
 if (-not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
 
 # ---------------------------------------------------------------------------
-# Build admin-ui
+# Build frontend
 # ---------------------------------------------------------------------------
 if ($SkipBuild) {
-    Write-Step 'Skipping admin-ui build (-SkipBuild)'
-    if (-not (Test-Path $AdminUiDist)) {
-        Write-Host "ERROR: $AdminUiDist not found. Run without -SkipBuild first." -ForegroundColor Red
+    Write-Step 'Skipping frontend build (-SkipBuild)'
+    if (-not (Test-Path $FrontendDist)) {
+        Write-Host "ERROR: $FrontendDist not found. Run without -SkipBuild first." -ForegroundColor Red
         exit 1
     }
 } else {
-    Write-Step 'Building admin-ui'
-    Push-Location $AdminUiDir
+    Write-Step 'Building frontend'
+    Push-Location $FrontendDir
     try {
         & npm ci
         if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
@@ -123,7 +123,7 @@ if ($SkipBuild) {
     } finally {
         Pop-Location
     }
-    Write-Ok 'admin-ui built'
+    Write-Ok 'frontend built'
 }
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ Write-Step "Starting nginx container ($ContainerName)"
     --name $ContainerName `
     -p "${ProxyPort}:80" `
     -v "${NginxConf}:/etc/nginx/conf.d/default.conf:ro" `
-    -v "${AdminUiDist}:/usr/share/nginx/html/admin:ro" `
+    -v "${FrontendDist}:/usr/share/nginx/html/admin:ro" `
     nginx:alpine | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
@@ -266,7 +266,7 @@ Write-Host ''
 Write-Host '  ┌──────────────────────────────────────────────────┐' -ForegroundColor Cyan
 Write-Host '  │  MeisterProPR dev environment running            │' -ForegroundColor Cyan
 Write-Host '  ├──────────────────────────────────────────────────┤' -ForegroundColor Cyan
-Write-Host "  │  Admin UI  →  http://localhost:$ProxyPort/admin/        │" -ForegroundColor Cyan
+Write-Host "  │  Frontend  →  http://localhost:$ProxyPort/admin/        │" -ForegroundColor Cyan
 Write-Host "  │  API       →  http://localhost:$ProxyPort               │" -ForegroundColor Cyan
 Write-Host "  │  Backend   →  http://localhost:$BackendPort (direct)    │" -ForegroundColor Cyan
 Write-Host '  │                                                  │' -ForegroundColor Cyan

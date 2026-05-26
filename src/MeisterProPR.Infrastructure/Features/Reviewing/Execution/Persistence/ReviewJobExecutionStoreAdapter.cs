@@ -100,6 +100,40 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
             ct);
     }
 
+    public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            storedRevisionKey,
+            ct);
+    }
+
+    public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            storedRevisionKey,
+            ct);
+    }
+
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         return inner.SetCancelledAsync(id, ct);

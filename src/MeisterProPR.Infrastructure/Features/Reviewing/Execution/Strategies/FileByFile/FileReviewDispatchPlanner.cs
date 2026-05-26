@@ -126,7 +126,6 @@ internal sealed class FileReviewDispatchPlanner(
             DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
             RuntimeCapabilities = baseContext.RuntimeCapabilities,
-            ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
             EnableProRV = false,
             AugmentationMode = baseContext.AugmentationMode,

@@ -102,6 +102,7 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         return new AgentReviewRuntimeCapabilities(
             usesResponses,
             usesResponses,
+            usesResponses,
             usesResponses);
     }
 

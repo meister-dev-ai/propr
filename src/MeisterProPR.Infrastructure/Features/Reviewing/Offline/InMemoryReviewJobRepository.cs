@@ -335,6 +335,56 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 .FirstOrDefault());
     }
 
+    public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(
+            this._jobs.Values
+                .Where(job =>
+                    string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                    && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                    && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                    && job.PullRequestId == pullRequestId
+                    && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled
+                    && string.Equals(
+                        ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
+                        storedRevisionKey,
+                        StringComparison.Ordinal))
+                .OrderByDescending(job => job.CompletedAt)
+                .FirstOrDefault());
+    }
+
+    public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(
+            this._jobs.Values
+                .Where(job =>
+                    string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                    && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                    && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                    && job.PullRequestId == pullRequestId
+                    && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled
+                    && string.Equals(
+                        ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
+                        storedRevisionKey,
+                        StringComparison.Ordinal))
+                .OrderByDescending(job =>
+                    job.FileReviewResults.Count(result => result.IsComplete && !result.IsFailed && !result.IsExcluded && !result.IsCarriedForward))
+                .ThenByDescending(job => job.CompletedAt)
+                .FirstOrDefault());
+    }
+
     public Task UpdateAiConfigAsync(
         Guid id,
         Guid? connectionId,

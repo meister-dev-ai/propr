@@ -43,10 +43,10 @@ services:
     ports:
       - "5432:5432"
 
-  admin-ui:
+  frontend:
     build:
       context: ../..
-      dockerfile: admin-ui/Dockerfile
+      dockerfile: frontend/Dockerfile
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://127.0.0.1/healthz" ]
       interval: 15s
@@ -68,7 +68,7 @@ services:
     depends_on:
       meisterpropr:
         condition: service_healthy
-      admin-ui:
+      frontend:
         condition: service_healthy
       grafana:
         condition: service_started

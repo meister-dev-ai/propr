@@ -119,6 +119,29 @@ public interface IReviewJobExecutionStore
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Gets the most-recent terminal review job with file results for the supplied stored revision key.
+    /// </summary>
+    Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Gets the terminal review job with file results for the supplied stored revision key that offers the most
+    ///     reusable completed file results.
+    /// </summary>
+    Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Marks a review job as cancelled.
     /// </summary>
     /// <param name="id">The review job identifier.</param>

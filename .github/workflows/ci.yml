@@ -134,8 +134,8 @@ jobs:
       - name: Run API tests
         run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
 
-  admin-ui-tests:
-    name: Admin UI tests
+  frontend-tests:
+    name: Frontend tests
     runs-on: ubuntu-latest
     needs: test
     permissions:
@@ -148,17 +148,17 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install admin-ui dependencies
+      - name: Install frontend dependencies
         run: npm ci
-        working-directory: admin-ui
+        working-directory: frontend
 
-      - name: Type check admin-ui
+      - name: Type check frontend
         run: npm run type-check
-        working-directory: admin-ui
+        working-directory: frontend
 
-      - name: Run admin-ui unit tests
+      - name: Run frontend unit tests
         run: npm test
-        working-directory: admin-ui
+        working-directory: frontend
 
   build-backend-image:
     name: Build backend image
@@ -203,7 +203,7 @@ jobs:
   build-frontend-image:
     name: Build frontend image
     runs-on: ubuntu-latest
-    needs: [ test, admin-ui-tests ]
+    needs: [ test, frontend-tests ]
     permissions:
       contents: read
       security-events: write
@@ -217,10 +217,10 @@ jobs:
         uses: docker/build-push-action@v7.0.0
         with:
           context: .
-          file: admin-ui/Dockerfile
+          file: frontend/Dockerfile
           push: false
           load: true
-          tags: meisterpropr-admin-ui:ci-${{ github.run_number }}
+          tags: meisterpropr-frontend:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -228,7 +228,7 @@ jobs:
         uses: anchore/scan-action@v7.4.0
         id: scan-frontend
         with:
-          image: meisterpropr-admin-ui:ci-${{ github.run_number }}
+          image: meisterpropr-frontend:ci-${{ github.run_number }}
           fail-build: false
           output-format: sarif
 

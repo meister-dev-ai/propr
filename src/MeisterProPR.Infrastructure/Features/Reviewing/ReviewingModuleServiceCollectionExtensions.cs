@@ -90,7 +90,9 @@ public static class ReviewingModuleServiceCollectionExtensions
         services.AddSingleton<ApplicationIAiReviewCore>(sp => new ToolAwareAiReviewCore(
             null,
             sp.GetRequiredService<IOptions<AiReviewOptions>>(),
-            sp.GetRequiredService<ILogger<ToolAwareAiReviewCore>>()));
+            sp.GetRequiredService<ILogger<ToolAwareAiReviewCore>>(),
+            sp.GetService<IManagedReviewSessionTransportFactory>()));
+        services.TryAddSingleton<IManagedReviewSessionTransportFactory, ManagedReviewSessionTransportFactory>();
         services.AddScoped<FileReviewer>(sp => new FileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),

@@ -67,16 +67,22 @@ AGENTS.md
 
 .playwright-mcp
 
-# Node / admin-ui
+# Node / frontend
 node_modules/
 dist/
 build/
-admin-ui/node_modules/
-admin-ui/dist/
-admin-ui/coverage/
-admin-ui/.env.local
-admin-ui/.env.*.local
+coverage/
+playwright-report/
+test-results/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.env.local
+frontend/.env.*.local
 # Derived from root openapi.json — not checked in
-admin-ui/openapi.json
-admin-ui/src/services/generated/
+frontend/openapi.json
+frontend/src/services/generated/
 .vscode/mcp.json

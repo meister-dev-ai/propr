@@ -4,7 +4,7 @@ param projectName string = 'meister-propr'
 @description('Azure region for all resources.')
 param location string = 'switzerlandnorth'
 
-@description('Container image tag for the backend, admin-ui, and ProCursor images.')
+@description('Container image tag for the backend, frontend, and ProCursor images.')
 param imageTag string = 'latest'
 
 @description('Set to false if you want to provision infrastructure without creating the app resources.')

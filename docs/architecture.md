@@ -38,7 +38,7 @@ flowchart TD
     AOAI["Azure OpenAI / AI Foundry"]
     EXT["External Caller (Extension / CI)"]
     PG[("PostgreSQL")]
-    ADMINUI["Admin UI (Vue 3 SPA)"]
+    FRONTEND["Frontend (Vue 3 SPA)"]
 
     subgraph backend["Meister DEV's ProPR Control Plane"]
         API["ASP.NET Core API"]
@@ -52,7 +52,7 @@ flowchart TD
     end
 
     EXT -- "POST /clients/{clientId}/reviewing/jobs" --> API
-    ADMINUI -- "Admin API / JWT" --> API
+    FRONTEND -- "Admin API / JWT" --> API
     API -- "persist job" --> PG
     WORKER -- "poll every 2 s" --> PG
     WORKER -- "fetch PR diff" --> ADO

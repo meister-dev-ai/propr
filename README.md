@@ -35,7 +35,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Per-file agentic review** — each changed file gets its own AI pass with tool-calling for cross-file investigation
 - **Automatic crawling** — background worker polls for PRs assigned to a configured reviewer
 - **Beautiful UI** - The UI is tailored towards efficient triage of review comments, with a summary dashboard, file tree sidebar, and token consumption aggregates
-- **Mixed-provider operations** — provider connections expose authoritative readiness separate from onboarding verification, plus connection-scoped status, verification history, webhook delivery logs, and categorized failures in the admin UI
+- **Mixed-provider operations** — provider connections expose authoritative readiness separate from onboarding verification, plus connection-scoped status, verification history, webhook delivery logs, and categorized failures in the frontend
 - **GitHub App installation support** - GitHub provider connections can authenticate with either PATs or installed GitHub Apps, with private keys protected at rest and installation tokens minted on demand
 
 ### BYOAI
@@ -52,7 +52,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
 - **Verification-backed publication control** — structured claim extraction, local contradiction checks, PR-level evidence attempt recording, bounded AI micro-verification, and deterministic final gating reduce false positives without replacing the existing staged review flow; support hints and fetched files do not publish broad findings without explicit supported claim outcomes
 - **Fixed-evidence repeated judgment for uncertain follow-up findings** — selected unresolved deeper-follow-up findings can get one extra bounded judgment over the same evidence set; disagreement stays non-publishable and is visible in diagnostics
-- **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the admin UI
+- **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the frontend
 - **Per-client and per Crawl Config prompt overrides** - Override predefined prompts to improve the AI output towards specific use cases
 
 ### Privacy
@@ -116,17 +116,17 @@ docker compose up --build
 curl -k https://localhost:5443/api/healthz
 ```
 
-Open `https://localhost:5443/` for the admin UI.
+Open `https://localhost:5443/` for the frontend.
 
 The default compose topology now runs three application processes: `meisterpropr` (public control plane),
-`procursor` (internal execution service), and `admin-ui`. ProPR talks to ProCursor over the internal
+`procursor` (internal execution service), and `frontend`. ProPR talks to ProCursor over the internal
 compose network with the shared `PROCURSOR_SHARED_KEY` carried in `X-ProCursor-Key`.
 
 Release artifacts follow the same split. Published runtime images are:
 
 - `ghcr.io/meister-dev-ai/propr:<tag>` for the ProPR API/control plane
 - `ghcr.io/meister-dev-ai/propr/procursor:<tag>` for the extracted internal ProCursor host
-- `ghcr.io/meister-dev-ai/propr/admin-ui:<tag>` for the admin UI
+- `ghcr.io/meister-dev-ai/propr/frontend:<tag>` for the frontend
 
 Stable releases publish both `<tag>` and `latest` for all three images. Pre-releases publish only the
 versioned tag.
@@ -153,7 +153,7 @@ PR processing. Posting uses the authenticated provider connection identity.
 
 For source-based development without Docker, `./scripts/run-local.sh` now generates one per-run shared
 ProCursor key, starts `MeisterProPR.Api`, waits for its health endpoint, starts
-`MeisterProPR.ProCursor.Service`, waits for its health endpoint, and then starts the admin UI. The
+`MeisterProPR.ProCursor.Service`, waits for its health endpoint, and then starts the frontend. The
 script defaults `PROCURSOR_DB_CONNECTION_STRING` to `DB_CONNECTION_STRING` for the extracted host so
 the local topology can reuse one physical PostgreSQL database while still keeping the control-plane and
 ProCursor operational ownership boundaries separate.
@@ -162,14 +162,14 @@ When `OTLP_ENDPOINT` is configured, both hosts emit OTLP traces for ASP.NET Core
 activity with distinct service names, `MeisterProPR.Api` and `MeisterProPR.ProCursor.Service`, and
 continue exposing Prometheus metrics locally.
 
-See [docs/getting-started.md](docs/getting-started.md) for Admin UI setup and
+See [docs/getting-started.md](docs/getting-started.md) for frontend setup and
 [docs/api.md](docs/api.md) for API examples.
 
 ---
 
 ## Admin Authentication
 
-Access to the admin API and admin UI requires a per-user account. On first startup the server
+Access to the admin API and frontend requires a per-user account. On first startup the server
 seeds an admin account from the bootstrap env vars:
 
 ```bash
@@ -179,7 +179,7 @@ MEISTER_JWT_SECRET=<random-32+-char-string>
 ```
 
 Log in via `POST /api/auth/login` to receive a 15-minute JWT access token and a 7-day refresh token
-when you are calling the default nginx front door on `https://localhost:5443/`. The admin UI handles
+when you are calling the default nginx front door on `https://localhost:5443/`. The frontend handles
 token refresh automatically.
 
 ## Tenant-Scoped SSO And Recovery
@@ -218,7 +218,7 @@ commercial-only capabilities requires a commercial license even for self-hosted 
 - Multiple SCM providers (`multiple-scm-providers`)
 - Crawl configurations (`crawl-configs`)
 
-The admin API and UI expose the installation's configured product edition through `Settings -> Licensing`,
+The admin API and frontend expose the installation's configured product edition through `Settings -> Licensing`,
 `GET /api/admin/licensing`, and `PATCH /api/admin/licensing`.
 
 That product setting is not, by itself, a commercial license grant. The authoritative licensing guidance is
@@ -257,7 +257,7 @@ See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup v
 
 | Document | Description |
 |---|---|
-| [docs/getting-started.md](docs/getting-started.md) | Admin UI setup guide: deploy, bootstrap, and configure clients |
+| [docs/getting-started.md](docs/getting-started.md) | Frontend setup guide: deploy, bootstrap, and configure clients |
 | [docs/provider-connections.md](docs/provider-connections.md) | Provider connection guide: auth modes, required fields, provider scopes, and where to get each value |
 | [docs/api.md](docs/api.md) | Technical API reference and curl examples |
 | [docs/architecture.md](docs/architecture.md) | Architecture overview and links to focused subsystem docs |

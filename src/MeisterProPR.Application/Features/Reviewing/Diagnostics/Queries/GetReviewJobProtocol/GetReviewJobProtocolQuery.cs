@@ -6,4 +6,4 @@ namespace MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetRev
 /// <summary>
 ///     Query for retrieving the protocol history of a single review job.
 /// </summary>
-public sealed record GetReviewJobProtocolQuery(Guid JobId);
+public sealed record GetReviewJobProtocolQuery(Guid JobId, bool IncludeEvents = true);

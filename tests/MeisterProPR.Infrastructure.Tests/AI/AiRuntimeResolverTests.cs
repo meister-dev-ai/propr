@@ -32,7 +32,7 @@ public sealed class AiRuntimeResolverTests
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
         driver.CreateChatClient(connection, model, binding).Returns(chatClient);
         driver.GetChatRuntimeCapabilities(connection, model, binding)
-            .Returns(new AgentReviewRuntimeCapabilities(true, true, true));
+            .Returns(new AgentReviewRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
 
@@ -42,7 +42,7 @@ public sealed class AiRuntimeResolverTests
         Assert.Same(model, runtime.Model);
         Assert.Same(binding, runtime.Binding);
         Assert.Same(chatClient, runtime.ChatClient);
-        Assert.Equal(new AgentReviewRuntimeCapabilities(true, true, true), runtime.Capabilities);
+        Assert.Equal(new AgentReviewRuntimeCapabilities(true, true, true, true), runtime.Capabilities);
         await repository.DidNotReceive().GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 

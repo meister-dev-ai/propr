@@ -1,6 +1,6 @@
 """
 description: Vue 3 SPA conventions covering router-driven admin flows, generated OpenAPI client usage, session state, and frontend test/mocking patterns.
-when-to-use: When files change under admin-ui/, including .vue, .ts, router, services, mocks, or frontend tests.
+when-to-use: When files change under frontend/, including .vue, .ts, router, services, mocks, or frontend tests.
 """
 
 # Frontend Architecture
@@ -19,7 +19,7 @@ when-to-use: When files change under admin-ui/, including .vue, .ts, router, ser
 
 ## Generated API Types And Client
 
-- `npm run generate:api` regenerates both `admin-ui/src/types/index.ts` and `admin-ui/src/services/generated/openapi.ts` from the root `openapi.json`. Do not edit generated OpenAPI type files by hand.
+- `npm run generate:api` regenerates both `frontend/src/types/index.ts` and `frontend/src/services/generated/openapi.ts` from the root `openapi.json`. Do not edit generated OpenAPI type files by hand.
 - The runtime client is `openapi-fetch`, wrapped by `createAdminClient()` in `src/services/api.ts`.
 - `createAdminClient()` is responsible for adding the bearer token, attempting silent refresh near expiry, and throwing `UnauthorizedError` when refresh fails. Keep that behavior centralized.
 - The standard `openapi-fetch` response shape is `{ data, error, response }`. Existing handwritten service modules check `response.ok` and translate API errors before components consume them.
@@ -27,7 +27,7 @@ when-to-use: When files change under admin-ui/, including .vue, .ts, router, ser
 
 ## Service-Layer Pattern
 
-- Files under `admin-ui/src/services/*.ts` are the intended handwritten layer above the generated client. They provide typed convenience methods, error shaping, and small workflow helpers.
+- Files under `frontend/src/services/*.ts` are the intended handwritten layer above the generated client. They provide typed convenience methods, error shaping, and small workflow helpers.
 - Do not collapse those wrappers into components and do not try to hand-edit generated OpenAPI types instead.
 
 ## Security And Rendering
@@ -44,9 +44,9 @@ when-to-use: When files change under admin-ui/, including .vue, .ts, router, ser
 ## Mocking And Tests
 
 - MSW v2 handlers live in `src/mocks/handlers.ts` and use `http`, `HttpResponse`, and the shared `API_BASE_URL`. Handler paths and casing must exactly match client calls.
-- Frontend tests currently live in both `admin-ui/tests/**` and some legacy `src/**/__tests__` locations. Follow the nearby pattern rather than moving tests just for consistency.
+- Frontend tests currently live in both `frontend/tests/**` and some legacy `src/**/__tests__` locations. Follow the nearby pattern rather than moving tests just for consistency.
 - Component and view tests commonly `vi.mock()` service modules, router helpers, and `useSession()` to isolate behavior. That is the expected unit-test style in this repo.
-- Playwright E2E coverage exists under `admin-ui/tests/e2e/` for higher-level auth and tenant flows.
+- Playwright E2E coverage exists under `frontend/tests/e2e/` for higher-level auth and tenant flows.
 
 ## Intentional Frontend Patterns
 

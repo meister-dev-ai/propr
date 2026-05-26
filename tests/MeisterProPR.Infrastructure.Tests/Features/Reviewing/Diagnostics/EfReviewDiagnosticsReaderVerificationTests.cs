@@ -58,7 +58,7 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         Assert.NotNull(returnedProtocol.FileOutcome);
@@ -102,7 +102,7 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         var degradedEvent = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.VerificationDegraded);
@@ -145,7 +145,7 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         var fallbackEvent = Assert.Single(returnedProtocol.Events, e => e.Name == ReviewProtocolEventNames.ReviewAgentSessionFallback);
@@ -207,7 +207,7 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
 
         var sut = new EfReviewDiagnosticsReader(repository);
 
-        var result = await sut.GetJobProtocolAsync(job.Id, CancellationToken.None);
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
 
         var returnedProtocol = Assert.Single(result!.Protocols);
         Assert.NotNull(returnedProtocol.FollowUp);

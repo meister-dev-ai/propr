@@ -125,7 +125,7 @@ public sealed class ReviewSystemContext
     /// <summary>
     ///     Runtime capability flags resolved for the default review binding.
     /// </summary>
-    public AgentReviewRuntimeCapabilities RuntimeCapabilities { get; set; } = new(false, false, false);
+    public AgentReviewRuntimeCapabilities RuntimeCapabilities { get; set; } = new(false, false, false, false);
 
     /// <summary>
     ///     Optional logical review session carried across per-file multi-turn execution.

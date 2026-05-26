@@ -29,6 +29,7 @@ namespace MeisterProPR.Application.ValueObjects;
 /// <param name="FallbacksJson">JSON-serialised session fallback records, or <see langword="null" /> when unavailable.</param>
 /// <param name="ProviderConversationId">Opaque provider-managed conversation identifier, when available.</param>
 /// <param name="ProviderResponseId">Opaque provider-managed response-chain identifier, when available.</param>
+/// <param name="ActivePromptMode">The effective prompt-submission mode at loop completion.</param>
 public sealed record ReviewLoopMetrics(
     int ToolCallCount,
     string? ToolCallsJson,
@@ -41,4 +42,5 @@ public sealed record ReviewLoopMetrics(
     string? TurnsJson = null,
     string? FallbacksJson = null,
     string? ProviderConversationId = null,
-    string? ProviderResponseId = null);
+    string? ProviderResponseId = null,
+    AgentReviewPromptMode ActivePromptMode = AgentReviewPromptMode.FullReplayFallback);

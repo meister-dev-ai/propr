@@ -160,6 +160,32 @@ public interface IJobRepository
         string storedRevisionKey,
         CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns the most-recent terminal review job for the given pull request whose persisted revision key matches
+    ///     the supplied stored revision key, with <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or
+    ///     <see langword="null" />.
+    /// </summary>
+    Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the terminal review job for the given pull request and persisted revision key that has the most
+    ///     reusable completed file results, with <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or
+    ///     <see langword="null" />.
+    /// </summary>
+    Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default);
+
     /// <summary>Persists the AI connection snapshot captured at job-start time.</summary>
     Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null);
 

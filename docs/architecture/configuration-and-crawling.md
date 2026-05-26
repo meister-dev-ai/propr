@@ -48,7 +48,7 @@ reviewer-trigger identity.
 ```mermaid
 sequenceDiagram
     actor Admin
-    participant UI as Admin UI
+    participant UI as Frontend
     participant PCON as ClientProviderConnectionsController
     participant PSC as ClientProviderScopesController
     participant PRI as ClientReviewerIdentitiesController
@@ -92,7 +92,7 @@ provider also applies its own upstream filters.
 ```mermaid
 sequenceDiagram
     actor Admin
-    participant UI as Admin UI
+    participant UI as Frontend
     participant DR as AdoDiscoveryController
     participant DS as IAdoDiscoveryService
     participant WH as AdminWebhookConfigsController

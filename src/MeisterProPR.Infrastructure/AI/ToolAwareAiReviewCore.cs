@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,10 +26,11 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     Wraps an <see cref="IChatClient" /> and drives a multi-turn conversation until
 ///     the AI signals completion or the iteration limit is reached.
 /// </summary>
-public sealed partial class ToolAwareAiReviewCore(
+internal sealed partial class ToolAwareAiReviewCore(
     IChatClient? chatClient,
     IOptions<AiReviewOptions> options,
-    ILogger<ToolAwareAiReviewCore> logger) : IAiReviewCore
+    ILogger<ToolAwareAiReviewCore> logger,
+    IManagedReviewSessionTransportFactory? managedSessionTransportFactory = null) : IAiReviewCore
 {
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.ReviewLoop");
 
@@ -110,14 +112,18 @@ public sealed partial class ToolAwareAiReviewCore(
                 cancellationToken);
         }
 
-        var registeredTools = BuildTools(systemContext.ReviewTools, cancellationToken);
+        var rawTools = BuildTools(systemContext.ReviewTools, cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
+        var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
+        var transportTools = usesManagedSessionTransport
+            ? this.WrapToolsForManagedSession(rawTools, state, systemContext, cancellationToken)
+            : rawTools;
         var chatOptions = new ChatOptions
         {
             MaxOutputTokens = 8192,
             ModelId = effectiveModelId,
             Temperature = systemContext.Temperature,
-            Tools = registeredTools.Count > 0 ? [.. registeredTools] : null,
+            Tools = transportTools.Count > 0 ? [.. transportTools] : null,
         };
 
         state.InitializeSession(ResolveInitialSessionMode(systemContext));
@@ -140,6 +146,16 @@ public sealed partial class ToolAwareAiReviewCore(
         // T044: use tier-specific client when configured; fall back to injected default
         var effectiveClient = systemContext.TierChatClient ?? chatClient
             ?? throw new InvalidOperationException("No chat client available for review execution.");
+        var managedSessionTransport = usesManagedSessionTransport
+            ? (managedSessionTransportFactory ?? new ManagedReviewSessionTransportFactory()).Create(effectiveClient, transportTools)
+            : null;
+
+        Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions responseOptions)
+        {
+            return ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
+                ? managedSessionTransport!.GetResponseAsync(messages, responseOptions, cancellationToken)
+                : effectiveClient.GetResponseAsync(messages, responseOptions, cancellationToken);
+        }
 
         using var activity = ActivitySource.StartActivity("ReviewLoop");
         activity?.SetTag("pr.id", pullRequest.PullRequestId);
@@ -164,7 +180,7 @@ public sealed partial class ToolAwareAiReviewCore(
                 ChatResponse response;
                 try
                 {
-                    response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
+                    response = await GetResponseAsync(messagesToSend, chatOptions);
                 }
                 catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
                 {
@@ -172,7 +188,7 @@ public sealed partial class ToolAwareAiReviewCore(
                     messagesToSend = BuildMessagesForCurrentTurn(state, systemContext);
                     inputSample = GetInputSample(messagesToSend);
                     systemPrompt = GetSystemPrompt(messagesToSend);
-                    response = await effectiveClient.GetResponseAsync(messagesToSend, chatOptions, cancellationToken);
+                    response = await GetResponseAsync(messagesToSend, chatOptions);
                 }
 
                 AppendResponseToState(state, response);
@@ -204,6 +220,7 @@ public sealed partial class ToolAwareAiReviewCore(
                         systemPrompt,
                         outputSample,
                         cancellationToken);
+                    await RecordSessionBindingEventIfNeededAsync(systemContext, state, cancellationToken);
                     await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
                 }
 
@@ -229,7 +246,7 @@ public sealed partial class ToolAwareAiReviewCore(
                     var toolResultContents = new List<AIContent>();
                     foreach (var call in functionCalls)
                     {
-                        var resultText = await this.InvokeToolAsync(call, registeredTools, cancellationToken);
+                        var resultText = await this.InvokeToolAsync(call, rawTools, cancellationToken);
                         toolResultContents.Add(new FunctionResultContent(call.CallId, resultText));
                         state.RecordToolCall(call.Name ?? "", JsonSerializer.Serialize(call.Arguments), resultText);
 
@@ -304,10 +321,21 @@ public sealed partial class ToolAwareAiReviewCore(
                         "The response must start with '{' and end with '}'."));
                 var finalOptions = new ChatOptions
                     { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
-                var finalResponse = await effectiveClient.GetResponseAsync(
-                    BuildMessagesForForcedFinalTurn(state),
-                    finalOptions,
-                    cancellationToken);
+                ChatResponse finalResponse;
+                try
+                {
+                    finalResponse = await GetResponseAsync(
+                        BuildMessagesForForcedFinalTurn(state),
+                        finalOptions);
+                }
+                catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
+                {
+                    systemContext.ReviewSession = state.Session;
+                    finalResponse = await GetResponseAsync(
+                        BuildMessagesForForcedFinalTurn(state),
+                        finalOptions);
+                }
+
                 state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
                 state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
                 lastTextResponse = finalResponse.Text ?? "";
@@ -322,6 +350,7 @@ public sealed partial class ToolAwareAiReviewCore(
 
             lastTextResponse = await this.RepairFinalResponseIfNeededAsync(
                 effectiveClient,
+                managedSessionTransport,
                 state,
                 chatOptions,
                 effectiveModelId,
@@ -356,6 +385,7 @@ public sealed partial class ToolAwareAiReviewCore(
 
     private async Task<string> RepairFinalResponseIfNeededAsync(
         IChatClient effectiveClient,
+        IManagedReviewSessionTransport? managedSessionTransport,
         ReviewLoopState state,
         ChatOptions chatOptions,
         string effectiveModelId,
@@ -385,10 +415,19 @@ public sealed partial class ToolAwareAiReviewCore(
 
         var correctionOptions = new ChatOptions
             { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
-        var correctionResponse = await effectiveClient.GetResponseAsync(
-            state.Messages,
-            correctionOptions,
-            cancellationToken);
+        ChatResponse correctionResponse;
+        try
+        {
+            correctionResponse = ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
+                ? await managedSessionTransport!.GetResponseAsync(state.Messages, correctionOptions, cancellationToken)
+                : await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
+        }
+        catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
+        {
+            systemContext.ReviewSession = state.Session;
+            correctionResponse = await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
+        }
+
         state.AccumulateTokens(
             correctionResponse.Usage?.InputTokenCount,
             correctionResponse.Usage?.OutputTokenCount);
@@ -401,11 +440,27 @@ public sealed partial class ToolAwareAiReviewCore(
 
     private static AgentReviewSessionMode ResolveInitialSessionMode(ReviewSystemContext systemContext)
     {
-        return systemContext.RuntimeCapabilities.SupportsProviderManagedSessions
+        return systemContext.PerFileHint is not null && systemContext.RuntimeCapabilities.SupportsManagedRemoteConversation
             ? AgentReviewSessionMode.ProviderManagedSession
             : systemContext.PerFileHint is not null
                 ? AgentReviewSessionMode.LocalManagedSession
                 : AgentReviewSessionMode.StatelessReplay;
+    }
+
+    private static bool ShouldUseAgentFrameworkManagedSession(ReviewSystemContext systemContext)
+    {
+        return systemContext.PerFileHint is not null &&
+               systemContext.RuntimeCapabilities.SupportsManagedRemoteConversation;
+    }
+
+    private static bool ShouldUseAgentFrameworkManagedSession(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        IManagedReviewSessionTransport? managedSessionTransport)
+    {
+        return managedSessionTransport is not null &&
+               state.Session.Mode == AgentReviewSessionMode.ProviderManagedSession &&
+               ShouldUseAgentFrameworkManagedSession(systemContext);
     }
 
     private static void ApplySessionModeToOptions(ChatOptions chatOptions, ReviewLoopState state)
@@ -419,7 +474,7 @@ public sealed partial class ToolAwareAiReviewCore(
         }
 
         var handle = state.Session.ContinuationHandle;
-        if (!string.IsNullOrWhiteSpace(handle?.ProviderSessionId))
+        if (state.Iteration == 1 && !string.IsNullOrWhiteSpace(handle?.ProviderSessionId))
         {
             chatOptions.ConversationId = handle.ProviderSessionId;
         }
@@ -594,6 +649,45 @@ public sealed partial class ToolAwareAiReviewCore(
             DateTimeOffset.UtcNow);
     }
 
+    private static async Task RecordSessionBindingEventIfNeededAsync(
+        ReviewSystemContext systemContext,
+        ReviewLoopState state,
+        CancellationToken cancellationToken)
+    {
+        if (!systemContext.ActiveProtocolId.HasValue ||
+            systemContext.ProtocolRecorder is null ||
+            state.Session.Mode != AgentReviewSessionMode.ProviderManagedSession ||
+            state.Iteration != 1 ||
+            string.IsNullOrWhiteSpace(state.Session.RemoteConversationId))
+        {
+            return;
+        }
+
+        await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            systemContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ReviewAgentSessionBinding,
+            JsonSerializer.Serialize(
+                new
+                {
+                    sessionOwnerId = state.Session.LocalSessionId,
+                    conversationOwnerId = state.Session.ConversationOwnerId,
+                    bindingMethod = string.IsNullOrWhiteSpace(state.Session.ContinuationHandle?.ProviderSessionId)
+                        ? "reused_remote_binding"
+                        : "created_remote_thread",
+                    bindingOutcome = "succeeded",
+                    promptMode = state.Session.ActivePromptMode,
+                    remoteConversationId = state.Session.RemoteConversationId,
+                    sessionMode = state.Session.Mode,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    providerResponseId = state.Session.ContinuationHandle?.ProviderResponseId,
+                }),
+            null,
+            cancellationToken);
+    }
+
     private bool TryDowngradeProviderManagedSession(
         ReviewLoopState state,
         ReviewSystemContext systemContext,
@@ -604,14 +698,34 @@ public sealed partial class ToolAwareAiReviewCore(
             return false;
         }
 
+        var managedTransportException = ex as ManagedReviewSessionTransportException;
+        AppendRecoveredMessages(state, managedTransportException?.RecoveredMessages);
+
+        var isContinuationFailure = managedTransportException?.ContinuationStarted == true ||
+                                    state.Iteration > 1 ||
+                                    state.Session.ContinuationHandle is not null;
+
         state.RecordFallback(
             AgentReviewSessionMode.LocalManagedSession,
-            state.Iteration == 1 ? "provider_session_create_failed" : "provider_session_continue_failed",
+            isContinuationFailure
+                ? "provider_session_continue_failed"
+                : "provider_session_create_failed",
             "preserved durable system prompts and latest turn transcript");
         state.SetPersistentMessages(state.PersistentMessages.Count > 0 ? state.PersistentMessages : state.Messages);
         systemContext.ReviewSession = state.Session;
+        this.RecordSessionFallbackEventIfNeededAsync(systemContext, state, CancellationToken.None).GetAwaiter().GetResult();
         LogProviderManagedSessionDowngraded(logger, state.Iteration, ex.Message);
         return true;
+    }
+
+    private static void AppendRecoveredMessages(ReviewLoopState state, IReadOnlyList<ChatMessage>? recoveredMessages)
+    {
+        if (recoveredMessages is null || recoveredMessages.Count == 0)
+        {
+            return;
+        }
+
+        state.Messages.AddRange(recoveredMessages);
     }
 
     private static async Task RecordSessionTurnEventAsync(
@@ -636,9 +750,13 @@ public sealed partial class ToolAwareAiReviewCore(
                     turnNumber = latestTurn?.TurnNumber ?? state.Iteration,
                     sessionMode = state.Session.Mode,
                     contextStrategy = latestTurn?.ContextStrategy,
+                    promptMode = latestTurn?.PromptMode ?? state.Session.ActivePromptMode,
                     newInputSummary = latestTurn?.NewInputSummary ?? inputSample,
                     replayedPayloadSummary = latestTurn?.ReplayedPayloadSummary,
                     compactedPayloadSummary = latestTurn?.CompactedPayloadSummary,
+                    usedRemoteConversation = latestTurn?.UsedRemoteConversation,
+                    usedLocalReplay = latestTurn?.UsedLocalReplay,
+                    remoteConversationId = latestTurn?.RemoteConversationId,
                     providerSessionId = latestTurn?.ProviderSessionId,
                     providerResponseId = latestTurn?.ProviderResponseId,
                 }),
@@ -662,6 +780,34 @@ public sealed partial class ToolAwareAiReviewCore(
             return;
         }
 
+        await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            systemContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ReviewAgentSessionFallback,
+            JsonSerializer.Serialize(
+                new
+                {
+                    fromMode = fallback.FromMode,
+                    toMode = fallback.ToMode,
+                    fallback.Reason,
+                    fallback.TurnNumber,
+                    fallback.PreservedState,
+                }),
+            null,
+            null,
+            cancellationToken);
+    }
+
+    private async Task RecordSessionFallbackEventIfNeededAsync(
+        ReviewSystemContext systemContext,
+        ReviewLoopState state,
+        CancellationToken cancellationToken)
+    {
+        if (!systemContext.ActiveProtocolId.HasValue || systemContext.ProtocolRecorder is null || state.Session.Fallbacks.Count == 0)
+        {
+            return;
+        }
+
+        var fallback = state.Session.Fallbacks[^1];
         await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
             systemContext.ActiveProtocolId.Value,
             ReviewProtocolEventNames.ReviewAgentSessionFallback,
@@ -863,6 +1009,48 @@ public sealed partial class ToolAwareAiReviewCore(
         return tools;
     }
 
+    private List<AIFunction> WrapToolsForManagedSession(
+        IReadOnlyList<AIFunction> tools,
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        CancellationToken cancellationToken)
+    {
+        return tools
+            .Select(tool => new RecordingAIFunction(
+                tool, logger, (toolName, argumentsJson, resultJson) =>
+                    this.RecordManagedToolInvocationAsync(
+                        toolName,
+                        argumentsJson,
+                        resultJson,
+                        state,
+                        systemContext,
+                        cancellationToken)))
+            .Cast<AIFunction>()
+            .ToList();
+    }
+
+    private async Task RecordManagedToolInvocationAsync(
+        string toolName,
+        string argumentsJson,
+        string resultJson,
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        CancellationToken cancellationToken)
+    {
+        state.RecordToolCall(toolName, argumentsJson, resultJson);
+
+        if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+        {
+            await systemContext.ProtocolRecorder.RecordToolCallAsync(
+                systemContext.ActiveProtocolId.Value,
+                toolName,
+                argumentsJson,
+                resultJson,
+                state.Iteration,
+                cancellationToken);
+        }
+    }
+
     private async Task<string> InvokeToolAsync(
         FunctionCallContent call,
         IReadOnlyList<AIFunction> tools,
@@ -894,23 +1082,40 @@ public sealed partial class ToolAwareAiReviewCore(
 
     private static string? GetInputSample(IList<ChatMessage> messages)
     {
-        var last = messages.Count > 0 ? messages[^1] : null;
-        if (last is null)
+        if (messages.Count == 0)
         {
             return null;
         }
 
-        // User/assistant messages with text content
-        if (last.Text is { Length: > 0 } text)
+        return string.Join(
+            "\n\n---\n\n",
+            messages
+                .Select(FormatInputMessage)
+                .Where(sample => !string.IsNullOrWhiteSpace(sample)));
+    }
+
+    private static string? FormatInputMessage(ChatMessage message)
+    {
+        if (message.Text is { Length: > 0 } text)
         {
-            return text;
+            return $"[{message.Role.Value}]\n{text}";
         }
 
-        // Tool result messages: serialize each function result
-        var results = last.Contents.OfType<FunctionResultContent>().ToList();
-        if (results.Count > 0)
+        var toolResults = message.Contents.OfType<FunctionResultContent>().ToList();
+        if (toolResults.Count > 0)
         {
-            return string.Join("\n---\n", results.Select(r => $"[{r.CallId}]\n{r.Result}"));
+            return $"[{message.Role.Value}]\n" +
+                   string.Join("\n---\n", toolResults.Select(r => $"[{r.CallId}]\n{r.Result}"));
+        }
+
+        var functionCalls = message.Contents.OfType<FunctionCallContent>().ToList();
+        if (functionCalls.Count > 0)
+        {
+            return $"[{message.Role.Value}]\n" +
+                   string.Join(
+                       "\n---\n",
+                       functionCalls.Select(call =>
+                           $"{call.Name ?? "(unknown)"}\n{JsonSerializer.Serialize(call.Arguments)}"));
         }
 
         return null;
@@ -1202,7 +1407,8 @@ public sealed partial class ToolAwareAiReviewCore(
             turnsJson,
             fallbacksJson,
             state.Session.ContinuationHandle?.ProviderSessionId,
-            state.Session.ContinuationHandle?.ProviderResponseId);
+            state.Session.ContinuationHandle?.ProviderResponseId,
+            state.Session.ActivePromptMode);
     }
 
     [LoggerMessage(
@@ -1425,6 +1631,50 @@ public sealed partial class ToolAwareAiReviewCore(
             JsonSerializerOptions options)
         {
             JsonSerializer.Serialize(writer, value, options);
+        }
+    }
+
+    private sealed class RecordingAIFunction(
+        AIFunction inner,
+        ILogger logger,
+        Func<string, string, string, Task> onInvoked) : AIFunction
+    {
+        public override MethodInfo? UnderlyingMethod => inner.UnderlyingMethod;
+
+        public override JsonSerializerOptions JsonSerializerOptions => inner.JsonSerializerOptions;
+
+        public override JsonElement JsonSchema => inner.JsonSchema;
+
+        public override JsonElement? ReturnJsonSchema => inner.ReturnJsonSchema;
+
+        public override string Name => inner.Name;
+
+        public override string Description => inner.Description;
+
+        public override IReadOnlyDictionary<string, object?> AdditionalProperties => inner.AdditionalProperties;
+
+        protected override async ValueTask<object?> InvokeCoreAsync(
+            AIFunctionArguments arguments,
+            CancellationToken cancellationToken)
+        {
+            var argumentsJson = JsonSerializer.Serialize(
+                arguments.ToDictionary(argument => argument.Key, argument => argument.Value),
+                JsonOptions);
+
+            try
+            {
+                var result = await inner.InvokeAsync(arguments, cancellationToken);
+                var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                await onInvoked(this.Name, argumentsJson, resultJson);
+                return resultJson;
+            }
+            catch (Exception ex)
+            {
+                LogToolInvocationFailed(logger, this.Name, ex);
+                var errorResult = $"[Tool error: {ex.Message}]";
+                await onInvoked(this.Name, argumentsJson, errorResult);
+                return errorResult;
+            }
         }
     }
 }

@@ -44,6 +44,14 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(r => r.ResumedFromJobId)
+            .HasColumnName("resumed_from_job_id")
+            .IsRequired(false);
+
+        builder.Property(r => r.ResumedFromFileResultId)
+            .HasColumnName("resumed_from_file_result_id")
+            .IsRequired(false);
+
         builder.Property(r => r.ExclusionReason)
             .HasColumnName("exclusion_reason")
             .IsRequired(false);
@@ -67,6 +75,8 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
                     : JsonSerializer.Deserialize<IReadOnlyList<ReviewComment>>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(r => r.JobId).HasDatabaseName("ix_review_file_results_job_id");
+        builder.HasIndex(r => r.ResumedFromJobId).HasDatabaseName("ix_review_file_results_resumed_from_job_id");
+        builder.HasIndex(r => r.ResumedFromFileResultId).HasDatabaseName("ix_review_file_results_resumed_from_file_result_id");
         builder.HasIndex(r => new { r.JobId, r.FilePath })
             .IsUnique()
             .HasDatabaseName("ix_review_file_results_job_file");

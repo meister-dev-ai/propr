@@ -15,7 +15,7 @@ public sealed class ReviewingModuleTests
     public async Task GetReviewJobProtocolHandler_WhenJobMissing_ReturnsNull()
     {
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
-        diagnosticsReader.GetJobProtocolAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(Arg.Any<Guid>(), ct: Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<GetReviewJobProtocolResult?>(null));
 
         var handler = new GetReviewJobProtocolHandler(diagnosticsReader);
@@ -55,7 +55,7 @@ public sealed class ReviewingModuleTests
             ]);
 
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
-        diagnosticsReader.GetJobProtocolAsync(jobId, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(jobId, ct: Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<GetReviewJobProtocolResult?>(expected));
 
         var handler = new GetReviewJobProtocolHandler(diagnosticsReader);
@@ -110,7 +110,7 @@ public sealed class ReviewingModuleTests
             ]);
 
         var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
-        diagnosticsReader.GetJobProtocolAsync(jobId, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(jobId, ct: Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<GetReviewJobProtocolResult?>(expected));
 
         var handler = new GetReviewJobProtocolHandler(diagnosticsReader);

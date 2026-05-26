@@ -12,12 +12,12 @@ set -eu
 cat >/tmp/default.conf.template <<'EOF'
 @@TEMPLATE@@
 EOF
-envsubst '$ADMIN_UI_HOST $BACKEND_HOST' </tmp/default.conf.template >/etc/nginx/conf.d/default.conf
+envsubst '$FRONTEND_HOST $BACKEND_HOST' </tmp/default.conf.template >/etc/nginx/conf.d/default.conf
 exec /docker-entrypoint.sh nginx -g 'daemon off;'
 ''', '@@TEMPLATE@@', nginxTemplate)
 
 var normalizedKvUri = endsWith(kvUri, '/') ? kvUri : '${kvUri}/'
-var adminUiHost = '${projectName}-admin-ui.internal.${env.properties.defaultDomain}'
+var frontendHost = '${projectName}-frontend.internal.${env.properties.defaultDomain}'
 var backendHost = '${projectName}-backend.internal.${env.properties.defaultDomain}'
 var proCursorHost = '${projectName}-procursor.internal.${env.properties.defaultDomain}'
 
@@ -277,9 +277,9 @@ resource proCursor 'Microsoft.App/containerapps@2025-10-02-preview' = {
   dependsOn: [proCursorKvAccess, backend]
 }
 
-// ── Admin UI ──────────────────────────────────────────────────────────────────
-resource adminUi 'Microsoft.App/containerapps@2025-10-02-preview' = {
-  name: '${projectName}-admin-ui'
+// ── Frontend ──────────────────────────────────────────────────────────────────
+resource frontend 'Microsoft.App/containerapps@2025-10-02-preview' = {
+  name: '${projectName}-frontend'
   location: location
   identity: { type: 'None' }
   properties: {
@@ -299,9 +299,9 @@ resource adminUi 'Microsoft.App/containerapps@2025-10-02-preview' = {
     template: {
       containers: [
         {
-          // Admin UI image is pulled from GHCR (published by the team)
-          image: 'ghcr.io/meister-dev-ai/propr/admin-ui:${imageTag}'
-          name: '${projectName}-admin-ui'
+          // Frontend image is pulled from GHCR (published by the team)
+          image: 'ghcr.io/meister-dev-ai/propr/frontend:${imageTag}'
+          name: '${projectName}-frontend'
           resources: { cpu: json('0.5'), memory: '1Gi' }
         }
       ]
@@ -337,7 +337,7 @@ resource reverseProxy 'Microsoft.App/containerapps@2025-10-02-preview' = {
           command: ['/bin/sh', '-c']
           args: [reverseProxyStartCommand]
           env: [
-            { name: 'ADMIN_UI_HOST', value: adminUiHost }
+            { name: 'FRONTEND_HOST', value: frontendHost }
             { name: 'BACKEND_HOST',  value: backendHost }
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }

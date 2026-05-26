@@ -1,11 +1,11 @@
 # API Reference - ProPR Backend
 
 This page contains technical API examples for automating administrative tasks that are also
-available from the Admin UI. Use the Admin UI for interactive configuration; use the endpoints
+available from the frontend. Use the frontend for interactive configuration; use the endpoints
 below for automation and scripting.
 
 > NOTE: This file intentionally contains low-level `curl` examples. For UI-guided steps, use the
-> Admin UI (`https://localhost:5443/`) after first login.
+> frontend (`https://localhost:5443/`) after first login.
 >
 > The `curl -k` examples below are for local development against the self-signed
 > `https://localhost:5443` endpoint only.
@@ -169,7 +169,7 @@ pipeline falls back to the main file-review runtime.
 
 ## Guided Discovery Endpoints
 
-These endpoints are used by the Admin UI to populate Azure DevOps guided discovery flows.
+These endpoints are used by the frontend to populate Azure DevOps guided discovery flows.
 
 ```bash
 # List projects

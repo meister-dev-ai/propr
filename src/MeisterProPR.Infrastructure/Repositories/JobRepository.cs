@@ -348,6 +348,7 @@ public sealed class JobRepository(
     public async Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs
+            .AsSplitQuery()
             .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber))
             .ThenInclude(p => p.Events.OrderBy(e => e.OccurredAt))
             .Include(j => j.FileReviewResults)
@@ -463,6 +464,73 @@ public sealed class JobRepository(
             ReviewRevisionKeys.GetStoredKey(j.ReviewRevisionReference, j.IterationId),
             storedRevisionKey,
             StringComparison.Ordinal));
+
+        if (job is not null)
+        {
+            await this.HydrateSourceScopeAsync(job, ct);
+        }
+
+        return job;
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        var matchingJobs = await dbContext.ReviewJobs
+            .Include(j => j.FileReviewResults)
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        (j.Status == JobStatus.Completed || j.Status == JobStatus.Failed || j.Status == JobStatus.Cancelled))
+            .OrderByDescending(j => j.CompletedAt)
+            .ToListAsync(ct);
+
+        var job = matchingJobs.FirstOrDefault(j => string.Equals(
+            ReviewRevisionKeys.GetStoredKey(j.ReviewRevisionReference, j.IterationId),
+            storedRevisionKey,
+            StringComparison.Ordinal));
+
+        if (job is not null)
+        {
+            await this.HydrateSourceScopeAsync(job, ct);
+        }
+
+        return job;
+    }
+
+    /// <inheritdoc />
+    public async Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        var matchingJobs = await dbContext.ReviewJobs
+            .Include(j => j.FileReviewResults)
+            .Where(j => j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        (j.Status == JobStatus.Completed || j.Status == JobStatus.Failed || j.Status == JobStatus.Cancelled))
+            .ToListAsync(ct);
+
+        var job = matchingJobs
+            .Where(j => string.Equals(
+                ReviewRevisionKeys.GetStoredKey(j.ReviewRevisionReference, j.IterationId),
+                storedRevisionKey,
+                StringComparison.Ordinal))
+            .OrderByDescending(j => j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward))
+            .ThenByDescending(j => j.CompletedAt)
+            .FirstOrDefault();
 
         if (job is not null)
         {

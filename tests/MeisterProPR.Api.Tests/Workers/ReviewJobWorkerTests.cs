@@ -16,9 +16,14 @@ namespace MeisterProPR.Api.Tests.Workers;
 
 public class ReviewJobWorkerTests
 {
-    private static IOptions<WorkerOptions> CreateWorkerOptions(int pollIntervalMilliseconds = 25)
+    private static IOptions<WorkerOptions> CreateWorkerOptions(int pollIntervalMilliseconds = 25, int stuckJobTimeoutMinutes = 30)
     {
-        return Options.Create(new WorkerOptions { PollIntervalMilliseconds = pollIntervalMilliseconds });
+        return Options.Create(
+            new WorkerOptions
+            {
+                PollIntervalMilliseconds = pollIntervalMilliseconds,
+                StuckJobTimeoutMinutes = stuckJobTimeoutMinutes,
+            });
     }
 
     private static ReviewJob CreateJob(int prId = 1)
@@ -251,6 +256,77 @@ public class ReviewJobWorkerTests
 
         await repo.Received().SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
 
+        cts.Cancel();
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Worker_DoesNotFailInflightJobDuringStuckCleanup()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(1001);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        repo.GetPendingJobs().Returns(new[] { job }, Array.Empty<ReviewJob>());
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>()).Returns(true);
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(
+                call =>
+                {
+                    var threshold = call.Arg<TimeSpan>();
+                    Assert.Equal(TimeSpan.FromMinutes(5), threshold);
+                    return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+                },
+                call =>
+                {
+                    var threshold = call.Arg<TimeSpan>();
+                    Assert.Equal(TimeSpan.FromMinutes(5), threshold);
+                    return Task.FromResult<IReadOnlyList<ReviewJob>>([job]);
+                },
+                call =>
+                {
+                    var threshold = call.Arg<TimeSpan>();
+                    Assert.Equal(TimeSpan.FromMinutes(5), threshold);
+                    return Task.FromResult<IReadOnlyList<ReviewJob>>([job]);
+                });
+
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(job, Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+            });
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var cleanupScope = Substitute.For<IServiceScope>();
+        var processingScope = Substitute.For<IServiceScope>();
+        var cleanupProvider = Substitute.For<IServiceProvider>();
+        var processingProvider = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(cleanupScope, cleanupScope, processingScope, cleanupScope, cleanupScope);
+        cleanupScope.ServiceProvider.Returns(cleanupProvider);
+        processingScope.ServiceProvider.Returns(processingProvider);
+
+        cleanupProvider.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        processingProvider.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        processingProvider.GetService(typeof(IReviewJobProcessor)).Returns(processor);
+
+        var worker = new ReviewJobWorker(
+            scopeFactory,
+            CreateWorkerOptions(25, 5),
+            CreateMetrics(),
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await Task.Delay(100, CancellationToken.None);
+
+        await repo.DidNotReceive().SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        release.TrySetResult();
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
     }

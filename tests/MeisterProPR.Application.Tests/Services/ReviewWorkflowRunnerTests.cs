@@ -87,7 +87,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -186,7 +186,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -271,7 +271,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -377,7 +377,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -481,7 +481,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -571,7 +571,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -680,7 +680,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -777,7 +777,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,
@@ -873,7 +873,7 @@ public sealed class ReviewWorkflowRunnerTests
                 job.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
-        diagnosticsReader.GetJobProtocolAsync(job.Id, Arg.Any<CancellationToken>())
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
         reviewStrategyDispatcher.ReviewAsync(
                 job,

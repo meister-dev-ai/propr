@@ -83,7 +83,25 @@ public partial record ReviewJobProtocolDto
 
     /// <summary>ProRV prefilter execution visibility metadata associated with this pass, when available.</summary>
     public ProtocolProRvPrefilterDto? ProRvPrefilter { get; init; }
+
+    /// <summary>Managed file-review session visibility metadata associated with this pass, when available.</summary>
+    public ProtocolAgentSessionDto? AgentSession { get; init; }
+
+    /// <summary>True when this pass was inherited from a prior same-revision retry source job.</summary>
+    public bool IsInherited { get; init; }
+
+    /// <summary>Metadata describing the source job/file pass when this pass was inherited.</summary>
+    public ProtocolInheritanceDto? Inheritance { get; init; }
 }
+
+/// <summary>
+///     Inherited pass metadata projected into the current job protocol view.
+/// </summary>
+public sealed record ProtocolInheritanceDto(
+    Guid SourceJobId,
+    Guid? SourceFileResultId,
+    Guid SourceProtocolId,
+    DateTimeOffset? SourceCompletedAt);
 
 /// <summary>
 ///     Carries data for a single event in a review protocol.
@@ -173,3 +191,15 @@ public sealed record ProtocolProRvPrefilterDto(
     bool GuidanceApplied,
     string? AppliedPromptKind,
     IReadOnlyList<string> AppliedGuidanceIds);
+
+/// <summary>
+///     Managed file-review session visibility metadata for one protocol pass.
+/// </summary>
+public sealed record ProtocolAgentSessionDto(
+    bool UsedManagedRemoteConversation,
+    string? RemoteConversationId,
+    string? BindingMethod,
+    string? BindingOutcome,
+    string? PromptMode,
+    bool UsedLocalReplay,
+    string? FallbackReason);

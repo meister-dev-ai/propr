@@ -8,17 +8,30 @@ using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJ
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
+using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
 /// <summary>
 ///     EF-backed Reviewing diagnostics reader.
 /// </summary>
-public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IReviewDiagnosticsReader
+public sealed class EfReviewDiagnosticsReader(
+    IJobRepository jobRepository,
+    IDbContextFactory<MeisterProPRDbContext>? dbContextFactory = null) : IReviewDiagnosticsReader
 {
-    public async Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(Guid jobId, CancellationToken ct = default)
+    private const string InheritedEventTextOmittedMessage =
+        "Inherited event payload omitted from this view to keep large same-revision retry traces responsive. Open the source job protocol to inspect the original captured body.";
+
+    private const string EventTextOmittedMessage =
+        "Event payload omitted from the overview to keep large protocol traces responsive. Select this pass to load the full captured body.";
+
+    public async Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(
+        Guid jobId,
+        bool includeEvents = true,
+        CancellationToken ct = default)
     {
         var job = await jobRepository.GetByIdWithProtocolsAsync(jobId, ct);
 
@@ -27,63 +40,420 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
             return null;
         }
 
-        var protocols = job.Protocols
-            .Select(protocol => new ReviewJobProtocolDto(
-                protocol.Id,
-                protocol.JobId,
-                protocol.AttemptNumber,
-                protocol.Label,
-                protocol.FileResultId,
-                protocol.StartedAt,
-                protocol.CompletedAt,
-                protocol.Outcome,
-                protocol.TotalInputTokens,
-                protocol.TotalOutputTokens,
-                protocol.IterationCount,
-                protocol.ToolCallCount,
-                protocol.FinalConfidence,
-                protocol.AiConnectionCategory,
-                protocol.ModelId,
-                ResolveFinalSummary(job, protocol),
-                ResolveFinalComments(job, protocol),
-                protocol.Events
-                    .Select(e => new ProtocolEventDto(
-                        e.Id,
-                        e.Kind,
-                        e.Name,
-                        e.OccurredAt,
-                        e.InputTokens,
-                        e.OutputTokens,
-                        e.InputTextSample,
-                        e.SystemPrompt,
-                        e.OutputSummary,
-                        e.Error))
-                    .ToList()
-                    .AsReadOnly())
-            {
-                Provider = job.Provider,
-                ProviderScopePath = job.OrganizationUrl,
-                ProviderProjectKey = ResolveProviderProjectKey(job),
-                RepositoryId = job.RepositoryId,
-                PullRequestId = job.PullRequestId,
-                ResolvedReviewStrategy = job.ReviewStrategy,
-                StrategySelectionSource = job.ReviewStrategySelectionSource,
-                FileOutcome = ResolveFileOutcome(job, protocol),
-                FollowUp = ResolveFollowUp(protocol),
-                RepeatedJudgment = ResolveRepeatedJudgment(protocol),
-                ProRvPrefilter = ResolveProRvPrefilter(protocol),
-            })
-            .ToList()
-            .AsReadOnly();
+        var protocols = new List<ReviewJobProtocolDto>(job.Protocols.Count + job.FileReviewResults.Count);
 
-        return new GetReviewJobProtocolResult(job.ClientId, protocols);
+        protocols.AddRange(job.Protocols.Select(protocol => CreateProtocolDto(job, protocol, includeEvents: includeEvents)));
+
+        var inheritedProtocols = await this.LoadInheritedProtocolsAsync(job, includeEvents, ct);
+        protocols.AddRange(inheritedProtocols);
+
+        return new GetReviewJobProtocolResult(job.ClientId, protocols.AsReadOnly());
     }
 
-    private static string? ResolveFinalSummary(ReviewJob job, ReviewJobProtocol protocol)
+    public async Task<ReviewJobProtocolDto?> GetJobProtocolPassAsync(Guid jobId, Guid protocolId, CancellationToken ct = default)
+    {
+        var job = await jobRepository.GetByIdWithFileResultsAsync(jobId, ct);
+        if (job is null)
+        {
+            return null;
+        }
+
+        if (dbContextFactory is null)
+        {
+            var fallbackJob = await jobRepository.GetByIdWithProtocolsAsync(jobId, ct);
+            if (fallbackJob is null)
+            {
+                return null;
+            }
+
+            var protocol = fallbackJob.Protocols.FirstOrDefault(candidate => candidate.Id == protocolId);
+            if (protocol is not null)
+            {
+                return CreateProtocolDto(fallbackJob, protocol, includeEvents: true);
+            }
+
+            return await this.LoadInheritedProtocolPassFallbackAsync(fallbackJob, protocolId, ct);
+        }
+
+        await using var db = await dbContextFactory.CreateDbContextAsync(ct);
+        var protocolEntity = await db.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(protocol => protocol.JobId == jobId && protocol.Id == protocolId)
+            .Include(protocol => protocol.Events.OrderBy(evt => evt.OccurredAt))
+            .FirstOrDefaultAsync(ct);
+
+        if (protocolEntity is not null)
+        {
+            return CreateProtocolDto(job, protocolEntity, includeEvents: true);
+        }
+
+        return await this.LoadInheritedProtocolPassFromStoreAsync(job, protocolId, ct);
+    }
+
+    private async Task<IReadOnlyList<ReviewJobProtocolDto>> LoadInheritedProtocolsAsync(ReviewJob job, bool includeEvents, CancellationToken ct)
+    {
+        var resumedFileResults = job.FileReviewResults
+            .Where(result => result.IsComplete
+                             && !result.IsFailed
+                             && !result.IsExcluded
+                             && !result.IsCarriedForward
+                             && result.ResumedFromJobId.HasValue
+                             && result.ResumedFromFileResultId.HasValue)
+            .ToList();
+
+        if (resumedFileResults.Count == 0)
+        {
+            return [];
+        }
+
+        var inheritedProtocols = new List<ReviewJobProtocolDto>(resumedFileResults.Count);
+        var sourceProtocols = await this.LoadInheritedSourceProtocolsAsync(resumedFileResults, ct);
+
+        foreach (var resumedFileResult in resumedFileResults)
+        {
+            var sourceJobId = resumedFileResult.ResumedFromJobId!.Value;
+            var sourceFileResultId = resumedFileResult.ResumedFromFileResultId!.Value;
+            if (!sourceProtocols.TryGetValue((sourceJobId, sourceFileResultId), out var sourceProtocol))
+            {
+                continue;
+            }
+
+            inheritedProtocols.Add(
+                CreateProtocolDto(
+                    job,
+                    sourceProtocol,
+                    resumedFileResult,
+                    includeEvents,
+                    new ProtocolInheritanceDto(
+                        sourceJobId,
+                        resumedFileResult.ResumedFromFileResultId,
+                        sourceProtocol.Id,
+                        sourceProtocol.CompletedAt)));
+        }
+
+        return inheritedProtocols;
+    }
+
+    private async Task<ReviewJobProtocolDto?> LoadInheritedProtocolPassFromStoreAsync(
+        ReviewJob job,
+        Guid protocolId,
+        CancellationToken ct)
+    {
+        var resumedFileResult = job.FileReviewResults.FirstOrDefault(result =>
+            result.IsComplete
+            && !result.IsFailed
+            && !result.IsExcluded
+            && !result.IsCarriedForward
+            && result.ResumedFromJobId.HasValue
+            && result.ResumedFromFileResultId.HasValue);
+
+        if (resumedFileResult is null || dbContextFactory is null)
+        {
+            return null;
+        }
+
+        await using var db = await dbContextFactory.CreateDbContextAsync(ct);
+        var sourceProtocol = await db.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == protocolId)
+            .Include(candidate => candidate.Events.OrderBy(evt => evt.OccurredAt))
+            .FirstOrDefaultAsync(ct);
+
+        if (sourceProtocol is null)
+        {
+            return null;
+        }
+
+        var matchingFileResult = job.FileReviewResults.FirstOrDefault(result =>
+            result.ResumedFromJobId == sourceProtocol.JobId
+            && result.ResumedFromFileResultId == sourceProtocol.FileResultId);
+
+        if (matchingFileResult is null)
+        {
+            return null;
+        }
+
+        return CreateProtocolDto(
+            job,
+            sourceProtocol,
+            matchingFileResult,
+            true,
+            new ProtocolInheritanceDto(
+                sourceProtocol.JobId,
+                matchingFileResult.ResumedFromFileResultId,
+                sourceProtocol.Id,
+                sourceProtocol.CompletedAt));
+    }
+
+    private async Task<ReviewJobProtocolDto?> LoadInheritedProtocolPassFallbackAsync(
+        ReviewJob job,
+        Guid protocolId,
+        CancellationToken ct)
+    {
+        var resumedFileResults = job.FileReviewResults.Where(result =>
+                result.IsComplete
+                && !result.IsFailed
+                && !result.IsExcluded
+                && !result.IsCarriedForward
+                && result.ResumedFromJobId.HasValue
+                && result.ResumedFromFileResultId.HasValue)
+            .ToList();
+
+        foreach (var resumedFileResult in resumedFileResults)
+        {
+            var sourceJob = await jobRepository.GetByIdWithProtocolsAsync(resumedFileResult.ResumedFromJobId!.Value, ct);
+            if (sourceJob is null)
+            {
+                continue;
+            }
+
+            var sourceProtocol = sourceJob.Protocols.FirstOrDefault(candidate => candidate.Id == protocolId);
+            if (sourceProtocol is null)
+            {
+                continue;
+            }
+
+            return CreateProtocolDto(
+                job,
+                sourceProtocol,
+                resumedFileResult,
+                true,
+                new ProtocolInheritanceDto(
+                    sourceJob.Id,
+                    resumedFileResult.ResumedFromFileResultId,
+                    sourceProtocol.Id,
+                    sourceProtocol.CompletedAt));
+        }
+
+        return null;
+    }
+
+    private async Task<IReadOnlyDictionary<(Guid SourceJobId, Guid SourceFileResultId), ReviewJobProtocol>> LoadInheritedSourceProtocolsAsync(
+        IReadOnlyList<ReviewFileResult> resumedFileResults,
+        CancellationToken ct)
+    {
+        return dbContextFactory is null
+            ? await this.LoadInheritedSourceProtocolsFromRepositoryAsync(resumedFileResults, ct)
+            : await this.LoadInheritedSourceProtocolsFromStoreAsync(resumedFileResults, ct);
+    }
+
+    private async Task<IReadOnlyDictionary<(Guid SourceJobId, Guid SourceFileResultId), ReviewJobProtocol>> LoadInheritedSourceProtocolsFromStoreAsync(
+        IReadOnlyList<ReviewFileResult> resumedFileResults,
+        CancellationToken ct)
+    {
+        await using var db = await dbContextFactory!.CreateDbContextAsync(ct);
+        var sourceProtocols = new Dictionary<(Guid SourceJobId, Guid SourceFileResultId), ReviewJobProtocol>();
+
+        foreach (var sourceJobGroup in resumedFileResults.GroupBy(result => result.ResumedFromJobId!.Value))
+        {
+            var sourceFileResultIds = sourceJobGroup
+                .Select(result => result.ResumedFromFileResultId!.Value)
+                .Distinct()
+                .ToArray();
+
+            var selectedProtocolIds = (await db.ReviewJobProtocols
+                    .AsNoTracking()
+                    .Where(protocol => protocol.JobId == sourceJobGroup.Key
+                                       && protocol.FileResultId.HasValue
+                                       && sourceFileResultIds.Contains(protocol.FileResultId.Value))
+                    .Select(protocol => new
+                    {
+                        protocol.Id,
+                        FileResultId = protocol.FileResultId!.Value,
+                        protocol.CompletedAt,
+                        protocol.StartedAt,
+                        protocol.Outcome,
+                    })
+                    .ToListAsync(ct))
+                .Where(protocol => string.Equals(protocol.Outcome, "Completed", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(protocol => protocol.FileResultId)
+                .Select(group => group
+                    .OrderByDescending(protocol => protocol.CompletedAt ?? DateTimeOffset.MinValue)
+                    .ThenByDescending(protocol => protocol.StartedAt)
+                    .Select(protocol => protocol.Id)
+                    .First())
+                .ToArray();
+
+            if (selectedProtocolIds.Length == 0)
+            {
+                continue;
+            }
+
+            var selectedProtocols = await db.ReviewJobProtocols
+                .AsNoTracking()
+                .Where(protocol => selectedProtocolIds.Contains(protocol.Id))
+                .Include(protocol => protocol.Events.OrderBy(evt => evt.OccurredAt))
+                .ToListAsync(ct);
+
+            foreach (var protocol in selectedProtocols.Where(protocol => protocol.FileResultId.HasValue))
+            {
+                sourceProtocols[(sourceJobGroup.Key, protocol.FileResultId!.Value)] = protocol;
+            }
+        }
+
+        return sourceProtocols;
+    }
+
+    private async Task<IReadOnlyDictionary<(Guid SourceJobId, Guid SourceFileResultId), ReviewJobProtocol>> LoadInheritedSourceProtocolsFromRepositoryAsync(
+        IReadOnlyList<ReviewFileResult> resumedFileResults,
+        CancellationToken ct)
+    {
+        var sourceProtocols = new Dictionary<(Guid SourceJobId, Guid SourceFileResultId), ReviewJobProtocol>();
+        var sourceJobs = new Dictionary<Guid, ReviewJob?>();
+
+        foreach (var resumedFileResult in resumedFileResults)
+        {
+            var sourceJobId = resumedFileResult.ResumedFromJobId!.Value;
+            if (!sourceJobs.TryGetValue(sourceJobId, out var sourceJob))
+            {
+                sourceJob = await jobRepository.GetByIdWithProtocolsAsync(sourceJobId, ct);
+                sourceJobs[sourceJobId] = sourceJob;
+            }
+
+            if (sourceJob is null)
+            {
+                continue;
+            }
+
+            var sourceFileResultId = resumedFileResult.ResumedFromFileResultId!.Value;
+            var sourceProtocol = ResolveInheritedSourceProtocol(sourceJob, sourceFileResultId);
+            if (sourceProtocol is null)
+            {
+                continue;
+            }
+
+            sourceProtocols[(sourceJobId, sourceFileResultId)] = sourceProtocol;
+        }
+
+        return sourceProtocols;
+    }
+
+    private static ReviewJobProtocol? ResolveInheritedSourceProtocol(ReviewJob sourceJob, Guid sourceFileResultId)
+    {
+        return sourceJob.Protocols
+            .Where(protocol => protocol.FileResultId == sourceFileResultId)
+            .OrderByDescending(protocol => protocol.CompletedAt ?? DateTimeOffset.MinValue)
+            .ThenByDescending(protocol => protocol.StartedAt)
+            .FirstOrDefault(protocol => string.Equals(protocol.Outcome, "Completed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ReviewJobProtocolDto CreateProtocolDto(
+        ReviewJob projectionJob,
+        ReviewJobProtocol protocol,
+        ReviewFileResult? fileResultOverride = null,
+        bool includeEvents = true,
+        ProtocolInheritanceDto? inheritance = null)
+    {
+        return new ReviewJobProtocolDto(
+            protocol.Id,
+            projectionJob.Id,
+            protocol.AttemptNumber,
+            protocol.Label,
+            fileResultOverride?.Id ?? protocol.FileResultId,
+            protocol.StartedAt,
+            protocol.CompletedAt,
+            protocol.Outcome,
+            protocol.TotalInputTokens,
+            protocol.TotalOutputTokens,
+            protocol.IterationCount,
+            protocol.ToolCallCount,
+            protocol.FinalConfidence,
+            protocol.AiConnectionCategory,
+            protocol.ModelId,
+            ResolveFinalSummary(projectionJob, protocol, fileResultOverride),
+            ResolveFinalComments(projectionJob, protocol, fileResultOverride),
+            CreateEventDtos(protocol, includeEvents, inheritance is not null))
+        {
+            Provider = projectionJob.Provider,
+            ProviderScopePath = projectionJob.OrganizationUrl,
+            ProviderProjectKey = ResolveProviderProjectKey(projectionJob),
+            RepositoryId = projectionJob.RepositoryId,
+            PullRequestId = projectionJob.PullRequestId,
+            ResolvedReviewStrategy = projectionJob.ReviewStrategy,
+            StrategySelectionSource = projectionJob.ReviewStrategySelectionSource,
+            FileOutcome = ResolveFileOutcome(projectionJob, protocol, fileResultOverride),
+            FollowUp = ResolveFollowUp(protocol),
+            RepeatedJudgment = ResolveRepeatedJudgment(protocol),
+            ProRvPrefilter = ResolveProRvPrefilter(protocol),
+            AgentSession = ResolveAgentSession(protocol),
+            IsInherited = inheritance is not null,
+            Inheritance = inheritance,
+        };
+    }
+
+    private static IReadOnlyList<ProtocolEventDto> CreateEventDtos(
+        ReviewJobProtocol protocol,
+        bool includeEvents,
+        bool isInherited)
+    {
+        if (!includeEvents)
+        {
+            return protocol.Events
+                .Select(e => new ProtocolEventDto(
+                    e.Id,
+                    e.Kind,
+                    e.Name,
+                    e.OccurredAt,
+                    e.InputTokens,
+                    e.OutputTokens,
+                    null,
+                    null,
+                    BuildOverviewOutputSummary(e, isInherited),
+                    e.Error))
+                .ToList()
+                .AsReadOnly();
+        }
+
+        return protocol.Events
+            .Select(e => new ProtocolEventDto(
+                e.Id,
+                e.Kind,
+                e.Name,
+                e.OccurredAt,
+                e.InputTokens,
+                e.OutputTokens,
+                isInherited ? null : e.InputTextSample,
+                isInherited ? null : e.SystemPrompt,
+                isInherited ? BuildInheritedOutputSummary(e) : e.OutputSummary,
+                e.Error))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private static string? BuildOverviewOutputSummary(ProtocolEvent e, bool isInherited)
+    {
+        if (!string.IsNullOrWhiteSpace(e.Error))
+        {
+            return e.OutputSummary;
+        }
+
+        if (e.OutputSummary is null)
+        {
+            return null;
+        }
+
+        return isInherited ? InheritedEventTextOmittedMessage : EventTextOmittedMessage;
+    }
+
+    private static string? BuildInheritedOutputSummary(ProtocolEvent e)
+    {
+        if (!string.IsNullOrWhiteSpace(e.Error))
+        {
+            return e.OutputSummary;
+        }
+
+        return e.OutputSummary is null
+            ? null
+            : InheritedEventTextOmittedMessage;
+    }
+
+    private static string? ResolveFinalSummary(ReviewJob job, ReviewJobProtocol protocol, ReviewFileResult? fileResultOverride = null)
     {
         if (protocol.FileResultId.HasValue)
         {
-            return job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value)?.PerFileSummary;
+            return fileResultOverride is not null
+                ? fileResultOverride?.PerFileSummary
+                : job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value)?.PerFileSummary;
         }
 
         if (string.Equals(protocol.Label, "synthesis", StringComparison.OrdinalIgnoreCase))
@@ -96,12 +466,14 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
 
     private static IReadOnlyList<ProtocolReviewCommentDto>? ResolveFinalComments(
         ReviewJob job,
-        ReviewJobProtocol protocol)
+        ReviewJobProtocol protocol,
+        ReviewFileResult? fileResultOverride = null)
     {
         if (protocol.FileResultId.HasValue)
         {
-            return job.FileReviewResults
-                .FirstOrDefault(result => result.Id == protocol.FileResultId.Value)?
+            return (fileResultOverride is not null
+                    ? fileResultOverride
+                    : job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value))?
                 .Comments?
                 .Select(ToProtocolReviewCommentDto)
                 .ToList()
@@ -132,14 +504,19 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
             : repository.OwnerOrNamespace;
     }
 
-    private static ProtocolFileOutcomeDto? ResolveFileOutcome(ReviewJob job, ReviewJobProtocol protocol)
+    private static ProtocolFileOutcomeDto? ResolveFileOutcome(
+        ReviewJob job,
+        ReviewJobProtocol protocol,
+        ReviewFileResult? fileResultOverride = null)
     {
         if (!protocol.FileResultId.HasValue)
         {
             return null;
         }
 
-        var fileResult = job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value);
+        var fileResult = fileResultOverride is not null
+            ? fileResultOverride
+            : job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value);
         if (fileResult is null)
         {
             return null;
@@ -406,6 +783,92 @@ public sealed class EfReviewDiagnosticsReader(IJobRepository jobRepository) : IR
                 guidanceApplied,
                 appliedPromptKind,
                 appliedGuidanceIds)
+            : null;
+    }
+
+    private static ProtocolAgentSessionDto? ResolveAgentSession(ReviewJobProtocol protocol)
+    {
+        string? remoteConversationId = null;
+        string? bindingMethod = null;
+        string? bindingOutcome = null;
+        string? promptMode = null;
+        string? fallbackReason = null;
+        var usedManagedRemoteConversation = false;
+        var usedLocalReplay = false;
+
+        foreach (var evt in protocol.Events)
+        {
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionBinding, StringComparison.Ordinal))
+            {
+                if (TryGetString(evt.InputTextSample, "remoteConversationId", out var bindingConversationId))
+                {
+                    remoteConversationId ??= bindingConversationId;
+                }
+
+                if (TryGetString(evt.InputTextSample, "bindingMethod", out var parsedBindingMethod))
+                {
+                    bindingMethod ??= parsedBindingMethod;
+                }
+
+                if (TryGetString(evt.InputTextSample, "bindingOutcome", out var parsedBindingOutcome))
+                {
+                    bindingOutcome ??= parsedBindingOutcome;
+                }
+
+                if (TryGetString(evt.InputTextSample, "promptMode", out var parsedPromptMode))
+                {
+                    promptMode ??= parsedPromptMode;
+                }
+
+                usedManagedRemoteConversation = true;
+                continue;
+            }
+
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionTurn, StringComparison.Ordinal))
+            {
+                if (TryGetString(evt.InputTextSample, "remoteConversationId", out var turnConversationId))
+                {
+                    remoteConversationId ??= turnConversationId;
+                }
+
+                if (TryGetString(evt.InputTextSample, "promptMode", out var parsedTurnPromptMode))
+                {
+                    promptMode ??= parsedTurnPromptMode;
+                }
+
+                if (TryGetBoolean(evt.InputTextSample, "usedRemoteConversation", out var parsedUsedRemoteConversation))
+                {
+                    usedManagedRemoteConversation |= parsedUsedRemoteConversation;
+                }
+
+                if (TryGetBoolean(evt.InputTextSample, "usedLocalReplay", out var parsedUsedLocalReplay))
+                {
+                    usedLocalReplay |= parsedUsedLocalReplay;
+                }
+
+                continue;
+            }
+
+            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionFallback, StringComparison.Ordinal))
+            {
+                if (TryGetString(evt.InputTextSample, "reason", out var parsedFallbackReason))
+                {
+                    fallbackReason ??= parsedFallbackReason;
+                }
+
+                usedLocalReplay = true;
+            }
+        }
+
+        return remoteConversationId is not null || bindingMethod is not null || fallbackReason is not null || usedManagedRemoteConversation || usedLocalReplay
+            ? new ProtocolAgentSessionDto(
+                usedManagedRemoteConversation,
+                remoteConversationId,
+                bindingMethod,
+                bindingOutcome,
+                promptMode,
+                usedLocalReplay,
+                fallbackReason)
             : null;
     }
 

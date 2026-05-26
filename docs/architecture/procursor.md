@@ -10,7 +10,7 @@ lifecycle, and extracted-host settings. Review orchestration reaches it only thr
 `IProCursorGateway` and `PROCURSOR_*` settings; it does not talk directly to ProCursor repositories,
 Azure DevOps materializers, or snapshot tables.
 
-ProPR is the only public control plane. Browser traffic, admin UI calls, and public auth are
+ProPR is the only public control plane. Browser traffic, frontend calls, and public auth are
 anchored to ProPR. The ProCursor host is internal-only and authenticates both directions
 with `X-ProCursor-Key` using one shared `PROCURSOR_SHARED_KEY`.
 
@@ -155,7 +155,7 @@ sequenceDiagram
     participant AGG as IProCursorTokenUsageAggregationService
     participant ROLL as procursor_token_usage_rollups
     participant API as ProCursorTokenUsageController
-    participant UI as Admin UI
+    participant UI as Frontend
 
     IDX->>EMB: GenerateEmbeddingsAsync(...)
     EMB->>EMB: Prefer provider UsageDetails
@@ -176,7 +176,7 @@ sequenceDiagram
     API-->>UI: Totals, top sources, recent safe events, freshness
 ```
 
-A dedicated rollup worker refreshes daily and monthly aggregates so the admin UI can read stable
+A dedicated rollup worker refreshes daily and monthly aggregates so the frontend can read stable
 totals and gap-fill the newest uncaptured window from raw events.
 
 ## Operational Expectations

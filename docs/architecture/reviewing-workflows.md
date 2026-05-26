@@ -145,9 +145,12 @@ admin API shape changes are required for the slice.
 
 The protocol surface remains event-driven. Each reviewed file pass can emit:
 
+- `review_agent_session_binding` with the file-owned local session identifier, binding method,
+  binding outcome, prompt mode, and remote conversation identifier when managed remote conversation
+  binding succeeds
 - `review_agent_session_turn` with turn number, selected session mode, context strategy,
-  replay-summary metadata, compacted-payload summary, and any provider session or response-chain
-  identifiers
+  prompt mode, replay-summary metadata, compacted-payload summary, remote-vs-local continuation
+  markers, and any provider session or response-chain identifiers
 - `review_agent_session_fallback` with the downgraded-from mode, downgraded-to mode, fallback
   reason, turn number, and preserved-state description
 
@@ -155,11 +158,17 @@ Operators should interpret those events together with the normal AI call and too
 
 - `sessionMode` identifies whether the pass used stateless replay, local managed continuation, or
   provider-managed continuation.
+- `promptMode` identifies whether the turn established the remote conversation binding, continued it
+  with only the current prompt, or fell back to explicit replay.
 - `contextStrategy` distinguishes full-context submission from delta-context continuation on each AI
   turn.
 - `replayedPayloadSummary` and `compactedPayloadSummary` provide the evidence that later tiny or
   empty follow-up results did not force the earlier bulky payloads to be retransmitted in full.
-- `providerSessionId` and `providerResponseId` are present only when the runtime exposes them.
+- `remoteConversationId` and `providerResponseId` are present only when the runtime exposes them.
+
+For Agent Framework-backed managed remote conversations, the first successful managed turn creates a
+session and binds it to the remote conversation. Later turns continue through that same session using
+only the current prompt and do not re-pass the remote conversation identifier on each turn.
 
 ## ProRV Focused Guidance
 

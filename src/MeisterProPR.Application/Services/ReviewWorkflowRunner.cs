@@ -142,7 +142,7 @@ public sealed class ReviewWorkflowRunner(
 
             await jobs.SetResultAsync(job.Id, result, cancellationToken);
 
-            var protocols = (await diagnosticsReader.GetJobProtocolAsync(job.Id, cancellationToken))?.Protocols ?? [];
+            var protocols = (await diagnosticsReader.GetJobProtocolAsync(job.Id, true, cancellationToken))?.Protocols ?? [];
 
             return new ReviewWorkflowResult(
                 jobs.GetById(job.Id) ?? job,

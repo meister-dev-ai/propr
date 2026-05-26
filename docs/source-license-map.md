@@ -6,12 +6,15 @@ Do not edit it manually.
 | Path or file | Source license | Capability classification | Notes |
 |---|---|---|---|
 | `docs/` | Elastic License 2.0 unless otherwise noted | Documentation | This row is maintained by the generator as a repository convention. |
-| `admin-ui/src/components/TenantLoginProviders.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
-| `admin-ui/src/components/TenantProviderList.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
-| `admin-ui/src/components/TenantSsoProviderForm.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
-| `admin-ui/src/views/TenantExternalCallbackView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
-| `admin-ui/src/views/TenantLoginView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
-| `admin-ui/src/views/TenantSettingsView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/components/TenantLoginProviders.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/components/TenantProviderList.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/components/TenantSsoProviderForm.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/view-models/useTenantCallbackViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/view-models/useTenantLoginViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/view-models/useTenantSettingsViewModel.ts` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/views/TenantExternalCallbackView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/views/TenantLoginView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
+| `frontend/src/features/tenants/views/TenantSettingsView.vue` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs` | Elastic License 2.0 | Mixed file with commercial capability implementation | Marked in-source and contains shared behavior alongside commercial-only functionality. |
 | `src/MeisterProPR.Api/Features/IdentityAndAccess/Controllers/TenantSsoProvidersController.cs` | Elastic License 2.0 | Commercial capability implementation | Marked in-source with the commercial-only functionality notice. |
 | `src/MeisterProPR.Infrastructure/Features/IdentityAndAccess/Persistence/TenantAuthService.cs` | Elastic License 2.0 | Mixed file with commercial capability implementation | Marked in-source and contains shared behavior alongside commercial-only functionality. |

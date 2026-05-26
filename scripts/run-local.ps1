@@ -14,7 +14,7 @@ $ApiProject = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
 $ProCursorProject = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\MeisterProPR.ProCursor.Service.csproj'
 $ApiFolder = Join-Path $RepoRoot 'src\MeisterProPR.Api'
 $ProCursorFolder = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service'
-$UiFolder = Join-Path $RepoRoot 'admin-ui'
+$UiFolder = Join-Path $RepoRoot 'frontend'
 $EnvFile = Join-Path $RepoRoot '.env'
 $ApiDll = Join-Path $RepoRoot 'src\MeisterProPR.Api\bin\Debug\net10.0\MeisterProPR.Api.dll'
 $ProCursorDll = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\bin\Debug\net10.0\MeisterProPR.ProCursor.Service.dll'
@@ -691,7 +691,7 @@ Add-DotEnvValues -Target $uiEnv -DotEnv $dotenv -ExcludedKeys @('VITE_API_BASE_U
 
 if (-not $SkipUiInstall) {
     if (-not (Test-Path (Join-Path $UiFolder 'node_modules'))) {
-        Write-RunLocalMessage -Message 'Installing admin-ui dependencies (npm ci)' -Color Cyan
+        Write-RunLocalMessage -Message 'Installing frontend dependencies (npm ci)' -Color Cyan
         Invoke-LoggedCommand -FileName 'npm' -Arguments 'ci' -WorkingDirectory $UiFolder -Env $uiEnv -Label 'npm-ci'
     }
 }
@@ -705,7 +705,7 @@ $proCursor = $null
 $ui = $null
 
 try {
-    Write-RunLocalMessage -Message 'Starting backend, ProCursor, and admin UI in this terminal. Press Ctrl+C to stop all processes.' -Color Green
+    Write-RunLocalMessage -Message 'Starting backend, ProCursor, and frontend in this terminal. Press Ctrl+C to stop all processes.' -Color Green
     Write-RunLocalMessage -Message "Local run log: $LogFile" -Color DarkGray
     Write-RunLocalMessage -Message 'Shared ProCursor key generated for this run' -Color DarkGray
 
@@ -726,7 +726,7 @@ try {
     Write-RunLocalMessage -Message "API PID: $($api.Process.Id)" -Color DarkGray
     Write-RunLocalMessage -Message "ProCursor PID: $($proCursor.Process.Id)" -Color DarkGray
     Write-RunLocalMessage -Message "UI PID: $($ui.Process.Id)" -Color DarkGray
-    Write-RunLocalMessage -Message "API -> http://localhost:$BackendPort  ProCursor -> http://localhost:$ProCursorPort  Admin UI -> http://localhost:5173" -Color Green
+    Write-RunLocalMessage -Message "API -> http://localhost:$BackendPort  ProCursor -> http://localhost:$ProCursorPort  Frontend -> http://localhost:5173" -Color Green
 
     Wait-ForChildren -Children $children
 

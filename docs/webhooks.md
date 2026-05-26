@@ -7,25 +7,25 @@ Overview
 
 Webhooks let ProPR receive pull-request or merge-request events from supported SCM providers so the service can queue AI review jobs automatically. A webhook consists of two parts:
 
-- A **webhook configuration** in ProPR (Admin UI) which defines the organization/project/repository scope, enabled events, and exposes a one-time secret and listener URL.
+- A **webhook configuration** in ProPR (frontend) which defines the organization/project/repository scope, enabled events, and exposes a one-time secret and listener URL.
 - A **provider-side webhook or service hook** that calls the ProPR listener URL when events occur.
 
 Quick checklist (what must be true)
 
 
 - ProPR instance is reachable by Azure DevOps (public URL / NAT / firewall); HTTPS is recommended.
-- You have Admin access to ProPR's Admin UI to create webhook configurations.
+- You have Admin access to ProPR's frontend to create webhook configurations.
 - You can create the matching webhook or service hook in the target provider.
 - You have an active provider connection in ProPR for the target host and scope.
 - Database and background workers for ProPR are running (reviews are queued and processed asynchronously).
 
-Create the webhook configuration (ProPR Admin UI)
+Create the webhook configuration (ProPR frontend)
 
 
-1. Sign in to the ProPR Admin UI and open **Admin → Webhook Configurations**.
+1. Sign in to the ProPR frontend and open **Admin → Webhook Configurations**.
 2. Click **Create webhook configuration**.
 3. Select the organization (e.g. `https://dev.azure.com/my-org`).
-4. Choose a project (the Admin UI may show a project name or let you pick by discovery). Prefer using the **project name** (not a GUID) when you intend to reference repositories by name.
+4. Choose a project (the frontend may show a project name or let you pick by discovery). Prefer using the **project name** (not a GUID) when you intend to reference repositories by name.
 5. Add repository filters (use the guided discovery to pick the repository). When available, choose the *canonical repository* entry — this stores the canonical repository identifier (GUID) and avoids name-vs-id mismatches.
 6. Select which events to enable (Pull Request Created, Updated, Commented).
 7. Optionally set **Review Temperature** to a value between `0.0` and `2.0` if this webhook should override the model default.
@@ -152,17 +152,17 @@ Notes about repository & project identifiers
 
   it means the webhook delivery contained a repository *name* while ProPR's stored configuration used a *project GUID*. To avoid this, either:
 
-  - Configure the webhook/repo filter using the canonical repository reference (GUID) provided by the Admin UI (recommended), or
+  - Configure the webhook/repo filter using the canonical repository reference (GUID) provided by the frontend (recommended), or
   - Ensure the webhook configuration uses the **project name** instead of a GUID when the repository is referenced by name.
 
 Troubleshooting (common issues & fixes)
 
 
-- Authorization failed / missing: verify the Azure DevOps service hook is configured to use Basic auth and that the password equals the ProPR generated secret, or verify the GitLab webhook is using the Secret token field so GitLab sends `X-Gitlab-Token`. You can re-generate a secret in the Admin UI and update the webhook if needed.
+- Authorization failed / missing: verify the Azure DevOps service hook is configured to use Basic auth and that the password equals the ProPR generated secret, or verify the GitLab webhook is using the Secret token field so GitLab sends `X-Gitlab-Token`. You can re-generate a secret in the frontend and update the webhook if needed.
 - Listener unreachable: ensure your ProPR instance is reachable from Azure DevOps (public URL, correct port, HTTPS).
 - Listener URL shows the backend host instead of the public proxy: set `MEISTER_PUBLIC_BASE_URL` on the API to the public reverse-proxy base URL and recreate or update the webhook using the newly generated listener URL.
 - "A project name is required…": see the section above about repo vs project identifiers. Use canonical repository GUIDs when possible.
-- No review jobs queued: confirm ProPR has a working database and the background workers are running (the Admin UI and `/healthz` endpoint help verify).
+- No review jobs queued: confirm ProPR has a working database and the background workers are running (the frontend and `/healthz` endpoint help verify).
 - Check deliveries: open **Admin → Webhook Configurations → {your config} → Deliveries** to see recent webhook deliveries, outcomes, and failure reasons.
 
 If you need help

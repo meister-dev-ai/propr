@@ -8,7 +8,7 @@ SCM operations.
 
 ```mermaid
 sequenceDiagram
-    actor User as User / Admin UI
+    actor User as User / Frontend
     participant Auth as AuthController
     participant MW as AuthMiddleware
     participant JT as JwtTokenService

@@ -238,6 +238,28 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult<ReviewJob?>(null);
         }
 
+        public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            string storedRevisionKey,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
+
+        public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            string storedRevisionKey,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
+
         public Task UpdateAiConfigAsync(Guid id, Guid? connectionId, string? model, CancellationToken ct = default, float? reviewTemperature = null)
         {
             return Task.CompletedTask;

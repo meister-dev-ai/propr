@@ -298,6 +298,108 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
+    public async Task GetJobProtocol_WhenIncludeEventsIsFalse_OmitsEventBodiesButKeepsEventRows()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 61, 1);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Overview.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = "full input",
+                SystemPrompt = "full system",
+                OutputSummary = "full output",
+            });
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol?includeEvents=false");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var ev = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single()
+            .GetProperty("events")
+            .EnumerateArray()
+            .Single();
+
+        Assert.Equal("ai_call_iter_1", ev.GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, ev.GetProperty("inputTextSample").ValueKind);
+        Assert.Equal(JsonValueKind.Null, ev.GetProperty("systemPrompt").ValueKind);
+        Assert.Equal(
+            "Event payload omitted from the overview to keep large protocol traces responsive. Select this pass to load the full captured body.",
+            ev.GetProperty("outputSummary").GetString());
+    }
+
+    [Fact]
+    public async Task GetJobProtocolPass_ReturnsFullEventBodiesForSelectedProtocol()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 62, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Detail.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow,
+                InputTextSample = "full input",
+                SystemPrompt = "full system",
+                OutputSummary = "full output",
+            });
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol/{protocol.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var ev = body.GetProperty("events").EnumerateArray().Single();
+        Assert.Equal(protocol.Id.ToString(), body.GetProperty("id").GetString());
+        Assert.Equal("full input", ev.GetProperty("inputTextSample").GetString());
+        Assert.Equal("full system", ev.GetProperty("systemPrompt").GetString());
+        Assert.Equal("full output", ev.GetProperty("outputSummary").GetString());
+    }
+
+    [Fact]
     public async Task GetJobProtocol_FileProtocol_IncludesFinalSummaryAndComments()
     {
         using var scope = factory.Services.CreateScope();

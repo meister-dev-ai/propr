@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ApiProject="$REPO_ROOT/src/MeisterProPR.Api/MeisterProPR.Api.csproj"
 ProCursorProject="$REPO_ROOT/src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj"
-UiFolder="$REPO_ROOT/admin-ui"
+UiFolder="$REPO_ROOT/frontend"
 EnvFile="$REPO_ROOT/.env"
 
 DB_CONNECTION_STRING="${DB_CONNECTION_STRING:-}"
@@ -486,7 +486,7 @@ wait_for_log_readers() {
 
 build_env_array_ui ui_env_assign
 if [ "$SKIP_UI_INSTALL" = false ] && [ ! -d "$UiFolder/node_modules" ]; then
-  write_status "Installing admin-ui dependencies (npm ci)"
+  write_status "Installing frontend dependencies (npm ci)"
   env "${ui_env_assign[@]}" npm ci --prefix "$UiFolder"
 fi
 
@@ -498,7 +498,7 @@ write_status "Building backend and ProCursor host"
 dotnet build "$ApiProject"
 dotnet build "$ProCursorProject"
 
-write_status "Starting backend, ProCursor, and admin UI in this terminal. Press Ctrl+C to stop all processes."
+write_status "Starting backend, ProCursor, and frontend in this terminal. Press Ctrl+C to stop all processes."
 write_status "Local run log: $LogFile"
 write_status "Shared ProCursor key generated for this run"
 
@@ -532,7 +532,7 @@ UI_PID=$!
 write_status "API PID: $API_PID"
 write_status "ProCursor PID: $PROCURSOR_PID"
 write_status "UI PID: $UI_PID"
-write_status "API -> http://localhost:$BACKEND_PORT  ProCursor -> http://localhost:$PROCURSOR_PORT  Admin UI -> http://localhost:5173"
+write_status "API -> http://localhost:$BACKEND_PORT  ProCursor -> http://localhost:$PROCURSOR_PORT  Frontend -> http://localhost:5173"
 
 API_EXIT=0
 PROCURSOR_EXIT=0

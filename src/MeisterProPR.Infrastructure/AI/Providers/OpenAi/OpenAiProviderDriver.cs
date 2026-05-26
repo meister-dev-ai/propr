@@ -84,6 +84,7 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
         return new AgentReviewRuntimeCapabilities(
             usesResponses,
             usesResponses,
+            usesResponses,
             usesResponses);
     }
 

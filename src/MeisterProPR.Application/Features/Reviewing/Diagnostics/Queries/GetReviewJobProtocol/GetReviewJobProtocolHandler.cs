@@ -17,6 +17,6 @@ public sealed class GetReviewJobProtocolHandler(IReviewDiagnosticsReader diagnos
         GetReviewJobProtocolQuery query,
         CancellationToken ct = default)
     {
-        return diagnosticsReader.GetJobProtocolAsync(query.JobId, ct);
+        return diagnosticsReader.GetJobProtocolAsync(query.JobId, query.IncludeEvents, ct);
     }
 }

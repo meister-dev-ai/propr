@@ -92,7 +92,7 @@ jobs:
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "backend=${{ env.REGISTRY }}/${REPO}" >> "$GITHUB_OUTPUT"
           echo "procursor=${{ env.REGISTRY }}/${REPO}/procursor" >> "$GITHUB_OUTPUT"
-          echo "frontend=${{ env.REGISTRY }}/${REPO}/admin-ui" >> "$GITHUB_OUTPUT"
+          echo "frontend=${{ env.REGISTRY }}/${REPO}/frontend" >> "$GITHUB_OUTPUT"
 
       - name: Compute Docker tags
         id: tags
@@ -232,7 +232,7 @@ jobs:
         uses: docker/build-push-action@v7.0.0
         with:
           context: .
-          file: admin-ui/Dockerfile
+          file: frontend/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.frontend }}
           labels: |

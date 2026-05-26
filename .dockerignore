@@ -41,10 +41,13 @@ logs/
 # NuGet cache
 packages/
 
-# Node / admin-ui
+# Node / frontend
 node_modules/
 dist/
 build/
-admin-ui/node_modules/
-admin-ui/dist/
-admin-ui/coverage/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
