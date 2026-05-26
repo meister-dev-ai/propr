@@ -20,9 +20,7 @@ public sealed class ReviewStrategyDispatcherTests
     public async Task ReviewAsync_AgenticFileByFile_ThrowsDisabledStrategyError()
     {
         var fileByFile = Substitute.For<IFileByFileReviewOrchestrator>();
-        var agenticFileByFile = Substitute.For<IAgenticFileByFileReviewOrchestrator>();
-        var prWideAgentic = Substitute.For<IPrWideAgenticReviewOrchestrator>();
-        var sut = new ReviewStrategyDispatcher(fileByFile, agenticFileByFile, prWideAgentic);
+        var sut = new ReviewStrategyDispatcher(fileByFile);
         var job = CreateJob(ReviewStrategy.AgenticFileByFile);
         var pr = CreatePr();
         var context = new ReviewSystemContext(null, [], null);
@@ -33,19 +31,13 @@ public sealed class ReviewStrategyDispatcherTests
         Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
         await fileByFile.DidNotReceive().ReviewAsync(
             Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await agenticFileByFile.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await prWideAgentic.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
     }
 
     [Fact]
     public async Task ReviewAsync_PrWideAgentic_ThrowsDisabledStrategyError()
     {
         var fileByFile = Substitute.For<IFileByFileReviewOrchestrator>();
-        var agenticFileByFile = Substitute.For<IAgenticFileByFileReviewOrchestrator>();
-        var prWideAgentic = Substitute.For<IPrWideAgenticReviewOrchestrator>();
-        var sut = new ReviewStrategyDispatcher(fileByFile, agenticFileByFile, prWideAgentic);
+        var sut = new ReviewStrategyDispatcher(fileByFile);
         var job = CreateJob(ReviewStrategy.PrWideAgentic);
         var pr = CreatePr();
         var context = new ReviewSystemContext(null, [], null);
@@ -56,18 +48,12 @@ public sealed class ReviewStrategyDispatcherTests
         Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
         await fileByFile.DidNotReceive().ReviewAsync(
             Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await agenticFileByFile.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await prWideAgentic.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
     }
 
     [Fact]
     public async Task ReviewAsync_FileByFile_RoutesToLegacyOrchestrator()
     {
         var fileByFile = Substitute.For<IFileByFileReviewOrchestrator>();
-        var agenticFileByFile = Substitute.For<IAgenticFileByFileReviewOrchestrator>();
-        var prWideAgentic = Substitute.For<IPrWideAgenticReviewOrchestrator>();
         var expected = new ReviewResult("file", []);
         fileByFile.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -76,7 +62,7 @@ public sealed class ReviewStrategyDispatcherTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>())
             .Returns(expected);
-        var sut = new ReviewStrategyDispatcher(fileByFile, agenticFileByFile, prWideAgentic);
+        var sut = new ReviewStrategyDispatcher(fileByFile);
         var job = CreateJob(ReviewStrategy.FileByFile);
         var pr = CreatePr();
         var context = new ReviewSystemContext(null, [], null);
@@ -85,18 +71,12 @@ public sealed class ReviewStrategyDispatcherTests
 
         Assert.Same(expected, result);
         await fileByFile.Received(1).ReviewAsync(job, pr, context, CancellationToken.None);
-        await agenticFileByFile.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await prWideAgentic.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
     }
 
     [Fact]
     public async Task ReviewAsync_WithDisabledStrategyAndExplicitPipelineProfile_ThrowsDisabledStrategyError()
     {
         var fileByFile = Substitute.For<IFileByFileReviewOrchestrator>();
-        var agenticFileByFile = Substitute.For<IAgenticFileByFileReviewOrchestrator>();
-        var prWideAgentic = Substitute.For<IPrWideAgenticReviewOrchestrator>();
         var profileProvider = Substitute.For<IReviewPipelineProfileProvider>();
         profileProvider.GetProfiles(ReviewStrategy.AgenticFileByFile).Returns(
         [
@@ -113,7 +93,7 @@ public sealed class ReviewStrategyDispatcherTests
                 false),
         ]);
 
-        var sut = new ReviewStrategyDispatcher(fileByFile, agenticFileByFile, prWideAgentic, profileProvider);
+        var sut = new ReviewStrategyDispatcher(fileByFile, profileProvider);
         var job = CreateJob(ReviewStrategy.AgenticFileByFile);
         var pr = CreatePr();
         var context = new ReviewSystemContext(null, [], null);
@@ -129,10 +109,6 @@ public sealed class ReviewStrategyDispatcherTests
         Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
         profileProvider.DidNotReceive().GetProfiles(ReviewStrategy.AgenticFileByFile);
         await fileByFile.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await agenticFileByFile.DidNotReceive().ReviewAsync(
-            Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
-        await prWideAgentic.DidNotReceive().ReviewAsync(
             Arg.Any<ReviewJob>(), Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), Arg.Any<IChatClient?>());
     }
 

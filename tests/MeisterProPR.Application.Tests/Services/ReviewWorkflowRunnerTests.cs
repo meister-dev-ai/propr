@@ -899,6 +899,7 @@ public sealed class ReviewWorkflowRunnerTests
 
         var result = await sut.RunAsync(request, CancellationToken.None);
 
+        Assert.NotNull(result.BoundaryIssues);
         var issue = Assert.Single(result.BoundaryIssues);
         Assert.Equal(boundaryIssue.IssueId, issue.IssueId);
     }

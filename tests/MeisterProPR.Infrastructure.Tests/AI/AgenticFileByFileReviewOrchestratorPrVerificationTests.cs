@@ -366,7 +366,7 @@ public sealed class AgenticFileByFileReviewOrchestratorPrVerificationTests
             .Returns(callInfo =>
             {
                 var messages = callInfo.Arg<IList<ChatMessage>>();
-                capturedChatCalls.Add(messages.Select(message => (message.Role, message.Text)).ToList());
+                capturedChatCalls.Add(messages.Select(message => (message.Role, (string?)message.Text)).ToList());
                 return Task.FromResult(
                     capturedChatCalls.Count switch
                     {

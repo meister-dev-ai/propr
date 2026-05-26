@@ -345,11 +345,14 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                toolNames = (callInfo.Arg<ChatOptions?>()?.Tools?
+                var tools = callInfo.Arg<ChatOptions?>()?.Tools;
+                toolNames = tools is null
+                    ? []
+                    : tools
                         .OfType<AIFunction>()
                         .Select(tool => tool.Name)
-                        .Where(name => !string.IsNullOrWhiteSpace(name)))
-                    .ToList() ?? [];
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .ToList();
 
                 return CreateFinalReviewResponse("Done.");
             });

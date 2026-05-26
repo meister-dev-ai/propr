@@ -56,58 +56,40 @@ internal sealed class AgenticFileReviewDispatchPlanner(
             return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
         }
 
-        using var semaphore = new SemaphoreSlim(options.MaxFileReviewConcurrency);
+        var semaphore = new SemaphoreSlim(options.MaxFileReviewConcurrency);
         var allChangedFiles = pr.ChangedFiles.ToList();
         var fileIndexByPath = allChangedFiles
             .Select((f, i) => (f.Path, Index: i + 1))
             .ToDictionary(x => x.Path, x => x.Index);
 
-        var tasks = filesToReview.Select(async file =>
+        var tasks = new List<Task>(filesToReview.Count);
+        foreach (var file in filesToReview)
         {
-            await semaphore.WaitAsync(ct);
-            try
-            {
-                var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
-                var existingResult = existingResults.GetValueOrDefault(file.Path);
-                var fileAgenticCandidateFindings = await fileReviewer.ReviewAsync(
+            tasks.Add(
+                this.ReviewFileAsync(
+                    file,
+                    semaphore,
                     job,
                     pr,
-                    file,
-                    fileIndex,
-                    allChangedFiles.Count,
                     executionContext,
-                    existingResult,
                     effectiveClient,
-                    ct);
+                    allChangedFiles.Count,
+                    fileIndexByPath,
+                    existingResults,
+                    survivingAgenticCandidateFindings,
+                    exceptions,
+                    ct));
+        }
 
-                if (fileAgenticCandidateFindings.Count > 0)
-                {
-                    lock (survivingAgenticCandidateFindings)
-                    {
-                        survivingAgenticCandidateFindings.AddRange(fileAgenticCandidateFindings);
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed review for file {FilePath} in job {JobId}", file.Path, job.Id);
-                lock (exceptions)
-                {
-                    exceptions.Add(ex);
-                }
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        await Task.WhenAll(tasks);
-        return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
+        try
+        {
+            await Task.WhenAll(tasks);
+            return new FileReviewDispatchResult(existingResults, exceptions, survivingAgenticCandidateFindings);
+        }
+        finally
+        {
+            semaphore.Dispose();
+        }
     }
 
     private static ReviewSystemContext CreateExecutionContext(ReviewSystemContext baseContext)
@@ -139,6 +121,62 @@ internal sealed class AgenticFileReviewDispatchPlanner(
             PromptExperiment = baseContext.PromptExperiment,
             SkippedSteps = baseContext.SkippedSteps,
         };
+    }
+
+    private async Task ReviewFileAsync(
+        ChangedFile file,
+        SemaphoreSlim semaphore,
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext executionContext,
+        IChatClient effectiveClient,
+        int totalChangedFileCount,
+        IReadOnlyDictionary<string, int> fileIndexByPath,
+        IReadOnlyDictionary<string, ReviewFileResult> existingResults,
+        List<CandidateReviewFinding> survivingAgenticCandidateFindings,
+        List<Exception> exceptions,
+        CancellationToken ct)
+    {
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
+            var existingResult = existingResults.GetValueOrDefault(file.Path);
+            var fileAgenticCandidateFindings = await fileReviewer.ReviewAsync(
+                job,
+                pr,
+                file,
+                fileIndex,
+                totalChangedFileCount,
+                executionContext,
+                existingResult,
+                effectiveClient,
+                ct);
+
+            if (fileAgenticCandidateFindings.Count > 0)
+            {
+                lock (survivingAgenticCandidateFindings)
+                {
+                    survivingAgenticCandidateFindings.AddRange(fileAgenticCandidateFindings);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed review for file {FilePath} in job {JobId}", file.Path, job.Id);
+            lock (exceptions)
+            {
+                exceptions.Add(ex);
+            }
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     private async Task MarkFileExcludedAsync(

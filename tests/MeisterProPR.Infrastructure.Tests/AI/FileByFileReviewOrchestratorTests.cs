@@ -1332,9 +1332,9 @@ public class FileByFileReviewOrchestratorTests
 
         await sut.ReviewAsync(job, pr, context, CancellationToken.None);
 
-        Received.InOrder(async () =>
+        Received.InOrder(() =>
         {
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringBaselinePassCompleted,
                 Arg.Is<string?>(details => details != null && details.Contains("\"passKind\":\"Baseline\"", StringComparison.Ordinal)),
@@ -1342,7 +1342,7 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringAugmentationPassCompleted,
                 Arg.Is<string?>(details => details != null && details.Contains("\"passKind\":\"ProRVAugmentation\"", StringComparison.Ordinal)),
@@ -1350,7 +1350,7 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringMergeCompleted,
                 Arg.Is<string?>(details =>
@@ -1761,7 +1761,7 @@ public class FileByFileReviewOrchestratorTests
         var chatClient = Substitute.For<IChatClient>();
         chatClient.GetResponseAsync(
                 Arg.Do<IList<ChatMessage>>(messages =>
-                    capturedSynthesisMessages = messages.Select(message => (message.Role, message.Text)).ToList()),
+                    capturedSynthesisMessages = messages.Select(message => (message.Role, (string?)message.Text)).ToList()),
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"summary":"Synthesized summary.","cross_cutting_concerns":[]}""")));

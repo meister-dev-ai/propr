@@ -583,55 +583,45 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             CancellationToken.None,
             Substitute.For<IChatClient>());
 
-        Received.InOrder(async () =>
+        Received.InOrder(() =>
         {
-            await fallback.ReviewAsync(
+            fallback.ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
 
-            await protocolRecorder.RecordPrWideStageEventAsync(
+            protocolRecorder.RecordPrWideStageEventAsync(
                 prWideProtocolId,
                 ReviewProtocolEventNames.PrWideVerificationCompleted,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                null,
+                Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordPrWideStageEventAsync(
+            protocolRecorder.RecordPrWideStageEventAsync(
                 prWideProtocolId,
                 ReviewProtocolEventNames.PrWideFinalGateDecision,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                null,
+                Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordPrWideStageEventAsync(
+            protocolRecorder.RecordPrWideStageEventAsync(
                 prWideProtocolId,
                 ReviewProtocolEventNames.PrWideSummaryReconciled,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                null,
+                Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordPrWideStageEventAsync(
+            protocolRecorder.RecordPrWideStageEventAsync(
                 prWideProtocolId,
                 ReviewProtocolEventNames.PrWidePublicationPrepared,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                null,
-                Arg.Any<CancellationToken>());
-
-            await protocolRecorder.SetCompletedAsync(
-                prWideProtocolId,
-                "Completed",
-                0,
-                0,
-                0,
-                0,
-                null,
+                Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
         });
 
@@ -645,6 +635,15 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 output.Contains("\"inlineCommentCount\":1", StringComparison.Ordinal) &&
                 output.Contains("\"prLevelCommentCount\":1", StringComparison.Ordinal)),
             Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received(1).SetCompletedAsync(
+            prWideProtocolId,
+            "Completed",
+            Arg.Any<long>(),
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Is<int?>(finalConfidence => finalConfidence == null),
             Arg.Any<CancellationToken>());
     }
 

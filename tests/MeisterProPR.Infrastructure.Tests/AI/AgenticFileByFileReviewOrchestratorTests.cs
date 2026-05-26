@@ -756,9 +756,9 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
 
         await sut.ReviewAsync(job, pr, context, CancellationToken.None, chatClient);
 
-        Received.InOrder(async () =>
+        Received.InOrder(() =>
         {
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.ReviewStrategySelected,
                 Arg.Any<string?>(),
@@ -766,7 +766,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringBaselinePassCompleted,
                 Arg.Is<string?>(details => details != null && details.Contains("\"passKind\":\"Baseline\"", StringComparison.Ordinal)),
@@ -774,7 +774,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringAugmentationPassCompleted,
                 Arg.Is<string?>(details => details != null && details.Contains("\"passKind\":\"ProRVAugmentation\"", StringComparison.Ordinal)),
@@ -782,7 +782,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
 
-            await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolRecorder.RecordReviewStrategyEventAsync(
                 context.ActiveProtocolId.Value,
                 ReviewProtocolEventNames.LateSteeringMergeCompleted,
                 Arg.Is<string?>(details =>

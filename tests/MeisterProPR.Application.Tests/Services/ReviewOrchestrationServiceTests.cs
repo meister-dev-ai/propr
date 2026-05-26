@@ -2162,14 +2162,14 @@ public class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        Received.InOrder(async () =>
+        Received.InOrder(() =>
         {
-            await threadReplyPublisher.ReplyAsync(
+            threadReplyPublisher.ReplyAsync(
                 job.ClientId,
                 Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "200"),
                 "Closing - fixed in the latest change.",
                 Arg.Any<CancellationToken>());
-            await threadStatusWriter.UpdateThreadStatusAsync(
+            threadStatusWriter.UpdateThreadStatusAsync(
                 job.ClientId,
                 Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "200"),
                 "fixed",

@@ -15,7 +15,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Manages clients and related admin configuration.</summary>
 [ApiController]
-public sealed partial class ClientsController(
+public sealed class ClientsController(
     IClientAdminService clientAdminService,
     ITenantAdminService tenantAdminService) : ControllerBase
 {

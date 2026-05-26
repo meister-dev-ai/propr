@@ -52,6 +52,8 @@ public sealed record CandidateFindingProvenance
     /// <param name="evidenceSetId">Optional stable evidence-set identifier associated with the finding.</param>
     /// <param name="requiresExplicitSupport">Whether the finding requires explicit support before publication.</param>
     /// <param name="sourceOriginId">Optional stable identifier of the deeper follow-up task or repeated-judgment origin.</param>
+    /// <param name="reviewPassKind">Review pass that produced the finding.</param>
+    /// <param name="findingProvenanceKind">Normalized provenance classification for downstream handling.</param>
     public CandidateFindingProvenance(
         string originKind,
         string generatedByStage,

@@ -960,7 +960,9 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
     private static string GetSingleQueryValue(Dictionary<string, StringValues> query, string parameterName)
     {
         Assert.True(query.TryGetValue(parameterName, out var values), $"Missing query parameter '{parameterName}'.");
-        return Assert.Single(values);
+        var value = Assert.Single(values);
+        Assert.NotNull(value);
+        return value;
     }
 
     private sealed record GitHubEmailResponse(

@@ -282,6 +282,7 @@ public sealed class JobsController(
     /// </summary>
     /// <param name="id">The review job identifier.</param>
     /// <param name="protocolId">The protocol-pass identifier.</param>
+    /// <param name="diagnosticsReader">Diagnostics reader used to load the captured protocol pass.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <response code="200">Protocol pass returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>

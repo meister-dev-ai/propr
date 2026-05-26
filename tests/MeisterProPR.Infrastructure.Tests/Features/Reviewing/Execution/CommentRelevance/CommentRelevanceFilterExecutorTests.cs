@@ -22,7 +22,7 @@ public sealed class CommentRelevanceFilterExecutorTests
         var registry = new CommentRelevanceFilterRegistry([], CommentRelevanceFilterSelection.None);
         var sut = new CommentRelevanceFilterExecutor(registry, protocolRecorder);
 
-        var result = await sut.ExecuteAsync(CreateRequest(protocolId: Guid.NewGuid()), CancellationToken.None);
+        var result = await sut.ExecuteAsync(CreateRequest(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Null(result);
         await protocolRecorder.DidNotReceive().RecordCommentRelevanceEventAsync(
@@ -42,7 +42,7 @@ public sealed class CommentRelevanceFilterExecutorTests
         var registry = new CommentRelevanceFilterRegistry([], new CommentRelevanceFilterSelection("hybrid-v1"));
         var sut = new CommentRelevanceFilterExecutor(registry, protocolRecorder);
 
-        var result = await sut.ExecuteAsync(CreateRequest(protocolId: protocolId), CancellationToken.None);
+        var result = await sut.ExecuteAsync(CreateRequest(protocolId), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("hybrid-v1", result!.ImplementationId);
@@ -65,7 +65,7 @@ public sealed class CommentRelevanceFilterExecutorTests
     {
         var protocolId = Guid.NewGuid();
         var protocolRecorder = CreateProtocolRecorder();
-        var request = CreateRequest(protocolId: protocolId, selectedImplementationId: "hybrid-v1", comments: [CreateComment("Keep me.")]);
+        var request = CreateRequest(protocolId, "hybrid-v1", [CreateComment("Keep me.")]);
         var filter = new StubCommentRelevanceFilter(
             "hybrid-v1",
             "1.2.3",
@@ -77,7 +77,7 @@ public sealed class CommentRelevanceFilterExecutorTests
                     incomingRequest.Comments.Count,
                     [
                         new CommentRelevanceFilterDecision(
-                            CommentRelevanceFilterDecision.KeepDecision, incomingRequest.Comments[0], [], CommentRelevanceFilterDecision.AiAdjudicationSource)
+                            CommentRelevanceFilterDecision.KeepDecision, incomingRequest.Comments[0], [], CommentRelevanceFilterDecision.AiAdjudicationSource),
                     ],
                     ["comment_relevance_evaluator"],
                     [],
@@ -131,7 +131,7 @@ public sealed class CommentRelevanceFilterExecutorTests
         var registry = new CommentRelevanceFilterRegistry([filter], new CommentRelevanceFilterSelection("hybrid-v1"));
         var sut = new CommentRelevanceFilterExecutor(registry, protocolRecorder);
 
-        var result = await sut.ExecuteAsync(CreateRequest(protocolId: protocolId), CancellationToken.None);
+        var result = await sut.ExecuteAsync(CreateRequest(protocolId), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(2, result!.KeptCount);

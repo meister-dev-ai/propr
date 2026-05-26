@@ -31,7 +31,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
     {
         services.AddScoped<IReviewJobExecutionStore>(sp =>
             new ReviewJobExecutionStoreAdapter(sp.GetRequiredService<IJobRepository>()));
-        services.AddScoped<IReviewStrategyDispatcher, ReviewStrategyDispatcher>();
+        services.AddScoped<IReviewStrategyDispatcher>(sp => new ReviewStrategyDispatcher(
+            sp.GetRequiredService<IFileByFileReviewOrchestrator>(),
+            sp.GetService<IReviewPipelineProfileProvider>()));
         services.AddSingleton<IReviewPipelineProfileProvider, ReviewPipelineProfileProvider>();
         services.AddScoped<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileProRvPrefilterStage>();

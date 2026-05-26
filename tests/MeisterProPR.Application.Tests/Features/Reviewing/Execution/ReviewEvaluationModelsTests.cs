@@ -38,6 +38,7 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("gpt-4o", request.ModelId);
         Assert.Same(fixture, request.Fixture);
         Assert.Same(configuration, request.Configuration);
+        Assert.NotNull(request.Configuration);
         Assert.False(request.Configuration.EnableProRV);
         Assert.Equal(ReviewAugmentationMode.Disabled, request.Configuration.EffectiveAugmentationMode);
         Assert.Equal(ReviewAugmentationMode.Disabled, request.EffectiveAugmentationMode);

@@ -14,8 +14,6 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 /// <summary>Routes review execution to the orchestrator selected by the job strategy snapshot.</summary>
 public sealed class ReviewStrategyDispatcher(
     IFileByFileReviewOrchestrator fileByFileOrchestrator,
-    IAgenticFileByFileReviewOrchestrator? agenticFileByFileReviewOrchestrator = null,
-    IPrWideAgenticReviewOrchestrator? prWideAgenticReviewOrchestrator = null,
     IReviewPipelineProfileProvider? pipelineProfileProvider = null) : IReviewStrategyDispatcher
 {
     /// <inheritdoc />

@@ -195,8 +195,7 @@ public class AdoCommentPosterTests
             "/src/Program.cs",
             42,
             PublicationAnchorPrecision.Inline,
-            "177",
-            null);
+            "177");
 
         var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
 
