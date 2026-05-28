@@ -20,53 +20,14 @@ const deleteReviewerIdentityMock = vi.fn()
 const listProviderActivationStatusesMock = vi.fn()
 const notifyMock = vi.fn()
 
-vi.mock('@/services/providerActivationService', () => ({
-  getEnabledProviderOptions: (statuses: Array<{ providerFamily: string; isEnabled: boolean }>) => statuses
-    .filter((status) => status.isEnabled)
-    .map((status) => ({
-      value: status.providerFamily,
-      label: status.providerFamily === 'azureDevOps'
-        ? 'Azure DevOps'
-        : status.providerFamily === 'gitLab'
-          ? 'GitLab'
-          : status.providerFamily === 'forgejo'
-            ? 'Forgejo'
-            : 'GitHub',
-    })),
-  getProviderDefaultHostBaseUrl: (providerFamily: string) => {
-    switch (providerFamily) {
-      case 'azureDevOps':
-        return 'https://dev.azure.com'
-      case 'gitLab':
-        return 'https://gitlab.com'
-      case 'forgejo':
-        return 'https://codeberg.org'
-      default:
-        return 'https://github.com'
-    }
-  },
-  getSupportedAuthenticationKinds: (providerFamily: string, hostBaseUrl?: string) => {
-    if (providerFamily === 'azureDevOps') {
-      return !hostBaseUrl || hostBaseUrl.includes('dev.azure.com') || hostBaseUrl.includes('.visualstudio.com')
-        ? ['oauthClientCredentials']
-        : ['personalAccessToken', 'windowsUserAccount']
-    }
+vi.mock('@/services/providerActivationService', async () => {
+  const actual = await vi.importActual<typeof import('@/services/providerActivationService')>('@/services/providerActivationService')
 
-    if (providerFamily === 'github') {
-      return ['personalAccessToken', 'appInstallation']
-    }
-
-    return ['personalAccessToken']
-  },
-  isHostedAzureDevOpsHost: (hostBaseUrl: string) =>
-    hostBaseUrl.includes('dev.azure.com') || hostBaseUrl.includes('.visualstudio.com'),
-  requiresUserName: (providerFamily: string, hostBaseUrl: string, authenticationKind: string) =>
-    providerFamily === 'azureDevOps'
-      && !hostBaseUrl.includes('dev.azure.com')
-      && !hostBaseUrl.includes('.visualstudio.com')
-      && authenticationKind === 'windowsUserAccount',
-  listProviderActivationStatuses: listProviderActivationStatusesMock,
-}))
+  return {
+    ...actual,
+    listProviderActivationStatuses: listProviderActivationStatusesMock,
+  }
+})
 
 vi.mock('@/services/providerConnectionsService', () => ({
   listProviderConnections: listProviderConnectionsMock,
