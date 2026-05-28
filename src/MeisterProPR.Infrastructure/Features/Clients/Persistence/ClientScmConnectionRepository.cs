@@ -81,17 +81,36 @@ public sealed class ClientScmConnectionRepository(
             return null;
         }
 
-        var record = await this.WithReadDbAsync(
-            db => db.ClientScmConnections
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    connection =>
-                        connection.ClientId == clientId
-                        && connection.Provider == host.Provider
-                        && connection.HostBaseUrl == host.HostBaseUrl
-                        && connection.IsActive,
-                    ct),
-            ct);
+        ClientScmConnectionRecord? record;
+        if (host.Provider == ScmProvider.AzureDevOps)
+        {
+            record = (await this.WithReadDbAsync(
+                    db => db.ClientScmConnections
+                        .AsNoTracking()
+                        .Where(connection =>
+                            connection.ClientId == clientId
+                            && connection.Provider == host.Provider
+                            && connection.IsActive)
+                        .ToListAsync(ct),
+                    ct))
+                .Where(connection => AzureDevOpsHostBaseUrlMatches(connection.HostBaseUrl, host.HostBaseUrl))
+                .OrderByDescending(connection => connection.HostBaseUrl.Length)
+                .FirstOrDefault();
+        }
+        else
+        {
+            record = await this.WithReadDbAsync(
+                db => db.ClientScmConnections
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        connection =>
+                            connection.ClientId == clientId
+                            && connection.Provider == host.Provider
+                            && connection.HostBaseUrl == host.HostBaseUrl
+                            && connection.IsActive,
+                        ct),
+                ct);
+        }
 
         return record is null ? null : this.ToCredentialDto(record);
     }
@@ -387,26 +406,12 @@ public sealed class ClientScmConnectionRepository(
     {
         foreach (var scope in dbContext.ClientScmScopes.Where(scope => scope.ClientId == clientId && scope.ConnectionId == connectionId))
         {
-            if (!Uri.TryCreate(scope.ScopePath.Trim(), UriKind.Absolute, out var scopeUri))
+            if (!TryRepointAzureDevOpsScopePath(scope.ScopePath, previousHostBaseUrl, newHostBaseUrl, out var repointedScopePath))
             {
                 continue;
             }
 
-            if (!string.Equals(
-                    scopeUri.GetLeftPart(UriPartial.Authority).TrimEnd('/'),
-                    previousHostBaseUrl,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var newHostUri = new Uri(newHostBaseUrl);
-            scope.ScopePath = new UriBuilder(scopeUri)
-            {
-                Scheme = newHostUri.Scheme,
-                Host = newHostUri.Host,
-                Port = newHostUri.IsDefaultPort ? -1 : newHostUri.Port,
-            }.Uri.ToString().TrimEnd('/');
+            scope.ScopePath = repointedScopePath;
             scope.UpdatedAt = DateTimeOffset.UtcNow;
         }
     }
@@ -684,7 +689,78 @@ public sealed class ClientScmConnectionRepository(
 
     private static string NormalizeHostBaseUrl(ScmProvider providerFamily, string hostBaseUrl)
     {
+        if (providerFamily == ScmProvider.AzureDevOps && !IsHostedAzureDevOpsHost(hostBaseUrl))
+        {
+            return NormalizeAbsoluteUrlPreservingPath(hostBaseUrl);
+        }
+
         return new ProviderHostRef(providerFamily, hostBaseUrl).HostBaseUrl;
+    }
+
+    private static bool AzureDevOpsHostBaseUrlMatches(string left, string right)
+    {
+        var normalizedLeft = left.Trim().TrimEnd('/');
+        var normalizedRight = right.Trim().TrimEnd('/');
+        if (string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return normalizedLeft.StartsWith(normalizedRight + "/", StringComparison.OrdinalIgnoreCase)
+               || normalizedRight.StartsWith(normalizedLeft + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryRepointAzureDevOpsScopePath(
+        string scopePath,
+        string previousHostBaseUrl,
+        string newHostBaseUrl,
+        out string repointedScopePath)
+    {
+        repointedScopePath = string.Empty;
+        if (!Uri.TryCreate(scopePath.Trim(), UriKind.Absolute, out _))
+        {
+            return false;
+        }
+
+        var normalizedScopePath = NormalizeAbsoluteUrlPreservingPath(scopePath);
+        var normalizedPreviousHostBaseUrl = NormalizeAbsoluteUrlPreservingPath(previousHostBaseUrl);
+        var normalizedNewHostBaseUrl = NormalizeAbsoluteUrlPreservingPath(newHostBaseUrl);
+        if (!string.Equals(normalizedScopePath, normalizedPreviousHostBaseUrl, StringComparison.OrdinalIgnoreCase)
+            && !normalizedScopePath.StartsWith(normalizedPreviousHostBaseUrl + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var suffix = normalizedScopePath[normalizedPreviousHostBaseUrl.Length..];
+        repointedScopePath = (normalizedNewHostBaseUrl + suffix).TrimEnd('/');
+        return true;
+    }
+
+    private static string NormalizeAbsoluteUrlPreservingPath(string value)
+    {
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
+        {
+            throw new ArgumentException("HostBaseUrl must be an absolute URL.", nameof(value));
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+
+        return builder.Uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+    }
+
+    private static bool IsHostedAzureDevOpsHost(string hostBaseUrl)
+    {
+        if (!Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeRequired(string value)

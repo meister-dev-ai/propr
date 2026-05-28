@@ -240,8 +240,36 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         Assert.Equal(@"CONTOSO\\ado-user", created!.UserName);
 
         var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        Assert.Equal("https://ado-server.example.com/tfs/defaultcollection", record.HostBaseUrl);
         Assert.Equal(@"CONTOSO\\ado-user", record.UserName);
         Assert.NotEqual("super-secret-password", record.EncryptedSecretMaterial);
+    }
+
+    [Fact]
+    public async Task GetOperationalConnectionAsync_AzureDevOpsScopePathMatchesStoredServerBasePath()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "Azure DevOps Server",
+            "server-pat",
+            true,
+            ct: CancellationToken.None);
+
+        var resolved = await this._repository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.AzureDevOps, "https://ado-server.example.com/tfs/DefaultCollection"),
+            CancellationToken.None);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(created!.Id, resolved!.Id);
+        Assert.Equal("https://ado-server.example.com/tfs", resolved.HostBaseUrl);
     }
 
     [Fact]
@@ -294,6 +322,60 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
 
         var scope = await this._dbContext.ClientScmScopes.SingleAsync(candidate => candidate.ConnectionId == created.Id);
         Assert.Equal("http://172.24.241.1:8060/tfs/defaultcollection", scope.ScopePath);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AzureDevOpsHostChange_RepointsExistingScopeServerBasePath()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs",
+            ScmAuthenticationKind.WindowsUserAccount,
+            null,
+            null,
+            "Azure DevOps Server",
+            "super-secret-password",
+            true,
+            userName: @"CONTOSO\\ado-user",
+            ct: CancellationToken.None);
+
+        this._dbContext.ClientScmScopes.Add(
+            new ClientScmScopeRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = client.Id,
+                ConnectionId = created!.Id,
+                ScopeType = "organization",
+                ExternalScopeId = "defaultcollection",
+                ScopePath = "https://ado-server.example.com/tfs/defaultcollection",
+                DisplayName = "Default Collection",
+                VerificationStatus = "verified",
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        await this._repository.UpdateAsync(
+            client.Id,
+            created.Id,
+            "https://ado-server.example.com/ado",
+            ScmAuthenticationKind.WindowsUserAccount,
+            null,
+            null,
+            "Azure DevOps Server",
+            null,
+            true,
+            userName: @"CONTOSO\\ado-user",
+            ct: CancellationToken.None);
+
+        var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        var scope = await this._dbContext.ClientScmScopes.SingleAsync(candidate => candidate.ConnectionId == created.Id);
+        Assert.Equal("https://ado-server.example.com/ado", record.HostBaseUrl);
+        Assert.Equal("https://ado-server.example.com/ado/defaultcollection", scope.ScopePath);
     }
 
     private async Task<ClientRecord> SeedClientAsync()

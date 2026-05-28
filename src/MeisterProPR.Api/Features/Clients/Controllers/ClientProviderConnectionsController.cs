@@ -127,6 +127,18 @@ public sealed partial class ClientProviderConnectionsController(
     {
         var errors = new List<(string PropertyName, string Message)>();
 
+        if (CreateClientProviderConnectionRequestValidator.RequiresSecureAzureDevOpsServerCredentialHost(
+                providerFamily,
+                hostBaseUrl,
+                authenticationKind)
+            && !CreateClientProviderConnectionRequestValidator.IsHttpsUrl(hostBaseUrl))
+        {
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.HostBaseUrl),
+                    "Azure DevOps Server personal access token and Windows user-account authentication require an HTTPS host URL."));
+        }
+
         if (!CreateClientProviderConnectionRequestValidator.IsSupportedAuthenticationKind(
                 providerFamily,
                 hostBaseUrl,
@@ -191,6 +203,14 @@ public sealed partial class ClientProviderConnectionsController(
                         nameof(CreateClientProviderConnectionRequest.OAuthClientId),
                         "OAuthClientId is only valid for Azure DevOps OAuth client-credentials connections."));
             }
+
+            if (!hasCompatibleSecretMaterial)
+            {
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.Secret),
+                        "A replacement secret is required when switching Azure DevOps authentication modes."));
+            }
         }
         else if (!string.IsNullOrWhiteSpace(userName))
         {
@@ -198,6 +218,16 @@ public sealed partial class ClientProviderConnectionsController(
                 (
                     nameof(CreateClientProviderConnectionRequest.UserName),
                     "UserName is only valid for Azure DevOps Server Windows user-account connections."));
+        }
+
+        if (providerFamily == ScmProvider.AzureDevOps
+            && authenticationKind == ScmAuthenticationKind.PersonalAccessToken
+            && !hasCompatibleSecretMaterial)
+        {
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.Secret),
+                    "A replacement secret is required when switching Azure DevOps authentication modes."));
         }
 
         if (providerFamily != ScmProvider.GitHub)

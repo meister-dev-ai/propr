@@ -108,7 +108,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
             token.ExpiresOn);
     }
 
-    private static string BuildCacheKey(string normalizedUrl, AdoConnectionCredentials? credentials)
+    internal static string BuildCacheKey(string normalizedUrl, AdoConnectionCredentials? credentials)
     {
         if (credentials is null)
         {
@@ -118,7 +118,7 @@ public sealed class VssConnectionFactory(TokenCredential credential)
         return credentials.AuthenticationKind switch
         {
             ScmAuthenticationKind.OAuthClientCredentials =>
-                $"{normalizedUrl}::oauth::{credentials.OAuthClientId}",
+                $"{normalizedUrl}::oauth::{credentials.OAuthTenantId}::{credentials.OAuthClientId}::{ComputeCacheTokenFingerprint(credentials.Secret)}",
             ScmAuthenticationKind.PersonalAccessToken =>
                 $"{normalizedUrl}::pat::{ComputeCacheTokenFingerprint(credentials.Secret)}",
             ScmAuthenticationKind.WindowsUserAccount =>

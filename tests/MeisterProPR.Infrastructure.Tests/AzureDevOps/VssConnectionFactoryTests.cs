@@ -182,11 +182,30 @@ public class VssConnectionFactoryTests
         Assert.NotNull(connection);
         Assert.IsType<VssCredentials>(connection.Credentials);
 
-        var vssCredentials = (VssCredentials)connection.Credentials;
+        var vssCredentials = connection.Credentials;
         Assert.IsType<WindowsCredential>(vssCredentials.Windows);
         var networkCredential = vssCredentials.Windows.Credentials?.GetCredential(new Uri("https://ado-server.example.com"), "NTLM");
         Assert.NotNull(networkCredential);
         Assert.Equal("ado-user", networkCredential!.UserName);
         Assert.Equal("CONTOSO", networkCredential.Domain);
+    }
+
+    [Fact]
+    public void BuildCacheKey_OAuthCredentialsIncludesSecretAndTenantFingerprint()
+    {
+        const string orgUrl = "https://dev.azure.com/testorg";
+
+        var first = VssConnectionFactory.BuildCacheKey(
+            orgUrl,
+            AdoConnectionCredentials.ForOAuthClientCredentials("tenant-a", "client-id", "secret-a"));
+        var second = VssConnectionFactory.BuildCacheKey(
+            orgUrl,
+            AdoConnectionCredentials.ForOAuthClientCredentials("tenant-a", "client-id", "secret-b"));
+        var third = VssConnectionFactory.BuildCacheKey(
+            orgUrl,
+            AdoConnectionCredentials.ForOAuthClientCredentials("tenant-b", "client-id", "secret-a"));
+
+        Assert.NotEqual(first, second);
+        Assert.NotEqual(first, third);
     }
 }

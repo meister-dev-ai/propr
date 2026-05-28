@@ -457,7 +457,10 @@ describe('ClientProviderConnectionsTab', () => {
     await wrapper.find('input[placeholder="https://dev.azure.com or https://ado-server.example.com/tfs"]').setValue('https://ado-server.example.com/tfs')
     await flushPromises()
 
-    const authenticationSelect = wrapper.findAll('select')[1]
+    const authenticationSelect = wrapper.findAll('select').find((select) =>
+      select.findAll('option').some((option) => option.element.getAttribute('value') === 'windowsUserAccount'),
+    )
+    expect(authenticationSelect).toBeTruthy()
     await authenticationSelect.setValue('windowsUserAccount')
     const userNameInput = wrapper.findAll('input').find((input) => input.attributes('placeholder')?.includes('ado-user'))
     expect(userNameInput).toBeTruthy()
@@ -495,6 +498,52 @@ describe('ClientProviderConnectionsTab', () => {
 
     expect(updateProviderConnectionMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('A GitHub App private key is required when switching to GitHub App authentication.')
+  })
+
+  it('shows an Azure DevOps-specific secret error when switching auth modes without a replacement secret', async () => {
+    listProviderConnectionsMock.mockResolvedValue([
+      {
+        id: 'provider-conn-1',
+        clientId: 'client-1',
+        providerFamily: 'azureDevOps',
+        hostBaseUrl: 'https://ado-server.example.com/tfs',
+        authenticationKind: 'personalAccessToken',
+        userName: null,
+        displayName: 'Azure DevOps Server',
+        isActive: true,
+        verificationStatus: 'verified',
+        readinessLevel: 'configured',
+        readinessReason: 'Configured.',
+        hostVariant: 'selfHosted',
+        missingReadinessCriteria: [],
+        lastVerifiedAt: '2026-04-13T21:00:00Z',
+        lastVerificationError: null,
+        createdAt: '2026-04-13T20:00:00Z',
+        updatedAt: '2026-04-13T21:00:00Z',
+      },
+    ])
+    listProviderScopesMock.mockResolvedValue([])
+    getReviewerIdentityMock.mockResolvedValue(null)
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.findAll('.provider-connection-item')[0].trigger('click')
+    await flushPromises()
+
+    const authenticationSelect = wrapper.findAll('select').find((select) =>
+      select.findAll('option').some((option) => option.element.getAttribute('value') === 'windowsUserAccount'),
+    )
+    expect(authenticationSelect).toBeTruthy()
+    await authenticationSelect!.setValue('windowsUserAccount')
+    const userNameInput = wrapper.findAll('input').find((input) => input.attributes('placeholder')?.includes('ado-user'))
+    expect(userNameInput).toBeTruthy()
+    await userNameInput!.setValue('CONTOSO\\ado-user')
+    await wrapper.get('.btn-primary.btn-sm').trigger('click')
+    await flushPromises()
+
+    expect(updateProviderConnectionMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('A replacement secret is required when switching Azure DevOps authentication modes.')
   })
 
   it('resolves reviewer candidates and saves the selected reviewer identity', async () => {

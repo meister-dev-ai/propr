@@ -640,6 +640,105 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
     }
 
     [Fact]
+    public async Task PatchProviderConnection_AzureDevOpsServerHostOnlyHttpOnPatConnection_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs",
+            displayName: "Azure DevOps Server",
+            secret: "server-pat");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                hostBaseUrl = "http://127.0.0.1",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Contains(
+            nameof(CreateClientProviderConnectionRequest.HostBaseUrl),
+            body.GetProperty("errors").EnumerateObject().Select(error => error.Name));
+    }
+
+    [Fact]
+    public async Task PatchProviderConnection_AzureDevOpsServerPatToWindowsWithoutSecret_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs",
+            displayName: "Azure DevOps Server",
+            secret: "server-pat");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                authenticationKind = "windowsUserAccount",
+                userName = @"CONTOSO\ado-user",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Contains(
+            nameof(CreateClientProviderConnectionRequest.Secret),
+            body.GetProperty("errors").EnumerateObject().Select(error => error.Name));
+    }
+
+    [Fact]
+    public async Task PatchProviderConnection_AzureDevOpsServerWindowsToPatWithoutSecret_Returns400()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs",
+            ScmAuthenticationKind.WindowsUserAccount,
+            displayName: "Azure DevOps Server",
+            secret: "server-password",
+            userName: @"CONTOSO\ado-user");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                authenticationKind = "personalAccessToken",
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Contains(
+            nameof(CreateClientProviderConnectionRequest.Secret),
+            body.GetProperty("errors").EnumerateObject().Select(error => error.Name));
+    }
+
+    [Fact]
     public async Task PostProviderConnection_DuplicateConnection_ReturnsConflictWithSafeError()
     {
         await factory.ResetProviderStateAsync();
@@ -1192,7 +1291,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
             string secret = "ghp_default_secret",
             bool isActive = true,
             long? gitHubAppId = null,
-            long? gitHubAppInstallationId = null)
+            long? gitHubAppInstallationId = null,
+            string? userName = null)
         {
             var resolvedHostBaseUrl = hostBaseUrl ?? $"https://github-{Guid.NewGuid():N}.example.com/acme/platform";
 
@@ -1210,7 +1310,8 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                 isActive,
                 gitHubAppId,
                 gitHubAppInstallationId,
-                ct: CancellationToken.None);
+                userName,
+                CancellationToken.None);
 
             this.ConnectionId = created!.Id;
             return created;

@@ -137,7 +137,7 @@ const shellClass = computed(() => isCreateMode.value ? 'section-card-body provid
 const availableProviderOptions = computed(() => props.providerOptions?.length ? props.providerOptions : defaultProviderOptions)
 const authenticationOptions = computed(() =>
   props.form.providerFamily === 'azureDevOps'
-    ? props.form.hostBaseUrl.includes('dev.azure.com') || props.form.hostBaseUrl.includes('.visualstudio.com')
+    ? isHostedAzureDevOpsHost(props.form.hostBaseUrl)
       ? [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
       : [
           { value: 'personalAccessToken', label: 'Personal Access Token' },

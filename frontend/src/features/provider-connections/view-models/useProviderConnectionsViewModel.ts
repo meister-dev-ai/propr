@@ -648,9 +648,11 @@ export function useProviderConnectionsViewModel(
     }
 
     if (editSecretRequired.value && !editForm.secret.trim()) {
-      editError.value = editForm.authenticationKind === 'appInstallation'
-        ? 'A GitHub App private key is required when switching to GitHub App authentication.'
-        : 'A personal access token is required when switching away from GitHub App authentication.'
+      editError.value = editForm.providerFamily === 'github'
+        ? editForm.authenticationKind === 'appInstallation'
+          ? 'A GitHub App private key is required when switching to GitHub App authentication.'
+          : 'A personal access token is required when switching away from GitHub App authentication.'
+        : 'A replacement secret is required when switching Azure DevOps authentication modes.'
       return
     }
 
