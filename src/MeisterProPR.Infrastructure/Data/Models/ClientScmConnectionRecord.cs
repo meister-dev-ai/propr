@@ -13,6 +13,7 @@ public sealed class ClientScmConnectionRecord
     public ScmProvider Provider { get; set; }
     public string HostBaseUrl { get; set; } = string.Empty;
     public ScmAuthenticationKind AuthenticationKind { get; set; }
+    public string? UserName { get; set; }
     public string? OAuthTenantId { get; set; }
     public string? OAuthClientId { get; set; }
     public long? GitHubAppId { get; set; }

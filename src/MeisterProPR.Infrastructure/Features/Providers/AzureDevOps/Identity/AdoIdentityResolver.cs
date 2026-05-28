@@ -1,81 +1,56 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Net.Http.Headers;
-using System.Text.Json;
-using Azure.Core;
-using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
+using Microsoft.VisualStudio.Services.Identity;
+using Microsoft.VisualStudio.Services.Identity.Client;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Identity;
 
 /// <summary>
-///     ADO-backed implementation of <see cref="IIdentityResolver" /> that calls the
-///     org-scoped VSSPS identity endpoint, which the service principal's token is
-///     authorised to access (unlike the global <c>vssps.visualstudio.com</c> endpoint).
+///     ADO-backed implementation of <see cref="IIdentityResolver" /> that resolves identities
+///     through the authenticated Azure DevOps client connection.
 /// </summary>
 public sealed class AdoIdentityResolver(
-    TokenCredential credential,
-    IHttpClientFactory httpClientFactory,
+    VssConnectionFactory connectionFactory,
     IClientScmConnectionRepository connectionRepository)
     : IIdentityResolver
 {
-    private const string AdoScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
-
-    private static readonly JsonSerializerOptions JsonOptions =
-        new() { PropertyNameCaseInsensitive = true };
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<ResolvedIdentity>> ResolveAsync(
         string organizationUrl,
         string displayName,
         Guid clientId,
+        Guid? connectionId = null,
         CancellationToken ct = default)
     {
-        var perClientCredentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
-            connectionRepository,
-            clientId,
-            organizationUrl,
+        var credentials = connectionId.HasValue
+            ? AdoProviderAdapterHelpers.ToAdoCredentials(await connectionRepository.GetOperationalConnectionByIdAsync(clientId, connectionId.Value, ct))
+            : await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+                connectionRepository,
+                clientId,
+                organizationUrl,
+                ct);
+        AdoProviderAdapterHelpers.EnsureRuntimeCredentialsAvailable(organizationUrl, credentials);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
+        var client = connection.GetClient<IdentityHttpClient>();
+        var identities = await client.ReadIdentitiesAsync(
+            IdentitySearchFilter.General,
+            displayName,
+            ReadIdentitiesOptions.None,
+            QueryMembership.None,
+            null,
+            null,
             ct);
 
-        var effectiveCredential = perClientCredentials is not null
-            ? new ClientSecretCredential(
-                perClientCredentials.TenantId,
-                perClientCredentials.ClientId,
-                perClientCredentials.Secret)
-            : credential;
-
-        var token = await effectiveCredential.GetTokenAsync(new TokenRequestContext([AdoScope]), ct);
-
-        // Extract org name from https://dev.azure.com/{org}
-        var orgName = new Uri(organizationUrl).Segments.Last().TrimEnd('/');
-        var url = $"https://vssps.dev.azure.com/{orgName}/_apis/identities" +
-                  $"?searchFilter=General&filterValue={Uri.EscapeDataString(displayName)}&api-version=7.1";
-
-        var client = httpClientFactory.CreateClient("AdoIdentity");
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", token.Token);
-
-        var response = await client.GetAsync(url, ct);
-        response.EnsureSuccessStatusCode();
-
-        var body = await response.Content.ReadAsStringAsync(ct);
-        var result = JsonSerializer.Deserialize<IdentityQueryResult>(body, JsonOptions);
-
-        return result?.Value?
-            .Where(i => !string.IsNullOrWhiteSpace(i.ProviderDisplayName))
-            .Select(i => new ResolvedIdentity(i.Id, i.ProviderDisplayName!))
-            .ToList() ?? [];
-    }
-
-    private sealed class IdentityQueryResult
-    {
-        public List<IdentityEntry>? Value { get; init; }
-    }
-
-    private sealed class IdentityEntry
-    {
-        public Guid Id { get; set; }
-        public string? ProviderDisplayName { get; set; }
+        return identities?
+                   .Where(identity => identity.Id != Guid.Empty)
+                   .Select(identity => new ResolvedIdentity(
+                       identity.Id,
+                       !string.IsNullOrWhiteSpace(identity.DisplayName)
+                           ? identity.DisplayName!
+                           : identity.ProviderDisplayName ?? identity.Id.ToString("D")))
+                   .ToList()
+               ?? [];
     }
 }

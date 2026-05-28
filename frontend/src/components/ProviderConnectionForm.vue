@@ -41,6 +41,10 @@
         <label>OAuth Client ID</label>
         <input v-model="form.oAuthClientId" type="text" placeholder="Azure app registration client ID" />
       </div>
+      <div v-if="showUserNameField" class="form-field">
+        <label>User Name</label>
+        <input v-model="form.userName" type="text" placeholder="CONTOSO\\ado-user" />
+      </div>
       <div v-if="showGitHubAppFields" class="form-field">
         <label>GitHub App ID</label>
         <input v-model="form.gitHubAppId" type="number" min="1" placeholder="123456" />
@@ -49,6 +53,9 @@
         <label>Installation ID</label>
         <input v-model="form.gitHubAppInstallationId" type="number" min="1" placeholder="987654321" />
       </div>
+      <p v-if="showAzureDevOpsServerSecurityHint" class="provider-form-grid-full provider-form-hint">
+        Self-hosted Azure DevOps Server PAT and Windows user-account connections require HTTPS. If ProPR runs on Linux, WSL, or in containers, the server certificate must also be trusted inside that runtime.
+      </p>
       <div class="form-field provider-form-grid-full">
         <label>
           {{ secretLabel }}
@@ -77,13 +84,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ProviderOption } from '@/services/providerActivationService'
+import { isHostedAzureDevOpsHost, type ProviderOption } from '@/services/providerActivationService'
 import type { ScmAuthenticationKind, ScmProviderFamily } from '@/services/providerConnectionsService'
 
 type ProviderConnectionFormModel = {
   providerFamily?: ScmProviderFamily
   hostBaseUrl: string
   authenticationKind: ScmAuthenticationKind
+  userName?: string
   oAuthTenantId?: string
   oAuthClientId?: string
   gitHubAppId?: string | number
@@ -129,7 +137,12 @@ const shellClass = computed(() => isCreateMode.value ? 'section-card-body provid
 const availableProviderOptions = computed(() => props.providerOptions?.length ? props.providerOptions : defaultProviderOptions)
 const authenticationOptions = computed(() =>
   props.form.providerFamily === 'azureDevOps'
-    ? [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
+    ? props.form.hostBaseUrl.includes('dev.azure.com') || props.form.hostBaseUrl.includes('.visualstudio.com')
+      ? [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
+      : [
+          { value: 'personalAccessToken', label: 'Personal Access Token' },
+          { value: 'windowsUserAccount', label: 'Windows User Account' },
+        ]
     : props.form.providerFamily === 'github'
       ? [
           { value: 'personalAccessToken', label: 'Personal Access Token' },
@@ -137,11 +150,19 @@ const authenticationOptions = computed(() =>
         ]
       : [{ value: 'personalAccessToken', label: 'Personal Access Token' }],
 )
-const showAzureOAuthFields = computed(() => props.form.providerFamily === 'azureDevOps')
+const showAzureOAuthFields = computed(
+  () => props.form.providerFamily === 'azureDevOps' && props.form.authenticationKind === 'oauthClientCredentials',
+)
+const showUserNameField = computed(
+  () => props.form.providerFamily === 'azureDevOps' && props.form.authenticationKind === 'windowsUserAccount',
+)
 const showGitHubAppFields = computed(
   () => props.form.providerFamily === 'github' && props.form.authenticationKind === 'appInstallation',
 )
-const hostPlaceholder = computed(() => props.form.providerFamily === 'azureDevOps' ? 'https://dev.azure.com' : 'https://github.com')
+const showAzureDevOpsServerSecurityHint = computed(
+  () => props.form.providerFamily === 'azureDevOps' && !isHostedAzureDevOpsHost(props.form.hostBaseUrl),
+)
+const hostPlaceholder = computed(() => props.form.providerFamily === 'azureDevOps' ? 'https://dev.azure.com or https://ado-server.example.com/tfs' : 'https://github.com')
 const secretLabel = computed(() => showGitHubAppFields.value ? 'Private Key (PEM)' : 'Secret')
 const secretHintText = computed(() =>
   props.secretRequired ? '(required for this authentication change)' : '(leave blank to keep current)',
@@ -173,6 +194,12 @@ const secretPlaceholder = computed(() => {
 
 .provider-form-grid-full {
   grid-column: 1 / -1;
+}
+
+.provider-form-hint {
+  color: rgba(15, 23, 42, 0.7);
+  font-size: 0.95rem;
+  margin: 0;
 }
 
 .toggle-checkbox {

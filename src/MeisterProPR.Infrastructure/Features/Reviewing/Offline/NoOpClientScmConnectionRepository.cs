@@ -31,6 +31,14 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         return Task.FromResult<ClientScmConnectionCredentialDto?>(null);
     }
 
+    public Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<ClientScmConnectionCredentialDto?>(null);
+    }
+
     public Task<ClientScmConnectionDto?> AddAsync(
         Guid clientId,
         ScmProvider providerFamily,
@@ -43,6 +51,7 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default)
     {
         throw new InvalidOperationException("Client SCM connections are unavailable in offline review-evaluation mode.");
@@ -60,6 +69,7 @@ public sealed class NoOpClientScmConnectionRepository : IClientScmConnectionRepo
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default)
     {
         throw new InvalidOperationException("Client SCM connections are unavailable in offline review-evaluation mode.");

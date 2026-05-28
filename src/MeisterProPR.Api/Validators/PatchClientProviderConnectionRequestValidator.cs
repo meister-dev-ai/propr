@@ -3,6 +3,7 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Features.Clients.Controllers;
+using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Validators;
 
@@ -17,6 +18,7 @@ public sealed class
             .Must(request =>
                 request.HostBaseUrl is not null
                 || request.AuthenticationKind.HasValue
+                || request.UserName is not null
                 || request.OAuthTenantId is not null
                 || request.OAuthClientId is not null
                 || request.GitHubAppId.HasValue
@@ -37,6 +39,13 @@ public sealed class
             .MaximumLength(200)
             .WithMessage("DisplayName must not exceed 200 characters.")
             .When(request => request.DisplayName is not null);
+
+        this.RuleFor(request => request.UserName)
+            .NotEmpty()
+            .WithMessage("UserName must not be empty.")
+            .MaximumLength(256)
+            .WithMessage("UserName must not exceed 256 characters.")
+            .When(request => request.UserName is not null);
 
         this.RuleFor(request => request.Secret)
             .NotEmpty()
@@ -68,5 +77,28 @@ public sealed class
             .GreaterThan(0)
             .WithMessage("GitHubAppInstallationId must be a positive numeric identifier.")
             .When(request => request.GitHubAppInstallationId.HasValue);
+
+        this.RuleFor(request => request)
+            .Must(request => request.AuthenticationKind != ScmAuthenticationKind.WindowsUserAccount || request.UserName is not null)
+            .WithMessage("UserName must be provided when switching to Azure DevOps Server Windows user-account authentication.")
+            .When(request => request.AuthenticationKind.HasValue);
+
+        this.RuleFor(request => request)
+            .Must(request => !CreateClientProviderConnectionRequestValidator.RequiresSecureWindowsUserAccountHost(
+                                 ScmProvider.AzureDevOps,
+                                 request.HostBaseUrl,
+                                 request.AuthenticationKind ?? ScmAuthenticationKind.PersonalAccessToken)
+                             || CreateClientProviderConnectionRequestValidator.IsHttpsUrl(request.HostBaseUrl))
+            .WithMessage("Azure DevOps Server Windows user-account authentication requires an HTTPS host URL.")
+            .When(request => request.HostBaseUrl is not null && request.AuthenticationKind.HasValue);
+
+        this.RuleFor(request => request)
+            .Must(request => !CreateClientProviderConnectionRequestValidator.RequiresSecureAzureDevOpsServerCredentialHost(
+                                 ScmProvider.AzureDevOps,
+                                 request.HostBaseUrl,
+                                 request.AuthenticationKind ?? ScmAuthenticationKind.PersonalAccessToken)
+                             || CreateClientProviderConnectionRequestValidator.IsHttpsUrl(request.HostBaseUrl))
+            .WithMessage("Azure DevOps Server personal access token and Windows user-account authentication require an HTTPS host URL.")
+            .When(request => request.HostBaseUrl is not null && request.AuthenticationKind.HasValue);
     }
 }

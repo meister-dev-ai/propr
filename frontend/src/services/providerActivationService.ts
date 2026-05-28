@@ -101,13 +101,27 @@ export function getProviderDefaultHostBaseUrl(providerFamily: ScmProviderFamily)
   }
 }
 
+export function isHostedAzureDevOpsHost(hostBaseUrl: string): boolean {
+  try {
+    const url = new URL(hostBaseUrl)
+    return url.hostname === 'dev.azure.com' || url.hostname.endsWith('.visualstudio.com')
+  } catch {
+    return false
+  }
+}
+
 export function getSupportedAuthenticationKind(providerFamily: ScmProviderFamily): ScmAuthenticationKind {
   return providerFamily === 'azureDevOps' ? 'oauthClientCredentials' : 'personalAccessToken'
 }
 
-export function getSupportedAuthenticationKinds(providerFamily: ScmProviderFamily): ScmAuthenticationKind[] {
+export function getSupportedAuthenticationKinds(
+  providerFamily: ScmProviderFamily,
+  hostBaseUrl?: string,
+): ScmAuthenticationKind[] {
   if (providerFamily === 'azureDevOps') {
-    return ['oauthClientCredentials']
+    return !hostBaseUrl || isHostedAzureDevOpsHost(hostBaseUrl)
+      ? ['oauthClientCredentials']
+      : ['personalAccessToken', 'windowsUserAccount']
   }
 
   if (providerFamily === 'github') {
@@ -115,4 +129,14 @@ export function getSupportedAuthenticationKinds(providerFamily: ScmProviderFamil
   }
 
   return ['personalAccessToken']
+}
+
+export function requiresUserName(
+  providerFamily: ScmProviderFamily,
+  hostBaseUrl: string,
+  authenticationKind: ScmAuthenticationKind,
+): boolean {
+  return providerFamily === 'azureDevOps'
+    && !isHostedAzureDevOpsHost(hostBaseUrl)
+    && authenticationKind === 'windowsUserAccount'
 }

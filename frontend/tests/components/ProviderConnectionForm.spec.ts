@@ -12,6 +12,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'github' as const,
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'personalAccessToken' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -47,6 +48,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'github' as const,
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'personalAccessToken' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -83,6 +85,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'github' as const,
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'appInstallation' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -111,6 +114,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'github' as const,
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'personalAccessToken' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -141,7 +145,7 @@ describe('ProviderConnectionForm', () => {
     await providerSelect.setValue('azureDevOps')
 
     expect(form.providerFamily).toBe('azureDevOps')
-    expect(wrapper.find('input[placeholder="https://dev.azure.com"]').exists()).toBe(true)
+    expect(wrapper.find('input[placeholder="https://dev.azure.com or https://ado-server.example.com/tfs"]').exists()).toBe(true)
   })
 
   it('shows Azure DevOps OAuth fields in create mode when Azure DevOps is selected', async () => {
@@ -149,6 +153,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'azureDevOps' as const,
       hostBaseUrl: 'https://dev.azure.com',
       authenticationKind: 'oauthClientCredentials' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -167,7 +172,7 @@ describe('ProviderConnectionForm', () => {
       },
     })
 
-    expect(wrapper.find('input[placeholder="https://dev.azure.com"]').exists()).toBe(true)
+    expect(wrapper.find('input[placeholder="https://dev.azure.com or https://ado-server.example.com/tfs"]').exists()).toBe(true)
     expect(wrapper.find('input[placeholder="contoso.onmicrosoft.com or tenant GUID"]').exists()).toBe(true)
     expect(wrapper.find('input[placeholder="Azure app registration client ID"]').exists()).toBe(true)
 
@@ -183,6 +188,7 @@ describe('ProviderConnectionForm', () => {
       providerFamily: 'github' as const,
       hostBaseUrl: 'https://github.com',
       authenticationKind: 'appInstallation' as const,
+      userName: '',
       oAuthTenantId: '',
       oAuthClientId: '',
       gitHubAppId: '',
@@ -215,5 +221,72 @@ describe('ProviderConnectionForm', () => {
     expect(form.gitHubAppId).toBe(123456)
     expect(form.gitHubAppInstallationId).toBe(789012)
     expect(form.secret).toBe('-----BEGIN PRIVATE KEY-----')
+  })
+
+  it('shows Azure DevOps Server Windows-account fields only for self-hosted windows auth', async () => {
+    const form = reactive({
+      providerFamily: 'azureDevOps' as const,
+      hostBaseUrl: 'https://ado-server.example.com/tfs',
+      authenticationKind: 'windowsUserAccount' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    const textInputs = wrapper.findAll('input[type="text"]')
+    expect(textInputs.some((input) => input.attributes('placeholder')?.includes('ado-user'))).toBe(true)
+    expect(wrapper.find('input[placeholder="contoso.onmicrosoft.com or tenant GUID"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('require HTTPS')
+    expect(wrapper.text()).toContain('trusted inside that runtime')
+
+    const authOptions = wrapper.findAll('select')[1].findAll('option').map((option) => option.text())
+    expect(authOptions).toContain('Windows User Account')
+
+    const userNameInput = textInputs.find((input) => input.attributes('placeholder')?.includes('ado-user'))
+    expect(userNameInput).toBeTruthy()
+    await userNameInput!.setValue('CONTOSO\\ado-user')
+    expect(form.userName).toBe('CONTOSO\\ado-user')
+  })
+
+  it('does not show the Azure DevOps Server HTTPS hint for hosted Azure DevOps', async () => {
+    const form = reactive({
+      providerFamily: 'azureDevOps' as const,
+      hostBaseUrl: 'https://dev.azure.com',
+      authenticationKind: 'oauthClientCredentials' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('require HTTPS')
+    expect(wrapper.text()).not.toContain('trusted inside that runtime')
   })
 })

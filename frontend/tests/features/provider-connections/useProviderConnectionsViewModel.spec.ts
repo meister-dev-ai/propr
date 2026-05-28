@@ -83,4 +83,69 @@ describe('useProviderConnectionsViewModel', () => {
     expect(detailOpen).toBe(true)
     expect(vm?.selectedConnection.value?.displayName).toBe('GitHub')
   })
+
+  it('requires and submits userName for Azure DevOps Server windows auth', async () => {
+    let vm: ReturnType<typeof useProviderConnectionsViewModel> | null = null
+    const createProviderConnection = vi.fn(async () => ({
+      id: 'connection-2',
+      clientId: 'client-1',
+      providerFamily: 'azureDevOps',
+      hostBaseUrl: 'https://ado-server.example.com/tfs',
+      authenticationKind: 'windowsUserAccount',
+      userName: 'CONTOSO\\ado-user',
+      displayName: 'Azure DevOps Server',
+      isActive: true,
+      verificationStatus: 'unknown',
+      readinessLevel: 'configured',
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    }))
+
+    const app = createApp(defineComponent({
+      setup() {
+        vm = useProviderConnectionsViewModel({
+          clientId: 'client-1',
+          providerConnectionsService: {
+            listProviderActivationStatuses: async () => [{ providerFamily: 'azureDevOps', isEnabled: true } as never],
+            listProviderConnections: async () => [],
+            createProviderConnection,
+            updateProviderConnection: async () => { throw new Error('unused') },
+            verifyProviderConnection: async () => { throw new Error('unused') },
+            deleteProviderConnection: async () => undefined,
+            listProviderScopes: async () => [],
+            createProviderScope: async () => { throw new Error('unused') },
+            updateProviderScope: async () => { throw new Error('unused') },
+            deleteProviderScope: async () => undefined,
+            resolveReviewerIdentityCandidates: async () => [],
+            getReviewerIdentity: async () => null,
+            setReviewerIdentity: async () => { throw new Error('unused') },
+            deleteReviewerIdentity: async () => undefined,
+          },
+        })
+        return () => null
+      },
+    }))
+
+    app.mount(document.createElement('div'))
+    await flushPromises()
+
+    vm!.createForm.providerFamily = 'azureDevOps'
+    vm!.createForm.hostBaseUrl = 'https://ado-server.example.com/tfs'
+    vm!.createForm.authenticationKind = 'windowsUserAccount'
+    vm!.createForm.displayName = 'Azure DevOps Server'
+    vm!.createForm.secret = 'password'
+
+    await vm!.handleCreateConnection()
+    expect(vm!.createError.value).toContain('User name is required')
+
+    vm!.createForm.userName = 'CONTOSO\\ado-user'
+    await vm!.handleCreateConnection()
+
+    expect(createProviderConnection).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      providerFamily: 'azureDevOps',
+      authenticationKind: 'windowsUserAccount',
+      userName: 'CONTOSO\\ado-user',
+      hostBaseUrl: 'https://ado-server.example.com/tfs',
+    }))
+  })
 })

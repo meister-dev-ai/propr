@@ -19,4 +19,8 @@ public enum ScmAuthenticationKind
     /// <summary>App installation authentication.</summary>
     [JsonStringEnumMemberName("appInstallation")]
     AppInstallation = 2,
+
+    /// <summary>Windows user account authentication for Azure DevOps Server.</summary>
+    [JsonStringEnumMemberName("windowsUserAccount")]
+    WindowsUserAccount = 3,
 }

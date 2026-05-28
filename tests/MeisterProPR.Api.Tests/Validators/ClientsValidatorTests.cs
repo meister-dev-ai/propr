@@ -67,6 +67,7 @@ public sealed class ClientsValidatorTests
                 ScmAuthenticationKind.PersonalAccessToken,
                 null,
                 null,
+                null,
                 "GitHub Cloud",
                 "secret"));
 
@@ -81,6 +82,7 @@ public sealed class ClientsValidatorTests
                 ScmProvider.GitHub,
                 "https://github.com",
                 ScmAuthenticationKind.AppInstallation,
+                null,
                 null,
                 null,
                 "GitHub App",
@@ -103,6 +105,7 @@ public sealed class ClientsValidatorTests
                 providerFamily,
                 providerFamily == ScmProvider.AzureDevOps ? "https://dev.azure.com" : "https://github.com",
                 authenticationKind,
+                null,
                 null,
                 null,
                 "Connection",
@@ -130,6 +133,7 @@ public sealed class ClientsValidatorTests
                 ScmProvider.AzureDevOps,
                 "https://dev.azure.com",
                 ScmAuthenticationKind.OAuthClientCredentials,
+                null,
                 tenantId,
                 clientId,
                 "Azure DevOps",
@@ -148,6 +152,147 @@ public sealed class ClientsValidatorTests
         Assert.Contains(
             result.Errors,
             error => error.PropertyName == nameof(PatchClientProviderConnectionRequest.OAuthTenantId));
+    }
+
+    [Fact]
+    public void CreateProviderConnection_AzureDevOpsServerPatRequest_Passes()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps,
+                "https://ado-server.example.com/tfs",
+                ScmAuthenticationKind.PersonalAccessToken,
+                null,
+                null,
+                null,
+                "Azure DevOps Server",
+                "server-pat"));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CreateProviderConnection_AzureDevOpsServerWindowsAccountRequest_Passes()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps,
+                "https://ado-server.example.com/tfs",
+                ScmAuthenticationKind.WindowsUserAccount,
+                @"CONTOSO\\ado-user",
+                null,
+                null,
+                "Azure DevOps Server",
+                "server-password"));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CreateProviderConnection_AzureDevOpsServerWindowsAccountWithoutUserName_Fails()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps,
+                "https://ado-server.example.com/tfs",
+                ScmAuthenticationKind.WindowsUserAccount,
+                null,
+                null,
+                null,
+                "Azure DevOps Server",
+                "server-password"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == nameof(CreateClientProviderConnectionRequest.UserName));
+    }
+
+    [Fact]
+    public void CreateProviderConnection_PrivateNetworkHttpHostPatForAzureDevOpsServer_Fails()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps,
+                "http://127.0.0.1",
+                ScmAuthenticationKind.PersonalAccessToken,
+                null,
+                null,
+                null,
+                "Azure DevOps Server",
+                "server-pat"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains(
+                "personal access token and Windows user-account authentication require an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void CreateProviderConnection_AzureDevOpsServerWindowsAccountOnHttpHost_Fails()
+    {
+        var result = CreateProviderConnectionValidator.Validate(
+            new CreateClientProviderConnectionRequest(
+                ScmProvider.AzureDevOps,
+                "http://127.0.0.1",
+                ScmAuthenticationKind.WindowsUserAccount,
+                @"CONTOSO\\ado-user",
+                null,
+                null,
+                "Azure DevOps Server",
+                "server-password"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains("requires an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PatchProviderConnection_PrivateNetworkHttpHostOnly_Passes()
+    {
+        var result = PatchProviderConnectionValidator.Validate(new PatchClientProviderConnectionRequest("http://127.0.0.1"));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchProviderConnection_AzureDevOpsServerPatOnHttpHost_Fails()
+    {
+        var result = PatchProviderConnectionValidator.Validate(
+            new PatchClientProviderConnectionRequest(
+                "http://127.0.0.1",
+                ScmAuthenticationKind.PersonalAccessToken));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains(
+                "personal access token and Windows user-account authentication require an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PatchProviderConnection_AzureDevOpsServerWindowsAccountOnHttpHost_Fails()
+    {
+        var result = PatchProviderConnectionValidator.Validate(
+            new PatchClientProviderConnectionRequest(
+                "http://127.0.0.1",
+                ScmAuthenticationKind.WindowsUserAccount,
+                @"CONTOSO\\ado-user"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains("requires an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PatchProviderConnection_WindowsAccountAuthenticationWithoutUserName_Fails()
+    {
+        var result = PatchProviderConnectionValidator.Validate(
+            new PatchClientProviderConnectionRequest(AuthenticationKind: ScmAuthenticationKind.WindowsUserAccount));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("UserName", StringComparison.Ordinal));
     }
 
     // T035 — PatchClientRequest.CustomSystemMessage validation

@@ -26,6 +26,15 @@ public sealed class StaticProviderReadinessProfileCatalog : IProviderReadinessPr
                     true,
                     true,
                     "Azure DevOps Services is fully aligned to the provider support baseline."),
+                [(ScmProvider.AzureDevOps, SelfHosted)] = new(
+                    ScmProvider.AzureDevOps,
+                    SelfHosted,
+                    true,
+                    true,
+                    false,
+                    true,
+                    false,
+                    "Self-hosted Azure DevOps remains onboarding-ready until lifecycle continuity and observability proof match the hosted baseline."),
                 [(ScmProvider.GitHub, Hosted)] = new(
                     ScmProvider.GitHub,
                     Hosted,

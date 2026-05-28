@@ -14751,6 +14751,10 @@
             "type": "integer",
             "format": "int64",
             "nullable": true
+          },
+          "userName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -15226,6 +15230,10 @@
           },
           "authenticationKind": {
             "$ref": "#/components/schemas/ScmAuthenticationKind"
+          },
+          "userName": {
+            "type": "string",
+            "nullable": true
           },
           "oAuthTenantId": {
             "type": "string",
@@ -15949,6 +15957,10 @@
           },
           "authenticationKind": {
             "$ref": "#/components/schemas/ScmAuthenticationKind"
+          },
+          "userName": {
+            "type": "string",
+            "nullable": true
           },
           "oAuthTenantId": {
             "type": "string",
@@ -18520,7 +18532,8 @@
         "enum": [
           "oauthClientCredentials",
           "personalAccessToken",
-          "appInstallation"
+          "appInstallation",
+          "windowsUserAccount"
         ],
         "type": "string",
         "description": "Credential models supported by SCM provider connections."

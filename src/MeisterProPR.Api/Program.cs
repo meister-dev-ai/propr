@@ -66,6 +66,8 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+    AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true);
+
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddHttpContextAccessor();
 
@@ -116,6 +118,7 @@ try
                 request.ProviderFamily,
                 request.HostBaseUrl,
                 request.AuthenticationKind,
+                request.UserName,
                 request.OAuthTenantId,
                 request.OAuthClientId,
                 request.DisplayName,
@@ -126,6 +129,7 @@ try
             {
                 request.HostBaseUrl,
                 request.AuthenticationKind,
+                request.UserName,
                 request.OAuthTenantId,
                 request.OAuthClientId,
                 request.DisplayName,

@@ -293,6 +293,46 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
     }
 
     [Fact]
+    public async Task PostProviderConnection_AzureDevOpsServerWindowsAccount_PersistsUserName()
+    {
+        await factory.ResetProviderStateAsync();
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/clients/{factory.ClientId}/provider-connections");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                providerFamily = "azureDevOps",
+                hostBaseUrl = "https://ado-server.example.com/tfs/defaultcollection",
+                authenticationKind = "windowsUserAccount",
+                userName = @"CONTOSO\ado-user",
+                displayName = "Contoso Azure DevOps Server",
+                secret = "password-value",
+                isActive = true,
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var connectionId = body.GetProperty("id").GetGuid();
+        Assert.Equal("azureDevOps", body.GetProperty("providerFamily").GetString());
+        Assert.Equal("windowsUserAccount", body.GetProperty("authenticationKind").GetString());
+        Assert.Equal(@"CONTOSO\ado-user", body.GetProperty("userName").GetString());
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = await dbContext.ClientScmConnections.FirstAsync(connection => connection.Id == connectionId);
+        Assert.Equal(@"CONTOSO\ado-user", record.UserName);
+        Assert.NotEqual("password-value", record.EncryptedSecretMaterial);
+    }
+
+    [Fact]
     public async Task PostProviderConnection_AzureDevOpsAppInstallation_Returns400()
     {
         await factory.ResetProviderStateAsync();
@@ -763,7 +803,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal("failed", body.GetProperty("verificationStatus").GetString());
         Assert.Contains(
-            "only OAuth client credentials",
+            "must use OAuth client credentials",
             body.GetProperty("lastVerificationError").GetString(),
             StringComparison.OrdinalIgnoreCase);
     }
@@ -960,7 +1000,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
     {
         await factory.ResetProviderStateAsync();
         var connection = await factory.CreateConnectionAsync();
-        factory.SetReviewerIdentityResolutionFailure("The provider token raw-secret-value is invalid.");
+        factory.SetReviewerIdentityResolutionFailure("Azure DevOps Server reviewer identity lookup failed with status 401.");
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(
@@ -975,7 +1015,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(
-            "Reviewer identity resolution is unavailable for this provider connection.",
+            "Azure DevOps Server reviewer identity lookup failed with status 401.",
             body.GetProperty("error").GetString());
         Assert.DoesNotContain(
             "raw-secret-value",
@@ -1111,6 +1151,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                     Arg.Any<Guid>(),
                     Arg.Any<ProviderHostRef>(),
                     Arg.Any<string>(),
+                    Arg.Any<Guid?>(),
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<IReadOnlyList<ReviewerIdentity>>(identities));
         }
@@ -1122,6 +1163,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                     Arg.Any<Guid>(),
                     Arg.Any<ProviderHostRef>(),
                     Arg.Any<string>(),
+                    Arg.Any<Guid?>(),
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromException<IReadOnlyList<ReviewerIdentity>>(new InvalidOperationException(message)));
         }
@@ -1168,7 +1210,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                 isActive,
                 gitHubAppId,
                 gitHubAppInstallationId,
-                CancellationToken.None);
+                ct: CancellationToken.None);
 
             this.ConnectionId = created!.Id;
             return created;

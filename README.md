@@ -64,7 +64,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 
 ### Data sovereignty
 
-- **Per-client provider credentials** — each client can isolate Azure DevOps service principals plus protected GitHub, GitLab, or Forgejo-family connection secrets at the connection level; GitHub App private keys stay encrypted at rest and installation tokens are not persisted
+- **Per-client provider credentials** — each client can isolate Azure DevOps Services OAuth credentials, Azure DevOps Server PAT or Windows-account credentials, plus protected GitHub, GitLab, or Forgejo-family connection secrets at the connection level; GitHub App private keys stay encrypted at rest and installation tokens are not persisted
 - **Job persistence + recovery mechanism** — review jobs survive restarts; stuck processing jobs auto-recovered
 
 ### Traceability
@@ -147,9 +147,30 @@ ProCursor may use independent key-ring stores as long as each service can still 
 owns.
 
 Azure DevOps integrations are configured through provider connections: add the provider connection,
-add the organization scope, and confirm the reviewer identity on that connection before enabling
-crawl or webhook automation. The reviewer identity is only an optional trigger/filter for automatic
-PR processing. Posting uses the authenticated provider connection identity.
+choose the supported auth mode for the host variant, add the organization scope, and confirm the
+reviewer identity on that connection before enabling crawl or webhook automation. Hosted Azure
+DevOps Services uses OAuth client credentials. Self-hosted Azure DevOps Server uses either a PAT or
+an explicit Windows user account plus password. The reviewer identity is only an optional
+trigger/filter for automatic PR processing. Posting uses the authenticated provider connection
+identity.
+
+For on-premises Azure DevOps Server onboarding:
+
+1. Expose the server over `https://`.
+2. Confirm the HTTPS endpoint is reachable from the runtime that hosts ProPR.
+3. Trust the Azure DevOps Server certificate chain inside that runtime as well as on the browser or host OS.
+4. Create one `azureDevOps` provider connection with the server root URL, for example `https://ado-server.example.com/tfs`.
+5. Choose either `personalAccessToken` or `windowsUserAccount`.
+6. Add one enabled `organization` scope that points to the actual collection URL, for example `https://ado-server.example.com/tfs/DefaultCollection`.
+7. Run verification, then resolve and save the reviewer identity on that connection.
+
+PAT and explicit Windows-account Azure DevOps Server auth both run through the Azure DevOps .NET/VSS
+client basic-auth path, which requires TLS. If ProPR runs in Linux, WSL, or containers, trusting the
+certificate only in the Windows browser or host OS is not sufficient. The runtime that executes ProPR
+must trust the certificate too. For Azure DevOps Server `windowsUserAccount`, use the server-recognized
+Windows login format such as `CONTOSO\ado-user`. ProPR enables managed NTLM for Linux and WSL runtimes,
+so extra packages such as `gss-ntlmssp` are only a fallback if Windows-auth verification still fails.
+See `docs/provider-connections.md` for the full on-prem onboarding flow.
 
 For source-based development without Docker, `./scripts/run-local.sh` now generates one per-run shared
 ProCursor key, starts `MeisterProPR.Api`, waits for its health endpoint, starts

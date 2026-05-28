@@ -4675,7 +4675,10 @@ export interface paths {
         /** Returns the protocol (agentic trace) for a single review job. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description When false, omits heavy per-event bodies from the list response while retaining event rows and metadata. */
+                    includeEvents?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description The review job identifier. */
@@ -4738,7 +4741,10 @@ export interface paths {
         /** Returns the protocol (agentic trace) for a single review job. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description When false, omits heavy per-event bodies from the list response while retaining event rows and metadata. */
+                    includeEvents?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description The review job identifier. */
@@ -4771,6 +4777,136 @@ export interface paths {
                     };
                 };
                 /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewing/jobs/{id}/protocol/{protocolId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one full protocol pass (including captured event bodies) for a single review job. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The review job identifier. */
+                    id: string;
+                    /** @description The protocol-pass identifier. */
+                    protocolId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Protocol pass returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobProtocolDto"];
+                        "application/json": components["schemas"]["ReviewJobProtocolDto"];
+                        "text/json": components["schemas"]["ReviewJobProtocolDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job or protocol pass not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{id}/protocol/{protocolId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns one full protocol pass (including captured event bodies) for a single review job. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The review job identifier. */
+                    id: string;
+                    /** @description The protocol-pass identifier. */
+                    protocolId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Protocol pass returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobProtocolDto"];
+                        "application/json": components["schemas"]["ReviewJobProtocolDto"];
+                        "text/json": components["schemas"]["ReviewJobProtocolDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job or protocol pass not found. */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -9582,6 +9718,7 @@ export interface components {
             gitHubAppId?: number | null;
             /** Format: int64 */
             gitHubAppInstallationId?: number | null;
+            userName?: string | null;
         };
         /** @description Client-scoped SCM provider scope metadata returned by admin APIs. */
         ClientScmScopeDto: {
@@ -9748,6 +9885,7 @@ export interface components {
             providerFamily?: components["schemas"]["ScmProvider"];
             hostBaseUrl?: string | null;
             authenticationKind?: components["schemas"]["ScmAuthenticationKind"];
+            userName?: string | null;
             oAuthTenantId?: string | null;
             oAuthClientId?: string | null;
             displayName?: string | null;
@@ -10055,6 +10193,7 @@ export interface components {
         PatchClientProviderConnectionRequest: {
             hostBaseUrl?: string | null;
             authenticationKind?: components["schemas"]["ScmAuthenticationKind"];
+            userName?: string | null;
             oAuthTenantId?: string | null;
             oAuthClientId?: string | null;
             displayName?: string | null;
@@ -11066,7 +11205,7 @@ export interface components {
          * @description Credential models supported by SCM provider connections.
          * @enum {string}
          */
-        ScmAuthenticationKind: "oauthClientCredentials" | "personalAccessToken" | "appInstallation";
+        ScmAuthenticationKind: "oauthClientCredentials" | "personalAccessToken" | "appInstallation" | "windowsUserAccount";
         /**
          * @description Supported source-control provider families.
          * @enum {string}

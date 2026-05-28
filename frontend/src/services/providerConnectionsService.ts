@@ -6,7 +6,7 @@ import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
 
 export type ScmProviderFamily = 'github' | 'gitLab' | 'forgejo' | 'azureDevOps'
-export type ScmAuthenticationKind = 'personalAccessToken' | 'oauthClientCredentials' | 'appInstallation'
+export type ScmAuthenticationKind = 'personalAccessToken' | 'oauthClientCredentials' | 'appInstallation' | 'windowsUserAccount'
 export type ProviderConnectionReadinessLevel = 'unknown' | 'configured' | 'degraded' | 'onboardingReady' | 'workflowComplete'
 
 export interface ClientScmConnectionDto {
@@ -15,6 +15,7 @@ export interface ClientScmConnectionDto {
   providerFamily: ScmProviderFamily
   hostBaseUrl: string
   authenticationKind: ScmAuthenticationKind
+  userName?: string | null
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
   gitHubAppId?: number | null
@@ -52,6 +53,7 @@ export interface CreateClientProviderConnectionRequest {
   providerFamily: ScmProviderFamily
   hostBaseUrl: string
   authenticationKind: ScmAuthenticationKind
+  userName?: string | null
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
   gitHubAppId?: number | null
@@ -64,6 +66,7 @@ export interface CreateClientProviderConnectionRequest {
 export interface PatchClientProviderConnectionRequest {
   hostBaseUrl?: string
   authenticationKind?: ScmAuthenticationKind
+  userName?: string | null
   oAuthTenantId?: string | null
   oAuthClientId?: string | null
   gitHubAppId?: number | null

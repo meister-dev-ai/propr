@@ -133,7 +133,7 @@ public sealed class LocalProPrScmBroker(
 
     private async Task<GitHttpClient> GetGitClientAsync(
         string organizationUrl,
-        AdoServicePrincipalCredentials? credentials,
+        AdoConnectionCredentials? credentials,
         CancellationToken ct)
     {
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
@@ -142,7 +142,7 @@ public sealed class LocalProPrScmBroker(
 
     private async Task<IReadOnlyList<WikiV2>> ListWikisAsync(
         ProCursorKnowledgeSourceDto source,
-        AdoServicePrincipalCredentials? credentials,
+        AdoConnectionCredentials? credentials,
         CancellationToken ct)
     {
         var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
@@ -153,7 +153,7 @@ public sealed class LocalProPrScmBroker(
 
     private async Task<string> ResolveWikiRepositoryIdAsync(
         ProCursorKnowledgeSourceDto source,
-        AdoServicePrincipalCredentials? credentials,
+        AdoConnectionCredentials? credentials,
         CancellationToken ct)
     {
         var canonicalWikiId = !string.IsNullOrWhiteSpace(source.CanonicalSourceRef?.Value)
@@ -209,7 +209,7 @@ public sealed class LocalProPrScmBroker(
         }
     }
 
-    private async Task<AdoServicePrincipalCredentials?> ResolveConnectionCredentialsAsync(
+    private async Task<AdoConnectionCredentials?> ResolveConnectionCredentialsAsync(
         Guid clientId,
         string organizationUrl,
         CancellationToken ct)
@@ -219,18 +219,27 @@ public sealed class LocalProPrScmBroker(
             new ProviderHostRef(ScmProvider.AzureDevOps, organizationUrl),
             ct);
 
-        if (connection is null ||
-            string.IsNullOrWhiteSpace(connection.OAuthTenantId) ||
-            string.IsNullOrWhiteSpace(connection.OAuthClientId) ||
-            string.IsNullOrWhiteSpace(connection.Secret))
+        if (connection is null)
         {
             return null;
         }
 
-        return new AdoServicePrincipalCredentials(
-            connection.OAuthTenantId,
-            connection.OAuthClientId,
-            connection.Secret);
+        return connection.AuthenticationKind switch
+        {
+            ScmAuthenticationKind.OAuthClientCredentials
+                when !string.IsNullOrWhiteSpace(connection.OAuthTenantId)
+                     && !string.IsNullOrWhiteSpace(connection.OAuthClientId)
+                => AdoConnectionCredentials.ForOAuthClientCredentials(
+                    connection.OAuthTenantId,
+                    connection.OAuthClientId,
+                    connection.Secret),
+            ScmAuthenticationKind.PersonalAccessToken
+                => AdoConnectionCredentials.ForPersonalAccessToken(connection.Secret),
+            ScmAuthenticationKind.WindowsUserAccount
+                when !string.IsNullOrWhiteSpace(connection.UserName)
+                => AdoConnectionCredentials.ForWindowsUserAccount(connection.UserName, connection.Secret),
+            _ => null,
+        };
     }
 
     private static async Task<string> ResolveHeadCommitShaAsync(

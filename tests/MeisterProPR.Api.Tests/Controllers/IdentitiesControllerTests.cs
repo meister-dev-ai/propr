@@ -103,6 +103,7 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
                     host.Provider == ScmProvider.AzureDevOps &&
                     host.HostBaseUrl == "https://dev.azure.com"),
                 "Reviewer",
+                null,
                 Arg.Any<CancellationToken>());
     }
 
@@ -180,6 +181,7 @@ public sealed class IdentitiesControllerTests(IdentitiesControllerTests.Identiti
                         Arg.Any<Guid>(),
                         Arg.Any<ProviderHostRef>(),
                         Arg.Any<string>(),
+                        Arg.Any<Guid?>(),
                         Arg.Any<CancellationToken>())
                     .Returns(
                         Task.FromResult<IReadOnlyList<ReviewerIdentity>>(

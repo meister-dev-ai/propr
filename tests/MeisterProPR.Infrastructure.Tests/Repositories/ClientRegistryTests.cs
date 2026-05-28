@@ -198,7 +198,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             true,
             123456,
             789012,
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         var result = await this._registry.GetEffectiveReviewerIdentityAsync(
             client.Id,

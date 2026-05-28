@@ -236,7 +236,7 @@ public class AdoDiscoveryService(
     }
 
     protected internal virtual async
-        Task<(ClientAdoOrganizationScopeDto Scope, AdoServicePrincipalCredentials? Credentials, VssConnection Connection
+        Task<(ClientAdoOrganizationScopeDto Scope, AdoConnectionCredentials? Credentials, VssConnection Connection
             )> ResolveScopeAsync(
             Guid clientId,
             Guid organizationScopeId,
@@ -256,11 +256,8 @@ public class AdoDiscoveryService(
         }
 
         var organizationUrl = scope.ScopePath;
-        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
-            connectionRepository,
-            clientId,
-            organizationUrl,
-            ct);
+        var credentials = await AdoProviderAdapterHelpers.ResolveScopeCredentialsAsync(connectionRepository, scope, ct);
+        AdoProviderAdapterHelpers.EnsureRuntimeCredentialsAvailable(organizationUrl, credentials);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
         return (AdoProviderAdapterHelpers.ToAdoOrganizationScopeDto(scope), credentials, connection);
     }

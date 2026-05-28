@@ -20,9 +20,6 @@ public sealed partial class ClientReviewerIdentitiesController(
     IScmProviderRegistry providerRegistry,
     ILogger<ClientReviewerIdentitiesController> logger) : ControllerBase
 {
-    private const string ReviewerIdentityResolutionUnavailableMessage =
-        "Reviewer identity resolution is unavailable for this provider connection.";
-
     private IActionResult? ValidateRequest(ValidationResult result)
     {
         if (result.IsValid)
@@ -50,7 +47,7 @@ public sealed partial class ClientReviewerIdentitiesController(
         Exception ex)
     {
         LogReviewerIdentityResolutionConflict(logger, clientId, connectionId, search, ex);
-        return this.Conflict(new { error = ReviewerIdentityResolutionUnavailableMessage });
+        return this.Conflict(new { error = ex.Message });
     }
 
     /// <summary>Resolves candidate reviewer-trigger identities for one client provider connection.</summary>
@@ -101,6 +98,7 @@ public sealed partial class ClientReviewerIdentitiesController(
                 clientId,
                 new ProviderHostRef(connection.ProviderFamily, connection.HostBaseUrl),
                 search,
+                connection.Id,
                 ct);
 
             var response = candidates

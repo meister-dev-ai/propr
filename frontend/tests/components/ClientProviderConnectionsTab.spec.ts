@@ -45,9 +45,11 @@ vi.mock('@/services/providerActivationService', () => ({
         return 'https://github.com'
     }
   },
-  getSupportedAuthenticationKinds: (providerFamily: string) => {
+  getSupportedAuthenticationKinds: (providerFamily: string, hostBaseUrl?: string) => {
     if (providerFamily === 'azureDevOps') {
-      return ['oauthClientCredentials']
+      return !hostBaseUrl || hostBaseUrl.includes('dev.azure.com') || hostBaseUrl.includes('.visualstudio.com')
+        ? ['oauthClientCredentials']
+        : ['personalAccessToken', 'windowsUserAccount']
     }
 
     if (providerFamily === 'github') {
@@ -56,6 +58,13 @@ vi.mock('@/services/providerActivationService', () => ({
 
     return ['personalAccessToken']
   },
+  isHostedAzureDevOpsHost: (hostBaseUrl: string) =>
+    hostBaseUrl.includes('dev.azure.com') || hostBaseUrl.includes('.visualstudio.com'),
+  requiresUserName: (providerFamily: string, hostBaseUrl: string, authenticationKind: string) =>
+    providerFamily === 'azureDevOps'
+      && !hostBaseUrl.includes('dev.azure.com')
+      && !hostBaseUrl.includes('.visualstudio.com')
+      && authenticationKind === 'windowsUserAccount',
   listProviderActivationStatuses: listProviderActivationStatusesMock,
 }))
 
@@ -411,6 +420,58 @@ describe('ClientProviderConnectionsTab', () => {
       gitHubAppId: 123456,
       gitHubAppInstallationId: 789012,
       secret: '-----BEGIN PRIVATE KEY-----',
+    }))
+  })
+
+  it('submits userName for Azure DevOps Server windows auth create flow', async () => {
+    listProviderActivationStatusesMock.mockResolvedValue([
+      { providerFamily: 'azureDevOps', isEnabled: true },
+    ])
+    createProviderConnectionMock.mockResolvedValue({
+      id: 'provider-conn-2',
+      clientId: 'client-1',
+      providerFamily: 'azureDevOps',
+      hostBaseUrl: 'https://ado-server.example.com/tfs',
+      authenticationKind: 'windowsUserAccount',
+      userName: 'CONTOSO\\ado-user',
+      displayName: 'Azure DevOps Server',
+      isActive: true,
+      verificationStatus: 'unknown',
+      readinessLevel: 'configured',
+      readinessReason: 'Connection has not completed onboarding verification yet.',
+      hostVariant: 'selfHosted',
+      missingReadinessCriteria: ['Connection has not been verified yet.'],
+      lastVerifiedAt: null,
+      lastVerificationError: null,
+      createdAt: '2026-04-13T21:10:00Z',
+      updatedAt: '2026-04-13T21:10:00Z',
+    })
+    listProviderScopesMock.mockResolvedValue([])
+    getReviewerIdentityMock.mockResolvedValue(null)
+
+    const wrapper = await mountTab()
+    await flushPromises()
+
+    await wrapper.get('.provider-create-toggle').trigger('click')
+    await wrapper.find('input[placeholder="e.g. GitHub Enterprise"]').setValue('Azure DevOps Server')
+    await wrapper.find('input[placeholder="https://dev.azure.com or https://ado-server.example.com/tfs"]').setValue('https://ado-server.example.com/tfs')
+    await flushPromises()
+
+    const authenticationSelect = wrapper.findAll('select')[1]
+    await authenticationSelect.setValue('windowsUserAccount')
+    const userNameInput = wrapper.findAll('input').find((input) => input.attributes('placeholder')?.includes('ado-user'))
+    expect(userNameInput).toBeTruthy()
+    await userNameInput!.setValue('CONTOSO\\ado-user')
+    await wrapper.find('input[placeholder="Paste the provider secret"]').setValue('password')
+    await wrapper.get('.provider-create-submit').trigger('click')
+    await flushPromises()
+
+    expect(createProviderConnectionMock).toHaveBeenCalledWith('client-1', expect.objectContaining({
+      providerFamily: 'azureDevOps',
+      authenticationKind: 'windowsUserAccount',
+      userName: 'CONTOSO\\ado-user',
+      hostBaseUrl: 'https://ado-server.example.com/tfs',
+      secret: 'password',
     }))
   })
 

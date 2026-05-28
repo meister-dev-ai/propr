@@ -3,6 +3,7 @@
 
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
+using Microsoft.VisualStudio.Services.Common;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
@@ -121,7 +122,7 @@ public class VssConnectionFactoryTests
 
         // Per-client credentials use a real ClientSecretCredential path internally.
         // We can't easily substitute ClientSecretCredential, but we CAN verify the global credential is not used.
-        var perClientCredentials = new AdoServicePrincipalCredentials("tenant-id", "client-id", "secret");
+        var perClientCredentials = AdoConnectionCredentials.ForOAuthClientCredentials("tenant-id", "client-id", "secret");
 
         // The ClientSecretCredential will fail with invalid tenant/client (no real AAD call in tests),
         // but we can confirm the global credential received zero calls.
@@ -136,5 +137,56 @@ public class VssConnectionFactoryTests
 
         await globalCredential.DidNotReceiveWithAnyArgs()
             .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetConnectionAsync_WithPersonalAccessToken_DoesNotUseGlobalCredential()
+    {
+        var globalCredential = Substitute.For<TokenCredential>();
+        var factory = new VssConnectionFactory(globalCredential);
+
+        var connection = await factory.GetConnectionAsync(
+            "https://ado-server.example.com",
+            AdoConnectionCredentials.ForPersonalAccessToken("server-pat"));
+
+        Assert.NotNull(connection);
+        await globalCredential.DidNotReceiveWithAnyArgs()
+            .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetConnectionAsync_WithWindowsUserAccount_DoesNotUseGlobalCredential()
+    {
+        var globalCredential = Substitute.For<TokenCredential>();
+        var factory = new VssConnectionFactory(globalCredential);
+
+        var connection = await factory.GetConnectionAsync(
+            "https://ado-server.example.com",
+            AdoConnectionCredentials.ForWindowsUserAccount(@"CONTOSO\ado-user", "password-value"));
+
+        Assert.NotNull(connection);
+        await globalCredential.DidNotReceiveWithAnyArgs()
+            .GetTokenAsync(Arg.Any<TokenRequestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetConnectionAsync_WithWindowsUserAccount_UsesWindowsCredential()
+    {
+        var globalCredential = Substitute.For<TokenCredential>();
+        var factory = new VssConnectionFactory(globalCredential);
+
+        var connection = await factory.GetConnectionAsync(
+            "https://ado-server.example.com",
+            AdoConnectionCredentials.ForWindowsUserAccount(@"CONTOSO\ado-user", "password-value"));
+
+        Assert.NotNull(connection);
+        Assert.IsType<VssCredentials>(connection.Credentials);
+
+        var vssCredentials = (VssCredentials)connection.Credentials;
+        Assert.IsType<WindowsCredential>(vssCredentials.Windows);
+        var networkCredential = vssCredentials.Windows.Credentials?.GetCredential(new Uri("https://ado-server.example.com"), "NTLM");
+        Assert.NotNull(networkCredential);
+        Assert.Equal("ado-user", networkCredential!.UserName);
+        Assert.Equal("CONTOSO", networkCredential.Domain);
     }
 }

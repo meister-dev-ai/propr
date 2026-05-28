@@ -74,6 +74,7 @@ public sealed class IdentitiesController(IScmProviderRegistry providerRegistry) 
                 clientId.Value,
                 new ProviderHostRef(ScmProvider.AzureDevOps, orgUrl),
                 displayName,
+                null,
                 ct);
 
         var response = matches

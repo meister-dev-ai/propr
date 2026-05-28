@@ -13,8 +13,10 @@ public sealed class StubIdentityResolver : IIdentityResolver
         string organizationUrl,
         string displayName,
         Guid clientId,
+        Guid? connectionId = null,
         CancellationToken ct = default)
     {
+        _ = connectionId;
         return Task.FromResult<IReadOnlyList<ResolvedIdentity>>([]);
     }
 }

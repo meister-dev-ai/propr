@@ -17,5 +17,6 @@ public interface IReviewerIdentityService
         Guid clientId,
         ProviderHostRef host,
         string searchText,
+        Guid? connectionId = null,
         CancellationToken ct = default);
 }

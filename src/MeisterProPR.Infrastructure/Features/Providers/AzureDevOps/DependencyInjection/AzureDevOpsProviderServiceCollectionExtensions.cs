@@ -61,11 +61,9 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
         services.TryAddScoped<IAdoCommentPoster, AdoCommentPoster>();
         services.TryAddScoped<IAssignedReviewDiscoveryService, AdoAssignedPrFetcher>();
         services.TryAddScoped<IPrStatusFetcher, AdoPrStatusFetcher>();
-        services.AddHttpClient("AdoIdentity");
         services.TryAddScoped<IIdentityResolver>(sp =>
             new AdoIdentityResolver(
-                credential,
-                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<VssConnectionFactory>(),
                 sp.GetRequiredService<IClientScmConnectionRepository>()));
         services.TryAddScoped<AdoReviewerManager>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewAssignmentService, AdoReviewerManager>());

@@ -22,8 +22,10 @@ internal sealed class GitLabReviewerIdentityService(
         Guid clientId,
         ProviderHostRef host,
         string searchText,
+        Guid? connectionId = null,
         CancellationToken ct = default)
     {
+        _ = connectionId;
         ArgumentException.ThrowIfNullOrWhiteSpace(searchText);
 
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);

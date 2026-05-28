@@ -57,7 +57,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             true,
             123456,
             789012,
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         Assert.NotNull(created);
         Assert.Equal(123456, created!.GitHubAppId);
@@ -86,7 +86,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             true,
             123456,
             789012,
-            CancellationToken.None);
+            ct: CancellationToken.None);
         Assert.NotNull(created);
 
         await this._repository.UpdateVerificationAsync(
@@ -110,7 +110,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             true,
             456123,
             654321,
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         Assert.NotNull(updated);
         Assert.Equal("unknown", updated!.VerificationStatus);
@@ -142,7 +142,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             true,
             123456,
             789012,
-            CancellationToken.None);
+            ct: CancellationToken.None);
         Assert.NotNull(created);
 
         var updated = await this._repository.UpdateAsync(
@@ -155,9 +155,7 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
             "GitHub PAT",
             "ghp_rotated_secret",
             true,
-            null,
-            null,
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         Assert.NotNull(updated);
         Assert.Null(updated!.GitHubAppId);
@@ -218,6 +216,84 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
                 Assert.Equal(ScmProvider.GitHub, credential!.ProviderFamily);
                 Assert.Equal(hostBaseUrl, credential.HostBaseUrl);
             });
+    }
+
+    [Fact]
+    public async Task AddAsync_AzureDevOpsServerWindowsAccount_PersistsUserNameAndProtectedSecret()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.AzureDevOps,
+            "https://ado-server.example.com/tfs/defaultcollection",
+            ScmAuthenticationKind.WindowsUserAccount,
+            null,
+            null,
+            "Azure DevOps Server",
+            "super-secret-password",
+            true,
+            userName: @"CONTOSO\\ado-user",
+            ct: CancellationToken.None);
+
+        Assert.NotNull(created);
+        Assert.Equal(@"CONTOSO\\ado-user", created!.UserName);
+
+        var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        Assert.Equal(@"CONTOSO\\ado-user", record.UserName);
+        Assert.NotEqual("super-secret-password", record.EncryptedSecretMaterial);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AzureDevOpsHostChange_RepointsExistingScopeAuthorities()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.AzureDevOps,
+            "http://127.0.0.1",
+            ScmAuthenticationKind.WindowsUserAccount,
+            null,
+            null,
+            "Azure DevOps Server",
+            "super-secret-password",
+            true,
+            userName: @"CONTOSO\\ado-user",
+            ct: CancellationToken.None);
+
+        this._dbContext.ClientScmScopes.Add(
+            new ClientScmScopeRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = client.Id,
+                ConnectionId = created!.Id,
+                ScopeType = "organization",
+                ExternalScopeId = "defaultcollection",
+                ScopePath = "http://127.0.0.1/tfs/defaultcollection",
+                DisplayName = "Default Collection",
+                VerificationStatus = "verified",
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        await this._repository.UpdateAsync(
+            client.Id,
+            created.Id,
+            "http://172.24.241.1:8060",
+            ScmAuthenticationKind.WindowsUserAccount,
+            null,
+            null,
+            "Azure DevOps Server",
+            null,
+            true,
+            userName: @"CONTOSO\\ado-user",
+            ct: CancellationToken.None);
+
+        var scope = await this._dbContext.ClientScmScopes.SingleAsync(candidate => candidate.ConnectionId == created.Id);
+        Assert.Equal("http://172.24.241.1:8060/tfs/defaultcollection", scope.ScopePath);
     }
 
     private async Task<ClientRecord> SeedClientAsync()

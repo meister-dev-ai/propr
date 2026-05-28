@@ -58,7 +58,9 @@ public sealed partial class ClientProviderConnectionsController(
 
     private IActionResult? ValidateSupportedAuthenticationConfiguration(
         ScmProvider providerFamily,
+        string hostBaseUrl,
         ScmAuthenticationKind authenticationKind,
+        string? userName,
         string? oAuthTenantId,
         string? oAuthClientId,
         long? gitHubAppId = null,
@@ -67,7 +69,9 @@ public sealed partial class ClientProviderConnectionsController(
     {
         foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(
                      providerFamily,
+                     hostBaseUrl,
                      authenticationKind,
+                     userName,
                      oAuthTenantId,
                      oAuthClientId,
                      gitHubAppId,
@@ -82,7 +86,9 @@ public sealed partial class ClientProviderConnectionsController(
 
     private static void EnsureSupportedAuthenticationConfiguration(
         ScmProvider providerFamily,
+        string hostBaseUrl,
         ScmAuthenticationKind authenticationKind,
+        string? userName,
         string? oAuthTenantId,
         string? oAuthClientId,
         long? gitHubAppId = null,
@@ -91,7 +97,9 @@ public sealed partial class ClientProviderConnectionsController(
     {
         var errors = GetAuthenticationConfigurationErrors(
                 providerFamily,
+                hostBaseUrl,
                 authenticationKind,
+                userName,
                 oAuthTenantId,
                 oAuthClientId,
                 gitHubAppId,
@@ -108,7 +116,9 @@ public sealed partial class ClientProviderConnectionsController(
 
     private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
         ScmProvider providerFamily,
+        string hostBaseUrl,
         ScmAuthenticationKind authenticationKind,
+        string? userName,
         string? oAuthTenantId,
         string? oAuthClientId,
         long? gitHubAppId,
@@ -119,6 +129,7 @@ public sealed partial class ClientProviderConnectionsController(
 
         if (!CreateClientProviderConnectionRequestValidator.IsSupportedAuthenticationKind(
                 providerFamily,
+                hostBaseUrl,
                 authenticationKind))
         {
             errors.Add(
@@ -129,6 +140,14 @@ public sealed partial class ClientProviderConnectionsController(
 
         if (CreateClientProviderConnectionRequestValidator.RequiresOAuthMetadata(providerFamily, authenticationKind))
         {
+            if (!string.IsNullOrWhiteSpace(userName))
+            {
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.UserName),
+                        "UserName is only valid for Azure DevOps Server Windows user-account connections."));
+            }
+
             if (string.IsNullOrWhiteSpace(oAuthTenantId))
             {
                 errors.Add(
@@ -144,6 +163,41 @@ public sealed partial class ClientProviderConnectionsController(
                         nameof(CreateClientProviderConnectionRequest.OAuthClientId),
                         "OAuthClientId is required for Azure DevOps OAuth client-credentials connections."));
             }
+        }
+
+        if (providerFamily == ScmProvider.AzureDevOps
+            && authenticationKind == ScmAuthenticationKind.WindowsUserAccount)
+        {
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.UserName),
+                        "UserName is required for Azure DevOps Server Windows user-account connections."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(oAuthTenantId))
+            {
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.OAuthTenantId),
+                        "OAuthTenantId is only valid for Azure DevOps OAuth client-credentials connections."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(oAuthClientId))
+            {
+                errors.Add(
+                    (
+                        nameof(CreateClientProviderConnectionRequest.OAuthClientId),
+                        "OAuthClientId is only valid for Azure DevOps OAuth client-credentials connections."));
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(userName))
+        {
+            errors.Add(
+                (
+                    nameof(CreateClientProviderConnectionRequest.UserName),
+                    "UserName is only valid for Azure DevOps Server Windows user-account connections."));
         }
 
         if (providerFamily != ScmProvider.GitHub)
@@ -470,7 +524,9 @@ public sealed partial class ClientProviderConnectionsController(
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
             request.ProviderFamily,
+            request.HostBaseUrl,
             request.AuthenticationKind,
+            request.UserName,
             request.OAuthTenantId,
             request.OAuthClientId,
             request.GitHubAppId,
@@ -494,6 +550,7 @@ public sealed partial class ClientProviderConnectionsController(
                 request.IsActive,
                 request.GitHubAppId,
                 request.GitHubAppInstallationId,
+                request.UserName,
                 ct);
 
             if (created is null)
@@ -576,6 +633,7 @@ public sealed partial class ClientProviderConnectionsController(
         }
 
         var effectiveAuthenticationKind = request.AuthenticationKind ?? existing.AuthenticationKind;
+        var effectiveUserName = request.UserName ?? existing.UserName;
         var effectiveOAuthTenantId = request.OAuthTenantId ?? existing.OAuthTenantId;
         var effectiveOAuthClientId = request.OAuthClientId ?? existing.OAuthClientId;
         var hasCompatibleSecretMaterial = !string.IsNullOrWhiteSpace(request.Secret)
@@ -595,7 +653,9 @@ public sealed partial class ClientProviderConnectionsController(
 
         var supportedAuthenticationValidation = this.ValidateSupportedAuthenticationConfiguration(
             existing.ProviderFamily,
+            request.HostBaseUrl ?? existing.HostBaseUrl,
             effectiveAuthenticationKind,
+            effectiveAuthenticationKind == ScmAuthenticationKind.WindowsUserAccount ? effectiveUserName : request.UserName,
             effectiveOAuthTenantId,
             effectiveOAuthClientId,
             effectiveGitHubAppId,
@@ -620,6 +680,7 @@ public sealed partial class ClientProviderConnectionsController(
                 request.IsActive ?? existing.IsActive,
                 persistedGitHubAppId,
                 persistedGitHubAppInstallationId,
+                effectiveAuthenticationKind == ScmAuthenticationKind.WindowsUserAccount ? effectiveUserName : null,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
@@ -700,7 +761,9 @@ public sealed partial class ClientProviderConnectionsController(
         {
             EnsureSupportedAuthenticationConfiguration(
                 connection.ProviderFamily,
+                connection.HostBaseUrl,
                 connection.AuthenticationKind,
+                connection.UserName,
                 connection.OAuthTenantId,
                 connection.OAuthClientId,
                 connection.GitHubAppId,
@@ -757,6 +820,7 @@ public sealed record CreateClientProviderConnectionRequest(
     ScmProvider ProviderFamily,
     string HostBaseUrl,
     ScmAuthenticationKind AuthenticationKind,
+    string? UserName,
     string? OAuthTenantId,
     string? OAuthClientId,
     string DisplayName,
@@ -769,6 +833,7 @@ public sealed record CreateClientProviderConnectionRequest(
 public sealed record PatchClientProviderConnectionRequest(
     string? HostBaseUrl = null,
     ScmAuthenticationKind? AuthenticationKind = null,
+    string? UserName = null,
     string? OAuthTenantId = null,
     string? OAuthClientId = null,
     string? DisplayName = null,

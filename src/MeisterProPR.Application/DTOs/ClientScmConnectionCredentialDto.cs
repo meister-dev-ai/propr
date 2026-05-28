@@ -18,7 +18,8 @@ public sealed record ClientScmConnectionCredentialDto(
     string Secret,
     bool IsActive,
     long? GitHubAppId = null,
-    long? GitHubAppInstallationId = null)
+    long? GitHubAppInstallationId = null,
+    string? UserName = null)
 {
     /// <summary>
     ///     Convenience constructor for non-OAuth credentials where tenant and client ID are not applicable.

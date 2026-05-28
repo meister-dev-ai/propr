@@ -29,4 +29,16 @@ public sealed class ProviderReadinessProfileCatalogTests
         Assert.Equal("selfHosted", profile.HostVariant);
         Assert.False(profile.IsWorkflowComplete);
     }
+
+    [Fact]
+    public void GetProfile_AzureDevOpsSelfHosted_ReturnsOnboardingReadyProfile()
+    {
+        var sut = new StaticProviderReadinessProfileCatalog();
+
+        var profile = sut.GetProfile(ScmProvider.AzureDevOps, "https://ado-server.example.com/tfs/defaultcollection");
+
+        Assert.Equal("selfHosted", profile.HostVariant);
+        Assert.False(profile.IsWorkflowComplete);
+        Assert.Contains("Self-hosted Azure DevOps", profile.Notes, StringComparison.OrdinalIgnoreCase);
+    }
 }

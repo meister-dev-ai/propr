@@ -277,8 +277,9 @@ public sealed class AdoDiscoveryServiceTests
         Assert.Equal(scopeId, service.LastResolvedScope!.Id);
         Assert.Equal("https://dev.azure.com/org", service.LastResolvedScope.OrganizationUrl);
         Assert.NotNull(service.LastResolvedCredentials);
-        Assert.Equal("contoso-tenant", service.LastResolvedCredentials!.TenantId);
-        Assert.Equal("contoso-client", service.LastResolvedCredentials.ClientId);
+        Assert.Equal(ScmAuthenticationKind.OAuthClientCredentials, service.LastResolvedCredentials!.AuthenticationKind);
+        Assert.Equal("contoso-tenant", service.LastResolvedCredentials.OAuthTenantId);
+        Assert.Equal("contoso-client", service.LastResolvedCredentials.OAuthClientId);
         Assert.Equal("secret-abc", service.LastResolvedCredentials.Secret);
     }
 
@@ -455,7 +456,7 @@ public sealed class AdoDiscoveryServiceTests
 
         public ClientAdoOrganizationScopeDto? LastResolvedScope { get; private set; }
 
-        public AdoServicePrincipalCredentials? LastResolvedCredentials { get; private set; }
+        public AdoConnectionCredentials? LastResolvedCredentials { get; private set; }
 
         public void SetProjects(params TeamProjectReference[] projects)
         {
@@ -494,7 +495,7 @@ public sealed class AdoDiscoveryServiceTests
         }
 
         protected internal override async
-            Task<(ClientAdoOrganizationScopeDto Scope, AdoServicePrincipalCredentials? Credentials, VssConnection
+            Task<(ClientAdoOrganizationScopeDto Scope, AdoConnectionCredentials? Credentials, VssConnection
                 Connection)> ResolveScopeAsync(
                 Guid clientId,
                 Guid organizationScopeId,

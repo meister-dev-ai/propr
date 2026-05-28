@@ -96,6 +96,35 @@ public sealed class ClientScmConnectionRepository(
         return record is null ? null : this.ToCredentialDto(record);
     }
 
+    public async Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default)
+    {
+        var record = await this.WithReadDbAsync(
+            db => db.ClientScmConnections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    connection =>
+                        connection.ClientId == clientId
+                        && connection.Id == connectionId
+                        && connection.IsActive,
+                    ct),
+            ct);
+
+        if (record is null)
+        {
+            return null;
+        }
+
+        if (providerActivationService is not null && !await providerActivationService.IsEnabledAsync(record.Provider, ct))
+        {
+            return null;
+        }
+
+        return this.ToCredentialDto(record);
+    }
+
     public async Task<ClientScmConnectionDto?> AddAsync(
         Guid clientId,
         ScmProvider providerFamily,
@@ -108,6 +137,7 @@ public sealed class ClientScmConnectionRepository(
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default)
     {
         if (!await dbContext.Clients.AnyAsync(client => client.Id == clientId, ct))
@@ -134,6 +164,7 @@ public sealed class ClientScmConnectionRepository(
             Provider = providerFamily,
             HostBaseUrl = normalizedHostBaseUrl,
             AuthenticationKind = authenticationKind,
+            UserName = NormalizeUserName(providerFamily, authenticationKind, userName),
             OAuthTenantId = NormalizeOptional(oAuthTenantId),
             OAuthClientId = NormalizeOptional(oAuthClientId),
             GitHubAppId = usesGitHubAppInstallation
@@ -175,6 +206,7 @@ public sealed class ClientScmConnectionRepository(
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default)
     {
         var record = await dbContext.ClientScmConnections
@@ -185,6 +217,7 @@ public sealed class ClientScmConnectionRepository(
             return null;
         }
 
+        var previousHostBaseUrl = record.HostBaseUrl;
         var normalizedHostBaseUrl = NormalizeHostBaseUrl(record.Provider, hostBaseUrl);
         if (await dbContext.ClientScmConnections.AnyAsync(
                 connection => connection.ClientId == clientId
@@ -201,6 +234,10 @@ public sealed class ClientScmConnectionRepository(
                                           normalizedHostBaseUrl,
                                           StringComparison.OrdinalIgnoreCase)
                                       || record.AuthenticationKind != authenticationKind
+                                      || !string.Equals(
+                                          record.UserName,
+                                          NormalizeUserName(record.Provider, authenticationKind, userName),
+                                          StringComparison.Ordinal)
                                       || !string.Equals(
                                           record.OAuthTenantId,
                                           NormalizeOptional(oAuthTenantId),
@@ -225,6 +262,7 @@ public sealed class ClientScmConnectionRepository(
 
         record.HostBaseUrl = normalizedHostBaseUrl;
         record.AuthenticationKind = authenticationKind;
+        record.UserName = NormalizeUserName(record.Provider, authenticationKind, userName);
         record.OAuthTenantId = NormalizeOptional(oAuthTenantId);
         record.OAuthClientId = NormalizeOptional(oAuthClientId);
         record.GitHubAppId = NormalizeGitHubAppIdentifier(
@@ -244,6 +282,12 @@ public sealed class ClientScmConnectionRepository(
         if (!string.IsNullOrWhiteSpace(secret))
         {
             record.EncryptedSecretMaterial = secretProtectionCodec.Protect(NormalizeRequired(secret), SecretPurpose);
+        }
+
+        if (record.Provider == ScmProvider.AzureDevOps
+            && !string.Equals(previousHostBaseUrl, normalizedHostBaseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            this.RepointAzureDevOpsOrganizationScopes(clientId, connectionId, previousHostBaseUrl, normalizedHostBaseUrl);
         }
 
         if (onboardingInputsChanged)
@@ -329,6 +373,44 @@ public sealed class ClientScmConnectionRepository(
         return true;
     }
 
+    /// <summary>
+    ///     For Azure DevOps provider connections, if the host URL changes, we need to update all existing scopes that point to the old host URL so they continue to
+    ///     function correctly.
+    ///     Otherwise, the scopes would still point at the old host and fail discovery and verification until manually updated.
+    ///     This method performs that repointing automatically during connection updates.
+    /// </summary>
+    private void RepointAzureDevOpsOrganizationScopes(
+        Guid clientId,
+        Guid connectionId,
+        string previousHostBaseUrl,
+        string newHostBaseUrl)
+    {
+        foreach (var scope in dbContext.ClientScmScopes.Where(scope => scope.ClientId == clientId && scope.ConnectionId == connectionId))
+        {
+            if (!Uri.TryCreate(scope.ScopePath.Trim(), UriKind.Absolute, out var scopeUri))
+            {
+                continue;
+            }
+
+            if (!string.Equals(
+                    scopeUri.GetLeftPart(UriPartial.Authority).TrimEnd('/'),
+                    previousHostBaseUrl,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var newHostUri = new Uri(newHostBaseUrl);
+            scope.ScopePath = new UriBuilder(scopeUri)
+            {
+                Scheme = newHostUri.Scheme,
+                Host = newHostUri.Host,
+                Port = newHostUri.IsDefaultPort ? -1 : newHostUri.Port,
+            }.Uri.ToString().TrimEnd('/');
+            scope.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+    }
+
     private async Task<T> WithReadDbAsync<T>(Func<MeisterProPRDbContext, Task<T>> operation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -361,7 +443,8 @@ public sealed class ClientScmConnectionRepository(
             record.CreatedAt,
             record.UpdatedAt,
             GitHubAppId: record.GitHubAppId,
-            GitHubAppInstallationId: record.GitHubAppInstallationId);
+            GitHubAppInstallationId: record.GitHubAppInstallationId,
+            UserName: record.UserName);
     }
 
     private ClientScmConnectionCredentialDto ToCredentialDto(ClientScmConnectionRecord record)
@@ -378,7 +461,8 @@ public sealed class ClientScmConnectionRepository(
             secretProtectionCodec.Unprotect(record.EncryptedSecretMaterial, SecretPurpose),
             record.IsActive,
             record.GitHubAppId,
-            record.GitHubAppInstallationId);
+            record.GitHubAppInstallationId,
+            record.UserName);
     }
 
     public async Task<ClientScmConnectionDto?> AddAsync(
@@ -401,6 +485,7 @@ public sealed class ClientScmConnectionRepository(
             displayName,
             secret,
             isActive,
+            null,
             null,
             null,
             ct);
@@ -426,6 +511,7 @@ public sealed class ClientScmConnectionRepository(
             displayName,
             secret,
             isActive,
+            null,
             null,
             null,
             ct);
@@ -456,6 +542,19 @@ public sealed class ClientScmConnectionRepository(
         }
 
         return value.Value;
+    }
+
+    private static string? NormalizeUserName(
+        ScmProvider providerFamily,
+        ScmAuthenticationKind authenticationKind,
+        string? userName)
+    {
+        if (providerFamily != ScmProvider.AzureDevOps || authenticationKind != ScmAuthenticationKind.WindowsUserAccount)
+        {
+            return null;
+        }
+
+        return NormalizeRequired(userName, nameof(userName), 256);
     }
 
     private async Task PurgeExpiredAuditEntriesAsync(CancellationToken ct)
@@ -592,6 +691,19 @@ public sealed class ClientScmConnectionRepository(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         return value.Trim();
+    }
+
+    private static string NormalizeRequired(string? value, string parameterName, int maxLength)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
+
+        var normalized = value.Trim();
+        if (normalized.Length > maxLength)
+        {
+            throw new InvalidOperationException($"{parameterName} must not exceed {maxLength} characters.");
+        }
+
+        return normalized;
     }
 
     private static string? NormalizeOptional(string? value)

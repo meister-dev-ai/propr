@@ -510,6 +510,7 @@ public sealed class AdoCompatibilityAdapterTests
                 "https://dev.azure.com/org-one",
                 "meister",
                 clientId,
+                connectionId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<ResolvedIdentity>>(
@@ -520,6 +521,7 @@ public sealed class AdoCompatibilityAdapterTests
                 "https://dev.azure.com/org-two",
                 "meister",
                 clientId,
+                connectionId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<ResolvedIdentity>>(
@@ -532,7 +534,7 @@ public sealed class AdoCompatibilityAdapterTests
             new ClientScmScopeRepository(db),
             identityResolver);
 
-        var result = await sut.ResolveCandidatesAsync(clientId, host, "meister", CancellationToken.None);
+        var result = await sut.ResolveCandidatesAsync(clientId, host, "meister", connectionId, CancellationToken.None);
 
         Assert.Collection(
             result.OrderBy(identity => identity.DisplayName, StringComparer.OrdinalIgnoreCase),
@@ -546,6 +548,45 @@ public sealed class AdoCompatibilityAdapterTests
                 Assert.Equal("Meister Bot", second.DisplayName);
                 Assert.Equal("Meister Bot", second.Login);
             });
+    }
+
+    [Fact]
+    public async Task ResolveCandidatesAsync_UsesScopeOwningConnectionWhenScopeHostDiffersFromConnectionHost()
+    {
+        await using var db = CreateContext();
+        var clientId = await SeedClientAsync(db);
+        var connectionId = await SeedAzureConnectionAsync(db, clientId);
+        await SeedAzureScopeAsync(db, clientId, connectionId, "http://127.0.0.1/tfs/defaultcollection");
+
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, "http://172.24.241.1:8060");
+        var identityResolver = Substitute.For<IIdentityResolver>();
+        identityResolver.ResolveAsync(
+                "http://127.0.0.1/tfs/defaultcollection",
+                "meister",
+                clientId,
+                connectionId,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ResolvedIdentity>>(
+                [
+                    new ResolvedIdentity(Guid.Parse("10000000-0000-0000-0000-000000000201"), "Meister Bot"),
+                ]));
+
+        var sut = new AdoReviewerIdentityService(
+            CreateConnectionRepository(clientId, connectionId, "http://172.24.241.1:8060"),
+            new ClientScmScopeRepository(db),
+            identityResolver);
+
+        var result = await sut.ResolveCandidatesAsync(clientId, host, "meister", connectionId, CancellationToken.None);
+
+        var candidate = Assert.Single(result);
+        Assert.Equal("Meister Bot", candidate.DisplayName);
+        await identityResolver.Received(1).ResolveAsync(
+            "http://127.0.0.1/tfs/defaultcollection",
+            "meister",
+            clientId,
+            connectionId,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -764,6 +805,20 @@ public sealed class AdoCompatibilityAdapterTests
 
         repository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>([connection]));
+        repository.GetOperationalConnectionByIdAsync(clientId, connectionId, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<ClientScmConnectionCredentialDto?>(
+                    new ClientScmConnectionCredentialDto(
+                        connectionId,
+                        clientId,
+                        ScmProvider.AzureDevOps,
+                        hostBaseUrl,
+                        ScmAuthenticationKind.OAuthClientCredentials,
+                        "tenant-id",
+                        "client-id",
+                        "Azure DevOps",
+                        "secret-value",
+                        true)));
         return repository;
     }
 

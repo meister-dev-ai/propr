@@ -21,6 +21,7 @@ public sealed class ScmProviderTests
     [InlineData(ScmAuthenticationKind.OAuthClientCredentials)]
     [InlineData(ScmAuthenticationKind.PersonalAccessToken)]
     [InlineData(ScmAuthenticationKind.AppInstallation)]
+    [InlineData(ScmAuthenticationKind.WindowsUserAccount)]
     public void ScmAuthenticationKind_AllSupportedModes_AreDefined(ScmAuthenticationKind authenticationKind)
     {
         Assert.True(Enum.IsDefined(typeof(ScmAuthenticationKind), authenticationKind));

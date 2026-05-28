@@ -22,6 +22,12 @@ public interface IClientScmConnectionRepository
         ProviderHostRef host,
         CancellationToken ct = default);
 
+    /// <summary>Returns one active provider connection plus decrypted secret material for the given client connection.</summary>
+    Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default);
+
     /// <summary>Adds a provider connection for the given client.</summary>
     Task<ClientScmConnectionDto?> AddAsync(
         Guid clientId,
@@ -35,6 +41,7 @@ public interface IClientScmConnectionRepository
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default);
 
     /// <summary>Updates one provider connection for the given client.</summary>
@@ -50,6 +57,7 @@ public interface IClientScmConnectionRepository
         bool isActive,
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
+        string? userName = null,
         CancellationToken ct = default);
 
     /// <summary>Updates verification state for one provider connection.</summary>

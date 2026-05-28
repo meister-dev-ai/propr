@@ -119,7 +119,7 @@ internal static class AdoProviderAdapterHelpers
         return connection.GetClient<GitHttpClient>();
     }
 
-    public static async Task<AdoServicePrincipalCredentials?> ResolveCredentialsAsync(
+    public static async Task<AdoConnectionCredentials?> ResolveCredentialsAsync(
         IClientScmConnectionRepository connectionRepository,
         Guid clientId,
         string organizationUrl,
@@ -130,7 +130,23 @@ internal static class AdoProviderAdapterHelpers
         return ToAdoCredentials(connection);
     }
 
-    public static Task<AdoServicePrincipalCredentials?> ResolveCredentialsAsync(
+    public static async Task<AdoConnectionCredentials?> ResolveScopeCredentialsAsync(
+        IClientScmConnectionRepository connectionRepository,
+        ClientScmScopeDto scope,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var connection = await connectionRepository.GetOperationalConnectionByIdAsync(scope.ClientId, scope.ConnectionId, ct);
+        if (connection is null)
+        {
+            return null;
+        }
+
+        return ToAdoCredentials(connection);
+    }
+
+    public static Task<AdoConnectionCredentials?> ResolveCredentialsAsync(
         IClientScmConnectionRepository connectionRepository,
         Guid? clientId,
         string organizationUrl,
@@ -138,7 +154,7 @@ internal static class AdoProviderAdapterHelpers
     {
         return clientId.HasValue
             ? ResolveCredentialsAsync(connectionRepository, clientId.Value, organizationUrl, ct)
-            : Task.FromResult<AdoServicePrincipalCredentials?>(null);
+            : Task.FromResult<AdoConnectionCredentials?>(null);
     }
 
     public static ClientAdoOrganizationScopeDto ToAdoOrganizationScopeDto(ClientScmScopeDto scope)
@@ -330,21 +346,29 @@ internal static class AdoProviderAdapterHelpers
         };
     }
 
-    private static AdoServicePrincipalCredentials? ToAdoCredentials(ClientScmConnectionCredentialDto? connection)
+    internal static AdoConnectionCredentials? ToAdoCredentials(ClientScmConnectionCredentialDto? connection)
     {
-        if (connection is null
-            || connection.ProviderFamily != ScmProvider.AzureDevOps
-            || connection.AuthenticationKind != ScmAuthenticationKind.OAuthClientCredentials
-            || string.IsNullOrWhiteSpace(connection.OAuthTenantId)
-            || string.IsNullOrWhiteSpace(connection.OAuthClientId))
+        if (connection is null || connection.ProviderFamily != ScmProvider.AzureDevOps)
         {
             return null;
         }
 
-        return new AdoServicePrincipalCredentials(
-            connection.OAuthTenantId,
-            connection.OAuthClientId,
-            connection.Secret);
+        return connection.AuthenticationKind switch
+        {
+            ScmAuthenticationKind.OAuthClientCredentials
+                when !string.IsNullOrWhiteSpace(connection.OAuthTenantId)
+                     && !string.IsNullOrWhiteSpace(connection.OAuthClientId)
+                => AdoConnectionCredentials.ForOAuthClientCredentials(
+                    connection.OAuthTenantId,
+                    connection.OAuthClientId,
+                    connection.Secret),
+            ScmAuthenticationKind.PersonalAccessToken
+                => AdoConnectionCredentials.ForPersonalAccessToken(connection.Secret),
+            ScmAuthenticationKind.WindowsUserAccount
+                when !string.IsNullOrWhiteSpace(connection.UserName)
+                => AdoConnectionCredentials.ForWindowsUserAccount(connection.UserName, connection.Secret),
+            _ => null,
+        };
     }
 
     private static AdoOrganizationVerificationStatus MapVerificationStatus(string? verificationStatus)
@@ -362,5 +386,33 @@ internal static class AdoProviderAdapterHelpers
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(organizationUrl);
         return organizationUrl.Trim().TrimEnd('/');
+    }
+
+    public static void EnsureRuntimeCredentialsAvailable(
+        string organizationUrl,
+        AdoConnectionCredentials? credentials)
+    {
+        if (credentials is not null)
+        {
+            return;
+        }
+
+        if (!IsHostedAzureDevOps(organizationUrl))
+        {
+            throw new InvalidOperationException(
+                "No active Azure DevOps Server credentials were found for this organization scope. Re-save the provider connection or re-add the " +
+                "organization scope so it points at the current server host.");
+        }
+    }
+
+    private static bool IsHostedAzureDevOps(string organizationUrl)
+    {
+        if (!Uri.TryCreate(organizationUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return string.Equals(uri.Host, "dev.azure.com", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -14,6 +14,7 @@ public interface IIdentityResolver
         string organizationUrl,
         string displayName,
         Guid clientId,
+        Guid? connectionId = null,
         CancellationToken ct = default);
 }
 

@@ -19,12 +19,18 @@ internal sealed class AdoReviewerIdentityService(
         Guid clientId,
         ProviderHostRef host,
         string searchText,
+        Guid? connectionId = null,
         CancellationToken ct = default)
     {
         EnsureAzureDevOps(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(searchText);
 
-        var matchingScopes = (await ResolveOrganizationScopesAsync(
+        var matchingScopes = connectionId.HasValue
+            ? (await scopeRepository.GetByConnectionIdAsync(clientId, connectionId.Value, ct))
+            .Where(scope => string.Equals(scope.ScopeType, "organization", StringComparison.OrdinalIgnoreCase))
+            .Where(scope => scope.IsEnabled)
+            .ToList()
+            : (await ResolveOrganizationScopesAsync(
                 connectionRepository,
                 scopeRepository,
                 clientId,
@@ -37,7 +43,14 @@ internal sealed class AdoReviewerIdentityService(
         foreach (var scope in matchingScopes)
         {
             var organizationUrl = NormalizeOrganizationUrl(scope.ScopePath);
-            var resolvedIdentities = await identityResolver.ResolveAsync(organizationUrl, searchText, clientId, ct);
+            var credentials = await ResolveScopeCredentialsAsync(connectionRepository, scope, ct);
+            EnsureRuntimeCredentialsAvailable(organizationUrl, credentials);
+            var resolvedIdentities = await identityResolver.ResolveAsync(
+                organizationUrl,
+                searchText,
+                clientId,
+                scope.ConnectionId,
+                ct);
             foreach (var resolvedIdentity in resolvedIdentities)
             {
                 identities.TryAdd(

@@ -2025,6 +2025,7 @@ export const handlers = [
       providerFamily: body.providerFamily ?? 'github',
       hostBaseUrl: body.hostBaseUrl ?? 'https://github.com',
       authenticationKind: body.authenticationKind ?? 'personalAccessToken',
+      userName: body.authenticationKind === 'windowsUserAccount' ? body.userName ?? null : null,
       gitHubAppId: body.authenticationKind === 'appInstallation' ? body.gitHubAppId ?? null : null,
       gitHubAppInstallationId: body.authenticationKind === 'appInstallation' ? body.gitHubAppInstallationId ?? null : null,
       displayName: body.displayName ?? 'New provider connection',
@@ -2071,6 +2072,9 @@ export const handlers = [
       displayName: body.displayName ?? connections[index].displayName,
       hostBaseUrl: body.hostBaseUrl ?? connections[index].hostBaseUrl,
       authenticationKind: body.authenticationKind ?? connections[index].authenticationKind,
+      userName: Object.prototype.hasOwnProperty.call(body, 'userName')
+        ? body.userName
+        : connections[index].userName,
       gitHubAppId: Object.prototype.hasOwnProperty.call(body, 'gitHubAppId')
         ? body.gitHubAppId
         : connections[index].gitHubAppId,

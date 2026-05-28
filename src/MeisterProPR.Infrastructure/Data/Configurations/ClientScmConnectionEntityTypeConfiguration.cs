@@ -33,6 +33,11 @@ internal sealed class ClientScmConnectionEntityTypeConfiguration : IEntityTypeCo
             .HasColumnName("authentication_kind")
             .HasConversion<int>();
 
+        builder.Property(connection => connection.UserName)
+            .HasColumnName("username")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
         builder.Property(connection => connection.OAuthTenantId)
             .HasColumnName("oauth_tenant_id")
             .HasMaxLength(256)

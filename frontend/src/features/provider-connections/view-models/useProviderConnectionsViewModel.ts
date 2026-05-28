@@ -8,6 +8,7 @@ import {
   getEnabledProviderOptions,
   getProviderDefaultHostBaseUrl,
   getSupportedAuthenticationKinds,
+  requiresUserName,
   listProviderActivationStatuses,
   type ProviderActivationStatusDto,
 } from '@/services/providerActivationService'
@@ -107,6 +108,7 @@ export interface ProviderConnectionsViewModel {
     providerFamily: ScmProviderFamily
     hostBaseUrl: string
     authenticationKind: ScmAuthenticationKind
+    userName: string
     oAuthTenantId: string
     oAuthClientId: string
     gitHubAppId: string
@@ -120,6 +122,7 @@ export interface ProviderConnectionsViewModel {
     displayName: string
     hostBaseUrl: string
     authenticationKind: ScmAuthenticationKind
+    userName: string
     oAuthTenantId: string
     oAuthClientId: string
     gitHubAppId: string
@@ -226,6 +229,7 @@ export function useProviderConnectionsViewModel(
     providerFamily: 'github' as ScmProviderFamily,
     hostBaseUrl: 'https://github.com',
     authenticationKind: 'personalAccessToken' as ScmAuthenticationKind,
+    userName: '',
     oAuthTenantId: '',
     oAuthClientId: '',
     gitHubAppId: '',
@@ -240,6 +244,7 @@ export function useProviderConnectionsViewModel(
     displayName: '',
     hostBaseUrl: '',
     authenticationKind: 'personalAccessToken' as ScmAuthenticationKind,
+    userName: '',
     oAuthTenantId: '',
     oAuthClientId: '',
     gitHubAppId: '',
@@ -304,7 +309,8 @@ export function useProviderConnectionsViewModel(
   function applyCreateProviderDefaults(providerFamily: ScmProviderFamily) {
     createForm.providerFamily = providerFamily
     createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
-    createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
+    createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily, createForm.hostBaseUrl)
+    createForm.userName = ''
 
     if (providerFamily !== 'azureDevOps') {
       createForm.oAuthTenantId = ''
@@ -330,14 +336,15 @@ export function useProviderConnectionsViewModel(
 
   function normalizeAuthenticationKind(
     providerFamily: ScmProviderFamily,
+    hostBaseUrl: string,
     authenticationKind: ScmAuthenticationKind,
   ): ScmAuthenticationKind {
-    const supportedKinds = getSupportedAuthenticationKinds(providerFamily)
+    const supportedKinds = getSupportedAuthenticationKinds(providerFamily, hostBaseUrl)
     return supportedKinds.includes(authenticationKind) ? authenticationKind : supportedKinds[0]
   }
 
-  function getPreferredAuthenticationKind(providerFamily: ScmProviderFamily): ScmAuthenticationKind {
-    return getSupportedAuthenticationKinds(providerFamily)[0]
+  function getPreferredAuthenticationKind(providerFamily: ScmProviderFamily, hostBaseUrl: string): ScmAuthenticationKind {
+    return getSupportedAuthenticationKinds(providerFamily, hostBaseUrl)[0]
   }
 
   function clearOAuthFields(form: typeof createForm | typeof editForm) {
@@ -348,6 +355,10 @@ export function useProviderConnectionsViewModel(
   function clearGitHubAppFields(form: typeof createForm | typeof editForm) {
     form.gitHubAppId = ''
     form.gitHubAppInstallationId = ''
+  }
+
+  function clearUserNameField(form: typeof createForm | typeof editForm) {
+    form.userName = ''
   }
 
   function parseOptionalPositiveNumber(value: string | number): number | null {
@@ -368,12 +379,13 @@ export function useProviderConnectionsViewModel(
 
     if (providerFamily === 'azureDevOps') {
       createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
-      createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
+      createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily, createForm.hostBaseUrl)
       scopeForm.scopeType = 'organization'
       return
     }
 
-    createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily)
+    createForm.authenticationKind = getPreferredAuthenticationKind(providerFamily, createForm.hostBaseUrl)
+    clearUserNameField(createForm)
     clearOAuthFields(createForm)
     createForm.hostBaseUrl = getProviderDefaultHostBaseUrl(providerFamily)
 
@@ -387,8 +399,19 @@ export function useProviderConnectionsViewModel(
       clearOAuthFields(createForm)
     }
 
+    if (!requiresUserName(createForm.providerFamily, createForm.hostBaseUrl, authenticationKind)) {
+      clearUserNameField(createForm)
+    }
+
     if (authenticationKind !== 'appInstallation') {
       clearGitHubAppFields(createForm)
+    }
+  })
+
+  watch(() => createForm.hostBaseUrl, (hostBaseUrl) => {
+    createForm.authenticationKind = normalizeAuthenticationKind(createForm.providerFamily, hostBaseUrl, createForm.authenticationKind)
+    if (!requiresUserName(createForm.providerFamily, hostBaseUrl, createForm.authenticationKind)) {
+      clearUserNameField(createForm)
     }
   })
 
@@ -397,8 +420,23 @@ export function useProviderConnectionsViewModel(
       clearOAuthFields(editForm)
     }
 
+    if (!requiresUserName(editForm.providerFamily, editForm.hostBaseUrl, authenticationKind)) {
+      clearUserNameField(editForm)
+    }
+
     if (authenticationKind !== 'appInstallation') {
       clearGitHubAppFields(editForm)
+    }
+  })
+
+  watch(() => editForm.hostBaseUrl, (hostBaseUrl) => {
+    if (!hostBaseUrl) {
+      return
+    }
+
+    editForm.authenticationKind = normalizeAuthenticationKind(editForm.providerFamily, hostBaseUrl, editForm.authenticationKind)
+    if (!requiresUserName(editForm.providerFamily, hostBaseUrl, editForm.authenticationKind)) {
+      clearUserNameField(editForm)
     }
   })
 
@@ -512,6 +550,11 @@ export function useProviderConnectionsViewModel(
       return
     }
 
+    if (requiresUserName(createForm.providerFamily, createForm.hostBaseUrl, createForm.authenticationKind) && !createForm.userName.trim()) {
+      createError.value = 'User name is required for Azure DevOps Server Windows user-account connections.'
+      return
+    }
+
     if (createForm.authenticationKind === 'appInstallation') {
       if (!parseOptionalPositiveNumber(createForm.gitHubAppId) || !parseOptionalPositiveNumber(createForm.gitHubAppInstallationId)) {
         createError.value = 'GitHub App ID and Installation ID are required for GitHub App connections.'
@@ -526,6 +569,7 @@ export function useProviderConnectionsViewModel(
         providerFamily: createForm.providerFamily,
         hostBaseUrl: createForm.hostBaseUrl.trim(),
         authenticationKind: createForm.authenticationKind,
+        userName: createForm.userName.trim() || null,
         oAuthTenantId: createForm.oAuthTenantId.trim() || null,
         oAuthClientId: createForm.oAuthClientId.trim() || null,
         gitHubAppId: createForm.authenticationKind === 'appInstallation'
@@ -559,6 +603,7 @@ export function useProviderConnectionsViewModel(
         : providerOptions.value[0]?.value ?? 'github',
     )
     clearOAuthFields(createForm)
+    clearUserNameField(createForm)
     clearGitHubAppFields(createForm)
     createForm.displayName = ''
     createForm.secret = ''
@@ -571,7 +616,8 @@ export function useProviderConnectionsViewModel(
     editForm.providerFamily = connection.providerFamily
     editForm.displayName = connection.displayName
     editForm.hostBaseUrl = connection.hostBaseUrl
-    editForm.authenticationKind = normalizeAuthenticationKind(connection.providerFamily, connection.authenticationKind)
+    editForm.authenticationKind = normalizeAuthenticationKind(connection.providerFamily, connection.hostBaseUrl, connection.authenticationKind)
+    editForm.userName = connection.userName ?? ''
     editForm.oAuthTenantId = connection.oAuthTenantId ?? ''
     editForm.oAuthClientId = connection.oAuthClientId ?? ''
     editForm.gitHubAppId = connection.gitHubAppId?.toString() ?? ''
@@ -586,7 +632,8 @@ export function useProviderConnectionsViewModel(
     editForm.providerFamily = 'github'
     editForm.displayName = ''
     editForm.hostBaseUrl = ''
-    editForm.authenticationKind = getPreferredAuthenticationKind('github')
+    editForm.authenticationKind = getPreferredAuthenticationKind('github', 'https://github.com')
+    clearUserNameField(editForm)
     clearOAuthFields(editForm)
     clearGitHubAppFields(editForm)
     editForm.secret = ''
@@ -595,6 +642,11 @@ export function useProviderConnectionsViewModel(
   }
 
   async function handleSaveConnectionEdit(connectionId: string) {
+    if (requiresUserName(editForm.providerFamily, editForm.hostBaseUrl, editForm.authenticationKind) && !editForm.userName.trim()) {
+      editError.value = 'User name is required for Azure DevOps Server Windows user-account connections.'
+      return
+    }
+
     if (editSecretRequired.value && !editForm.secret.trim()) {
       editError.value = editForm.authenticationKind === 'appInstallation'
         ? 'A GitHub App private key is required when switching to GitHub App authentication.'
@@ -616,6 +668,7 @@ export function useProviderConnectionsViewModel(
         displayName: editForm.displayName.trim(),
         hostBaseUrl: editForm.hostBaseUrl.trim(),
         authenticationKind: editForm.authenticationKind,
+        userName: editForm.userName.trim() || null,
         oAuthTenantId: editForm.oAuthTenantId.trim() || null,
         oAuthClientId: editForm.oAuthClientId.trim() || null,
         gitHubAppId: editForm.authenticationKind === 'appInstallation'
