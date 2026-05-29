@@ -152,6 +152,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          pull: true
           tags: ${{ steps.tags.outputs.backend }}
           labels: |
             org.opencontainers.image.title=Meister DEV ProPR
@@ -193,6 +194,7 @@ jobs:
           context: .
           file: Dockerfile.procursor
           push: true
+          pull: true
           tags: ${{ steps.tags.outputs.procursor }}
           labels: |
             org.opencontainers.image.title=Meister DEV ProPR ProCursor
@@ -234,6 +236,7 @@ jobs:
           context: .
           file: frontend/Dockerfile
           push: true
+          pull: true
           tags: ${{ steps.tags.outputs.frontend }}
           labels: |
             org.opencontainers.image.title=Meister DEV ProPR Management Interface

@@ -68,6 +68,11 @@ try
 {
     AppContext.SetSwitch("System.Net.Security.UseManagedNtlm", true);
 
+    if (await TryRunHealthCheckAsync(args))
+    {
+        return;
+    }
+
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddHttpContextAccessor();
 
@@ -520,6 +525,30 @@ finally
 /// <summary>Entry point for the API application used by tests and host.</summary>
 public partial class Program
 {
+    internal static async Task<bool> TryRunHealthCheckAsync(string[] args)
+    {
+        if (args.Length != 2 || !string.Equals(args[0], "--healthcheck", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(5),
+            };
+            using var response = await httpClient.GetAsync(args[1], HttpCompletionOption.ResponseHeadersRead);
+            Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
+        }
+        catch
+        {
+            Environment.ExitCode = 1;
+        }
+
+        return true;
+    }
+
     internal static string GetEffectiveProCursorMode(IConfiguration configuration)
     {
         var mode = new ProCursorRemoteOptions

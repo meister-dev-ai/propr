@@ -11,23 +11,36 @@ RUN dotnet restore
 RUN dotnet publish src/MeisterProPR.Api/MeisterProPR.Api.csproj \
     -c Release -o /app --no-restore
 
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
+RUN mkdir -p /app/.data-protection-keys
 
-# Kerberos runtime required by Microsoft.TeamFoundationServer.Client; curl for healthcheck
+# Minimal Kerberos runtime slice for Azure DevOps client auth support.
+FROM ubuntu:24.04 AS kerberos
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgssapi-krb5-2 curl \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /app .
+RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
+        /kerberos-root/lib/x86_64-linux-gnu \
+        /kerberos-root/etc/gss \
+    && cp -a /usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2* /kerberos-root/usr/lib/x86_64-linux-gnu/ \
+    && cp -a /lib/x86_64-linux-gnu/libkrb5.so.3* /kerberos-root/lib/x86_64-linux-gnu/ \
+    && cp -a /lib/x86_64-linux-gnu/libk5crypto.so.3* /kerberos-root/lib/x86_64-linux-gnu/ \
+    && cp -a /lib/x86_64-linux-gnu/libkrb5support.so.0* /kerberos-root/lib/x86_64-linux-gnu/ \
+    && cp -a /lib/x86_64-linux-gnu/libcom_err.so.2* /kerberos-root/lib/x86_64-linux-gnu/ \
+    && cp -a /lib/x86_64-linux-gnu/libkeyutils.so.1* /kerberos-root/lib/x86_64-linux-gnu/ \
+    && cp -a /etc/gss /kerberos-root/etc/
 
-# Non-root user (rootless container) plus a writable Data Protection key-ring path.
-RUN useradd --system --no-create-home appuser \
-    && mkdir -p /app/.data-protection-keys \
-    && chown -R appuser /app
-USER appuser
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS runtime
+WORKDIR /app
+
+COPY --from=kerberos /kerberos-root/ /
+COPY --from=build --chown=1654:1654 /app /app
+
+USER app
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["dotnet", "MeisterProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz"]
 ENTRYPOINT ["dotnet", "MeisterProPR.Api.dll"]

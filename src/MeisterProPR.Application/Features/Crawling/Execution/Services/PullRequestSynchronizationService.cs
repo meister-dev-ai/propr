@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Application.DTOs;
@@ -556,6 +557,18 @@ public sealed class PullRequestSynchronizationService(
         if (revision is null)
         {
             return null;
+        }
+
+        // Providers that expose a real numeric iteration id (Azure DevOps) put it in ProviderRevisionId.
+        // Trust that value directly — synthesizing a hash here would store a fake id on ReviewJob.IterationId
+        // that later fails downstream provider lookups (e.g. GetPullRequestIterationAsync).
+        if (int.TryParse(
+                revision.ProviderRevisionId,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var providerIterationId) && providerIterationId > 0)
+        {
+            return providerIterationId;
         }
 
         var key = revision.ProviderRevisionId

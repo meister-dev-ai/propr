@@ -40,6 +40,7 @@ services:
       retries: 30
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
 
@@ -48,7 +49,7 @@ services:
       context: ../..
       dockerfile: frontend/Dockerfile
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1/healthz" ]
+      test: [ "CMD", "nginx", "-t" ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -112,7 +113,7 @@ services:
     volumes:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/healthz" ]
+      test: [ "CMD", "dotnet", "MeisterProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -130,13 +131,13 @@ services:
       - MEISTER_JWT_SECRET=${MEISTER_JWT_SECRET}
       - MEISTER_DATA_PROTECTION_KEYS_PATH=/app/.data-protection-keys
       - PROCURSOR_PROPR_BASE_URL=${PROCURSOR_PROPR_BASE_URL:-http://meisterpropr:8080}
-      - PROCURSOR_DB_CONNECTION_STRING=${PROCURSOR_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=meisterpropr;Username=postgres;Password=devpass}
+      - PROCURSOR_DB_CONNECTION_STRING=${PROCURSOR_DB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=meisterpropr_procursor;Username=postgres;Password=devpass}
       - PROCURSOR_SHARED_KEY=${PROCURSOR_SHARED_KEY}
       - LOKI_URL=http://loki:3100
     volumes:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8081/healthz" ]
+      test: [ "CMD", "dotnet", "MeisterProPR.ProCursor.Service.dll", "--healthcheck", "http://127.0.0.1:8081/healthz" ]
       interval: 30s
       timeout: 10s
       retries: 3

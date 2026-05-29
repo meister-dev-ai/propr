@@ -180,6 +180,7 @@ jobs:
           file: Dockerfile
           push: false
           load: true
+          pull: true
           tags: meisterpropr:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -220,6 +221,7 @@ jobs:
           file: frontend/Dockerfile
           push: false
           load: true
+          pull: true
           tags: meisterpropr-frontend:ci-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

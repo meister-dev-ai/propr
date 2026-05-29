@@ -429,6 +429,117 @@ public sealed class PullRequestSynchronizationServiceTests
         await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task
+        SynchronizeAsync_WithNumericProviderRevisionId_UsesProviderIterationIdInsteadOfSynthesizingOne()
+    {
+        // Regression: ADO webhooks supply a real iteration id in ReviewRevision.ProviderRevisionId.
+        // The synchronization service must trust that value rather than hash it into a synthetic id
+        // that downstream provider lookups (GetPullRequestIterationAsync) cannot resolve.
+        const int providerIterationId = 7;
+
+        var jobs = Substitute.For<IJobRepository>();
+        var iterationResolver = Substitute.For<IPullRequestIterationResolver>();
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([]);
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, providerIterationId)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, providerIterationId)
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            iterationResolver);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Webhook, "pull request created") with
+            {
+                CandidateIterationId = null,
+                ReviewRevision = new ReviewRevision(
+                    "head-sha",
+                    "base-sha",
+                    "base-sha",
+                    providerIterationId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "base-sha...head-sha"),
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await iterationResolver.DidNotReceive()
+            .GetLatestIterationIdAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job => job.IterationId == providerIterationId),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task
+        SynchronizeAsync_WithNonNumericProviderRevisionId_StillSynthesizesIterationIdWithoutCallingResolver()
+    {
+        // Providers without numeric iteration ids (GitHub/GitLab/Forgejo) keep the SHA-256 fallback,
+        // so we still avoid the resolver and queue a job with a deterministic synthetic id.
+        var jobs = Substitute.For<IJobRepository>();
+        var iterationResolver = Substitute.For<IPullRequestIterationResolver>();
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([]);
+        jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            iterationResolver);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                CandidateIterationId = null,
+                ReviewRevision = new ReviewRevision(
+                    "head-sha",
+                    "base-sha",
+                    "start-sha",
+                    "revision-abc",
+                    "patch-1"),
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await iterationResolver.DidNotReceive()
+            .GetLatestIterationIdAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>());
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job => job.IterationId > 0),
+                Arg.Any<CancellationToken>());
+    }
+
     private static PullRequestSynchronizationRequest CreateRequest(
         PullRequestActivationSource activationSource,
         string summaryLabel)
