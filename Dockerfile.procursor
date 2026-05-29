@@ -33,7 +33,9 @@ RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS runtime
 WORKDIR /app
 
-COPY --from=kerberos /kerberos-root/ /
+COPY --from=kerberos /kerberos-root/usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
+COPY --from=kerberos /kerberos-root/lib/x86_64-linux-gnu/ /lib/x86_64-linux-gnu/
+COPY --from=kerberos /kerberos-root/etc/gss/ /etc/gss/
 COPY --from=build --chown=1654:1654 /app /app
 
 USER app
