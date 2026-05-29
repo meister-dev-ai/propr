@@ -18,7 +18,7 @@ public sealed class TenantMembershipsController(
     ITenantMembershipService tenantMembershipService) : ControllerBase
 {
     /// <summary>Lists tenant memberships for one tenant administrator scope.</summary>
-    [HttpGet("/api/admin/tenants/{tenantId:guid}/memberships")]
+    [HttpGet("/admin/tenants/{tenantId:guid}/memberships")]
     [ProducesResponseType(typeof(IReadOnlyList<TenantMembershipDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -40,7 +40,7 @@ public sealed class TenantMembershipsController(
     }
 
     /// <summary>Returns one tenant membership.</summary>
-    [HttpGet("/api/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
+    [HttpGet("/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
     [ProducesResponseType(typeof(TenantMembershipDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -58,7 +58,7 @@ public sealed class TenantMembershipsController(
     }
 
     /// <summary>Updates the role for an existing tenant membership.</summary>
-    [HttpPatch("/api/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
+    [HttpPatch("/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
     [ProducesResponseType(typeof(TenantMembershipDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -96,7 +96,7 @@ public sealed class TenantMembershipsController(
     }
 
     /// <summary>Removes a tenant membership when recovery-safe rules allow it.</summary>
-    [HttpDelete("/api/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
+    [HttpDelete("/admin/tenants/{tenantId:guid}/memberships/{membershipId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

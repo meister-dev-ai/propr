@@ -44,7 +44,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
 
         var tenantSlug = $"acme-{Guid.NewGuid():N}";
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/tenants");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/tenants");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
@@ -73,7 +73,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/tenants/{tenantId}");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -98,7 +98,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         await factory.SeedTenantMembershipAsync(ownTenantId, userId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/tenants/{otherTenantId}");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{otherTenantId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -117,7 +117,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/tenants");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/tenants");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
@@ -144,7 +144,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         factory.ResetLicensing();
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/tenants/{TenantCatalog.SystemTenantId}");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{TenantCatalog.SystemTenantId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
@@ -165,7 +165,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
         await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/tenants");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/tenants");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
@@ -188,7 +188,7 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
 
         var tenantSlug = $"acme-{Guid.NewGuid():N}";
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/tenants");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/admin/tenants");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));

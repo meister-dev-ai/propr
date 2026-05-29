@@ -35,7 +35,7 @@ public sealed class TenantSsoProvidersController(
     }
 
     /// <summary>Lists tenant-owned SSO providers for one tenant administrator view.</summary>
-    [HttpGet("/api/admin/tenants/{tenantId:guid}/sso-providers")]
+    [HttpGet("/admin/tenants/{tenantId:guid}/sso-providers")]
     [ProducesResponseType(typeof(IReadOnlyList<TenantSsoProviderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -69,7 +69,7 @@ public sealed class TenantSsoProvidersController(
     }
 
     /// <summary>Returns a single tenant-owned SSO provider configuration.</summary>
-    [HttpGet("/api/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
+    [HttpGet("/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
     [ProducesResponseType(typeof(TenantSsoProviderDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -102,7 +102,7 @@ public sealed class TenantSsoProvidersController(
     }
 
     /// <summary>Creates a tenant-owned SSO provider.</summary>
-    [HttpPost("/api/admin/tenants/{tenantId:guid}/sso-providers")]
+    [HttpPost("/admin/tenants/{tenantId:guid}/sso-providers")]
     [ProducesResponseType(typeof(TenantSsoProviderDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -171,7 +171,7 @@ public sealed class TenantSsoProvidersController(
     }
 
     /// <summary>Replaces a tenant-owned SSO provider configuration.</summary>
-    [HttpPut("/api/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
+    [HttpPut("/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
     [ProducesResponseType(typeof(TenantSsoProviderDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -238,7 +238,7 @@ public sealed class TenantSsoProvidersController(
     }
 
     /// <summary>Deletes a tenant-owned SSO provider.</summary>
-    [HttpDelete("/api/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
+    [HttpDelete("/admin/tenants/{tenantId:guid}/sso-providers/{providerId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

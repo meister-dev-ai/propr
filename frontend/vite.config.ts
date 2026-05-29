@@ -15,9 +15,7 @@ function parseAllowedHosts(value?: string): string[] {
 }
 
 export function rewriteApiProxyPath(requestPath: string): string {
-  return requestPath.startsWith('/api/admin/tenants')
-    ? requestPath
-    : requestPath.replace(/^\/api/, '')
+  return requestPath.replace(/^\/api/, '')
 }
 
 export default defineConfig(({ mode }) => {

@@ -211,7 +211,7 @@ Tenant users sign in through the tenant login route and the related tenant auth 
 - which external providers are enabled, and
 - which email domains are allowed for first-time external provisioning.
 
-Tenant administrators manage those settings and memberships under `/api/admin/tenants/{tenantId}/...`. Platform administrators stay outside tenant-local policy and always retain the recovery sign-in path at `/auth/login`.
+Tenant administrators manage those settings and memberships under `/admin/tenants/{tenantId}/...`. Platform administrators stay outside tenant-local policy and always retain the recovery sign-in path at `/auth/login`.
 
 ---
 

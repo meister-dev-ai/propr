@@ -11229,7 +11229,7 @@
         }
       }
     },
-    "/api/admin/tenants/{tenantId}/memberships": {
+    "/admin/tenants/{tenantId}/memberships": {
       "get": {
         "tags": [
           "TenantMemberships"
@@ -11339,7 +11339,7 @@
         }
       }
     },
-    "/api/admin/tenants/{tenantId}/memberships/{membershipId}": {
+    "/admin/tenants/{tenantId}/memberships/{membershipId}": {
       "get": {
         "tags": [
           "TenantMemberships"
@@ -11727,7 +11727,7 @@
         }
       }
     },
-    "/api/admin/tenants": {
+    "/admin/tenants": {
       "get": {
         "tags": [
           "Tenants"
@@ -11933,7 +11933,7 @@
         }
       }
     },
-    "/api/admin/tenants/{tenantId}": {
+    "/admin/tenants/{tenantId}": {
       "get": {
         "tags": [
           "Tenants"
@@ -12172,7 +12172,7 @@
         }
       }
     },
-    "/api/admin/tenants/{tenantId}/sso-providers": {
+    "/admin/tenants/{tenantId}/sso-providers": {
       "get": {
         "tags": [
           "TenantSsoProviders"
@@ -12460,7 +12460,7 @@
         }
       }
     },
-    "/api/admin/tenants/{tenantId}/sso-providers/{providerId}": {
+    "/admin/tenants/{tenantId}/sso-providers/{providerId}": {
       "get": {
         "tags": [
           "TenantSsoProviders"

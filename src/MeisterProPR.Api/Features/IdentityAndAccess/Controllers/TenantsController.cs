@@ -16,7 +16,7 @@ namespace MeisterProPR.Api.Controllers;
 public sealed class TenantsController(ITenantAdminService tenantAdminService) : ControllerBase
 {
     /// <summary>Lists tenants visible to the current caller.</summary>
-    [HttpGet("/api/admin/tenants")]
+    [HttpGet("/admin/tenants")]
     [ProducesResponseType(typeof(IReadOnlyList<TenantDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -47,7 +47,7 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
     }
 
     /// <summary>Returns one tenant when the caller belongs to it or is a platform administrator.</summary>
-    [HttpGet("/api/admin/tenants/{tenantId:guid}")]
+    [HttpGet("/admin/tenants/{tenantId:guid}")]
     [ProducesResponseType(typeof(TenantDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -65,7 +65,7 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
     }
 
     /// <summary>Creates a new tenant boundary.</summary>
-    [HttpPost("/api/admin/tenants")]
+    [HttpPost("/admin/tenants")]
     [ProducesResponseType(typeof(TenantDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -106,7 +106,7 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
     }
 
     /// <summary>Applies partial tenant policy updates.</summary>
-    [HttpPatch("/api/admin/tenants/{tenantId:guid}")]
+    [HttpPatch("/admin/tenants/{tenantId:guid}")]
     [ProducesResponseType(typeof(TenantDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

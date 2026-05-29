@@ -20,7 +20,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
         await factory.SeedTenantMembershipAsync(tenantId, tenantAdminId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/tenants/{tenantId}/memberships");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/tenants/{tenantId}/memberships");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(tenantAdminId, AppUserRole.User));
@@ -41,7 +41,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
         await factory.SeedTenantMembershipAsync(ownTenantId, tenantAdminId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/tenants/{otherTenantId}/memberships");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/tenants/{otherTenantId}/memberships");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(tenantAdminId, AppUserRole.User));
@@ -60,7 +60,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
         var membershipId = await factory.SeedTenantMembershipAsync(tenantId, tenantAdminId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/tenants/{tenantId}/memberships/{membershipId}");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/admin/tenants/{tenantId}/memberships/{membershipId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(tenantAdminId, AppUserRole.User));
@@ -79,7 +79,7 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
         var membershipId = await factory.SeedTenantMembershipAsync(tenantId, tenantAdminId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/tenants/{tenantId}/memberships/{membershipId}");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/admin/tenants/{tenantId}/memberships/{membershipId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(tenantAdminId, AppUserRole.User));

@@ -19,9 +19,10 @@ public sealed class TenantSsoOpenApiTests
                 "openapi.json"));
         var content = await File.ReadAllTextAsync(openApiPath);
 
-        Assert.Contains("/api/admin/tenants", content, StringComparison.Ordinal);
-        Assert.Contains("/api/admin/tenants/{tenantId}/sso-providers", content, StringComparison.Ordinal);
-        Assert.Contains("/api/admin/tenants/{tenantId}/memberships", content, StringComparison.Ordinal);
+        Assert.Contains("/admin/tenants", content, StringComparison.Ordinal);
+        Assert.Contains("/admin/tenants/{tenantId}/sso-providers", content, StringComparison.Ordinal);
+        Assert.Contains("/admin/tenants/{tenantId}/memberships", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("/api/admin/tenants", content, StringComparison.Ordinal);
         Assert.DoesNotContain("UpsertTenantMembershipRequest", content, StringComparison.Ordinal);
         Assert.Contains("/auth/tenants/{tenantSlug}/providers", content, StringComparison.Ordinal);
         Assert.Contains("/auth/tenants/{tenantSlug}/local-login", content, StringComparison.Ordinal);

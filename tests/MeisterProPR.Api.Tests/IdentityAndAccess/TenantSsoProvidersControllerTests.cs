@@ -29,7 +29,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/admin/tenants/{tenantId}/sso-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/tenants/{tenantId}/sso-providers");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -52,7 +52,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/tenants/{tenantId}/sso-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/tenants/{tenantId}/sso-providers");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -93,7 +93,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         await factory.SeedSsoProviderAsync(otherTenantId, "Globex Entra");
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/admin/tenants/{tenantId}/sso-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/tenants/{tenantId}/sso-providers");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -117,7 +117,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         var providerId = await factory.SeedSsoProviderAsync(tenantId, "Acme Entra");
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/tenants/{tenantId}/sso-providers/{providerId}");
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/admin/tenants/{tenantId}/sso-providers/{providerId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -155,7 +155,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         var providerId = await factory.SeedSsoProviderAsync(tenantId, "Acme Entra");
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/tenants/{tenantId}/sso-providers/{providerId}");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/admin/tenants/{tenantId}/sso-providers/{providerId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(userId, AppUserRole.User));
@@ -175,7 +175,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         factory.ResetLicensing();
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/tenants/{TenantCatalog.SystemTenantId}/sso-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/tenants/{TenantCatalog.SystemTenantId}/sso-providers");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));
@@ -241,7 +241,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         }
 
         var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/tenants/{TenantCatalog.SystemTenantId}/sso-providers/{providerId}");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/admin/tenants/{TenantCatalog.SystemTenantId}/sso-providers/{providerId}");
         request.Headers.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             factory.GenerateToken(Guid.NewGuid(), AppUserRole.Admin));

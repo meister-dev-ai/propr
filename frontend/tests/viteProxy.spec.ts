@@ -1,11 +1,13 @@
+// @vitest-environment node
+
 import { describe, expect, it } from 'vitest'
 import { rewriteApiProxyPath } from '../vite.config'
 
 describe('rewriteApiProxyPath', () => {
-  it('preserves tenant admin endpoints that are already rooted at /api', () => {
-    expect(rewriteApiProxyPath('/api/admin/tenants')).toBe('/api/admin/tenants')
-    expect(rewriteApiProxyPath('/api/admin/tenants/tenant-1')).toBe('/api/admin/tenants/tenant-1')
-    expect(rewriteApiProxyPath('/api/admin/tenants/tenant-1/memberships')).toBe('/api/admin/tenants/tenant-1/memberships')
+  it('rewrites tenant admin endpoints to backend routing', () => {
+    expect(rewriteApiProxyPath('/api/admin/tenants')).toBe('/admin/tenants')
+    expect(rewriteApiProxyPath('/api/admin/tenants/tenant-1')).toBe('/admin/tenants/tenant-1')
+    expect(rewriteApiProxyPath('/api/admin/tenants/tenant-1/memberships')).toBe('/admin/tenants/tenant-1/memberships')
   })
 
   it('rewrites non-tenant endpoints to match backend routing', () => {

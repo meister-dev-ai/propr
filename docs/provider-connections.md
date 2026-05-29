@@ -16,7 +16,7 @@ through the API.
 
 This page covers SCM provider connections used for repository discovery, crawling, and review publication. Tenant-scoped sign-in providers are a separate configuration surface used only for user authentication.
 
-Tenant sign-in providers are managed under `/api/admin/tenants/{tenantId}/sso-providers` and support the launch identity-provider set:
+Tenant sign-in providers are managed under `/admin/tenants/{tenantId}/sso-providers` and support the launch identity-provider set:
 
 - `EntraId` over `Oidc`
 - `Google` over `Oidc`

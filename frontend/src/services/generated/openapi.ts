@@ -7640,7 +7640,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tenants/{tenantId}/memberships": {
+    "/admin/tenants/{tenantId}/memberships": {
         parameters: {
             query?: never;
             header?: never;
@@ -7713,7 +7713,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tenants/{tenantId}/memberships/{membershipId}": {
+    "/admin/tenants/{tenantId}/memberships/{membershipId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -7938,7 +7938,7 @@ export interface paths {
         };
         trace?: never;
     };
-    "/api/admin/tenants": {
+    "/admin/tenants": {
         parameters: {
             query?: never;
             header?: never;
@@ -8070,7 +8070,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tenants/{tenantId}": {
+    "/admin/tenants/{tenantId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -8217,7 +8217,7 @@ export interface paths {
         };
         trace?: never;
     };
-    "/api/admin/tenants/{tenantId}/sso-providers": {
+    "/admin/tenants/{tenantId}/sso-providers": {
         parameters: {
             query?: never;
             header?: never;
@@ -8386,7 +8386,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/tenants/{tenantId}/sso-providers/{providerId}": {
+    "/admin/tenants/{tenantId}/sso-providers/{providerId}": {
         parameters: {
             query?: never;
             header?: never;
