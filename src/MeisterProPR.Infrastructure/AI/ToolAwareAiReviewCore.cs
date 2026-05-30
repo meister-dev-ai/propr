@@ -116,11 +116,11 @@ internal sealed partial class ToolAwareAiReviewCore(
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
         var transportTools = usesManagedSessionTransport
-            ? this.WrapToolsForManagedSession(rawTools, state, systemContext, cancellationToken)
+            ? this.WrapToolsForManagedSession(rawTools, state, systemContext, opts.MaxToolResultReplayCharacters, cancellationToken)
             : rawTools;
         var chatOptions = new ChatOptions
         {
-            MaxOutputTokens = 8192,
+            MaxOutputTokens = ResolveMaxOutputTokens(opts, systemContext.PerFileHint?.ComplexityTier),
             ModelId = effectiveModelId,
             Temperature = systemContext.Temperature,
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
@@ -196,7 +196,8 @@ internal sealed partial class ToolAwareAiReviewCore(
 
                 var inputTokens = response.Usage?.InputTokenCount;
                 var outputTokens = response.Usage?.OutputTokenCount;
-                state.AccumulateTokens(inputTokens, outputTokens);
+                var cachedInputTokens = response.Usage?.CachedInputTokenCount;
+                state.AccumulateTokens(inputTokens, outputTokens, cachedInputTokens);
                 state.UpdateContinuationHandle(CreateContinuationHandle(response, state), response.ContinuationToken);
                 state.RecordTurn(
                     state.Session.Mode == AgentReviewSessionMode.StatelessReplay
@@ -219,7 +220,11 @@ internal sealed partial class ToolAwareAiReviewCore(
                         inputSample,
                         systemPrompt,
                         outputSample,
-                        cancellationToken);
+                        cancellationToken,
+                        cachedInputTokens: cachedInputTokens,
+                        cacheStatus: ResolveCacheStatus(systemContext, inputTokens, cachedInputTokens, messagesToSend),
+                        cacheMissCategory: ResolveCacheMissCategory(systemContext, inputTokens, cachedInputTokens, messagesToSend),
+                        prefixEligibility: ResolvePrefixEligibility(systemContext, messagesToSend));
                     await RecordSessionBindingEventIfNeededAsync(systemContext, state, cancellationToken);
                     await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
                 }
@@ -247,8 +252,12 @@ internal sealed partial class ToolAwareAiReviewCore(
                     foreach (var call in functionCalls)
                     {
                         var resultText = await this.InvokeToolAsync(call, rawTools, cancellationToken);
-                        toolResultContents.Add(new FunctionResultContent(call.CallId, resultText));
-                        state.RecordToolCall(call.Name ?? "", JsonSerializer.Serialize(call.Arguments), resultText);
+                        var originalPayloadTokens = EstimateTokenCount(resultText);
+                        var boundedResultText = BoundToolResult(resultText, opts.MaxToolResultReplayCharacters);
+                        var boundedPayloadTokens = EstimateTokenCount(boundedResultText);
+                        var toolEvidenceAction = boundedResultText.Length < resultText.Length ? "Bounded" : null;
+                        toolResultContents.Add(new FunctionResultContent(call.CallId, boundedResultText));
+                        state.RecordToolCall(call.Name ?? "", JsonSerializer.Serialize(call.Arguments), boundedResultText);
 
                         if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
                         {
@@ -256,18 +265,19 @@ internal sealed partial class ToolAwareAiReviewCore(
                                 systemContext.ActiveProtocolId.Value,
                                 call.Name ?? "",
                                 JsonSerializer.Serialize(call.Arguments),
-                                resultText,
+                                boundedResultText,
                                 state.Iteration,
-                                cancellationToken);
+                                cancellationToken,
+                                toolEvidenceAction,
+                                toolEvidenceAction is not null ? originalPayloadTokens : null,
+                                toolEvidenceAction is not null ? boundedPayloadTokens : null,
+                                toolEvidenceAction is not null ? true : null);
                         }
                     }
 
                     state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
-                    if (state.Session.Mode == AgentReviewSessionMode.LocalManagedSession)
-                    {
-                        state.CompactReplayHistory();
-                        systemContext.ReviewSession = state.Session;
-                    }
+                    state.CompactReplayHistory();
+                    systemContext.ReviewSession = state.Session;
 
                     state.Iteration++;
                     continue;
@@ -336,9 +346,33 @@ internal sealed partial class ToolAwareAiReviewCore(
                         finalOptions);
                 }
 
-                state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount);
+                var finalCachedInputTokens = finalResponse.Usage?.CachedInputTokenCount;
+                state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount, finalCachedInputTokens);
                 state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
                 lastTextResponse = finalResponse.Text ?? "";
+
+                if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+                {
+                    await systemContext.ProtocolRecorder.RecordAiCallAsync(
+                        systemContext.ActiveProtocolId.Value,
+                        state.Iteration,
+                        finalResponse.Usage?.InputTokenCount,
+                        finalResponse.Usage?.OutputTokenCount,
+                        GetInputSample(BuildMessagesForForcedFinalTurn(state)),
+                        GetSystemPrompt(BuildMessagesForForcedFinalTurn(state)),
+                        lastTextResponse,
+                        cancellationToken,
+                        "ai_call_forced_final",
+                        cachedInputTokens: finalCachedInputTokens,
+                        cacheStatus: ResolveCacheStatus(
+                            systemContext, finalResponse.Usage?.InputTokenCount, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                        cacheMissCategory: ResolveCacheMissCategory(
+                            systemContext, finalResponse.Usage?.InputTokenCount, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                        prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
+                        finalizationAttemptKind: "ForcedFinal",
+                        finalizationReason: "iteration_limit_reached",
+                        finalizationOutcome: string.IsNullOrWhiteSpace(lastTextResponse) ? "StillInvalid" : "ProducedFinalText");
+                }
 
                 if (string.IsNullOrWhiteSpace(lastTextResponse))
                 {
@@ -428,11 +462,35 @@ internal sealed partial class ToolAwareAiReviewCore(
             correctionResponse = await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
         }
 
+        var correctionCachedInputTokens = correctionResponse.Usage?.CachedInputTokenCount;
         state.AccumulateTokens(
             correctionResponse.Usage?.InputTokenCount,
-            correctionResponse.Usage?.OutputTokenCount);
+            correctionResponse.Usage?.OutputTokenCount,
+            correctionCachedInputTokens);
 
         var corrected = correctionResponse.Text ?? string.Empty;
+        if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+        {
+            await systemContext.ProtocolRecorder.RecordAiCallAsync(
+                systemContext.ActiveProtocolId.Value,
+                state.Iteration,
+                correctionResponse.Usage?.InputTokenCount,
+                correctionResponse.Usage?.OutputTokenCount,
+                GetInputSample(state.Messages),
+                GetSystemPrompt(state.Messages),
+                corrected,
+                cancellationToken,
+                "ai_call_schema_repair",
+                cachedInputTokens: correctionCachedInputTokens,
+                cacheStatus: ResolveCacheStatus(systemContext, correctionResponse.Usage?.InputTokenCount, correctionCachedInputTokens, state.Messages),
+                cacheMissCategory: ResolveCacheMissCategory(
+                    systemContext, correctionResponse.Usage?.InputTokenCount, correctionCachedInputTokens, state.Messages),
+                prefixEligibility: ResolvePrefixEligibility(systemContext, state.Messages),
+                finalizationAttemptKind: "SchemaRepair",
+                finalizationReason: "malformed_or_incomplete_final_response",
+                finalizationOutcome: string.IsNullOrWhiteSpace(corrected) ? "StillInvalid" : "ProducedValidCandidate");
+        }
+
         return string.IsNullOrWhiteSpace(corrected)
             ? lastTextResponse
             : corrected;
@@ -445,6 +503,106 @@ internal sealed partial class ToolAwareAiReviewCore(
             : systemContext.PerFileHint is not null
                 ? AgentReviewSessionMode.LocalManagedSession
                 : AgentReviewSessionMode.StatelessReplay;
+    }
+
+    private static int ResolveMaxOutputTokens(AiReviewOptions opts, FileComplexityTier? tier)
+    {
+        return tier switch
+        {
+            FileComplexityTier.Low => opts.MaxOutputTokensLow,
+            FileComplexityTier.Medium => opts.MaxOutputTokensMedium,
+            _ => opts.MaxOutputTokensHigh,
+        };
+    }
+
+    private static CacheCallStatus ResolveCacheStatus(
+        ReviewSystemContext systemContext,
+        long? inputTokens,
+        long? cachedInputTokens,
+        IList<ChatMessage> messages)
+    {
+        var eligibility = ResolvePrefixEligibility(systemContext, messages);
+        if (eligibility is PrefixEligibilityStatus.NotApplicable)
+        {
+            return CacheCallStatus.NotApplicable;
+        }
+
+        if (!systemContext.RuntimeCapabilities.SupportsPromptCaching)
+        {
+            return CacheCallStatus.Unsupported;
+        }
+
+        if (eligibility is not PrefixEligibilityStatus.Eligible)
+        {
+            return CacheCallStatus.Ineligible;
+        }
+
+        if (!cachedInputTokens.HasValue)
+        {
+            return CacheCallStatus.Unobservable;
+        }
+
+        return cachedInputTokens.Value > 0
+            ? CacheCallStatus.Hit
+            : CacheCallStatus.Miss;
+    }
+
+    private static string? ResolveCacheMissCategory(
+        ReviewSystemContext systemContext,
+        long? inputTokens,
+        long? cachedInputTokens,
+        IList<ChatMessage> messages)
+    {
+        var status = ResolveCacheStatus(systemContext, inputTokens, cachedInputTokens, messages);
+        return status switch
+        {
+            CacheCallStatus.Unsupported => "provider_unsupported",
+            CacheCallStatus.Unobservable => "provider_detail_unavailable",
+            CacheCallStatus.Ineligible => "prefix_changed",
+            CacheCallStatus.Miss => "provider_cache_expired",
+            CacheCallStatus.RoutingOverflow => "provider_routing_overflow",
+            _ => null,
+        };
+    }
+
+    private static PrefixEligibilityStatus ResolvePrefixEligibility(ReviewSystemContext systemContext, IList<ChatMessage> messages)
+    {
+        if (systemContext.PerFileHint is null || messages.Count == 0)
+        {
+            return PrefixEligibilityStatus.NotApplicable;
+        }
+
+        var systemPrefix = GetSystemPrompt(messages);
+        if (string.IsNullOrWhiteSpace(systemPrefix))
+        {
+            return PrefixEligibilityStatus.NotApplicable;
+        }
+
+        return EstimateTokenCount(systemPrefix) >= 1024
+            ? PrefixEligibilityStatus.Eligible
+            : PrefixEligibilityStatus.IneligibleTooShort;
+    }
+
+    private static string BoundToolResult(string resultText, int maxCharacters)
+    {
+        if (resultText.Length <= maxCharacters)
+        {
+            return resultText;
+        }
+
+        var omitted = resultText.Length - maxCharacters;
+        return resultText[..maxCharacters] +
+               $"\n\n[Tool evidence bounded: omitted {omitted} characters from replay. Re-run the tool with a narrower range if exact context is needed.]";
+    }
+
+    private static int EstimateTokenCount(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        return Math.Max(1, text.Length / 4);
     }
 
     private static bool ShouldUseAgentFrameworkManagedSession(ReviewSystemContext systemContext)
@@ -1013,11 +1171,12 @@ internal sealed partial class ToolAwareAiReviewCore(
         IReadOnlyList<AIFunction> tools,
         ReviewLoopState state,
         ReviewSystemContext systemContext,
+        int maxToolResultReplayCharacters,
         CancellationToken cancellationToken)
     {
         return tools
             .Select(tool => new RecordingAIFunction(
-                tool, logger, (toolName, argumentsJson, resultJson) =>
+                tool, logger, maxToolResultReplayCharacters, (toolName, argumentsJson, resultJson) =>
                     this.RecordManagedToolInvocationAsync(
                         toolName,
                         argumentsJson,
@@ -1041,13 +1200,18 @@ internal sealed partial class ToolAwareAiReviewCore(
 
         if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
         {
+            var wasBounded = resultJson.Contains("[Tool evidence bounded:", StringComparison.Ordinal);
             await systemContext.ProtocolRecorder.RecordToolCallAsync(
                 systemContext.ActiveProtocolId.Value,
                 toolName,
                 argumentsJson,
                 resultJson,
                 state.Iteration,
-                cancellationToken);
+                cancellationToken,
+                wasBounded ? "Bounded" : null,
+                EstimateTokenCount(resultJson),
+                EstimateTokenCount(resultJson),
+                wasBounded);
         }
     }
 
@@ -1408,7 +1572,8 @@ internal sealed partial class ToolAwareAiReviewCore(
             fallbacksJson,
             state.Session.ContinuationHandle?.ProviderSessionId,
             state.Session.ContinuationHandle?.ProviderResponseId,
-            state.Session.ActivePromptMode);
+            state.Session.ActivePromptMode,
+            state.TotalCachedInputTokens);
     }
 
     [LoggerMessage(
@@ -1637,6 +1802,7 @@ internal sealed partial class ToolAwareAiReviewCore(
     private sealed class RecordingAIFunction(
         AIFunction inner,
         ILogger logger,
+        int maxToolResultReplayCharacters,
         Func<string, string, string, Task> onInvoked) : AIFunction
     {
         public override MethodInfo? UnderlyingMethod => inner.UnderlyingMethod;
@@ -1664,7 +1830,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             try
             {
                 var result = await inner.InvokeAsync(arguments, cancellationToken);
-                var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                var resultJson = BoundToolResult(JsonSerializer.Serialize(result, JsonOptions), maxToolResultReplayCharacters);
                 await onInvoked(this.Name, argumentsJson, resultJson);
                 return resultJson;
             }

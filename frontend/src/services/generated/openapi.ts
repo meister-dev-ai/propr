@@ -9639,6 +9639,16 @@ export interface components {
             edition?: components["schemas"]["InstallationEdition"];
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
         };
+        /**
+         * @description Cache outcome recorded for one AI call.
+         * @enum {string}
+         */
+        CacheCallStatus: "notApplicable" | "hit" | "miss" | "unobservable" | "ineligible" | "expired" | "routingOverflow" | "unsupported";
+        /**
+         * @description Provider/model cache observability roll-up for one protocol pass.
+         * @enum {string}
+         */
+        CacheObservabilityStatus: "unknown" | "observable" | "unobservable" | "unsupported";
         /** @description Transport shape for a provider-aware canonical source reference. */
         CanonicalSourceReferenceDto: {
             provider?: string | null;
@@ -10268,6 +10278,11 @@ export interface components {
             contributedMemoryCount?: number;
             contributedMemories?: components["schemas"]["ContributingMemorySummaryDto"][] | null;
         };
+        /**
+         * @description Stable-prefix eligibility recorded for one cache-sensitive AI call.
+         * @enum {string}
+         */
+        PrefixEligibilityStatus: "notApplicable" | "eligible" | "ineligibleTooShort" | "ineligiblePrefixUnstable";
         /** @description API-facing representation of one premium capability's effective state. */
         PremiumCapabilityDto: {
             key?: string | null;
@@ -10774,6 +10789,22 @@ export interface components {
             outputSummary?: string | null;
             /** @description Error message if this event failed, or null. */
             error?: string | null;
+            /**
+             * Format: int64
+             * @description Cached input tokens read from a provider cache for this AI call.
+             */
+            cachedInputTokens?: number | null;
+            cacheStatus?: components["schemas"]["CacheCallStatus"];
+            /** @description Actionable miss or unavailable reason when cache status is not a hit. */
+            cacheMissCategory?: string | null;
+            prefixEligibility?: components["schemas"]["PrefixEligibilityStatus"];
+            toolEvidence?: components["schemas"]["ProtocolToolEvidenceDto"];
+            /** @description Forced-final or schema-repair attempt kind for this AI call. */
+            finalizationAttemptKind?: string | null;
+            /** @description Reason for a forced-final or schema-repair attempt. */
+            finalizationReason?: string | null;
+            /** @description Outcome for a forced-final or schema-repair attempt. */
+            finalizationOutcome?: string | null;
         };
         /**
          * @description Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent.
@@ -10847,6 +10878,16 @@ export interface components {
             severity?: components["schemas"]["CommentSeverity"];
             /** @description Final comment text. */
             message?: string | null;
+        };
+        /** @description Visibility for one tool-result evidence bounding or refresh action. */
+        ProtocolToolEvidenceDto: {
+            sourceToolName?: string | null;
+            /** Format: int32 */
+            originalPayloadTokens?: number;
+            /** Format: int32 */
+            boundedPayloadTokens?: number;
+            action?: string | null;
+            refreshable?: boolean;
         };
         /** @description Global provider-family activation status for installation-wide administration. */
         ProviderActivationStatusDto: {
@@ -11086,6 +11127,12 @@ export interface components {
             repeatedJudgment?: components["schemas"]["ProtocolRepeatedJudgmentDto"];
             proRvPrefilter?: components["schemas"]["ProtocolProRvPrefilterDto"];
             agentSession?: components["schemas"]["ProtocolAgentSessionDto"];
+            /**
+             * Format: int64
+             * @description Sum of cached input tokens across AI calls where the provider reported cached usage.
+             */
+            totalCachedInputTokens?: number | null;
+            cacheObservability?: components["schemas"]["CacheObservabilityStatus"];
             /** @description True when this pass was inherited from a prior same-revision retry source job. */
             isInherited?: boolean;
             inheritance?: components["schemas"]["ProtocolInheritanceDto"];

@@ -32,6 +32,44 @@ public sealed class ProtocolEvent
     /// <summary>Output token count for this event. <see langword="null" /> when the provider did not return usage data.</summary>
     public long? OutputTokens { get; init; }
 
+    /// <summary>
+    ///     Cached input token count for this AI call. <see langword="null" /> when cache usage was not observable.
+    /// </summary>
+    public long? CachedInputTokens { get; init; }
+
+    /// <summary>Cache outcome for this event when it represents an AI call.</summary>
+    public CacheCallStatus CacheStatus { get; init; } = CacheCallStatus.NotApplicable;
+
+    /// <summary>Actionable cache miss or unavailability category.</summary>
+    public string? CacheMissCategory { get; init; }
+
+    /// <summary>Stable-prefix eligibility for this AI call.</summary>
+    public PrefixEligibilityStatus PrefixEligibility { get; init; } = PrefixEligibilityStatus.NotApplicable;
+
+    /// <summary>Tool-result evidence action when this event records bounding, summarisation, or refresh.</summary>
+    public string? ToolEvidenceAction { get; init; }
+
+    /// <summary>Name of the tool whose evidence was bounded, summarised, omitted, or refreshed.</summary>
+    public string? ToolEvidenceSourceToolName { get; init; }
+
+    /// <summary>Estimated size of the original tool-result payload before bounding.</summary>
+    public int? ToolEvidenceOriginalPayloadTokens { get; init; }
+
+    /// <summary>Estimated size of the bounded payload retained for replay.</summary>
+    public int? ToolEvidenceBoundedPayloadTokens { get; init; }
+
+    /// <summary>Whether precise evidence can be refreshed through the normal investigation tools.</summary>
+    public bool? ToolEvidenceRefreshable { get; init; }
+
+    /// <summary>Forced-final or schema-repair attempt kind for this AI call.</summary>
+    public string? FinalizationAttemptKind { get; init; }
+
+    /// <summary>Reason for a forced-final or schema-repair attempt.</summary>
+    public string? FinalizationReason { get; init; }
+
+    /// <summary>Outcome of a forced-final or schema-repair attempt.</summary>
+    public string? FinalizationOutcome { get; init; }
+
     /// <summary>Truncated sample of the input text sent (max 4,000 characters). <see langword="null" /> when not applicable.</summary>
     public string? InputTextSample { get; init; }
 

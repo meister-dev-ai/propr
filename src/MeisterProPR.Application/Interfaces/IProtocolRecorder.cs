@@ -63,7 +63,14 @@ public interface IProtocolRecorder
         string? outputTextSample,
         CancellationToken ct = default,
         string? name = null,
-        string? error = null);
+        string? error = null,
+        long? cachedInputTokens = null,
+        CacheCallStatus cacheStatus = CacheCallStatus.NotApplicable,
+        string? cacheMissCategory = null,
+        PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
+        string? finalizationAttemptKind = null,
+        string? finalizationReason = null,
+        string? finalizationOutcome = null);
 
     /// <summary>
     ///     Records explicit prompt-stage evidence for one executed prompt-driven stage. Never throws.
@@ -101,7 +108,11 @@ public interface IProtocolRecorder
         string arguments,
         string result,
         int iteration,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? toolEvidenceAction = null,
+        int? toolEvidenceOriginalPayloadTokens = null,
+        int? toolEvidenceBoundedPayloadTokens = null,
+        bool? toolEvidenceRefreshable = null);
 
     /// <summary>
     ///     Marks the protocol as complete and persists all aggregate summary fields. Never throws.
@@ -122,7 +133,9 @@ public interface IProtocolRecorder
         int iterationCount,
         int toolCallCount,
         int? finalConfidence,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        long? totalCachedInputTokens = null,
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown);
 
     /// <summary>
     ///     Adds token counts to an existing protocol's totals and propagates them to the job aggregate. Never throws.

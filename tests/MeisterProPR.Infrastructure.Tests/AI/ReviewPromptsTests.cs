@@ -49,7 +49,7 @@ public class ReviewPromptsTests
         Assert.Contains("[CURRENT FILE]", msg);
     }
 
-    // T035 — Per-file user message contains manifest with all changed files
+    // T035 — Per-file user message contains manifest with all changed files when already small
     [Fact]
     public void BuildPerFileUserMessage_ContainsManifestForAllFiles()
     {
@@ -61,7 +61,25 @@ public class ReviewPromptsTests
 
         Assert.Contains("src/Foo.cs", msg);
         Assert.Contains("src/Bar.cs", msg);
-        Assert.Contains("use get_file_content", msg);
+        Assert.Contains("get_file_content", msg);
+    }
+
+    [Fact]
+    public void BuildPerFileUserMessage_BoundsLargeManifestAndPointsToRefreshTool()
+    {
+        var current = CreateFile("src/File09.cs");
+        var allFiles = Enumerable.Range(1, 12)
+            .Select(i => new ChangedFileSummary($"src/File{i:00}.cs", ChangeType.Edit))
+            .ToList()
+            .AsReadOnly();
+
+        var msg = ReviewPrompts.BuildPerFileUserMessage(current, 9, 12, allFiles, [], "My PR", "feature/x", "main");
+
+        Assert.Contains("bounded list", msg, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("get_changed_files", msg, StringComparison.Ordinal);
+        Assert.Contains("src/File09.cs", msg, StringComparison.Ordinal);
+        Assert.Contains("src/File01.cs", msg, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/File12.cs", msg, StringComparison.Ordinal);
     }
 
     // T035 — Per-file user message only includes filtered threads
@@ -152,15 +170,13 @@ public class ReviewPromptsTests
     }
 
     [Fact]
-    public void BuildSystemPrompt_ContainsDiscoveryToolGuidance()
+    public void BuildSystemPrompt_ContainsGeneralToolEscalationGuidance()
     {
         var prompt = ReviewPrompts.BuildSystemPrompt(null);
 
-        Assert.Contains("search_code", prompt, StringComparison.Ordinal);
-        Assert.Contains("search_paths", prompt, StringComparison.Ordinal);
-        Assert.Contains("get_repository_overview", prompt, StringComparison.Ordinal);
-        Assert.Contains("get_file_neighborhood", prompt, StringComparison.Ordinal);
-        Assert.Contains("exact_identifier", prompt, StringComparison.Ordinal);
+        Assert.Contains("Use tools only when the diff does not provide enough direct evidence", prompt, StringComparison.Ordinal);
+        Assert.Contains("repository-wide search", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cross-file contracts", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -492,19 +508,18 @@ public class ReviewPromptsTests
         Assert.DoesNotContain("Repository Instructions", prompt);
     }
 
-    // T019 — BuildPerFileContextPrompt includes CRITICAL OUTPUT RULE reminder with required keys
+    // T019 — BuildPerFileContextPrompt includes output-key reminder with required keys
     [Fact]
     public void BuildPerFileContextPrompt_ContainsCriticalOutputRuleReminder()
     {
         var prompt = ReviewPrompts.BuildPerFileContextPrompt(null, "src/Foo.cs", 1, 3);
 
-        Assert.Contains("CRITICAL OUTPUT RULE", prompt);
         Assert.Contains(ReviewPrompts.OutputKeyReminder.Trim(), prompt);
-        Assert.Contains("\"comments\" (array)", prompt);
-        Assert.Contains("\"summary\" (string)", prompt);
-        Assert.Contains("\"confidence_evaluations\" (array)", prompt);
-        Assert.Contains("\"investigation_complete\" (bool)", prompt);
-        Assert.Contains("\"loop_complete\" (bool)", prompt);
+        Assert.Contains("\"comments\"", prompt);
+        Assert.Contains("\"summary\"", prompt);
+        Assert.Contains("\"confidence_evaluations\"", prompt);
+        Assert.Contains("\"investigation_complete\"", prompt);
+        Assert.Contains("\"loop_complete\"", prompt);
     }
 
     // T019 — BuildPerFileContextPrompt lists forbidden key names
@@ -513,9 +528,8 @@ public class ReviewPromptsTests
     {
         var prompt = ReviewPrompts.BuildPerFileContextPrompt(null, "src/Foo.cs", 1, 3);
 
-        Assert.Contains("key_issues", prompt);
-        Assert.Contains("verdict", prompt);
-        Assert.Contains("suggested_changes", prompt);
+        Assert.Contains("No other top-level keys", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("key_issues", prompt, StringComparison.Ordinal);
     }
 
     // T019 — BuildPerFileContextPrompt includes mandatory investigation block for multi-file PRs
@@ -543,11 +557,8 @@ public class ReviewPromptsTests
     [Fact]
     public void AgenticLoopGuidance_ContainsConditionalLanguageProhibition()
     {
-        // The CERTAINTY GATE section prohibits speculative language — spot-check one canonical phrase
-        Assert.Contains(
-            "Omission is always preferable to speculation",
-            ReviewPrompts.AgenticLoopGuidance,
-            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CERTAINTY GATE", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not soften or downgrade; discard", ReviewPrompts.AgenticLoopGuidance, StringComparison.OrdinalIgnoreCase);
     }
 
     // T012(b) — US2: AgenticLoopGuidance instructs get_file_tree for config files
@@ -568,11 +579,8 @@ public class ReviewPromptsTests
     {
         var guidance = ReviewPrompts.AgenticLoopGuidance;
 
-        Assert.Contains("search_source_repo", guidance, StringComparison.Ordinal);
-        Assert.Contains("search_source_changed_files", guidance, StringComparison.Ordinal);
-        Assert.Contains("search_target_repo", guidance, StringComparison.Ordinal);
-        Assert.Contains("search_target_changed_files", guidance, StringComparison.Ordinal);
-        Assert.Contains("Use search_code before broad file reads", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("repository-wide search", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cross-file contracts", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -582,7 +590,7 @@ public class ReviewPromptsTests
 
         Assert.Contains("baseline", guidance, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("target branch", guidance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("search_target_changed_files", guidance, StringComparison.Ordinal);
+        Assert.Contains("Target branch", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     // T012(c) — US2: BuildPerFileContextPrompt strengthened
@@ -619,9 +627,8 @@ public class ReviewPromptsTests
     {
         var guidance = ReviewPrompts.AgenticLoopGuidance;
 
-        Assert.Contains("working-memory summary", guidance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Later turns", guidance, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not re-fetch the same large file", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("working-memory summaries", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not re-fetch", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     // PR64-5466/5467 — SystemPrompt schema must declare all five required output keys

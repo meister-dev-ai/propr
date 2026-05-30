@@ -11,6 +11,8 @@
           <th>Tier</th>
           <th>Model</th>
           <th class="num-col">Input Tokens</th>
+          <th class="num-col">Cached Input</th>
+          <th class="num-col">Effective Input</th>
           <th class="num-col">Output Tokens</th>
           <th class="num-col">% of Total</th>
         </tr>
@@ -20,6 +22,8 @@
           <td><span class="tier-chip" :class="entry.tierClass">{{ entry.tierLabel }}</span></td>
           <td class="monospace-value">{{ entry.modelLabel }}</td>
           <td class="num-col">{{ formatTokens(entry.inputTokens) }}</td>
+          <td class="num-col">{{ formatTokens(entry.cachedInputTokens) }}</td>
+          <td class="num-col">{{ formatTokens(entry.effectiveInputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.outputTokens) }}</td>
           <td class="num-col">{{ pct(entry) }}</td>
         </tr>
@@ -28,6 +32,8 @@
         <tr class="totals-row">
           <td colspan="2">Total</td>
           <td class="num-col">{{ formatTokens(sumInput) }}</td>
+          <td class="num-col">{{ formatTokens(sumCachedInput) }}</td>
+          <td class="num-col">{{ formatTokens(sumEffectiveInput) }}</td>
           <td class="num-col">{{ formatTokens(sumOutput) }}</td>
           <td class="num-col">100%</td>
         </tr>
@@ -51,8 +57,10 @@ interface TokenBreakdownEntry {
   aiModel?: string | null
   totalInputTokens?: number | null
   totalOutputTokens?: number | null
+  totalCachedInputTokens?: number | null
   inputTokens?: number | null
   outputTokens?: number | null
+  cachedInputTokens?: number | null
 }
 
 interface NormalizedBreakdownEntry {
@@ -60,6 +68,8 @@ interface NormalizedBreakdownEntry {
   tierClass: string
   modelLabel: string
   inputTokens: number
+  cachedInputTokens: number
+  effectiveInputTokens: number
   outputTokens: number
 }
 
@@ -137,16 +147,24 @@ function formatModel(entry: TokenBreakdownEntry): string {
 }
 
 const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
-  props.breakdown.map((entry) => ({
-    tierLabel: tierLabel(entry),
-    tierClass: tierClass(entry),
-    modelLabel: formatModel(entry),
-    inputTokens: entry.totalInputTokens ?? entry.inputTokens ?? 0,
-    outputTokens: entry.totalOutputTokens ?? entry.outputTokens ?? 0,
-  })),
+  props.breakdown.map((entry) => {
+    const inputTokens = entry.totalInputTokens ?? entry.inputTokens ?? 0
+    const cachedInputTokens = entry.totalCachedInputTokens ?? entry.cachedInputTokens ?? 0
+    return {
+      tierLabel: tierLabel(entry),
+      tierClass: tierClass(entry),
+      modelLabel: formatModel(entry),
+      inputTokens,
+      cachedInputTokens,
+      effectiveInputTokens: Math.max(0, inputTokens - cachedInputTokens),
+      outputTokens: entry.totalOutputTokens ?? entry.outputTokens ?? 0,
+    }
+  }),
 )
 
 const sumInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.inputTokens, 0))
+const sumCachedInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.cachedInputTokens, 0))
+const sumEffectiveInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.effectiveInputTokens, 0))
 const sumOutput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.outputTokens, 0))
 const grandTotal = computed(() => sumInput.value + sumOutput.value)
 

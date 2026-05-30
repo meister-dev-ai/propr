@@ -247,7 +247,17 @@ public sealed class PromptExperimentBatchRunner(
             @event.SystemPrompt,
             @event.OutputSummary,
             @event.Error,
-            TryCreatePromptEvidence(@event));
+            TryCreatePromptEvidence(@event),
+            @event.CachedInputTokens,
+            @event.ToolEvidence is null
+                ? null
+                : new ProtocolToolEvidenceSnapshot(
+                    @event.ToolEvidence.SourceToolName,
+                    @event.ToolEvidence.OriginalPayloadTokens,
+                    @event.ToolEvidence.BoundedPayloadTokens,
+                    @event.ToolEvidence.Action,
+                    @event.ToolEvidence.Refreshable),
+            @event.FinalizationAttemptKind);
     }
 
     private static PromptExperimentEvidence? CreatePromptEvidence(ReviewJobProtocolDto protocol, PromptExperimentContext promptExperiment)

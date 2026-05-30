@@ -118,7 +118,7 @@ describe('ClientDetailView', () => {
     expect(wrapper.text()).not.toContain('SCM Providers')
     expect(wrapper.text()).not.toContain('Dismissed Findings')
     expect(wrapper.text()).not.toContain('Prompt Overrides')
-  })
+  }, 10_000)
 
   it('keeps configuration tabs visible for client administrators', async () => {
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)

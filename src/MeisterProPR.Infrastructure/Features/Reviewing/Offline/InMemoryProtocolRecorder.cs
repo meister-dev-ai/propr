@@ -51,7 +51,14 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string? outputTextSample,
         CancellationToken ct = default,
         string? name = null,
-        string? error = null)
+        string? error = null,
+        long? cachedInputTokens = null,
+        CacheCallStatus cacheStatus = CacheCallStatus.NotApplicable,
+        string? cacheMissCategory = null,
+        PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
+        string? finalizationAttemptKind = null,
+        string? finalizationReason = null,
+        string? finalizationOutcome = null)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -69,6 +76,13 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
+                CachedInputTokens = cachedInputTokens,
+                CacheStatus = cacheStatus,
+                CacheMissCategory = Sanitize(cacheMissCategory),
+                PrefixEligibility = prefixEligibility,
+                FinalizationAttemptKind = Sanitize(finalizationAttemptKind),
+                FinalizationReason = Sanitize(finalizationReason),
+                FinalizationOutcome = Sanitize(finalizationOutcome),
                 InputTextSample = Sanitize(inputTextSample),
                 SystemPrompt = Sanitize(systemPrompt),
                 OutputSummary = Sanitize(outputTextSample),
@@ -124,7 +138,11 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string arguments,
         string result,
         int iteration,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? toolEvidenceAction = null,
+        int? toolEvidenceOriginalPayloadTokens = null,
+        int? toolEvidenceBoundedPayloadTokens = null,
+        bool? toolEvidenceRefreshable = null)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -142,6 +160,11 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize($"args={arguments}"),
                 OutputSummary = Sanitize(result),
+                ToolEvidenceAction = Sanitize(toolEvidenceAction),
+                ToolEvidenceSourceToolName = toolEvidenceAction is null ? null : toolName,
+                ToolEvidenceOriginalPayloadTokens = toolEvidenceOriginalPayloadTokens,
+                ToolEvidenceBoundedPayloadTokens = toolEvidenceBoundedPayloadTokens,
+                ToolEvidenceRefreshable = toolEvidenceRefreshable,
             });
 
         return Task.CompletedTask;
@@ -155,7 +178,9 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         int iterationCount,
         int toolCallCount,
         int? finalConfidence,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        long? totalCachedInputTokens = null,
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -167,6 +192,8 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         protocol.Outcome = outcome;
         protocol.TotalInputTokens = totalInputTokens;
         protocol.TotalOutputTokens = totalOutputTokens;
+        protocol.TotalCachedInputTokens = totalCachedInputTokens;
+        protocol.CacheObservability = cacheObservability;
         protocol.IterationCount = iterationCount;
         protocol.ToolCallCount = toolCallCount;
         protocol.FinalConfidence = finalConfidence;

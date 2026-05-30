@@ -355,6 +355,38 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
     }
 
     [Fact]
+    public async Task RecordAiCallAsync_PersistsCacheAndFinalizationDiagnostics()
+    {
+        await this._recorder.RecordAiCallAsync(
+            this._protocolId,
+            2,
+            2048,
+            128,
+            "input",
+            "system",
+            "output",
+            cachedInputTokens: 1024,
+            cacheStatus: CacheCallStatus.Hit,
+            prefixEligibility: PrefixEligibilityStatus.Eligible,
+            finalizationAttemptKind: "ForcedFinal",
+            finalizationReason: "iteration_limit_reached",
+            finalizationOutcome: "ProducedFinalText");
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == "ai_call_iter_2")
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(1024, stored.CachedInputTokens);
+        Assert.Equal(CacheCallStatus.Hit, stored.CacheStatus);
+        Assert.Null(stored.CacheMissCategory);
+        Assert.Equal(PrefixEligibilityStatus.Eligible, stored.PrefixEligibility);
+        Assert.Equal("ForcedFinal", stored.FinalizationAttemptKind);
+        Assert.Equal("iteration_limit_reached", stored.FinalizationReason);
+        Assert.Equal("ProducedFinalText", stored.FinalizationOutcome);
+    }
+
+    [Fact]
     public async Task RecordToolCallAsync_WithDeepIteration_PersistsFullResultWithoutExcerptTruncation()
     {
         var result = new string('R', 2_500) + " final-tail";
@@ -374,6 +406,32 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
         Assert.Equal(result, stored.OutputSummary);
         Assert.DoesNotContain("[TRUNCATED]", stored.OutputSummary);
         Assert.EndsWith("final-tail", stored.OutputSummary);
+    }
+
+    [Fact]
+    public async Task RecordToolCallAsync_PersistsToolEvidenceDiagnostics()
+    {
+        await this._recorder.RecordToolCallAsync(
+            this._protocolId,
+            "get_file_content",
+            "{\"path\":\"src/Foo.cs\"}",
+            "bounded result",
+            1,
+            toolEvidenceAction: "Bounded",
+            toolEvidenceOriginalPayloadTokens: 2000,
+            toolEvidenceBoundedPayloadTokens: 256,
+            toolEvidenceRefreshable: true);
+
+        var stored = await this._db.ProtocolEvents
+            .Where(e => e.ProtocolId == this._protocolId && e.Name == "get_file_content")
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal("Bounded", stored.ToolEvidenceAction);
+        Assert.Equal("get_file_content", stored.ToolEvidenceSourceToolName);
+        Assert.Equal(2000, stored.ToolEvidenceOriginalPayloadTokens);
+        Assert.Equal(256, stored.ToolEvidenceBoundedPayloadTokens);
+        Assert.True(stored.ToolEvidenceRefreshable);
     }
 
     [Fact]
@@ -401,6 +459,30 @@ public sealed class EfProtocolRecorderTests(PostgresContainerFixture fixture) : 
         Assert.Equal(575, stored.TotalOutputTokens);
         Assert.Equal(1150, job.TotalInputTokensAggregated);
         Assert.Equal(575, job.TotalOutputTokensAggregated);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_PersistsCachedInputTotalAndObservability()
+    {
+        await this._recorder.SetCompletedAsync(
+            this._protocolId,
+            "Completed",
+            2000,
+            500,
+            2,
+            1,
+            null,
+            totalCachedInputTokens: 1200,
+            cacheObservability: CacheObservabilityStatus.Observable);
+
+        var stored = await this._db.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(p => p.Id == this._protocolId)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(stored);
+        Assert.Equal(1200, stored.TotalCachedInputTokens);
+        Assert.Equal(CacheObservabilityStatus.Observable, stored.CacheObservability);
     }
 
     [Fact]

@@ -54,6 +54,15 @@ public sealed class ReviewJobProtocol
     /// </summary>
     public long? TotalOutputTokens { get; set; }
 
+    /// <summary>
+    ///     Sum of cached input tokens across AI calls where the provider exposed cache usage.
+    ///     <see langword="null" /> when cache usage was never observable for this protocol pass.
+    /// </summary>
+    public long? TotalCachedInputTokens { get; set; }
+
+    /// <summary>Cache observability roll-up for this protocol pass.</summary>
+    public CacheObservabilityStatus CacheObservability { get; set; } = CacheObservabilityStatus.Unknown;
+
     /// <summary>Number of agentic loop iterations completed.</summary>
     public int? IterationCount { get; set; }
 

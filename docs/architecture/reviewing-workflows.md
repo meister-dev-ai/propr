@@ -228,7 +228,7 @@ flowchart TD
     Code and path search return structured result objects that distinguish success, no-match,
     partial, invalid-request, and bounded-tool blocked outcomes, and they reuse shared branch/scope
     resolution for exact identifier, exact phrase, regex, related-code, path-name, filter,
-    deterministic ordering, truncation, and limitation reporting across live providers and offline fixtures.
+    deterministic ordering, truncation, and limitation reporting across live providers and offline fixtures. The per-file prompt carries a bounded changed-file manifest; full PR file lists remain available through `get_changed_files` when needed.
 4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
    thread-memory reconsideration before extracting structured claims and running local verification.
@@ -256,13 +256,14 @@ states in the evidence bundle.
      and decides `Publish`, `SummaryOnly`, or `Drop` deterministically.
 11. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
      surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
-12. The protocol records machine-readable ProRV, verification, and final-gate events, including
+12. The protocol records machine-readable ProRV, verification, final-gate, and token-optimization events, including
      `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
      `prorv_prefilter_failed`, `prorv_focused_guidance_applied`,
      `verification_claims_extracted`, `verification_local_decision`,
     `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,
     `repeated_judgment_decision`, `summary_reconciliation`, `review_finding_gate_summary`, and
-    `review_finding_gate_decision`.
+    `review_finding_gate_decision`, plus per-call cache status, cached input tokens, prefix eligibility,
+    bounded tool-evidence metadata, and finalization attempt reason/outcome on the existing AI/tool events.
 
 Repository discovery stays bounded by the same review-tool policy surface as the existing file tools.
 When a search, overview, or neighborhood tool is not allowed or the tool budget is exhausted,
@@ -416,17 +417,35 @@ The per-file review input contains only the unified diff for that file. Full fil
 omitted, and the AI is instructed to call the existing `get_file_content` tool if it needs more
 context. This is the biggest token-saving measure for large files.
 
-### 3 - System Prompt Pruning In Review Loops
+### 3 - Cache-Aware Stable Prefixes
 
 `ToolAwareAiReviewCore` structures each file review as:
 
 - Step 1: global system prompt (S1) + per-file context prompt (S2) + user message
 - Step 2+: per-file context prompt (S2) only + accumulated conversation
 
-S1 is a fixed prefix, so sending it once lets the model infrastructure cache it across parallel file
-slots for the same pull request.
+S1 and the tool schema are kept stable ahead of volatile diff and tool-result content so providers
+that support automatic prefix caching can reuse the prefix across parallel file slots for the same
+pull request. Runtime capabilities record whether prompt caching and cache routing are expected, and
+protocol events read `CachedInputTokenCount` when the provider exposes it. Operators compare raw input,
+cached input, and effective input (`raw - cached`) per AI call; unobservable providers are reported as
+unobservable rather than as cache misses.
 
-### 4 - Full Protocol Text Capture
+### 4 - Bounded Tool Replay And Evidence Visibility
+
+Large tool results are bounded before they are replayed into later loop turns. The replayed message
+keeps a compact summary and tells the model when it can refresh the precise evidence through the same
+tool. The protocol records the source tool, original payload token estimate, bounded replay token
+estimate, action, and refreshability only when a tool result was actually bounded or summarized.
+
+### 5 - Tier-Sized Output And Finalization Visibility
+
+File complexity controls review output budget selection so low-risk files do not receive the same
+worst-case output allowance as high-complexity files. Remaining forced-final and schema-repair calls
+are recorded with attempt kind, reason, and outcome so full-context finalization costs are explicit in
+the job protocol and in offline evaluation artifacts.
+
+### 6 - Full Protocol Text Capture
 
 Protocol diagnostics persist the full captured AI prompt, AI response, and tool call text for each
 event. Recorder sanitization strips embedded null bytes so PostgreSQL can safely store the

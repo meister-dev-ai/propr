@@ -135,8 +135,11 @@ Verification metadata is stored in review-domain records and protocol payloads:
   per-file summary for newly reviewed files. Carried-forward rows remain outside the verification
   scope of the associated run.
 - `ReviewJobProtocol` records claim extraction, local verification, evidence collection, PR-level
-    verification, degraded verification states, summary reconciliation, and final-gate audit
-    payloads.
+    verification, degraded verification states, summary reconciliation, final-gate audit payloads,
+    total cached input tokens, and cache observability for each pass.
+- `ProtocolEvent` records per-call cache status, cached input tokens, cache miss category, prefix
+    eligibility, bounded tool-evidence token estimates, and finalization attempt details on existing
+    AI/tool events.
 - Final-gate payloads store summary reconciliation metadata, including original and final summary
     text, dropped finding ids, summary-only finding ids, and whether a summary rewrite was required.
 
@@ -197,7 +200,9 @@ erDiagram
         uuid FileResultId FK
         int PassNumber
         int InputTokens
+        int CachedInputTokens
         int OutputTokens
+        string CacheObservability
     }
 
     ReviewFileResult {

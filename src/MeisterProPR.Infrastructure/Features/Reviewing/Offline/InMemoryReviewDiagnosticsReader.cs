@@ -161,6 +161,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             FileOutcome = ResolveFileOutcome(projectionJob, protocol, fileResultOverride),
             FollowUp = ResolveFollowUp(protocol),
             RepeatedJudgment = ResolveRepeatedJudgment(protocol),
+            TotalCachedInputTokens = protocol.TotalCachedInputTokens,
+            CacheObservability = protocol.CacheObservability,
             IsInherited = inheritance is not null,
             Inheritance = inheritance,
         };
@@ -174,35 +176,63 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         if (!includeEvents)
         {
             return protocol.Events
-                .Select(e => new ProtocolEventDto(
-                    e.Id,
-                    e.Kind,
-                    e.Name,
-                    e.OccurredAt,
-                    e.InputTokens,
-                    e.OutputTokens,
-                    null,
-                    null,
-                    BuildOverviewOutputSummary(e, isInherited),
-                    e.Error))
+                .Select(e => CreateEventDto(e, null, null, BuildOverviewOutputSummary(e, isInherited)))
                 .ToList()
                 .AsReadOnly();
         }
 
         return protocol.Events
-            .Select(e => new ProtocolEventDto(
-                e.Id,
-                e.Kind,
-                e.Name,
-                e.OccurredAt,
-                e.InputTokens,
-                e.OutputTokens,
+            .Select(e => CreateEventDto(
+                e,
                 isInherited ? null : e.InputTextSample,
                 isInherited ? null : e.SystemPrompt,
-                isInherited ? BuildInheritedOutputSummary(e) : e.OutputSummary,
-                e.Error))
+                isInherited ? BuildInheritedOutputSummary(e) : e.OutputSummary))
             .ToList()
             .AsReadOnly();
+    }
+
+    private static ProtocolEventDto CreateEventDto(
+        ProtocolEvent e,
+        string? inputTextSample,
+        string? systemPrompt,
+        string? outputSummary)
+    {
+        return new ProtocolEventDto(
+            e.Id,
+            e.Kind,
+            e.Name,
+            e.OccurredAt,
+            e.InputTokens,
+            e.OutputTokens,
+            inputTextSample,
+            systemPrompt,
+            outputSummary,
+            e.Error)
+        {
+            CachedInputTokens = e.CachedInputTokens,
+            CacheStatus = e.CacheStatus,
+            CacheMissCategory = e.CacheMissCategory,
+            PrefixEligibility = e.PrefixEligibility,
+            ToolEvidence = CreateToolEvidenceDto(e),
+            FinalizationAttemptKind = e.FinalizationAttemptKind,
+            FinalizationReason = e.FinalizationReason,
+            FinalizationOutcome = e.FinalizationOutcome,
+        };
+    }
+
+    private static ProtocolToolEvidenceDto? CreateToolEvidenceDto(ProtocolEvent e)
+    {
+        if (string.IsNullOrWhiteSpace(e.ToolEvidenceAction) || string.IsNullOrWhiteSpace(e.ToolEvidenceSourceToolName))
+        {
+            return null;
+        }
+
+        return new ProtocolToolEvidenceDto(
+            e.ToolEvidenceSourceToolName,
+            e.ToolEvidenceOriginalPayloadTokens ?? 0,
+            e.ToolEvidenceBoundedPayloadTokens ?? 0,
+            e.ToolEvidenceAction,
+            e.ToolEvidenceRefreshable ?? false);
     }
 
     private static string? BuildOverviewOutputSummary(ProtocolEvent e, bool isInherited)

@@ -18,4 +18,17 @@ public sealed record StageEvidenceEvent(
     string? SystemPrompt,
     string? OutputSummary,
     string? Error,
-    PromptExperimentEvidence? PromptExperimentEvidence = null);
+    PromptExperimentEvidence? PromptExperimentEvidence = null,
+    long? CachedInputTokens = null,
+    ProtocolToolEvidenceSnapshot? ToolEvidence = null,
+    string? FinalizationAttemptKind = null);
+
+/// <summary>
+///     Compact token accounting snapshot for bounded or summarized tool evidence.
+/// </summary>
+public sealed record ProtocolToolEvidenceSnapshot(
+    string SourceToolName,
+    int OriginalPayloadTokens,
+    int BoundedPayloadTokens,
+    string Action,
+    bool Refreshable);

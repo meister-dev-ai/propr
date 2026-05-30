@@ -26,10 +26,11 @@ through shared provider-neutral review, webhook, publication, and observability 
 forking lifecycle, mention, or audit logic. The reviewing flow includes an optional ProRV prefilter
 that ranks file-specific review guidance before the main file review, followed by structured
 verification before publication: local contradiction checks precede per-file persistence, PR-level
-evidence retrieval and bounded AI micro-verification precede the deterministic final gate, summary
-reconciliation aligns the final summary with surviving outcomes, and a client-owned publication
-policy can suppress outbound SCM comments without skipping internal review result persistence or
-diagnostics.
+    evidence retrieval and bounded AI micro-verification precede the deterministic final gate, summary
+    reconciliation aligns the final summary with surviving outcomes, token-optimization diagnostics
+    separate raw, cached, effective, replay, and finalization costs, and a client-owned publication
+    policy can suppress outbound SCM comments without skipping internal review result persistence or
+    diagnostics.
 
 ```mermaid
 flowchart TD

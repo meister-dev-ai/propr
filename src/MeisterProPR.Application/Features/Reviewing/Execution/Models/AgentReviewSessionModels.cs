@@ -69,7 +69,9 @@ public sealed record AgentReviewRuntimeCapabilities(
     bool SupportsProviderManagedSessions,
     bool SupportsManagedRemoteConversation,
     bool SupportsBackgroundResponses,
-    bool PrefersResponsesApi);
+    bool PrefersResponsesApi,
+    bool SupportsPromptCaching = false,
+    bool SupportsPromptCacheRouting = false);
 
 /// <summary>
 ///     Opaque continuation metadata carried across review turns.

@@ -50,4 +50,30 @@ public sealed class TenantSsoOpenApiTests
         Assert.Contains("\"name\": \"error\"", content, StringComparison.Ordinal);
         Assert.Contains("\"name\": \"error_description\"", content, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task OpenApi_DocumentsProtocolTokenOptimizationDiagnostics()
+    {
+        var openApiPath = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "..",
+                "openapi.json"));
+        var content = await File.ReadAllTextAsync(openApiPath);
+
+        Assert.Contains("\"CacheCallStatus\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"CacheObservabilityStatus\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"PrefixEligibilityStatus\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"ProtocolToolEvidenceDto\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"cachedInputTokens\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"cacheStatus\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"toolEvidence\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"finalizationAttemptKind\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"totalCachedInputTokens\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"cacheObservability\"", content, StringComparison.Ordinal);
+    }
 }

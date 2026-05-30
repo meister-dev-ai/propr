@@ -15,15 +15,17 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 public sealed class ProviderRuntimeCapabilityTests
 {
     [Theory]
-    [InlineData(AiProtocolMode.Responses, true, true, true, true)]
-    [InlineData(AiProtocolMode.Auto, true, true, true, true)]
-    [InlineData(AiProtocolMode.ChatCompletions, false, false, false, false)]
+    [InlineData(AiProtocolMode.Responses, true, true, true, true, true, true)]
+    [InlineData(AiProtocolMode.Auto, true, true, true, true, true, true)]
+    [InlineData(AiProtocolMode.ChatCompletions, false, false, false, false, true, true)]
     public void AzureOpenAiProviderDriver_GetChatRuntimeCapabilities_TracksManagedSessionEligibility(
         AiProtocolMode protocolMode,
         bool supportsProviderManagedSessions,
         bool supportsManagedRemoteConversation,
         bool supportsBackgroundResponses,
-        bool prefersResponsesApi)
+        bool prefersResponsesApi,
+        bool supportsPromptCaching,
+        bool supportsPromptCacheRouting)
     {
         var driver = new AzureOpenAiProviderDriver();
         var model = AiConnectionTestFactory.CreateChatModel("gpt-5.4-mini");
@@ -37,7 +39,9 @@ public sealed class ProviderRuntimeCapabilityTests
                 supportsProviderManagedSessions,
                 supportsManagedRemoteConversation,
                 supportsBackgroundResponses,
-                prefersResponsesApi),
+                prefersResponsesApi,
+                supportsPromptCaching,
+                supportsPromptCacheRouting),
             capabilities);
     }
 

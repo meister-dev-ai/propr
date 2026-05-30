@@ -14533,6 +14533,30 @@
         "additionalProperties": false,
         "description": "Authenticated session snapshot shared with the admin UI after sign-in."
       },
+      "CacheCallStatus": {
+        "enum": [
+          "notApplicable",
+          "hit",
+          "miss",
+          "unobservable",
+          "ineligible",
+          "expired",
+          "routingOverflow",
+          "unsupported"
+        ],
+        "type": "string",
+        "description": "Cache outcome recorded for one AI call."
+      },
+      "CacheObservabilityStatus": {
+        "enum": [
+          "unknown",
+          "observable",
+          "unobservable",
+          "unsupported"
+        ],
+        "type": "string",
+        "description": "Provider/model cache observability roll-up for one protocol pass."
+      },
       "CanonicalSourceReferenceDto": {
         "type": "object",
         "properties": {
@@ -16180,6 +16204,16 @@
         "additionalProperties": false,
         "description": "Aggregated view of all review activity for a specific pull request."
       },
+      "PrefixEligibilityStatus": {
+        "enum": [
+          "notApplicable",
+          "eligible",
+          "ineligibleTooShort",
+          "ineligiblePrefixUnstable"
+        ],
+        "type": "string",
+        "description": "Stable-prefix eligibility recorded for one cache-sensitive AI call."
+      },
       "PremiumCapabilityDto": {
         "type": "object",
         "properties": {
@@ -17455,6 +17489,41 @@
             "type": "string",
             "description": "Error message if this event failed, or null.",
             "nullable": true
+          },
+          "cachedInputTokens": {
+            "type": "integer",
+            "description": "Cached input tokens read from a provider cache for this AI call.",
+            "format": "int64",
+            "nullable": true
+          },
+          "cacheStatus": {
+            "$ref": "#/components/schemas/CacheCallStatus"
+          },
+          "cacheMissCategory": {
+            "type": "string",
+            "description": "Actionable miss or unavailable reason when cache status is not a hit.",
+            "nullable": true
+          },
+          "prefixEligibility": {
+            "$ref": "#/components/schemas/PrefixEligibilityStatus"
+          },
+          "toolEvidence": {
+            "$ref": "#/components/schemas/ProtocolToolEvidenceDto"
+          },
+          "finalizationAttemptKind": {
+            "type": "string",
+            "description": "Forced-final or schema-repair attempt kind for this AI call.",
+            "nullable": true
+          },
+          "finalizationReason": {
+            "type": "string",
+            "description": "Reason for a forced-final or schema-repair attempt.",
+            "nullable": true
+          },
+          "finalizationOutcome": {
+            "type": "string",
+            "description": "Outcome for a forced-final or schema-repair attempt.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17666,6 +17735,32 @@
         },
         "additionalProperties": false,
         "description": "Carries one final review comment attributable to a protocol pass."
+      },
+      "ProtocolToolEvidenceDto": {
+        "type": "object",
+        "properties": {
+          "sourceToolName": {
+            "type": "string",
+            "nullable": true
+          },
+          "originalPayloadTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "boundedPayloadTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "refreshable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Visibility for one tool-result evidence bounding or refresh action."
       },
       "ProviderActivationStatusDto": {
         "type": "object",
@@ -18227,6 +18322,15 @@
           },
           "agentSession": {
             "$ref": "#/components/schemas/ProtocolAgentSessionDto"
+          },
+          "totalCachedInputTokens": {
+            "type": "integer",
+            "description": "Sum of cached input tokens across AI calls where the provider reported cached usage.",
+            "format": "int64",
+            "nullable": true
+          },
+          "cacheObservability": {
+            "$ref": "#/components/schemas/CacheObservabilityStatus"
           },
           "isInherited": {
             "type": "boolean",

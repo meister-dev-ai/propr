@@ -88,6 +88,22 @@ public sealed class AiReviewOptions
     [Range(1, 100, ErrorMessage = "MaxIterationsHigh must be between 1 and 100.")]
     public int MaxIterationsHigh { get; set; } = 20;
 
+    /// <summary>Maximum output tokens for low-complexity file reviews.</summary>
+    [Range(512, 32768, ErrorMessage = "MaxOutputTokensLow must be between 512 and 32768.")]
+    public int MaxOutputTokensLow { get; set; } = 4096;
+
+    /// <summary>Maximum output tokens for medium-complexity file reviews.</summary>
+    [Range(512, 32768, ErrorMessage = "MaxOutputTokensMedium must be between 512 and 32768.")]
+    public int MaxOutputTokensMedium { get; set; } = 6144;
+
+    /// <summary>Maximum output tokens for high-complexity file reviews and non-file review paths.</summary>
+    [Range(512, 32768, ErrorMessage = "MaxOutputTokensHigh must be between 512 and 32768.")]
+    public int MaxOutputTokensHigh { get; set; } = 8192;
+
+    /// <summary>Maximum characters retained from one bulky tool result before replay summarisation metadata is recorded.</summary>
+    [Range(1024, 200000, ErrorMessage = "MaxToolResultReplayCharacters must be between 1024 and 200000.")]
+    public int MaxToolResultReplayCharacters { get; set; } = 32000;
+
     /// <summary>
     ///     Minimum confidence score (0–100) required to post a comment at ERROR severity.
     ///     Comments below this threshold are automatically downgraded to WARNING before posting.

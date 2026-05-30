@@ -353,6 +353,89 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
+    public async Task GetJobProtocol_IncludesCacheEvidenceAndFinalizationDiagnostics()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 63, 1);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Cache.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+            TotalInputTokens = 2048,
+            TotalOutputTokens = 300,
+            TotalCachedInputTokens = 1024,
+            CacheObservability = CacheObservabilityStatus.Observable,
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-10),
+                InputTokens = 2048,
+                OutputTokens = 300,
+                CachedInputTokens = 1024,
+                CacheStatus = CacheCallStatus.Hit,
+                PrefixEligibility = PrefixEligibilityStatus.Eligible,
+                FinalizationAttemptKind = "ForcedFinal",
+                FinalizationReason = "iteration_limit_reached",
+                FinalizationOutcome = "ProducedFinalText",
+            });
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = "get_file_content",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                ToolEvidenceAction = "Bounded",
+                ToolEvidenceSourceToolName = "get_file_content",
+                ToolEvidenceOriginalPayloadTokens = 2000,
+                ToolEvidenceBoundedPayloadTokens = 256,
+                ToolEvidenceRefreshable = true,
+            });
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+        Assert.Equal(1024, protocolJson.GetProperty("totalCachedInputTokens").GetInt64());
+        Assert.Equal("observable", protocolJson.GetProperty("cacheObservability").GetString());
+
+        var events = protocolJson.GetProperty("events").EnumerateArray().ToList();
+        var aiCall = events.Single(e => e.GetProperty("name").GetString() == "ai_call_iter_1");
+        Assert.Equal(1024, aiCall.GetProperty("cachedInputTokens").GetInt64());
+        Assert.Equal("hit", aiCall.GetProperty("cacheStatus").GetString());
+        Assert.Equal("eligible", aiCall.GetProperty("prefixEligibility").GetString());
+        Assert.Equal("ForcedFinal", aiCall.GetProperty("finalizationAttemptKind").GetString());
+
+        var toolEvidence = events.Single(e => e.GetProperty("name").GetString() == "get_file_content")
+            .GetProperty("toolEvidence");
+        Assert.Equal("Bounded", toolEvidence.GetProperty("action").GetString());
+        Assert.Equal(2000, toolEvidence.GetProperty("originalPayloadTokens").GetInt32());
+        Assert.True(toolEvidence.GetProperty("refreshable").GetBoolean());
+    }
+
+    [Fact]
     public async Task GetJobProtocolPass_ReturnsFullEventBodiesForSelectedProtocol()
     {
         using var scope = factory.Services.CreateScope();

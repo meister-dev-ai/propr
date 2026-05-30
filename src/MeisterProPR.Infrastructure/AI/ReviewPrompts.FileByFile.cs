@@ -216,7 +216,7 @@ internal static partial class ReviewPrompts
                 sourceBranch,
                 targetBranch,
                 manifest.Count > totalFiles,
-                manifest.Select(f => new PromptTemplateModels.PromptFileManifestItem(
+                BuildBoundedManifest(file.Path, manifest).Select(f => new PromptTemplateModels.PromptFileManifestItem(
                     f.Path,
                     f.ChangeType.ToString(),
                     f.Path == file.Path,
@@ -232,6 +232,24 @@ internal static partial class ReviewPrompts
                     .ToList()));
 
         return ComposePrompt(context, PromptStageKeys.PerFileUser, PromptStageRole.User, defaultText);
+    }
+
+    private static IReadOnlyList<ChangedFileSummary> BuildBoundedManifest(string currentPath, IReadOnlyList<ChangedFileSummary> manifest)
+    {
+        var current = manifest.FirstOrDefault(file => string.Equals(file.Path, currentPath, StringComparison.Ordinal));
+        if (manifest.Count <= 8)
+        {
+            return manifest;
+        }
+
+        var bounded = new List<ChangedFileSummary>();
+        if (current is not null)
+        {
+            bounded.Add(current);
+        }
+
+        bounded.AddRange(manifest.Where(file => !string.Equals(file.Path, currentPath, StringComparison.Ordinal)).Take(7));
+        return bounded;
     }
 
     internal static string BuildSynthesisUserMessage(

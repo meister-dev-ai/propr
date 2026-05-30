@@ -26,6 +26,8 @@
                 <div class="stat-pill"><span class="stat-label">Visible Passes</span><span class="stat-value">{{ protocols.length }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Inherited</span><span class="stat-value">{{ inheritedProtocolCount }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Total Tokens</span><span class="stat-value fat-tokens">{{ formatTokens(totalInputTokens + totalOutputTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Cached Input</span><span class="stat-value fat-tokens">{{ formatTokens(totalCachedInputTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Effective Input</span><span class="stat-value fat-tokens">{{ formatTokens(totalEffectiveInputTokens) }}</span></div>
             </div>
 
             <!-- Top Level Tabs -->
@@ -439,9 +441,22 @@
                                                 </div>
                                             </div>
                                         </td>
-                                        <td class="tokens-cell fat-tokens">{{ formatTokens(row.merged.callDetails.inputTokens) }}</td>
+                                        <td class="tokens-cell fat-tokens">
+                                            <div>{{ formatTokens(row.merged.callDetails.inputTokens) }}</div>
+                                            <small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail">
+                                                Cached {{ formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ formatCacheStatus(row.merged.callDetails.cacheStatus) }}
+                                            </small>
+                                        </td>
                                         <td class="tokens-cell fat-tokens">{{ formatTokens(row.merged.callDetails.outputTokens) }}</td>
-                                        <td class="error-cell">{{ row.merged.callDetails.error ?? '' }}</td>
+                                        <td class="error-cell">
+                                            <span>{{ row.merged.callDetails.error ?? '' }}</span>
+                                            <span v-if="row.merged.callDetails.finalizationAttemptKind" class="status-badge status-processing">
+                                                {{ row.merged.callDetails.finalizationAttemptKind }}: {{ row.merged.callDetails.finalizationOutcome ?? row.merged.callDetails.finalizationReason }}
+                                            </span>
+                                            <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-processing">
+                                                Evidence {{ row.merged.callDetails.toolEvidence.action }}
+                                            </span>
+                                        </td>
                                     </tr>
                                 </TransitionGroup>
                             </table>
@@ -986,6 +1001,7 @@ interface TokenBreakdownEntry {
     modelId: string | null
     totalInputTokens: number
     totalOutputTokens: number
+    totalCachedInputTokens?: number | null
 }
 
 interface JobDetail {
@@ -1189,6 +1205,7 @@ type ReviewProtocolPass = ReviewJobProtocolDto & {
     completedAt?: string | null
     totalInputTokens?: number | null
     totalOutputTokens?: number | null
+    totalCachedInputTokens?: number | null
     iterationCount?: number | null
     toolCallCount?: number | null
     finalSummary?: string | null
@@ -1598,6 +1615,12 @@ const totalInputTokens = computed(() =>
 const totalOutputTokens = computed(() =>
     protocols.value.reduce((sum, p) => sum + (p.totalOutputTokens ?? 0), 0),
 )
+const totalCachedInputTokens = computed(() =>
+    protocols.value.reduce((sum, p) => sum + (p.totalCachedInputTokens ?? 0), 0),
+)
+const totalEffectiveInputTokens = computed(() =>
+    Math.max(0, totalInputTokens.value - totalCachedInputTokens.value),
+)
 
 const overallDuration = computed(() => {
     const start = jobDetail.value?.processingStartedAt ?? jobDetail.value?.submittedAt
@@ -1653,6 +1676,7 @@ const protocolTokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
     protocols.value.forEach(protocol => {
         const input = protocol.totalInputTokens ?? 0
         const output = protocol.totalOutputTokens ?? 0
+        const cached = protocol.totalCachedInputTokens ?? 0
         if (input === 0 && output === 0) {
             return
         }
@@ -1664,6 +1688,7 @@ const protocolTokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
         if (existing) {
             existing.totalInputTokens += input
             existing.totalOutputTokens += output
+            existing.totalCachedInputTokens = (existing.totalCachedInputTokens ?? 0) + cached
             return
         }
 
@@ -1672,6 +1697,7 @@ const protocolTokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
             modelId,
             totalInputTokens: input,
             totalOutputTokens: output,
+            totalCachedInputTokens: cached,
         })
     })
 
@@ -2600,6 +2626,11 @@ function formatRepeatedJudgmentStatus(repeatedJudgment: ProtocolRepeatedJudgment
 function formatTokens(n: number | null | undefined): string {
     if (n == null) return '—'
     return n.toLocaleString()
+}
+
+function formatCacheStatus(status: unknown): string {
+    if (status == null || status === 'notApplicable') return 'not captured'
+    return String(status).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
 }
 
 function shortGuid(value: string | null | undefined): string {

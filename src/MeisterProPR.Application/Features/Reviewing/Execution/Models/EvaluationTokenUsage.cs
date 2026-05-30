@@ -10,7 +10,11 @@ public sealed record EvaluationTokenUsage(
     long TotalInputTokens,
     long TotalOutputTokens,
     IReadOnlyList<EvaluationTokenUsageBreakdown> ByModel,
-    IReadOnlyList<EvaluationTokenUsageBreakdown> ByConnectionCategory);
+    IReadOnlyList<EvaluationTokenUsageBreakdown> ByConnectionCategory,
+    long TotalCachedInputTokens = 0,
+    long TotalEffectiveInputTokens = 0,
+    long TotalToolReplayTokens = 0,
+    int FinalizationCallCount = 0);
 
 /// <summary>
 ///     One token-usage breakdown bucket.

@@ -103,7 +103,9 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
             usesResponses,
             usesResponses,
             usesResponses,
-            usesResponses);
+            usesResponses,
+            true,
+            true);
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(

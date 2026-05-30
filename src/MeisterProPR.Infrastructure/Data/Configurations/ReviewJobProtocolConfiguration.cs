@@ -25,6 +25,11 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
         builder.Property(p => p.Outcome).HasColumnName("outcome").HasMaxLength(32).IsRequired(false);
         builder.Property(p => p.TotalInputTokens).HasColumnName("total_input_tokens").IsRequired(false);
         builder.Property(p => p.TotalOutputTokens).HasColumnName("total_output_tokens").IsRequired(false);
+        builder.Property(p => p.TotalCachedInputTokens).HasColumnName("total_cached_input_tokens").IsRequired(false);
+        builder.Property(p => p.CacheObservability)
+            .HasColumnName("cache_observability")
+            .HasConversion<short>()
+            .IsRequired();
         builder.Property(p => p.IterationCount).HasColumnName("iteration_count").IsRequired(false);
         builder.Property(p => p.ToolCallCount).HasColumnName("tool_call_count").IsRequired(false);
         builder.Property(p => p.FinalConfidence).HasColumnName("final_confidence").IsRequired(false);

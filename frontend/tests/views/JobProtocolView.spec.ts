@@ -237,6 +237,93 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('0.35')
   })
 
+  it('renders cached and effective input totals plus per-call cache evidence', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        totalInputTokens: 2000,
+        totalOutputTokens: 300,
+        totalCachedInputTokens: 1200,
+        cacheObservability: 'observable',
+        events: [
+          makeProtocolEvent({
+            id: 'cache-event',
+            kind: 'aiCall',
+            name: 'ai_call_iter_1',
+            inputTokens: 2000,
+            cachedInputTokens: 1200,
+            cacheStatus: 'hit',
+            outputTokens: 300,
+            inputTextSample: null,
+            outputSummary: null,
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Cached Input')
+    expect(wrapper.text()).toContain('1,200')
+    expect(wrapper.text()).toContain('Effective Input')
+    expect(wrapper.text()).toContain('800')
+    expect(wrapper.text()).toContain('Cached 1,200 · hit')
+  })
+
+  it('renders legacy cache rows as not captured and surfaces tool/finalization evidence', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        totalInputTokens: 2000,
+        totalOutputTokens: 300,
+        totalCachedInputTokens: null,
+        events: [
+          makeProtocolEvent({
+            id: 'final-event',
+            kind: 'aiCall',
+            name: 'ai_call_iter_1',
+            inputTokens: 2000,
+            cachedInputTokens: null,
+            cacheStatus: 'notApplicable',
+            outputTokens: 300,
+            inputTextSample: null,
+            outputSummary: null,
+            finalizationAttemptKind: 'ForcedFinal',
+            finalizationOutcome: 'ProducedFinalText',
+          }),
+          makeProtocolEvent({
+            id: 'tool-event',
+            kind: 'toolCall',
+            name: 'get_file_content',
+            inputTextSample: null,
+            outputSummary: null,
+            toolEvidence: {
+              sourceToolName: 'get_file_content',
+              originalPayloadTokens: 2000,
+              boundedPayloadTokens: 256,
+              action: 'Bounded',
+              refreshable: true,
+            },
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Cached — · not captured')
+    expect(wrapper.text()).toContain('ForcedFinal: ProducedFinalText')
+    expect(wrapper.text()).toContain('Evidence Bounded')
+  })
+
   it('reloads protocol data when navigating between job ids on the same route', async () => {
     const nextJobProtocols = [
       {

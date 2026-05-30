@@ -87,6 +87,12 @@ public partial record ReviewJobProtocolDto
     /// <summary>Managed file-review session visibility metadata associated with this pass, when available.</summary>
     public ProtocolAgentSessionDto? AgentSession { get; init; }
 
+    /// <summary>Sum of cached input tokens across AI calls where the provider reported cached usage.</summary>
+    public long? TotalCachedInputTokens { get; init; }
+
+    /// <summary>Roll-up of cache observability for this protocol pass.</summary>
+    public CacheObservabilityStatus CacheObservability { get; init; } = CacheObservabilityStatus.Unknown;
+
     /// <summary>True when this pass was inherited from a prior same-revision retry source job.</summary>
     public bool IsInherited { get; init; }
 
@@ -116,7 +122,7 @@ public sealed record ProtocolInheritanceDto(
 /// <param name="SystemPrompt">First 4000 characters of the system prompt used for this AI call, or null.</param>
 /// <param name="OutputSummary">First 1000 characters of output, or null.</param>
 /// <param name="Error">Error message if this event failed, or null.</param>
-public sealed record ProtocolEventDto(
+public sealed partial record ProtocolEventDto(
     Guid Id,
     ProtocolEventKind Kind,
     string Name,
@@ -127,6 +133,46 @@ public sealed record ProtocolEventDto(
     string? SystemPrompt,
     string? OutputSummary,
     string? Error);
+
+/// <summary>
+///     Additive cache, evidence, and finalization diagnostics projected for a single protocol event.
+/// </summary>
+public partial record ProtocolEventDto
+{
+    /// <summary>Cached input tokens read from a provider cache for this AI call.</summary>
+    public long? CachedInputTokens { get; init; }
+
+    /// <summary>Cache outcome for this AI call.</summary>
+    public CacheCallStatus CacheStatus { get; init; } = CacheCallStatus.NotApplicable;
+
+    /// <summary>Actionable miss or unavailable reason when cache status is not a hit.</summary>
+    public string? CacheMissCategory { get; init; }
+
+    /// <summary>Stable-prefix eligibility for this AI call.</summary>
+    public PrefixEligibilityStatus PrefixEligibility { get; init; } = PrefixEligibilityStatus.NotApplicable;
+
+    /// <summary>Tool evidence visibility details when this event records a bounded/summarized/refreshed result.</summary>
+    public ProtocolToolEvidenceDto? ToolEvidence { get; init; }
+
+    /// <summary>Forced-final or schema-repair attempt kind for this AI call.</summary>
+    public string? FinalizationAttemptKind { get; init; }
+
+    /// <summary>Reason for a forced-final or schema-repair attempt.</summary>
+    public string? FinalizationReason { get; init; }
+
+    /// <summary>Outcome for a forced-final or schema-repair attempt.</summary>
+    public string? FinalizationOutcome { get; init; }
+}
+
+/// <summary>
+///     Visibility for one tool-result evidence bounding or refresh action.
+/// </summary>
+public sealed record ProtocolToolEvidenceDto(
+    string SourceToolName,
+    int OriginalPayloadTokens,
+    int BoundedPayloadTokens,
+    string Action,
+    bool Refreshable);
 
 /// <summary>
 ///     Carries one final review comment attributable to a protocol pass.

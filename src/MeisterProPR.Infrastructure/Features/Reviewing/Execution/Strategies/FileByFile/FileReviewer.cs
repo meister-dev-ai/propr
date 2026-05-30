@@ -653,7 +653,11 @@ internal sealed partial class FileReviewer(
                 m.Iterations,
                 m.ToolCallCount,
                 m.FinalConfidence,
-                ct);
+                ct,
+                m.TotalCachedInputTokens,
+                m.TotalCachedInputTokens > 0
+                    ? CacheObservabilityStatus.Observable
+                    : CacheObservabilityStatus.Unobservable);
         }
     }
 

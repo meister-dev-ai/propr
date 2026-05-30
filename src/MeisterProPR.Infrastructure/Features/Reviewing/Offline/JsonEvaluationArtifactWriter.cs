@@ -113,6 +113,18 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                     systemPrompt = @event.SystemPrompt,
                     outputSummary = @event.OutputSummary,
                     error = @event.Error,
+                    cachedInputTokens = @event.CachedInputTokens,
+                    finalizationAttemptKind = @event.FinalizationAttemptKind,
+                    toolEvidence = @event.ToolEvidence is null
+                        ? null
+                        : new
+                        {
+                            sourceToolName = @event.ToolEvidence.SourceToolName,
+                            originalPayloadTokens = @event.ToolEvidence.OriginalPayloadTokens,
+                            boundedPayloadTokens = @event.ToolEvidence.BoundedPayloadTokens,
+                            action = @event.ToolEvidence.Action,
+                            refreshable = @event.ToolEvidence.Refreshable,
+                        },
                     promptExperimentEvidence = @event.PromptExperimentEvidence is null
                         ? null
                         : new
@@ -129,7 +141,11 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
             tokenUsage = new
             {
                 totalInputTokens = artifact.TokenUsage.TotalInputTokens,
+                totalCachedInputTokens = artifact.TokenUsage.TotalCachedInputTokens,
+                totalEffectiveInputTokens = artifact.TokenUsage.TotalEffectiveInputTokens,
                 totalOutputTokens = artifact.TokenUsage.TotalOutputTokens,
+                totalToolReplayTokens = artifact.TokenUsage.TotalToolReplayTokens,
+                finalizationCallCount = artifact.TokenUsage.FinalizationCallCount,
                 byModel = artifact.TokenUsage.ByModel.Select(entry => new
                 {
                     key = entry.Key,

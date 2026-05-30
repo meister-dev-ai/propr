@@ -2,7 +2,7 @@ Reviewing file {{fileIndex}} of {{totalFiles}}: {{filePath}} [{{changeType}}]
 PR: {{prTitle}} ({{sourceBranch}} → {{targetBranch}})
 Source branch (use this with get_file_content): {{sourceBranch}}
 
-Changed files in this PR (use get_file_content to inspect any):
+Changed files in this PR (bounded list; call get_changed_files for the complete manifest when needed):
 {{#if isReReviewPass}}
   Note: this is a re-review pass. Only {{totalFiles}} newly changed file(s) are under active review; the remaining files listed below are provided as context only.
 {{/if}}

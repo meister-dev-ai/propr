@@ -22,6 +22,18 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
         builder.Property(e => e.OccurredAt).HasColumnName("occurred_at").IsRequired();
         builder.Property(e => e.InputTokens).HasColumnName("input_tokens").IsRequired(false);
         builder.Property(e => e.OutputTokens).HasColumnName("output_tokens").IsRequired(false);
+        builder.Property(e => e.CachedInputTokens).HasColumnName("cached_input_tokens").IsRequired(false);
+        builder.Property(e => e.CacheStatus).HasColumnName("cache_status").HasConversion<short>().IsRequired();
+        builder.Property(e => e.CacheMissCategory).HasColumnName("cache_miss_category").HasMaxLength(128).IsRequired(false);
+        builder.Property(e => e.PrefixEligibility).HasColumnName("prefix_eligibility").HasConversion<short>().IsRequired();
+        builder.Property(e => e.ToolEvidenceAction).HasColumnName("tool_evidence_action").HasMaxLength(64).IsRequired(false);
+        builder.Property(e => e.ToolEvidenceSourceToolName).HasColumnName("tool_evidence_source_tool_name").HasMaxLength(128).IsRequired(false);
+        builder.Property(e => e.ToolEvidenceOriginalPayloadTokens).HasColumnName("tool_evidence_original_payload_tokens").IsRequired(false);
+        builder.Property(e => e.ToolEvidenceBoundedPayloadTokens).HasColumnName("tool_evidence_bounded_payload_tokens").IsRequired(false);
+        builder.Property(e => e.ToolEvidenceRefreshable).HasColumnName("tool_evidence_refreshable").IsRequired(false);
+        builder.Property(e => e.FinalizationAttemptKind).HasColumnName("finalization_attempt_kind").HasMaxLength(64).IsRequired(false);
+        builder.Property(e => e.FinalizationReason).HasColumnName("finalization_reason").HasMaxLength(256).IsRequired(false);
+        builder.Property(e => e.FinalizationOutcome).HasColumnName("finalization_outcome").HasMaxLength(128).IsRequired(false);
         builder.Property(e => e.InputTextSample)
             .HasColumnName("input_text_sample")
             .HasColumnType("text")

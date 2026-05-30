@@ -63,7 +63,14 @@ public sealed class EfProtocolRecorder(
         string? outputTextSample,
         CancellationToken ct = default,
         string? name = null,
-        string? error = null)
+        string? error = null,
+        long? cachedInputTokens = null,
+        CacheCallStatus cacheStatus = CacheCallStatus.NotApplicable,
+        string? cacheMissCategory = null,
+        PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
+        string? finalizationAttemptKind = null,
+        string? finalizationReason = null,
+        string? finalizationOutcome = null)
     {
         try
         {
@@ -77,6 +84,13 @@ public sealed class EfProtocolRecorder(
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
+                CachedInputTokens = cachedInputTokens,
+                CacheStatus = cacheStatus,
+                CacheMissCategory = Sanitize(cacheMissCategory),
+                PrefixEligibility = prefixEligibility,
+                FinalizationAttemptKind = Sanitize(finalizationAttemptKind),
+                FinalizationReason = Sanitize(finalizationReason),
+                FinalizationOutcome = Sanitize(finalizationOutcome),
                 InputTextSample = Sanitize(inputTextSample),
                 SystemPrompt = Sanitize(systemPrompt),
                 OutputSummary = Sanitize(outputTextSample),
@@ -140,7 +154,11 @@ public sealed class EfProtocolRecorder(
         string arguments,
         string result,
         int iteration,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? toolEvidenceAction = null,
+        int? toolEvidenceOriginalPayloadTokens = null,
+        int? toolEvidenceBoundedPayloadTokens = null,
+        bool? toolEvidenceRefreshable = null)
     {
         try
         {
@@ -155,6 +173,11 @@ public sealed class EfProtocolRecorder(
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(sample),
                 OutputSummary = Sanitize(result),
+                ToolEvidenceAction = Sanitize(toolEvidenceAction),
+                ToolEvidenceSourceToolName = toolEvidenceAction is null ? null : toolName,
+                ToolEvidenceOriginalPayloadTokens = toolEvidenceOriginalPayloadTokens,
+                ToolEvidenceBoundedPayloadTokens = toolEvidenceBoundedPayloadTokens,
+                ToolEvidenceRefreshable = toolEvidenceRefreshable,
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);
@@ -178,7 +201,9 @@ public sealed class EfProtocolRecorder(
         int iterationCount,
         int toolCallCount,
         int? finalConfidence,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        long? totalCachedInputTokens = null,
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown)
     {
         try
         {
@@ -193,6 +218,10 @@ public sealed class EfProtocolRecorder(
             protocol.Outcome = outcome;
             protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + totalInputTokens;
             protocol.TotalOutputTokens = (protocol.TotalOutputTokens ?? 0) + totalOutputTokens;
+            protocol.TotalCachedInputTokens = totalCachedInputTokens.HasValue
+                ? (protocol.TotalCachedInputTokens ?? 0) + totalCachedInputTokens.Value
+                : protocol.TotalCachedInputTokens;
+            protocol.CacheObservability = cacheObservability;
             protocol.IterationCount = iterationCount;
             protocol.ToolCallCount = toolCallCount;
             protocol.FinalConfidence = finalConfidence;

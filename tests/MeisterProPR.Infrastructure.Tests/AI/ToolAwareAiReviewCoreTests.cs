@@ -1086,6 +1086,116 @@ public class ToolAwareAiReviewCoreTests
     }
 
     [Fact]
+    public async Task ReviewAsync_WithCachedUsage_RecordsCacheDiagnosticsAndMetrics()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var json = """{"summary":"All good.","comments":[],"loop_complete":true}""";
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, json))
+                {
+                    Usage = new UsageDetails { InputTokenCount = 2048, CachedInputTokenCount = 1024, OutputTokenCount = 50 },
+                });
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, []),
+            RuntimeCapabilities = new AgentReviewRuntimeCapabilities(false, false, false, false, true, true),
+        };
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received(1)
+            .RecordAiCallAsync(
+                protocolId,
+                1,
+                2048,
+                50,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                1024,
+                CacheCallStatus.Hit,
+                Arg.Any<string?>(),
+                PrefixEligibilityStatus.Eligible,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>());
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(1024L, context.LoopMetrics!.TotalCachedInputTokens);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithUnobservableUsage_RecordsUnobservableCacheStatus()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var json = """{"summary":"All good.","comments":[],"loop_complete":true}""";
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, json))
+                {
+                    Usage = new UsageDetails { InputTokenCount = 2048, OutputTokenCount = 50 },
+                });
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, []),
+            RuntimeCapabilities = new AgentReviewRuntimeCapabilities(false, false, false, false, true, true),
+        };
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received(1)
+            .RecordAiCallAsync(
+                protocolId,
+                1,
+                2048,
+                50,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                null,
+                CacheCallStatus.Unobservable,
+                Arg.Any<string?>(),
+                PrefixEligibilityStatus.Eligible,
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>());
+    }
+
+    [Fact]
     public async Task ReviewAsync_WithToolOnlyResponseAndEmptyText_RecordsFunctionCallSummary()
     {
         var mockClient = Substitute.For<IChatClient>();
@@ -1180,6 +1290,61 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 1,
                 Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithOversizedToolResult_RecordsBoundedToolEvidence()
+    {
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetFileContentAsync("src/Foo.cs", "source", 1, 200, Arg.Any<CancellationToken>())
+            .Returns(new string('x', 5000));
+
+        var toolCallResponse = CreateFunctionCallResponse(
+            "call-1",
+            "get_file_content",
+            """{"path":"src/Foo.cs","branch":"source","startLine":1,"endLine":200}""");
+        var finalResponse = CreateFinalReviewResponse("Done.");
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(toolCallResponse, finalResponse);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            Microsoft.Extensions.Options.Options.Create(
+                new AiReviewOptions
+                {
+                    MaxIterations = 5,
+                    ConfidenceThreshold = 70,
+                    MaxToolResultReplayCharacters = 1024,
+                }),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var protocolId = Guid.NewGuid();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            ActiveProtocolId = protocolId,
+            ProtocolRecorder = recorder,
+        };
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        await recorder.Received(1)
+            .RecordToolCallAsync(
+                protocolId,
+                "get_file_content",
+                Arg.Any<string>(),
+                Arg.Is<string>(result => result.Length <= 1200 && result.Contains("[Tool evidence bounded", StringComparison.Ordinal)),
+                1,
+                Arg.Any<CancellationToken>(),
+                "Bounded",
+                Arg.Is<int?>(tokens => tokens > 1000),
+                Arg.Is<int?>(tokens => tokens < 400),
+                true);
     }
 
     [Fact]
